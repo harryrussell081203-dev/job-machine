@@ -72,7 +72,10 @@ GMAIL_ADDRESS = env_str("GMAIL_ADDRESS")
 GMAIL_APP_PASSWORD = env_str("GMAIL_APP_PASSWORD")
 
 # --- knobs (repo Settings > Secrets and variables > Actions > Variables) ---
-TEST_MODE = env_flag("TEST_MODE", True)          # default ON: nothing reaches an employer
+# LIVE by default: emails go to real employers. Set the repo variable
+# TEST_MODE=1 (or export TEST_MODE=1 locally) to route everything back to
+# Harry's own inbox instead.
+TEST_MODE = env_flag("TEST_MODE", False)
 DAILY_SEND_CAP = env_int("DAILY_SEND_CAP", 20)
 PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 7)
 SEARCH_LOCATIONS = env_list(
@@ -1131,6 +1134,178 @@ def run_sends(state, dry_run=False):
 
 
 # ======================================================================
+# DAILY SUMMARY - one digest a day at 22:00 UK time
+# ======================================================================
+SUMMARY_HOUR_UK = 22
+SUMMARY_TZ = "Europe/London"
+
+
+def uk_now():
+    """Local UK time. Falls back to a BST approximation if tzdata is missing."""
+    utc = datetime.now(timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        return utc.astimezone(ZoneInfo(SUMMARY_TZ))
+    except Exception:
+        # BST runs from the last Sunday in March to the last Sunday in October
+        def last_sunday(month):
+            day = 31
+            while True:
+                candidate = datetime(utc.year, month, day, 1, tzinfo=timezone.utc)
+                if candidate.weekday() == 6:
+                    return candidate
+                day -= 1
+        bst = last_sunday(3) <= utc < last_sunday(10)
+        return utc + timedelta(hours=1) if bst else utc
+
+
+def summary_due(force=False):
+    """The workflow fires at 21:00 and 22:00 UTC; exactly one of those is 22:00
+    in the UK, whichever way the clocks are set."""
+    return force or uk_now().hour == SUMMARY_HOUR_UK
+
+
+def summary_window(state):
+    since = parse_ts(state.get("last_summary_at"))
+    floor = datetime.now(timezone.utc) - timedelta(hours=24)
+    return min(since, floor) if since else floor
+
+
+def collect_summary(state, since):
+    """What happened since the last digest."""
+    def after(value):
+        stamp = parse_ts(value)
+        return stamp is not None and stamp >= since
+
+    jobs = list(state["jobs"].values())
+    applications = sorted(
+        [j for j in jobs if after(j.get("sent_at"))],
+        key=lambda j: -(j.get("score") or 0))
+    return {
+        "applications": applications,
+        "followups": [j for j in jobs if after(j.get("followup_sent_at"))],
+        "replies": [j for j in jobs if after(j.get("replied_at"))],
+        "found": [j for j in jobs if after(j.get("found_at"))],
+        "no_email": [j for j in jobs if after(j.get("found_at"))
+                     and j.get("status") == "no_email"],
+        "queued": [j for j in jobs if j.get("status") == "ready"],
+        "waiting": [j for j in jobs if j.get("status") == "sent"
+                    and not j.get("followup_sent_at")],
+        "lifetime": sum(1 for j in jobs
+                        if j.get("status") in ("sent", "replied")
+                        or j.get("followup_sent_at")),
+    }
+
+
+def esc(text):
+    return (str(text or "").replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def summary_bodies(data):
+    """(subject, plain text, html) for the digest."""
+    apps = data["applications"]
+    tests = [j for j in apps if j.get("status") == "test_sent"]
+    day = uk_now().strftime("%A %d %B")
+
+    if not apps:
+        subject = f"Job machine: nothing sent today ({day})"
+    elif tests:
+        subject = f"Job machine: {len(apps)} TEST email(s) ({day})"
+    else:
+        subject = f"Job machine: {len(apps)} application(s) sent ({day})"
+
+    lines = [subject, "=" * len(subject), ""]
+    rows = []
+    for job in apps:
+        address = job.get("contact_email") or "unknown"
+        who = job.get("contact_name")
+        target = f"{who} <{address}>" if who else address
+        tier = TIER_NAMES.get(job.get("email_tier"), "unknown")
+        flag = " [TEST]" if job.get("status") == "test_sent" else ""
+        lines += [
+            f"{job.get('title')} - {job.get('company')}{flag}",
+            f"  {job.get('location')} | score {job.get('score')} | "
+            f"to {target} ({tier})",
+            f"  Subject: {job.get('sent_subject')}",
+            f"  Listing: {job.get('url') or 'n/a'}",
+            "",
+        ]
+        rows.append(
+            f"<tr><td><b>{esc(job.get('title'))}</b><br>"
+            f"<span class=m>{esc(job.get('company'))}{esc(flag)} - "
+            f"{esc(job.get('location'))}</span></td>"
+            f"<td>{esc(job.get('score'))}</td>"
+            f"<td>{esc(who) + '<br>' if who else ''}"
+            f"<span class=m>{esc(address)}<br>{esc(tier)}</span></td>"
+            f"<td>{esc(job.get('sent_subject'))}</td></tr>")
+
+    if not apps:
+        lines.append("No applications went out in the last 24 hours.\n")
+
+    extras = []
+    if data["replies"]:
+        extras.append("Replies received: " + ", ".join(
+            f"{j.get('company')} ({j.get('title')})" for j in data["replies"]))
+    if data["followups"]:
+        extras.append("Follow-ups sent: " + ", ".join(
+            j.get("company", "?") for j in data["followups"]))
+    extras += [
+        f"New listings found: {len(data['found'])}",
+        f"Found but no real email address: {len(data['no_email'])}",
+        f"Queued and ready to send: {len(data['queued'])}",
+        f"Awaiting a reply (follow-up due in 4 days): {len(data['waiting'])}",
+        f"Applications sent all time: {data['lifetime']}",
+    ]
+    lines += ["-" * 40] + extras
+
+    table = ("<table><thead><tr><th>Role</th><th>Score</th><th>Sent to</th>"
+             "<th>Subject line</th></tr></thead><tbody>"
+             + "".join(rows) + "</tbody></table>") if rows else (
+        "<p>No applications went out in the last 24 hours.</p>")
+    html = f"""<html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;
+color:#111;line-height:1.45">
+<style>
+table{{border-collapse:collapse;width:100%;max-width:720px;font-size:14px}}
+th,td{{border-bottom:1px solid #ddd;padding:8px 6px;text-align:left;vertical-align:top}}
+th{{background:#f4f4f4;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
+.m{{color:#666;font-size:12px}}
+ul{{font-size:14px;padding-left:18px}}
+</style>
+<h2 style="margin:0 0 4px">{esc(subject)}</h2>
+<p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
+{table}
+<ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
+</body></html>"""
+    return subject, "\n".join(lines), html
+
+
+def send_summary(state, force=False):
+    if not summary_due(force):
+        print(f"[summary] not 22:00 in the UK yet (local {uk_now():%H:%M}), skipping")
+        return
+    if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
+        print("[summary] no Gmail credentials")
+        return
+
+    since = summary_window(state)
+    subject, text, html = summary_bodies(collect_summary(state, since))
+    msg = EmailMessage()
+    msg["From"] = GMAIL_ADDRESS
+    msg["To"] = GMAIL_ADDRESS
+    msg["Subject"] = subject
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    msg["Message-ID"] = email.utils.make_msgid(domain="gmail.com")
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as s:
+        s.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+        s.send_message(msg)
+    state["last_summary_at"] = now()
+    print(f"[summary] sent: {subject}")
+
+
+# ======================================================================
 # FOLLOW-UP
 # ======================================================================
 def has_reply_from(addr):
@@ -1223,7 +1398,17 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true",
                         help="compose everything but send nothing")
     parser.add_argument("--skip-harvest", action="store_true")
+    parser.add_argument("--summary", action="store_true",
+                        help="send the daily digest instead of running the pipeline")
+    parser.add_argument("--force", action="store_true",
+                        help="with --summary, send it whatever the UK clock says")
     args = parser.parse_args(argv)
+
+    if args.summary:
+        state = load()
+        send_summary(state, force=args.force)
+        save(state)
+        return 0
 
     print(f"=== job-machine {now()} ===")
     print(f"TEST_MODE={'ON (nothing reaches an employer)' if TEST_MODE else 'OFF (LIVE)'} "

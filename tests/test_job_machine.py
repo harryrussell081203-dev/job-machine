@@ -513,6 +513,109 @@ class TestFollowups(unittest.TestCase):
         send.assert_not_called()
 
 
+class TestDailySummary(unittest.TestCase):
+    def setUp(self):
+        patches = [mock.patch.object(jm, "GMAIL_ADDRESS", "harry@gmail.com"),
+                   mock.patch.object(jm, "GMAIL_APP_PASSWORD", "app-password")]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def state(self, *jobs, **extra):
+        state = {"jobs": {j["external_id"]: j for j in jobs},
+                 "companies_contacted": {}, "send_counts": {}}
+        state.update(extra)
+        return state
+
+    def sent_job(self, hours_ago=3, **over):
+        stamp = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat()
+        fields = {"status": "sent", "sent_at": stamp,
+                  "sent_subject": "Subsea tech for your Electronics Technician"}
+        fields.update(over)
+        return make_job(**fields)
+
+    def test_only_sends_at_2200_uk(self):
+        uk = datetime(2026, 8, 1, 22, 0, tzinfo=timezone.utc)
+        with mock.patch.object(jm, "uk_now", return_value=uk):
+            self.assertTrue(jm.summary_due())
+        with mock.patch.object(jm, "uk_now", return_value=uk.replace(hour=21)):
+            self.assertFalse(jm.summary_due())
+            self.assertTrue(jm.summary_due(force=True))
+
+    def test_skipped_outside_the_window_without_touching_smtp(self):
+        state = self.state(self.sent_job())
+        uk = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
+        with mock.patch.object(jm, "uk_now", return_value=uk), \
+             mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp:
+            jm.send_summary(state)
+        smtp.assert_not_called()
+        self.assertNotIn("last_summary_at", state)
+
+    def test_window_covers_24h_and_stretches_to_the_last_digest(self):
+        state = self.state(self.sent_job())
+        self.assertAlmostEqual(
+            (datetime.now(timezone.utc) - jm.summary_window(state)).total_seconds(),
+            24 * 3600, delta=5)
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        state["last_summary_at"] = old
+        self.assertEqual(jm.summary_window(state), jm.parse_ts(old))
+
+    def test_digest_lists_todays_applications_only(self):
+        state = self.state(
+            self.sent_job(external_id="today", title="Instrumentation Technician",
+                          company="North Sea Controls"),
+            self.sent_job(external_id="last_week", hours_ago=24 * 7,
+                          company="Old Corp"),
+            make_job(external_id="queued", status="ready"),
+        )
+        data = jm.collect_summary(state, jm.summary_window(state))
+        subject, text, html = jm.summary_bodies(data)
+        self.assertIn("1 application(s) sent", subject)
+        self.assertIn("North Sea Controls", text)
+        self.assertIn("North Sea Controls", html)
+        self.assertNotIn("Old Corp", text)
+        self.assertIn("Queued and ready to send: 1", text)
+
+    def test_quiet_day_still_gets_a_digest(self):
+        subject, text, html = jm.summary_bodies(
+            jm.collect_summary(self.state(), jm.summary_window(self.state())))
+        self.assertIn("nothing sent today", subject)
+        self.assertIn("No applications went out", text)
+        self.assertIn("No applications went out", html)
+
+    def test_test_sends_are_flagged_as_tests(self):
+        state = self.state(self.sent_job(status="test_sent"))
+        subject, text, _ = jm.summary_bodies(
+            jm.collect_summary(state, jm.summary_window(state)))
+        self.assertIn("TEST", subject)
+        self.assertIn("[TEST]", text)
+
+    def test_replies_and_followups_are_reported(self):
+        recent = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        state = self.state(
+            self.sent_job(external_id="r", status="replied", company="Replier Ltd",
+                          replied_at=recent),
+            self.sent_job(external_id="f", company="Chased Ltd",
+                          followup_sent_at=recent))
+        _, text, _ = jm.summary_bodies(
+            jm.collect_summary(state, jm.summary_window(state)))
+        self.assertIn("Replies received: Replier Ltd", text)
+        self.assertIn("Follow-ups sent: Chased Ltd", text)
+
+    def test_sends_multipart_to_harry_and_records_the_timestamp(self):
+        state = self.state(self.sent_job())
+        uk = datetime(2026, 8, 1, 22, 0, tzinfo=timezone.utc)
+        with mock.patch.object(jm, "uk_now", return_value=uk), \
+             mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp:
+            jm.send_summary(state)
+        msg = smtp.return_value.__enter__.return_value.send_message.call_args.args[0]
+        self.assertEqual(msg["To"], "harry@gmail.com")
+        self.assertIn("application(s) sent", msg["Subject"])
+        self.assertEqual({p.get_content_subtype() for p in msg.iter_parts()},
+                         {"plain", "html"})
+        self.assertIn("last_summary_at", state)
+
+
 class TestState(unittest.TestCase):
     def test_prune_keeps_history_and_drops_dead_listings(self):
         old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()

@@ -46,7 +46,8 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           # repo variables (Settings > Secrets and variables > Actions > Variables).
-          # TEST_MODE defaults to ON in code, so leaving it unset stays safe.
+          # TEST_MODE is unset by default, which means LIVE. Set it to 1 to send
+          # everything to your own inbox instead.
           TEST_MODE: ${{ github.event.inputs.test_mode || vars.TEST_MODE }}
           DAILY_SEND_CAP: ${{ vars.DAILY_SEND_CAP }}
           PER_RUN_SEND_CAP: ${{ vars.PER_RUN_SEND_CAP }}
