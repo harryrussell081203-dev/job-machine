@@ -41,12 +41,27 @@ class TestAnswerBank(unittest.TestCase):
         self.assertEqual(answers["phone"], "07398 530978")
         self.assertEqual(answers["right_to_work_uk"], "Yes")
 
-    def test_unknowns_are_null_not_guessed(self):
+    def test_the_details_harry_supplied_are_in_place(self):
         answers = pa.load_answers()
-        for unknown in ("postcode", "notice_period", "salary_expectation",
-                        "driving_licence"):
+        self.assertEqual(answers["postcode"], "AB25 3AJ")
+        self.assertEqual(answers["address_line_1"], "31 Cadenhead Road")
+        self.assertEqual(answers["salary_expectation"], "35000")
+        self.assertEqual(answers["driving_licence"], "No")
+        self.assertEqual(answers["earliest_start_date"], "Immediately")
+        self.assertIn("immediately", answers["notice_period"].lower())
+
+    def test_unknowns_are_still_null_not_guessed(self):
+        answers = pa.load_answers()
+        for unknown in ("willing_to_relocate", "offshore_willing", "linkedin",
+                        "reference_1"):
             self.assertIsNone(answers[unknown],
                               f"{unknown} must stay null until Harry fills it in")
+
+    def test_environment_overrides_the_file(self):
+        with mock.patch.dict(os.environ, {"ANSWER_POSTCODE": "AB10 1XX"}):
+            self.assertEqual(pa.load_answers()["postcode"], "AB10 1XX")
+        with mock.patch.dict(os.environ, {"ANSWER_POSTCODE": "  "}):
+            self.assertEqual(pa.load_answers()["postcode"], "AB25 3AJ")
 
     def test_readme_keys_are_not_treated_as_answers(self):
         self.assertFalse([k for k in pa.load_answers() if k.startswith("_")])
@@ -119,6 +134,50 @@ class TestFieldMatching(unittest.TestCase):
         self.assertIsNone(pa.choose_option(field(options=["Blue", "Green"]), "Yes"))
 
 
+class TestValueCoercion(unittest.TestCase):
+    def test_immediately_becomes_a_real_date_in_a_date_picker(self):
+        from datetime import datetime, timedelta, timezone
+        tomorrow = (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
+        for phrase in ("Immediately", "ASAP", "tomorrow", "None, available immediately"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(pa.coerce_value(field(type="date"), phrase), tomorrow)
+
+    def test_real_dates_are_normalised(self):
+        self.assertEqual(pa.coerce_value(field(type="date"), "02/09/2026"),
+                         "2026-09-02")
+
+    def test_an_unparseable_date_is_refused_rather_than_mangled(self):
+        self.assertIsNone(pa.coerce_value(field(type="date"), "whenever suits"))
+
+    def test_salary_fits_a_number_only_box(self):
+        self.assertEqual(pa.coerce_value(field(type="number"), "35000"), "35000")
+        self.assertEqual(pa.coerce_value(field(type="number"), "£35,000 a year"),
+                         "35000")
+        self.assertIsNone(pa.coerce_value(field(type="number"), "negotiable"))
+
+    def test_text_fields_are_left_alone(self):
+        self.assertEqual(pa.coerce_value(field(type="text"), "31 Cadenhead Road"),
+                         "31 Cadenhead Road")
+
+    def test_start_date_and_salary_now_fill_themselves(self):
+        answers = pa.load_answers()
+        fields = [field(index="0", label="Earliest start date", type="date",
+                        required=True),
+                  field(index="1", label="Expected salary", type="number",
+                        required=True),
+                  field(index="2", label="Post code", required=True)]
+        plan, flags = pa.plan_answers(fields, JOB, answers)
+        self.assertEqual(flags, [])
+        self.assertEqual([p["value"] for p in plan][1:], ["35000", "AB25 3AJ"])
+
+    def test_a_value_that_cannot_fit_is_flagged_not_forced(self):
+        answers = dict(pa.load_answers(), salary_expectation="negotiable")
+        _, flags = pa.plan_answers(
+            [field(index="0", label="Expected salary", type="number", required=True)],
+            JOB, answers)
+        self.assertTrue(any("could not fit" in f for f in flags))
+
+
 class TestPlanning(unittest.TestCase):
     def setUp(self):
         self.answers = pa.load_answers()
@@ -136,13 +195,14 @@ class TestPlanning(unittest.TestCase):
         self.assertEqual(flags, [])
 
     def test_a_required_unknown_is_flagged_never_invented(self):
-        fields = [field(index="0", label="Notice period", required=True)]
+        fields = [field(index="0", label="Are you willing to relocate?",
+                        required=True)]
         plan, flags = pa.plan_answers(fields, JOB, self.answers)
         self.assertEqual(plan, [])
-        self.assertTrue(any("notice_period" in f for f in flags))
+        self.assertTrue(any("willing_to_relocate" in f for f in flags))
 
     def test_an_optional_unknown_is_simply_left_blank(self):
-        fields = [field(index="0", label="Post code", required=False)]
+        fields = [field(index="0", label="LinkedIn profile", required=False)]
         plan, flags = pa.plan_answers(fields, JOB, self.answers)
         self.assertEqual((plan, flags), ([], []))
 

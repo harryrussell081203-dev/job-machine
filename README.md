@@ -145,9 +145,21 @@ form it touches is screenshotted and kept as a build artifact for 30 days.
 
 ### Where the answers come from
 
-Everything is answered from **`data/answers.json`** and nothing else. Fill in the
-`null` entries there (postcode, notice period, salary expectation, driving
-licence, start date) and far more applications go through without you.
+Everything is answered from **`data/answers.json`** and nothing else. Anything
+still `null` in that file is treated as "I don't know" and gets the application
+flagged rather than guessed at, so it is worth filling in.
+
+Answers are shaped to fit the box they are going in: `"Immediately"` becomes
+tomorrow's date in a date picker, and `"35000"` loses its pound sign and comma in
+a number-only field. If a value cannot be made to fit, the field is flagged
+instead of forced.
+
+> **This repository is public**, so `data/answers.json` and the CV in `cv/` are
+> readable by anyone. If you would rather your home address were not, set
+> repo **secrets** `ANSWER_ADDRESS_LINE_1` and `ANSWER_POSTCODE` and blank those
+> two entries in the file - any `ANSWER_<KEY>` environment variable overrides the
+> file. Making the repository private also works and stays free (private repos
+> get 2000 Actions minutes a month; this uses roughly a third of that).
 
 Free-text questions ("why do you want this role?") go to Gemini, which must
 answer from your profile *and name the fact it used*. If it cannot ground the

@@ -82,9 +82,41 @@ CAPTCHA_MARKERS = ("recaptcha", "hcaptcha", "turnstile", "cf-challenge",
 # ANSWER BANK
 # ======================================================================
 def load_answers():
+    """Answer bank from data/answers.json, with any ANSWER_<KEY> environment
+    variable winning. That lets details you would rather not commit - a home
+    address, say - live in GitHub secrets instead of in the repo."""
     with open(ANSWERS_PATH) as f:
         raw = json.load(f)
-    return {k: v for k, v in raw.items() if not k.startswith("_")}
+    answers = {k: v for k, v in raw.items() if not k.startswith("_")}
+    for key in list(answers):
+        override = os.environ.get(f"ANSWER_{key.upper()}")
+        if override and override.strip():
+            answers[key] = override.strip()
+    return answers
+
+
+RELATIVE_DATES = re.compile(
+    r"^(immediate(ly)?|asap|as soon as possible|now|tomorrow|straight away|"
+    r"available now|none|no notice)\b", re.I)
+
+
+def coerce_value(field, value):
+    """Shape an answer to fit the box. A date picker cannot take 'Immediately',
+    and a number field cannot take '35,000 a year'."""
+    text = str(value).strip()
+    if field.get("type") == "date":
+        if RELATIVE_DATES.match(text):
+            return (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d %B %Y"):
+            try:
+                return datetime.strptime(text, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return None
+    if field.get("type") == "number":
+        digits = re.sub(r"[^\d]", "", text.split(".")[0])
+        return digits or None
+    return text
 
 
 # Questions code refuses to answer automatically, whatever the bank says.
@@ -276,6 +308,13 @@ def plan_answers(fields, job, answers):
                                  f"option matching '{value}'")
                     continue
                 value = option
+            else:
+                value = coerce_value(field, value)
+                if value is None:
+                    flags.append(f"could not fit '{answers[key]}' into "
+                                 f"'{field.get('label') or field.get('name')}' "
+                                 f"({field.get('type')} field)")
+                    continue
             plan.append({"field": field, "value": value, "kind": "choice"
                          if field.get("options") else "text", "source": f"bank:{key}"})
             continue
