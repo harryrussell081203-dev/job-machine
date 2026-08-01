@@ -84,7 +84,10 @@ SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
 SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 
 # --- fixed tuning ---
+# MAX_AGE_HOURS and HARVEST_PAGES are module-level on purpose: portal_agent.py
+# widens them to sweep a month of listings without disturbing the email path.
 MAX_AGE_HOURS = 48
+HARVEST_PAGES = 1
 FOLLOWUP_AFTER_DAYS = 4
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
@@ -395,14 +398,19 @@ def strip_html(text):
 
 
 def fresh_enough(posted, granularity="hours"):
-    """True if a listing is within MAX_AGE_HOURS. With date-only granularity we
-    accept today and yesterday, which can never be more than 48h old."""
+    """True if a listing is within MAX_AGE_HOURS."""
     if posted is None:
         return True  # source gave us no date; the scorer still has to like it
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
     if granularity == "hours":
-        return posted >= datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
-    # date only: today or yesterday is at most 48h old, anything older is not
-    return posted.date() >= datetime.now(timezone.utc).date() - timedelta(days=1)
+        return posted >= cutoff
+    # Date-only sources (Reed) give a day, not a time. A job dated D could have
+    # gone up at 00:00 that day, so only accept D if the whole day sits inside
+    # the window. At the 48h default that works out as today or yesterday.
+    threshold = cutoff.date()
+    if cutoff.time() != datetime.min.time():
+        threshold += timedelta(days=1)
+    return posted.date() >= threshold
 
 
 def adzuna():
@@ -410,44 +418,50 @@ def adzuna():
     if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
         print("[harvest] adzuna: no credentials, skipping")
         return jobs
+    max_days = max(1, -(-MAX_AGE_HOURS // 24))
     for location in SEARCH_LOCATIONS:
         for kw in SEARCH_KEYWORDS:
-            try:
-                r = requests.get(
-                    "https://api.adzuna.com/v1/api/jobs/gb/search/1",
-                    params={
-                        "app_id": ADZUNA_APP_ID,
-                        "app_key": ADZUNA_APP_KEY,
-                        "results_per_page": 50,
-                        "what_or": kw,
-                        "where": location,
-                        "distance": SEARCH_RADIUS_MILES,
-                        "max_days_old": 2,
-                        "sort_by": "date",
-                        "content-type": "application/json",
-                    },
-                    headers=UA, timeout=30,
-                )
-                r.raise_for_status()
-                for j in r.json().get("results", []):
-                    posted = parse_ts(j.get("created"))
-                    if not fresh_enough(posted, "hours"):
-                        continue
-                    jobs.append({
-                        "external_id": f"adzuna_{j['id']}",
-                        "source": "adzuna",
-                        "title": j.get("title", "") or "",
-                        "company": (j.get("company") or {}).get("display_name", ""),
-                        "location": (j.get("location") or {}).get("display_name", ""),
-                        "search_location": location,
-                        "url": j.get("redirect_url", ""),
-                        "description": strip_html(j.get("description") or "")[:4000],
-                        "salary_min": j.get("salary_min"),
-                        "salary_max": j.get("salary_max"),
-                        "posted_at": posted.isoformat() if posted else None,
-                    })
-            except Exception as e:
-                print(f"[harvest] adzuna {location}: {e}")
+            for page in range(1, HARVEST_PAGES + 1):
+                try:
+                    r = requests.get(
+                        f"https://api.adzuna.com/v1/api/jobs/gb/search/{page}",
+                        params={
+                            "app_id": ADZUNA_APP_ID,
+                            "app_key": ADZUNA_APP_KEY,
+                            "results_per_page": 50,
+                            "what_or": kw,
+                            "where": location,
+                            "distance": SEARCH_RADIUS_MILES,
+                            "max_days_old": max_days,
+                            "sort_by": "date",
+                            "content-type": "application/json",
+                        },
+                        headers=UA, timeout=30,
+                    )
+                    r.raise_for_status()
+                    results = r.json().get("results", [])
+                    for j in results:
+                        posted = parse_ts(j.get("created"))
+                        if not fresh_enough(posted, "hours"):
+                            continue
+                        jobs.append({
+                            "external_id": f"adzuna_{j['id']}",
+                            "source": "adzuna",
+                            "title": j.get("title", "") or "",
+                            "company": (j.get("company") or {}).get("display_name", ""),
+                            "location": (j.get("location") or {}).get("display_name", ""),
+                            "search_location": location,
+                            "url": j.get("redirect_url", ""),
+                            "description": strip_html(j.get("description") or "")[:4000],
+                            "salary_min": j.get("salary_min"),
+                            "salary_max": j.get("salary_max"),
+                            "posted_at": posted.isoformat() if posted else None,
+                        })
+                    if len(results) < 50:
+                        break
+                except Exception as e:
+                    print(f"[harvest] adzuna {location} p{page}: {e}")
+                    break
     return jobs
 
 
@@ -465,41 +479,43 @@ def reed():
     if not REED_API_KEY:
         print("[harvest] reed: no credentials, skipping")
         return jobs
-    for location in SEARCH_LOCATIONS:
-        for kw in REED_KEYWORDS:
-            try:
-                r = requests.get(
-                    "https://www.reed.co.uk/api/1.0/search",
-                    auth=(REED_API_KEY, ""),
-                    params={
-                        "keywords": kw,
-                        "locationName": location,
-                        "distanceFromLocation": SEARCH_RADIUS_MILES,
-                        "resultsToTake": 50,
-                        "postedByDirectEmployer": "false",
-                    },
-                    headers=UA, timeout=30,
-                )
-                r.raise_for_status()
-                for j in r.json().get("results", []):
-                    posted = reed_date(j.get("date"))
-                    if not fresh_enough(posted, "date"):
-                        continue
-                    jobs.append({
-                        "external_id": f"reed_{j['jobId']}",
-                        "source": "reed",
-                        "title": j.get("jobTitle", "") or "",
-                        "company": j.get("employerName", "") or "",
-                        "location": j.get("locationName", "") or "",
-                        "search_location": location,
-                        "url": j.get("jobUrl", ""),
-                        "description": strip_html(j.get("jobDescription") or "")[:4000],
-                        "salary_min": j.get("minimumSalary"),
-                        "salary_max": j.get("maximumSalary"),
-                        "posted_at": posted.isoformat() if posted else None,
-                    })
-            except Exception as e:
-                print(f"[harvest] reed {location} '{kw}': {e}")
+    for location, kw, page in ((l, k, p) for l in SEARCH_LOCATIONS
+                              for k in REED_KEYWORDS
+                              for p in range(HARVEST_PAGES)):
+        try:
+            r = requests.get(
+                "https://www.reed.co.uk/api/1.0/search",
+                auth=(REED_API_KEY, ""),
+                params={
+                    "keywords": kw,
+                    "locationName": location,
+                    "distanceFromLocation": SEARCH_RADIUS_MILES,
+                    "resultsToTake": 50,
+                    "resultsToSkip": page * 50,
+                    "postedByDirectEmployer": "false",
+                },
+                headers=UA, timeout=30,
+            )
+            r.raise_for_status()
+            for j in r.json().get("results", []):
+                posted = reed_date(j.get("date"))
+                if not fresh_enough(posted, "date"):
+                    continue
+                jobs.append({
+                    "external_id": f"reed_{j['jobId']}",
+                    "source": "reed",
+                    "title": j.get("jobTitle", "") or "",
+                    "company": j.get("employerName", "") or "",
+                    "location": j.get("locationName", "") or "",
+                    "search_location": location,
+                    "url": j.get("jobUrl", ""),
+                    "description": strip_html(j.get("jobDescription") or "")[:4000],
+                    "salary_min": j.get("minimumSalary"),
+                    "salary_max": j.get("maximumSalary"),
+                    "posted_at": posted.isoformat() if posted else None,
+                })
+        except Exception as e:
+            print(f"[harvest] reed {location} '{kw}' p{page}: {e}")
     return jobs
 
 
@@ -1181,8 +1197,13 @@ def collect_summary(state, since):
     applications = sorted(
         [j for j in jobs if after(j.get("sent_at"))],
         key=lambda j: -(j.get("score") or 0))
+    portal = [j for j in jobs if after(j.get("portal_attempted_at"))]
     return {
         "applications": applications,
+        "portal_submitted": [j for j in portal if j.get("status") == "portal_submitted"],
+        "portal_review": [j for j in portal if j.get("status") in
+                          ("portal_review", "portal_ready")],
+        "portal_manual": [j for j in portal if j.get("status") == "portal_manual"],
         "followups": [j for j in jobs if after(j.get("followup_sent_at"))],
         "replies": [j for j in jobs if after(j.get("replied_at"))],
         "found": [j for j in jobs if after(j.get("found_at"))],
@@ -1241,7 +1262,38 @@ def summary_bodies(data):
             f"<td>{esc(job.get('sent_subject'))}</td></tr>")
 
     if not apps:
-        lines.append("No applications went out in the last 24 hours.\n")
+        lines.append("No emails went out in the last 24 hours.\n")
+
+    portal_html = ""
+    if data.get("portal_submitted") or data.get("portal_review") or \
+            data.get("portal_manual"):
+        lines += ["", "APPLICATION PORTALS", "-" * 19]
+        blocks = [
+            ("Submitted in full", data.get("portal_submitted", [])),
+            ("Filled in, waiting on you", data.get("portal_review", [])),
+            ("Portal needs doing by hand", data.get("portal_manual", [])),
+        ]
+        html_blocks = []
+        for heading, jobs_in_block in blocks:
+            if not jobs_in_block:
+                continue
+            lines.append(f"{heading}:")
+            items = []
+            for job in jobs_in_block:
+                why = job.get("portal_reason", "")
+                lines.append(f"  {job.get('title')} - {job.get('company')}"
+                             f"{' (' + why + ')' if why else ''}")
+                if job.get("portal_flags"):
+                    for flag in job["portal_flags"][:3]:
+                        lines.append(f"      needs you: {flag}")
+                link = job.get("apply_url") or job.get("url") or ""
+                items.append(
+                    f"<li><b>{esc(job.get('title'))}</b> - {esc(job.get('company'))}"
+                    + (f'<br><span class=m>{esc(why)}</span>' if why else "")
+                    + (f'<br><a href="{esc(link)}">open the form</a>' if link else "")
+                    + "</li>")
+            html_blocks.append(f"<h3>{esc(heading)}</h3><ul>{''.join(items)}</ul>")
+        portal_html = "<h2>Application portals</h2>" + "".join(html_blocks)
 
     extras = []
     if data["replies"]:
@@ -1275,6 +1327,7 @@ ul{{font-size:14px;padding-left:18px}}
 <h2 style="margin:0 0 4px">{esc(subject)}</h2>
 <p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
 {table}
+{portal_html}
 <ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
 </body></html>"""
     return subject, "\n".join(lines), html
