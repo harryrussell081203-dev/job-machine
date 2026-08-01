@@ -5,6 +5,8 @@ on:
     - cron: "0 8 * * 1-5"     # 08:00 UTC weekdays
     - cron: "30 11 * * 1-5"   # 11:30 UTC weekdays
     - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
+  push:
+    tags: ["fire-run-*"]      # push a tag to force a run when the UI is not handy
   workflow_dispatch:
     inputs:
       test_mode:
@@ -63,6 +65,9 @@ jobs:
 
       - name: Commit state
         if: always()
+        env:
+          # a tag-triggered run still commits its state to the default branch
+          TARGET: ${{ github.ref_type == 'tag' && github.event.repository.default_branch || github.ref_name }}
         run: |
           git config user.name "job-machine"
           git config user.email "actions@github.com"
@@ -73,8 +78,8 @@ jobs:
           fi
           git commit -m "state $(date -u +%F_%H%M)"
           for i in 1 2 3 4; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
-              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            git pull --rebase --autostash origin "${TARGET}" \
+              && git push origin "HEAD:refs/heads/${TARGET}" && exit 0
             echo "push failed, retry $i"
             sleep $((2 ** i))
           done
