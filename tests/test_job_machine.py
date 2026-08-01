@@ -580,8 +580,29 @@ class TestDailySummary(unittest.TestCase):
         subject, text, html = jm.summary_bodies(
             jm.collect_summary(self.state(), jm.summary_window(self.state())))
         self.assertIn("nothing sent today", subject)
-        self.assertIn("No applications went out", text)
+        self.assertIn("No emails went out", text)
         self.assertIn("No applications went out", html)
+
+    def test_portal_activity_is_reported(self):
+        recent = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        state = self.state(
+            make_job(external_id="p1", status="portal_submitted",
+                     company="Greenhouse Co", portal_attempted_at=recent,
+                     portal_reason="", apply_url="https://boards.greenhouse.io/x"),
+            make_job(external_id="p2", status="portal_review", company="Flagged Ltd",
+                     portal_attempted_at=recent, portal_reason="1 question(s) need Harry",
+                     portal_flags=["convictions: only Harry can answer it"]),
+            make_job(external_id="p3", status="portal_manual", company="Workday Co",
+                     portal_attempted_at=recent,
+                     portal_reason="workday portal - needs an account"))
+        _, text, html = jm.summary_bodies(
+            jm.collect_summary(state, jm.summary_window(state)))
+        self.assertIn("APPLICATION PORTALS", text)
+        self.assertIn("Submitted in full", text)
+        self.assertIn("Greenhouse Co", text)
+        self.assertIn("needs you: convictions", text)
+        self.assertIn("Workday Co", text)
+        self.assertIn("Application portals", html)
 
     def test_test_sends_are_flagged_as_tests(self):
         state = self.state(self.sent_job(status="test_sent"))

@@ -22,7 +22,7 @@ marked as contacted, and follow-ups are off.
 
 | Stage | What happens |
 | --- | --- |
-| 0. Schedule | `run.yml` at 08:00, 11:30 and 15:00 UTC on weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
+| 0. Schedule | `run.yml` at 08:00, 11:30 and 15:00 UTC weekdays; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
 | 1. Harvest | Adzuna + Reed, listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
 | 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
 | 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
@@ -113,13 +113,86 @@ python job_machine.py                     # LIVE - real employers
 python job_machine.py --summary --force   # send tonight's digest right now
 ```
 
-Tests (no network, nothing is sent):
+Tests (no network, nothing is sent, no real portal is touched):
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -v          # 86 tests
+PORTAL_BROWSER_TESTS=1 python -m unittest discover -s tests   # + drives Chromium
 ```
 
+The browser tests run against `tests/fixtures/fake_ats.html`, a local replica of
+a Greenhouse/Lever style form, so the form-filling is proven end to end without
+sending junk to a real employer.
+
 ---
+
+## The portal agent (`portal_agent.py`)
+
+The email side finds a human and writes to them. This side does the opposite: it
+opens the employer's actual application form in a real Chromium, works down it
+like a person would, uploads the CV and submits.
+
+```bash
+python portal_agent.py                 # show the queue
+python portal_agent.py --harvest       # pull and score a month of listings
+python portal_agent.py --run           # fill forms in, stop before submitting
+python portal_agent.py --run --submit  # actually submit the clean ones
+python portal_agent.py --run --headed  # watch it work in a visible browser
+```
+
+It runs from `.github/workflows/portal.yml` at 09:30 UTC on weekdays, and every
+form it touches is screenshotted and kept as a build artifact for 30 days.
+
+### Where the answers come from
+
+Everything is answered from **`data/answers.json`** and nothing else. Anything
+still `null` in that file is treated as "I don't know" and gets the application
+flagged rather than guessed at, so it is worth filling in.
+
+Answers are shaped to fit the box they are going in: `"Immediately"` becomes
+tomorrow's date in a date picker, and `"35000"` loses its pound sign and comma in
+a number-only field. If a value cannot be made to fit, the field is flagged
+instead of forced.
+
+> **This repository is public**, so `data/answers.json` and the CV in `cv/` are
+> readable by anyone. If you would rather your home address were not, set
+> repo **secrets** `ANSWER_ADDRESS_LINE_1` and `ANSWER_POSTCODE` and blank those
+> two entries in the file - any `ANSWER_<KEY>` environment variable overrides the
+> file. Making the repository private also works and stays free (private repos
+> get 2000 Actions minutes a month; this uses roughly a third of that).
+
+Free-text questions ("why do you want this role?") go to Gemini, which must
+answer from your profile *and name the fact it used*. If it cannot ground the
+answer, the field is left blank and the application is flagged. It never makes
+something up to fill a box.
+
+### What it refuses to do
+
+| It will not | Because |
+| --- | --- |
+| Answer convictions, DBS, health, disability, ethnicity, gender, religion, orientation | Only you can answer those, and a wrong answer follows you |
+| Enter your NI number, passport, bank details or date of birth | Identity data does not belong in an automated form-filler |
+| Tick "I certify the above is true and complete" | A machine cannot certify anything on your behalf |
+| Solve or work around a CAPTCHA | That is defeating bot protection, and it gets accounts banned |
+| Log into Workday, Taleo, LinkedIn, Indeed or Reed | They need an account and block automation; the digest links them for you |
+
+Hit any of those and the application is filled to the last safe field,
+screenshotted, and handed to you as `portal_review` rather than submitted.
+
+### Portals it works on
+
+Greenhouse, Lever, Workable, Ashby, SmartRecruiters, Recruitee, Teamtailor,
+JOIN and Personio — the ones that accept an application with no account and no
+bot check. Anything else is recorded as `portal_manual` with a direct link.
+
+### Portal variables
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `PORTAL_SUBMIT` | `0` | `0` fills and screenshots but stops short of submitting. Set to `1` to actually apply. |
+| `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
+| `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
+| `PORTAL_DAILY_CAP` | `25` | Applications per day |
 
 ## The nightly digest
 
