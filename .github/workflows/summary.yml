@@ -1,0 +1,65 @@
+name: job-machine summary
+
+# Fires at 21:00 and 22:00 UTC every day. Exactly one of those is 22:00 in the
+# UK whichever way the clocks are set, and the script sends only on that one.
+on:
+  schedule:
+    - cron: "0 21 * * *"
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send the digest now, ignoring the 22:00 UK gate (true/false)"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine-summary
+  cancel-in-progress: false
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests dnspython
+
+      - name: Send daily summary
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python job_machine.py --summary --force
+          else
+            python job_machine.py --summary
+          fi
+
+      - name: Commit state
+        if: always()
+        run: |
+          git config user.name "job-machine"
+          git config user.email "actions@github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "no state changes"
+            exit 0
+          fi
+          git commit -m "summary $(date -u +%F_%H%M)"
+          for i in 1 2 3 4; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "push failed, retry $i"
+            sleep $((2 ** i))
+          done
+          echo "could not push state" >&2
+          exit 1

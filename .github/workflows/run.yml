@@ -1,36 +1,82 @@
 name: job-machine
+
 on:
   schedule:
-    - cron: "0 8 * * 1-5"
-    - cron: "30 11 * * 1-5"
-    - cron: "0 15 * * 1-5"
-  workflow_dispatch: {}
+    - cron: "0 8 * * 1-5"     # 08:00 UTC weekdays
+    - cron: "30 11 * * 1-5"   # 11:30 UTC weekdays
+    - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "TEST_MODE for this run (1 = everything goes to your own inbox)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Compose but send nothing (true/false)"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
 
+concurrency:
+  group: job-machine
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install requests dnspython
+
       - name: Run pipeline
         env:
+          # secrets
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python job_machine.py
+          # repo variables (Settings > Secrets and variables > Actions > Variables).
+          # TEST_MODE is unset by default, which means LIVE. Set it to 1 to send
+          # everything to your own inbox instead.
+          TEST_MODE: ${{ github.event.inputs.test_mode || vars.TEST_MODE }}
+          DAILY_SEND_CAP: ${{ vars.DAILY_SEND_CAP }}
+          PER_RUN_SEND_CAP: ${{ vars.PER_RUN_SEND_CAP }}
+          SEARCH_LOCATIONS: ${{ vars.SEARCH_LOCATIONS }}
+          SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
+          SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python job_machine.py --dry-run
+          else
+            python job_machine.py
+          fi
+
       - name: Commit state
+        if: always()
         run: |
           git config user.name "job-machine"
           git config user.email "actions@github.com"
           git add data/
-          git commit -m "state $(date -u +%F_%H%M)" || echo "no changes"
-          git push
+          if git diff --cached --quiet; then
+            echo "no state changes"
+            exit 0
+          fi
+          git commit -m "state $(date -u +%F_%H%M)"
+          for i in 1 2 3 4; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "push failed, retry $i"
+            sleep $((2 ** i))
+          done
+          echo "could not push state" >&2
+          exit 1
