@@ -1,159 +1,249 @@
 """
-JOB MACHINE - fully automated job application outreach.
+JOB MACHINE - automated job application outreach for Harry Russell.
 Single file. Runs on GitHub Actions. Costs nothing.
 
-Pipeline: harvest fresh listings -> AI score vs Harry's profile -> find REAL
-email addresses (never guessed, named people preferred) -> write personalised
-email from a role-specific template -> send from Gmail with CV attached ->
-follow up after 4 days if no reply.
+Pipeline:
+  1. HARVEST   fresh listings (<=48h old) from Adzuna + Reed, across SEARCH_LOCATIONS
+  2. SCORE     Gemini scores each listing 0-100 against the candidate profile
+  3. DISCOVER  find a REAL email address - never guessed, never pattern-generated
+  4. COMPOSE   role-family template filled by Gemini inside hard style rules
+  5. SEND      Gmail SMTP with the CV attached, best contacts first, capped
+  6. FOLLOW-UP one short nudge 4 days later if the inbox shows no reply
+  7. STATE     everything in data/state.json, committed back by the workflow
+
+TEST_MODE (default ON) runs the whole pipeline for real but redirects every
+message to Harry's own inbox, prefixes the subject with the intended recipient,
+leaves companies unmarked and disables follow-ups.
 """
-import glob, imaplib, json, os, re, smtplib, time
-from datetime import datetime, timezone
+import argparse
+import email.utils
+import glob
+import imaplib
+import json
+import os
+import re
+import smtplib
+import sys
+import time
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import requests
-import dns.resolver
+
+try:
+    import dns.resolver
+except ImportError:  # pragma: no cover - dnspython is installed by the workflow
+    dns = None
 
 
 # ======================================================================
 # CONFIG
 # ======================================================================
-import os
+def env_str(name, default=""):
+    return (os.environ.get(name) or default).strip()
 
-# --- secrets (set in GitHub repo Settings > Secrets and variables > Actions) ---
-ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
-ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
-REED_API_KEY = os.environ.get("REED_API_KEY", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")          # harryrussell081203@gmail.com
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")  # Google App Password (needs 2FA on)
 
-# --- tuning ---
-SCORE_THRESHOLD = 70
-DAILY_SEND_CAP = 20        # across the whole day
-PER_RUN_SEND_CAP = 7       # workflow runs 3x/weekday
+def env_int(name, default):
+    try:
+        return int(env_str(name) or default)
+    except ValueError:
+        return default
+
+
+def env_flag(name, default):
+    raw = env_str(name).lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+def env_list(name, default):
+    raw = env_str(name)
+    values = [v.strip() for v in raw.split(",") if v.strip()]
+    return values or list(default)
+
+
+# --- secrets (repo Settings > Secrets and variables > Actions > Secrets) ---
+ADZUNA_APP_ID = env_str("ADZUNA_APP_ID")
+ADZUNA_APP_KEY = env_str("ADZUNA_APP_KEY")
+REED_API_KEY = env_str("REED_API_KEY")
+GEMINI_API_KEY = env_str("GEMINI_API_KEY")
+GMAIL_ADDRESS = env_str("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = env_str("GMAIL_APP_PASSWORD")
+
+# --- knobs (repo Settings > Secrets and variables > Actions > Variables) ---
+# LIVE by default: emails go to real employers. Set the repo variable
+# TEST_MODE=1 (or export TEST_MODE=1 locally) to route everything back to
+# Harry's own inbox instead.
+TEST_MODE = env_flag("TEST_MODE", False)
+DAILY_SEND_CAP = env_int("DAILY_SEND_CAP", 20)
+PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 7)
+SEARCH_LOCATIONS = env_list(
+    "SEARCH_LOCATIONS", ["Aberdeen", "Dundee", "Edinburgh", "Glasgow", "Inverness"])
+SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
+SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
+
+# --- fixed tuning ---
+MAX_AGE_HOURS = 48
 FOLLOWUP_AFTER_DAYS = 4
-SEARCH_LOCATION = "Aberdeen"
-SEARCH_RADIUS_MILES = 40
-MAX_DAYS_OLD = 2
+SEND_INTERVAL_SECONDS = 30
+FOLLOWUP_INTERVAL_SECONDS = 15
+MAX_SCORED_PER_RUN = 40          # keeps us inside the Gemini free tier
+MAX_DISCOVERED_PER_RUN = 15
+PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
+GEMINI_MODEL = "gemini-2.5-flash"
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+STATE_PATH = os.path.join(ROOT, "data", "state.json")
+CV_DIRS = [os.path.join(ROOT, "cv"), ROOT]
 
 SEARCH_KEYWORDS = [
     "engineer technician electronics instrumentation communications workshop maintenance",
 ]
-REED_KEYWORDS = ["engineer", "technician", "electronics"]
+REED_KEYWORDS = ["engineering technician", "electronics technician",
+                 "instrumentation technician", "maintenance technician",
+                 "communications technician"]
 
-GEMINI_MODEL = "gemini-2.5-flash"
-STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "state.json")
-CV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cv")
+# Titles that are never worth a Gemini call.
+TITLE_EXCLUSIONS = [
+    "chartered", "principal engineer", "head of", "director", "graduate scheme",
+    "sales executive", "sales manager", "business development", "care assistant",
+    "support worker", "hgv", "lgv", "delivery driver", "van driver", "chef",
+    "waiter", "waitress", "bartender", "cleaner", "warehouse operative",
+]
 
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
-- Ex-Royal Navy Communications & Information Specialist (HMS Westminster, Type 23 frigate): secure/non-secure comms, network engineering, cryptographic material, safety-critical equipment, high-pressure ops.
-- ~3 years Workshop Technician at Sonardyne International: assembly, testing, fault diagnosis and repair of subsea acoustic/electronic equipment; quality control; technical documentation.
-- Modern Apprenticeship SCQF Level 7 (electrical engineering / asset lifecycle & maintenance). Year 1 of BEng Instrumentation, Measurement & Control at RGU (paused).
-- Also founder of Leads2Profit: marketing automation business (n8n, AI tooling, Meta ads, CRM) for nightlife/events venues.
-- TARGET ROLES: engineering technician, electronics, instrumentation, maintenance, communications/radio, workshop, offshore/O&G technical, defence, forces-friendly trades; or technical/AV/production roles in events & nightlife.
-- LOCATION: Aberdeen and surrounds strongly preferred. Relocation only for clearly strong roles.
-- EXCLUDE: senior/chartered engineer roles requiring a completed degree + years of design experience, unrelated sales/care/driving/hospitality roles."""
+- Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
+- Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
+- DV security clearance.
+- Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
+- Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
+- Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
+- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife. Aberdeen strongly preferred.
+- EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
+
+SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
+PHONE = "07398 530978"
 
 
 # ======================================================================
 # TEMPLATES
 # ======================================================================
-# Copy system: role-family templates + hard style rules.
-# Gemini fills the skeleton; it is NOT allowed to freestyle structure.
+# Role-family templates plus hard style rules. Gemini fills the skeleton;
+# it is not allowed to invent its own structure, and code has the last word.
 
 BANNED = [
-    "I hope this email finds you well", "I hope this finds you well", "passionate",
-    "leverage", "delve", "seamless", "synergy", "dynamic", "keen to", "thrilled",
-    "excited to apply", "perfect fit", "hit the ground running", "fast-paced environment",
+    "I hope this email finds you well", "passionate", "leverage", "delve",
+    "seamless", "synergy", "dynamic", "thrilled", "excited to apply",
+    "perfect fit", "hit the ground running", "fast-paced environment",
     "proven track record", "results-driven", "detail-oriented", "team player",
-    "furthermore", "moreover", "in today's", "I am writing to", "esteemed",
-    "utilize", "spearheaded", "honed", "align", "resonate",
+    "I am writing to", "utilize", "spearheaded", "esteemed", "keen to",
+    "furthermore", "moreover",
 ]
 
-STYLE_RULES = """HARD RULES:
-- 60-90 words body. Short sentences. Plain English a mate would say out loud.
-- Greet by first name if a person's name is given, otherwise 'Hi,'.
-- Line 1 names the exact role and one concrete detail from THIS listing or company (a product, site, shift pattern, kit, venue - something proving he read it).
-- 2-3 proof lines: specific, with numbers. Never list everything - only what THIS job cares about.
-- One-line CTA: a single easy question ('Worth a quick call this week?' / 'When suits for a chat?').
-- Sign off: Harry, then 'Harry Russell / 07398 530978 / CV attached'.
-- Confident and warm, slightly informal, zero grovelling, zero corporate filler.
-- NEVER use any banned phrase. No exclamation marks. No markdown. No em dashes.
+STYLE_RULES = f"""HARD RULES:
+- Body is 60-90 words, not counting the greeting and the sign-off.
+- Short sentences. Plain English a tradesman would say out loud.
+- Greet by first name if one is given, otherwise 'Hi,'.
+- Line 1 names the exact role and one concrete detail from THIS listing (a product,
+  site, shift pattern, piece of kit, standard, venue) that proves he read it.
+- Then 2 or 3 numbered proof points, written as '1.', '2.', '3.' on their own lines.
+  Each one must matter to THIS job. Use specifics and numbers. Never list everything.
+- Then one line: a single easy question as the call to action.
+- Sign off exactly:
+Harry
+{SIGNOFF}
+- Confident and warm, slightly informal, no grovelling, no corporate filler.
+- No exclamation marks. No markdown. No em dashes. No banned phrases.
 
 SUBJECT RULES:
-- Max 8 words. Must reference the actual role or listing detail.
-- Concrete + a hook: who he is or what he can do, not 'Application for X'.
-- No clickbait lies, no ALL CAPS, at most one punctuation mark."""
+- Max 8 words, and it must name the role.
+- Concrete hook: who he is or what he can do. Never 'Application for X'.
+- No ALL CAPS, at most one punctuation mark."""
 
 TEMPLATES = {
     "communications": {
-        "keywords": ["comms", "communication", "radio", "network", "telecom", "signal", "it support", "systems"],
+        "keywords": ["comms", "communication", "radio", "network", "telecom",
+                     "signal", "satellite", "rf ", "it support", "systems"],
         "subject_examples": [
             "Royal Navy comms specialist for your {role}",
             "Ran secure comms at sea - your {role}",
         ],
         "skeleton": """{greeting}
 
-Saw your {role} listing - {one specific detail from the listing/company}.
+Saw your {role} listing - {one specific detail from the listing}.
 
-I spent 2 years as a Communications & Information Specialist in the Royal Navy, running secure and non-secure comms and network troubleshooting on a frontline frigate, including cryptographic material where mistakes weren't an option. Since then, 3 years of hands-on electronics testing and fault-finding at Sonardyne.
+1. {proof: Royal Navy comms - secure and non-secure comms, networks and crypto material on a Type 23 frigate, 2021-2023}
+2. {proof: 3 years at Sonardyne fault-finding electronic kit, tie it to what this job actually needs}
+3. {optional third proof only if it is relevant: DV clearance, apprenticeship, RGU study}
 
-{CTA question}
+{one question CTA}
 
 Harry
-Harry Russell / 07398 530978 / CV attached""",
+""" + SIGNOFF,
     },
     "electronics_technician": {
-        "keywords": ["electronic", "technician", "workshop", "assembly", "test", "repair", "solder", "pcb", "electrical"],
+        "keywords": ["electronic", "electrical", "technician", "workshop",
+                     "assembly", "test", "repair", "solder", "pcb", "bench",
+                     "manufacturing"],
         "subject_examples": [
             "Sonardyne-trained tech for your {role}",
-            "3 yrs subsea electronics - your {role} role",
+            "3 yrs subsea electronics - your {role}",
         ],
         "skeleton": """{greeting}
 
-Your {role} listing caught my eye - {one specific detail from the listing/company}.
+Your {role} listing caught my eye - {one specific detail from the listing}.
 
-I've spent 3 years at Sonardyne assembling, testing and fault-finding subsea acoustic and electronic kit to IPC-A-610 Class 3, plus component-level repair and the documentation to match. Before that, the Royal Navy taught me to look after safety-critical equipment properly.
+1. {proof: 3 years at Sonardyne building, testing and fault-finding subsea acoustic kit to IPC-A-610 Class 3}
+2. {proof: component-level diagnosis and repair plus the test records and documentation to match}
+3. {optional third proof only if relevant: Royal Navy safety-critical equipment, completed SCQF L7 apprenticeship, DV clearance}
 
-{CTA question}
+{one question CTA}
 
 Harry
-Harry Russell / 07398 530978 / CV attached""",
+""" + SIGNOFF,
     },
     "instrumentation_maintenance": {
-        "keywords": ["instrument", "maintenance", "calibration", "control", "mechanical", "offshore", "oil", "gas", "subsea", "rov"],
+        "keywords": ["instrument", "instrumentation", "maintenance", "calibration",
+                     "control", "mechanical", "offshore", "oil", "gas", "subsea",
+                     "rov", "plant", "asset", "reliability"],
         "subject_examples": [
             "Instrumentation apprentice-trained - your {role}",
             "Subsea kit background for your {role}",
         ],
         "skeleton": """{greeting}
 
-Applying for your {role} - {one specific detail from the listing/company}.
+Applying for your {role} - {one specific detail from the listing}.
 
-My background is exactly this space: 3 years testing and maintaining subsea acoustic positioning systems at Sonardyne, a completed Modern Apprenticeship (SCQF L7, electrical/asset lifecycle), and first-year BEng in Instrumentation, Measurement & Control at RGU. Navy before that, so shift work and pressure are normal.
+1. {proof: 3 years testing and maintaining subsea acoustic positioning systems at Sonardyne}
+2. {proof: completed Modern Apprenticeship SCQF L7 in electrical / asset lifecycle and maintenance, plus year 1 BEng Instrumentation, Measurement and Control at RGU}
+3. {optional third proof only if relevant: Royal Navy shift work and pressure, DV clearance}
 
-{CTA question}
+{one question CTA}
 
 Harry
-Harry Russell / 07398 530978 / CV attached""",
+""" + SIGNOFF,
     },
     "events_production": {
-        "keywords": ["event", "venue", "nightclub", "av ", "audio", "sound", "lighting", "production", "stage", "hospitality tech"],
+        "keywords": ["event", "venue", "nightclub", "bar tech", "av", "audio",
+                     "sound", "lighting", "production", "stage", "festival",
+                     "hospitality"],
         "subject_examples": [
             "Tech who lives in your industry - {role}",
-            "Comms + AV background for your {role}",
+            "Comms and AV background for your {role}",
         ],
         "skeleton": """{greeting}
 
-Your {role} role stood out - {one specific detail from the venue/company}.
+Your {role} role stood out - {one specific detail from the venue or listing}.
 
-I'm a rare mix for this industry: military-grade comms and electronics experience (Royal Navy, then 3 years at Sonardyne), and I run a marketing systems business built exclusively for nightlife and events venues, so I know how this world actually operates on both sides of the desk.
+1. {proof: military-grade comms and electronics background - Royal Navy then 3 years at Sonardyne}
+2. {proof: runs Leads2Profit, a marketing systems business built for nightlife and events venues, so he knows this world from the operator side}
+3. {optional third proof only if relevant: hands-on with AV, rigging, cabling, fault-finding under time pressure}
 
-{CTA question}
+{one question CTA}
 
 Harry
-Harry Russell / 07398 530978 / CV attached""",
+""" + SIGNOFF,
     },
     "general": {
         "keywords": [],
@@ -163,470 +253,1193 @@ Harry Russell / 07398 530978 / CV attached""",
         ],
         "skeleton": """{greeting}
 
-Saw your {role} listing - {one specific detail from the listing/company}.
+Saw your {role} listing - {one specific detail from the listing}.
 
-Quick background: 2 years Royal Navy as a Communications & Information Specialist, 3 years at Sonardyne testing and fault-finding precision electronic equipment, and a completed electrical engineering Modern Apprenticeship. I learn systems fast and turn up reliable.
+1. {proof: 2 years Royal Navy Communications and Information Specialist}
+2. {proof: 3 years at Sonardyne testing and fault-finding precision electronic equipment}
+3. {optional third proof only if relevant: completed electrical engineering Modern Apprenticeship, DV clearance}
 
-{CTA question}
+{one question CTA}
 
 Harry
-Harry Russell / 07398 530978 / CV attached""",
+""" + SIGNOFF,
     },
 }
 
+
 def pick_family(title, description=""):
-    text = f"{title} {description[:500]}".lower()
-    best, best_hits = "general", 0
-    for fam, t in TEMPLATES.items():
-        hits = sum(1 for k in t["keywords"] if k in text)
-        if hits > best_hits:
-            best, best_hits = fam, hits
+    """Route a listing to a template family. The title decides; the description
+    is only a tie-breaker."""
+    title_l = f" {title.lower()} "
+    desc_l = description[:600].lower()
+    best, best_score = "general", 0.0
+    for family, tpl in TEMPLATES.items():
+        score = 0.0
+        for kw in tpl["keywords"]:
+            if kw in title_l:
+                score += 1.0
+            elif kw in desc_l:
+                score += 0.1
+        if score > best_score:
+            best, best_score = family, score
     return best
 
 
 # ======================================================================
 # STATE
 # ======================================================================
-import json, os
-from datetime import datetime, timezone
-
 def now():
     return datetime.now(timezone.utc).isoformat()
+
 
 def today():
     return datetime.now(timezone.utc).date().isoformat()
 
+
+def parse_ts(value):
+    if not value:
+        return None
+    try:
+        text = value.replace("Z", "+00:00")
+        stamp = datetime.fromisoformat(text)
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def load():
     if os.path.exists(STATE_PATH):
         with open(STATE_PATH) as f:
-            return json.load(f)
-    return {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+            state = json.load(f)
+    else:
+        state = {}
+    state.setdefault("jobs", {})
+    state.setdefault("companies_contacted", {})
+    state.setdefault("send_counts", {})
+    return state
+
 
 def save(state):
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
-    with open(STATE_PATH, "w") as f:
-        json.dump(state, f, indent=1)
+    tmp = STATE_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f, indent=1, sort_keys=True)
+    os.replace(tmp, STATE_PATH)
+
 
 def sends_today(state):
     return state["send_counts"].get(today(), 0)
+
 
 def record_send(state):
     state["send_counts"][today()] = sends_today(state) + 1
 
 
+def company_key(name):
+    """Normalised company identity, so 'ACME Ltd.' and 'Acme Limited' collide."""
+    text = (name or "").lower()
+    text = re.sub(r"[^a-z0-9 ]", " ", text)
+    text = re.sub(
+        r"\b(ltd|limited|plc|llp|inc|group|holdings|uk|international|"
+        r"services|solutions|recruitment|the|and)\b", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def already_contacted(state, job):
+    """One email per company, ever - by normalised name or by domain."""
+    keys = [company_key(job.get("company"))]
+    if job.get("company_domain"):
+        keys.append(job["company_domain"].lower())
+    return any(k and k in state["companies_contacted"] for k in keys)
+
+
+def mark_contacted(state, job):
+    entry = {"at": now(), "company": job.get("company"),
+             "email": job.get("contact_email"), "job": job.get("external_id")}
+    for key in (company_key(job.get("company")),
+                (job.get("company_domain") or "").lower()):
+        if key:
+            state["companies_contacted"][key] = entry
+
+
+def prune(state):
+    """Forget listings that went nowhere, so the committed state stays small.
+    Sent/replied history and companies_contacted are kept forever."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=PRUNE_AFTER_DAYS)
+    dead = ("skipped", "no_email", "compose_failed", "send_failed")
+    doomed = []
+    for eid, job in state["jobs"].items():
+        found = parse_ts(job.get("found_at"))
+        if job.get("status") in dead and found and found < cutoff:
+            doomed.append(eid)
+    for eid in doomed:
+        del state["jobs"][eid]
+    if doomed:
+        print(f"[state] pruned {len(doomed)} dead listings")
+
+
 # ======================================================================
 # HARVEST
 # ======================================================================
-import requests
+UA = {"User-Agent": "Mozilla/5.0 (compatible; job-machine/1.0; +personal job search)"}
+TAG_RE = re.compile(r"<[^>]+>")
 
-UA = {"User-Agent": "Mozilla/5.0 (job-machine)"}
+
+def strip_html(text):
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", text or "")
+    text = TAG_RE.sub(" ", text)
+    text = (text.replace("&amp;", "&").replace("&nbsp;", " ")
+                .replace("&#39;", "'").replace("&quot;", '"')
+                .replace("&lt;", "<").replace("&gt;", ">"))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def fresh_enough(posted, granularity="hours"):
+    """True if a listing is within MAX_AGE_HOURS. With date-only granularity we
+    accept today and yesterday, which can never be more than 48h old."""
+    if posted is None:
+        return True  # source gave us no date; the scorer still has to like it
+    if granularity == "hours":
+        return posted >= datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
+    # date only: today or yesterday is at most 48h old, anything older is not
+    return posted.date() >= datetime.now(timezone.utc).date() - timedelta(days=1)
+
 
 def adzuna():
     jobs = []
-    for kw in SEARCH_KEYWORDS:
-        try:
-            r = requests.get(
-                "https://api.adzuna.com/v1/api/jobs/gb/search/1",
-                params={
-                    "app_id": ADZUNA_APP_ID,
-                    "app_key": ADZUNA_APP_KEY,
-                    "results_per_page": 50,
-                    "what_or": kw,
-                    "where": SEARCH_LOCATION,
-                    "distance": SEARCH_RADIUS_MILES,
-                    "max_days_old": MAX_DAYS_OLD,
-                    "sort_by": "date",
-                },
-                timeout=30,
-            )
-            for j in r.json().get("results", []):
-                jobs.append({
-                    "external_id": f"adzuna_{j['id']}",
-                    "source": "adzuna",
-                    "title": j.get("title", ""),
-                    "company": (j.get("company") or {}).get("display_name", ""),
-                    "location": (j.get("location") or {}).get("display_name", ""),
-                    "url": j.get("redirect_url", ""),
-                    "description": (j.get("description") or "")[:4000],
-                    "salary_min": j.get("salary_min"),
-                    "salary_max": j.get("salary_max"),
-                })
-        except Exception as e:
-            print(f"[harvest] adzuna error: {e}")
+    if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
+        print("[harvest] adzuna: no credentials, skipping")
+        return jobs
+    for location in SEARCH_LOCATIONS:
+        for kw in SEARCH_KEYWORDS:
+            try:
+                r = requests.get(
+                    "https://api.adzuna.com/v1/api/jobs/gb/search/1",
+                    params={
+                        "app_id": ADZUNA_APP_ID,
+                        "app_key": ADZUNA_APP_KEY,
+                        "results_per_page": 50,
+                        "what_or": kw,
+                        "where": location,
+                        "distance": SEARCH_RADIUS_MILES,
+                        "max_days_old": 2,
+                        "sort_by": "date",
+                        "content-type": "application/json",
+                    },
+                    headers=UA, timeout=30,
+                )
+                r.raise_for_status()
+                for j in r.json().get("results", []):
+                    posted = parse_ts(j.get("created"))
+                    if not fresh_enough(posted, "hours"):
+                        continue
+                    jobs.append({
+                        "external_id": f"adzuna_{j['id']}",
+                        "source": "adzuna",
+                        "title": j.get("title", "") or "",
+                        "company": (j.get("company") or {}).get("display_name", ""),
+                        "location": (j.get("location") or {}).get("display_name", ""),
+                        "search_location": location,
+                        "url": j.get("redirect_url", ""),
+                        "description": strip_html(j.get("description") or "")[:4000],
+                        "salary_min": j.get("salary_min"),
+                        "salary_max": j.get("salary_max"),
+                        "posted_at": posted.isoformat() if posted else None,
+                    })
+            except Exception as e:
+                print(f"[harvest] adzuna {location}: {e}")
     return jobs
+
+
+def reed_date(value):
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d %b %Y"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            continue
+    return None
+
 
 def reed():
     jobs = []
-    for kw in REED_KEYWORDS:
-        try:
-            r = requests.get(
-                "https://www.reed.co.uk/api/1.0/search",
-                auth=(REED_API_KEY, ""),
-                params={
-                    "keywords": kw,
-                    "locationName": SEARCH_LOCATION,
-                    "distanceFromLocation": SEARCH_RADIUS_MILES,
-                    "resultsToTake": 50,
-                },
-                timeout=30,
-            )
-            for j in r.json().get("results", []):
-                jobs.append({
-                    "external_id": f"reed_{j['jobId']}",
-                    "source": "reed",
-                    "title": j.get("jobTitle", ""),
-                    "company": j.get("employerName", ""),
-                    "location": j.get("locationName", ""),
-                    "url": j.get("jobUrl", ""),
-                    "description": (j.get("jobDescription") or "")[:4000],
-                    "salary_min": j.get("minimumSalary"),
-                    "salary_max": j.get("maximumSalary"),
-                })
-        except Exception as e:
-            print(f"[harvest] reed error: {e}")
+    if not REED_API_KEY:
+        print("[harvest] reed: no credentials, skipping")
+        return jobs
+    for location in SEARCH_LOCATIONS:
+        for kw in REED_KEYWORDS:
+            try:
+                r = requests.get(
+                    "https://www.reed.co.uk/api/1.0/search",
+                    auth=(REED_API_KEY, ""),
+                    params={
+                        "keywords": kw,
+                        "locationName": location,
+                        "distanceFromLocation": SEARCH_RADIUS_MILES,
+                        "resultsToTake": 50,
+                        "postedByDirectEmployer": "false",
+                    },
+                    headers=UA, timeout=30,
+                )
+                r.raise_for_status()
+                for j in r.json().get("results", []):
+                    posted = reed_date(j.get("date"))
+                    if not fresh_enough(posted, "date"):
+                        continue
+                    jobs.append({
+                        "external_id": f"reed_{j['jobId']}",
+                        "source": "reed",
+                        "title": j.get("jobTitle", "") or "",
+                        "company": j.get("employerName", "") or "",
+                        "location": j.get("locationName", "") or "",
+                        "search_location": location,
+                        "url": j.get("jobUrl", ""),
+                        "description": strip_html(j.get("jobDescription") or "")[:4000],
+                        "salary_min": j.get("minimumSalary"),
+                        "salary_max": j.get("maximumSalary"),
+                        "posted_at": posted.isoformat() if posted else None,
+                    })
+            except Exception as e:
+                print(f"[harvest] reed {location} '{kw}': {e}")
     return jobs
 
+
+def dedupe_key(job):
+    """Same role at the same company from two boards is one opportunity."""
+    title = re.sub(r"[^a-z0-9 ]", " ", (job.get("title") or "").lower())
+    title = re.sub(r"\s+", " ", title).strip()
+    return company_key(job.get("company")) + "|" + title
+
+
+def title_excluded(title):
+    low = f" {(title or '').lower()} "
+    return next((x for x in TITLE_EXCLUSIONS if x in low), None)
+
+
 def harvest(state):
-    new = 0
+    seen = {dedupe_key(j) for j in state["jobs"].values()}
+    new = dropped = 0
     for job in adzuna() + reed():
         eid = job["external_id"]
         if eid in state["jobs"]:
             continue
+        key = dedupe_key(job)
+        if key in seen:
+            continue
+        seen.add(key)
         job.update({"status": "new", "score": None, "found_at": now()})
+        excluded = title_excluded(job["title"])
+        if excluded:
+            job.update({"status": "skipped", "skip_reason": f"title excluded ({excluded})"})
+            dropped += 1
+        else:
+            new += 1
         state["jobs"][eid] = job
-        new += 1
-    print(f"[harvest] {new} new listings")
+    print(f"[harvest] {new} new listings ({dropped} dropped on title) "
+          f"across {len(SEARCH_LOCATIONS)} locations")
 
 
 # ======================================================================
 # SCORE
 # ======================================================================
-import json, time, requests
+_gemini_thinking_supported = True
 
-def gemini(prompt, max_tokens=300):
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-        params={"key": GEMINI_API_KEY},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens},
-        },
-        timeout=60,
-    )
-    r.raise_for_status()
-    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-def gemini_json(prompt, max_tokens=300, retries=2):
-    for _ in range(retries + 1):
+def gemini(prompt, max_tokens=800, as_json=True, temperature=0.4):
+    """One Gemini call. Returns the raw text, or raises."""
+    global _gemini_thinking_supported
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY not set")
+    config = {"temperature": temperature, "maxOutputTokens": max_tokens}
+    if as_json:
+        config["responseMimeType"] = "application/json"
+    if _gemini_thinking_supported:
+        # thinking tokens come out of the same budget and we do not need them here
+        config["thinkingConfig"] = {"thinkingBudget": 0}
+
+    last = None
+    for attempt in range(3):
         try:
-            raw = gemini(prompt, max_tokens)
-            clean = raw.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean)
-        except Exception as e:
-            print(f"[gemini] retrying: {e}")
+            r = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{GEMINI_MODEL}:generateContent",
+                headers={"x-goog-api-key": GEMINI_API_KEY},
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      "generationConfig": config},
+                timeout=90,
+            )
+            if r.status_code == 400 and "thinking" in r.text.lower():
+                _gemini_thinking_supported = False
+                config.pop("thinkingConfig", None)
+                continue
+            if r.status_code in (429, 500, 502, 503, 504):
+                wait = 10 * (attempt + 1)
+                print(f"[gemini] {r.status_code}, waiting {wait}s")
+                time.sleep(wait)
+                last = RuntimeError(f"HTTP {r.status_code}")
+                continue
+            r.raise_for_status()
+            parts = r.json()["candidates"][0]["content"]["parts"]
+            return "".join(p.get("text", "") for p in parts)
+        except Exception as e:  # network blips included
+            last = e
             time.sleep(5)
+    raise last or RuntimeError("gemini failed")
+
+
+def gemini_json(prompt, max_tokens=800, temperature=0.4):
+    try:
+        raw = gemini(prompt, max_tokens, as_json=True, temperature=temperature)
+    except Exception as e:
+        print(f"[gemini] gave up: {e}")
+        return None
+    clean = raw.strip()
+    if clean.startswith("```"):
+        clean = re.sub(r"^```[a-z]*|```$", "", clean.strip(), flags=re.M).strip()
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", clean, re.S)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+    print(f"[gemini] unparseable response: {clean[:200]}")
     return None
 
+
 def score_jobs(state):
-    unscored = [j for j in state["jobs"].values() if j["status"] == "new"][:40]
+    unscored = [j for j in state["jobs"].values()
+                if j["status"] == "new"][:MAX_SCORED_PER_RUN]
+    passed = 0
     for job in unscored:
         prompt = (
             'Screen this job listing for the candidate. Respond ONLY with JSON: '
             '{"score": <0-100>, "reason": "<one sentence>"}\n\n'
             f"CANDIDATE:\n{CANDIDATE_PROFILE}\n\n"
-            "SCORE GUIDE: 85+ strong direct match in/near Aberdeen. 70-84 good match. "
-            "40-69 partial. <40 poor/excluded.\n\n"
+            "SCORE GUIDE: 85+ strong direct match in or near Aberdeen. "
+            "70-84 good match he could clearly do. 40-69 partial. "
+            "<40 poor, wrong field, or on his exclude list. "
+            "Penalise roles needing a completed degree plus years of design "
+            "experience, and roles outside his target list.\n\n"
             f"LISTING:\nTitle: {job['title']}\nCompany: {job['company']}\n"
-            f"Location: {job['location']}\nSalary: {job.get('salary_min')}-{job.get('salary_max')}\n"
+            f"Location: {job['location']}\n"
+            f"Salary: {job.get('salary_min')}-{job.get('salary_max')}\n"
             f"Description: {job['description'][:2500]}"
         )
-        result = gemini_json(prompt)
+        result = gemini_json(prompt, max_tokens=300, temperature=0.2)
         if result is None:
             continue
-        job["score"] = max(0, min(100, int(result.get("score", 0))))
+        try:
+            score = int(float(result.get("score", 0)))
+        except (TypeError, ValueError):
+            score = 0
+        job["score"] = max(0, min(100, score))
         job["score_reason"] = str(result.get("reason", ""))[:300]
-        job["status"] = "scored" if job["score"] >= SCORE_THRESHOLD else "skipped"
-        time.sleep(4)  # stay inside free-tier rate limits
-    print(f"[score] scored {len(unscored)} listings")
+        if job["score"] >= SCORE_THRESHOLD:
+            job["status"] = "scored"
+            passed += 1
+        else:
+            job["status"] = "skipped"
+            job["skip_reason"] = f"score {job['score']}"
+        time.sleep(4)  # stay inside the free-tier rate limit
+    print(f"[score] scored {len(unscored)}, {passed} passed >= {SCORE_THRESHOLD}")
 
 
 # ======================================================================
-# DISCOVER
+# DISCOVER - real addresses only
 # ======================================================================
-import re, requests
-import dns.resolver
-
-UA = {"User-Agent": "Mozilla/5.0 (compatible; JobApply/1.0)"}
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 BAD_PREFIXES = ("noreply", "no-reply", "donotreply", "postmaster", "abuse",
-                "privacy", "unsubscribe", "support", "sales", "webmaster",
-                "example", "test", "email", "name", "your")
-HIRING_PREFIXES = ("careers", "jobs", "recruitment", "recruiting", "hr",
-                   "talent", "vacancies", "apply", "people")
-GENERIC_PREFIXES = ("info", "office", "enquiries", "admin", "hello", "contact",
-                    "mail", "reception", "accounts") + HIRING_PREFIXES
+                "privacy", "unsubscribe", "webmaster", "marketing", "newsletter",
+                "example", "test", "email", "name", "your", "user", "someone",
+                "firstname", "yourname", "sentry", "wordpress", "hostmaster")
+BAD_DOMAINS = ("example.com", "example.org", "domain.com", "yourcompany.com",
+               "sentry.io", "wixpress.com", "godaddy.com", "squarespace.com",
+               "gmail.com", "googlemail.com", "hotmail.com", "outlook.com",
+               "yahoo.com", "icloud.com", "aol.com", "live.com")
+HIRING_PREFIXES = ("careers", "career", "jobs", "job", "recruitment", "recruiting",
+                   "recruit", "hr", "talent", "vacancies", "vacancy", "apply",
+                   "people", "hiring", "workforce")
+GENERIC_PREFIXES = ("info", "office", "enquiries", "enquiry", "inquiries", "admin",
+                    "hello", "contact", "mail", "reception", "accounts", "general",
+                    "sales", "support", "team")
+
+TIER_NAMES = {3: "named person", 2: "hiring inbox", 1: "generic inbox"}
+COMMON_WORDS = {"help", "team", "here", "click", "more", "news", "home", "main",
+                "shop", "data", "site", "post", "west", "east", "north", "south"}
+
+
+VOWELS = "aeiouy"
+ONSETS = {"ch", "sh", "th", "ph", "wh", "br", "cr", "dr", "fr", "gr", "pr", "tr",
+          "bl", "cl", "fl", "gl", "pl", "sl", "sm", "sn", "sp", "st", "sc", "sk",
+          "sw", "tw", "kn", "wr", "rh", "kh", "gw", "vl", "dw", "qu"}
+LONG_ONSETS = {"chr", "thr", "shr", "spr", "str", "scr", "phr", "sch", "sph"}
+
+
+def plausible_first_name(word):
+    """Can we greet someone with this? 'jane' and 'chris' yes, 'jsmith' no -
+    getting the name wrong is worse than a plain 'Hi,'."""
+    if len(word) < 3 or not word.isalpha():
+        return False
+    if word[1] in VOWELS:
+        return True
+    if word[:3] in LONG_ONSETS:
+        return True
+    return word[:2] in ONSETS and word[2] in VOWELS
+
 
 def is_personal(local):
-    """Looks like a real person: firstname.lastname / f.lastname / plain first name."""
-    if local in GENERIC_PREFIXES or local.startswith(BAD_PREFIXES):
+    """True only if the local part belongs to an individual rather than a shared
+    inbox: jane.smith, j.smith and jane all qualify, careers and info do not."""
+    if local in GENERIC_PREFIXES or local in HIRING_PREFIXES:
         return False
-    parts = [p for p in re.split(r"[._-]", local) if p]
-    if not all(p.isalpha() for p in parts):
+    if local.startswith(BAD_PREFIXES):
         return False
-    if len(parts) >= 2 and all(len(p) >= 1 for p in parts):
-        return True
-    return len(parts) == 1 and 3 <= len(parts[0]) <= 12  # plain first name
+    parts = [p for p in re.split(r"[._\-]", local) if p]
+    if not parts or not all(p.isalpha() for p in parts):
+        return False
+    if len(parts) >= 2:
+        return all(len(p) >= 1 for p in parts) and any(len(p) >= 3 for p in parts)
+    single = parts[0]
+    return 3 <= len(single) <= 12 and single not in COMMON_WORDS
+
 
 def name_from_email(local):
-    parts = [p for p in re.split(r"[._-]", local) if len(p) > 1 and p.isalpha()]
-    return parts[0].capitalize() if parts else None
+    """First name to greet with, or None. Only ever taken from the address as
+    written - nothing is inferred or invented."""
+    parts = [p for p in re.split(r"[._\-]", local) if p]
+    if not parts or len(parts[0]) <= 2 or not parts[0].isalpha():
+        return None  # 'j.smith' is an initial, not a name we can greet with
+    if len(parts) == 1 and not plausible_first_name(parts[0]):
+        return None  # 'jsmith' is a surname with an initial stuck on the front
+    return parts[0].capitalize()
 
-def classify(email):
-    local = email.split("@")[0]
+
+def classify(address):
+    """(tier, first_name). 3 named person > 2 hiring inbox > 1 generic > 0 unusable."""
+    local = address.split("@")[0].lower()
     if is_personal(local):
-        return 3, name_from_email(local)   # named person - best
+        return 3, name_from_email(local)
     if local.startswith(HIRING_PREFIXES):
-        return 2, None                     # hiring inbox
-    if local in GENERIC_PREFIXES:
-        return 1, None                     # generic real inbox
+        return 2, None
+    if local.startswith(GENERIC_PREFIXES):
+        return 1, None
     return 0, None
 
+
 def has_mx(domain):
+    if dns is None:
+        print("[discover] dnspython missing, cannot MX-check")
+        return False
     try:
         return len(dns.resolver.resolve(domain, "MX")) > 0
     except Exception:
         return False
 
+
 def clean_emails(raw, domain=None):
     out = []
-    for e in set(x.lower().strip(".") for x in raw):
-        local = e.split("@")[0]
-        if local.startswith(BAD_PREFIXES):
+    for candidate in {x.lower().strip(" .,;:'\"<>()") for x in raw}:
+        if candidate.count("@") != 1:
             continue
-        if e.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")):
+        local, _, host = candidate.partition("@")
+        if not local or local.startswith(BAD_PREFIXES):
             continue
-        if domain and not e.endswith("@" + domain) and not e.endswith("." + domain):
+        if host in BAD_DOMAINS or host.endswith((".png", ".jpg", ".jpeg", ".gif",
+                                                 ".webp", ".svg", ".css", ".js")):
             continue
-        out.append(e)
-    return out
+        if domain and host != domain and not host.endswith("." + domain):
+            continue
+        out.append(candidate)
+    return sorted(out)
+
 
 def find_domain(company):
+    """Clearbit autocomplete: free, no key. Only accepts a confident name match."""
     try:
         r = requests.get("https://autocomplete.clearbit.com/v1/companies/suggest",
                          params={"query": company}, headers=UA, timeout=15)
-        for hit in r.json():
-            if hit.get("domain"):
+        r.raise_for_status()
+        wanted = company_key(company)
+        hits = r.json()
+        if not isinstance(hits, list):
+            return None
+        for hit in hits:
+            if hit.get("domain") and company_key(hit.get("name", "")) == wanted:
                 return hit["domain"]
-    except Exception:
-        pass
+        first = hits[0] if hits else None
+        if first and first.get("domain"):
+            name = company_key(first.get("name", ""))
+            if name and (name in wanted or wanted in name):
+                return first["domain"]
+    except Exception as e:
+        print(f"[discover] clearbit '{company}': {e}")
     return None
+
+
+SCRAPE_PATHS = ("", "/contact", "/contact-us", "/careers", "/jobs",
+                "/join-us", "/about", "/about-us", "/team", "/our-team", "/people")
+
 
 def scrape_site(domain):
     raw = []
-    for path in ("", "/contact", "/contact-us", "/careers", "/jobs",
-                 "/join-us", "/about", "/about-us", "/team", "/our-team", "/people"):
+    for path in SCRAPE_PATHS:
         for scheme in ("https", "http"):
             try:
                 r = requests.get(f"{scheme}://{domain}{path}", headers=UA, timeout=12)
-                raw += EMAIL_RE.findall(r.text)
+                if r.status_code == 200:
+                    raw += EMAIL_RE.findall(r.text)
+                    raw += [m.replace("%40", "@") for m in
+                            re.findall(r"mailto:([^\"'?>\s]+)", r.text)]
                 break
             except Exception:
                 continue
+        time.sleep(0.5)  # be polite to small company sites
     return clean_emails(raw, domain)
 
+
+def fetch_listing_text(job):
+    """Full advert text, where the source gives us a clean way to get it."""
+    try:
+        if job["source"] == "reed" and REED_API_KEY:
+            jid = job["external_id"].split("_", 1)[1]
+            r = requests.get(f"https://www.reed.co.uk/api/1.0/jobs/{jid}",
+                             auth=(REED_API_KEY, ""), headers=UA, timeout=20)
+            if r.ok:
+                return strip_html(r.json().get("jobDescription") or "")
+        elif job.get("url"):
+            r = requests.get(job["url"], headers=UA, timeout=20)
+            if r.ok:
+                return strip_html(r.text)
+    except Exception as e:
+        print(f"[discover] listing fetch failed: {e}")
+    return ""
+
+
 def best_email(candidates):
-    """Return (email, contact_name, tier) - highest tier wins. Never invents anything."""
-    best = (None, None, -1)
-    for e in candidates:
-        tier, name = classify(e)
+    """(email, first_name, tier) - highest tier wins. Never invents anything."""
+    best = (None, None, 0)
+    for address in candidates:
+        tier, name = classify(address)
         if tier > best[2]:
-            best = (e, name, tier)
+            best = (address, name, tier)
     return best
 
+
 def discover(state):
-    todo = [j for j in state["jobs"].values() if j["status"] == "scored"][:15]
+    todo = [j for j in state["jobs"].values()
+            if j["status"] == "scored"][:MAX_DISCOVERED_PER_RUN]
+    found = 0
     for job in todo:
-        # 1) emails printed inside the listing itself - directly tied to the job
-        listing_emails = clean_emails(EMAIL_RE.findall(job.get("description", "")))
-        email, name, tier = best_email(listing_emails)
+        # 1) addresses printed in the advert itself - directly tied to this job
+        text = job.get("description", "") + " " + fetch_listing_text(job)
+        job["listing_text_len"] = len(text)
+        email_addr, name, tier = best_email(clean_emails(EMAIL_RE.findall(text)))
         method = "listing"
 
-        # 2) company website scrape
-        if not email:
+        # 2) the company's own website
+        if not email_addr:
             company = (job.get("company") or "").strip()
             if not company:
-                job["status"], job["skip_reason"] = "skipped", "no company name"
+                job.update({"status": "skipped", "skip_reason": "no company name"})
                 continue
             domain = find_domain(company)
-            if not domain or not has_mx(domain):
-                job["status"] = "no_email"
+            if not domain:
+                job.update({"status": "no_email", "skip_reason": "no domain found"})
                 continue
             job["company_domain"] = domain
-            email, name, tier = best_email(scrape_site(domain))
+            if not has_mx(domain):
+                job.update({"status": "no_email", "skip_reason": "domain has no MX"})
+                continue
+            email_addr, name, tier = best_email(scrape_site(domain))
             method = "scraped"
 
-        # 3) nothing real found -> do NOT send. No guessing, ever.
-        if not email or not has_mx(email.split("@")[1]):
-            job["status"] = "no_email"
+        # 3) nothing real found -> do not send. No guessing, ever.
+        if not email_addr or tier < 1:
+            job.update({"status": "no_email", "skip_reason": "no real address found"})
+            continue
+        if not has_mx(email_addr.split("@")[1]):
+            job.update({"status": "no_email", "skip_reason": "address domain has no MX"})
             continue
 
-        job.update({"contact_email": email, "contact_name": name,
+        job.update({"contact_email": email_addr, "contact_name": name,
                     "email_method": method, "email_tier": tier, "status": "ready"})
-        who = name or email
-        print(f"[discover] {job['company']} -> {who} <{email}> tier={tier} via {method}")
-    print(f"[discover] processed {len(todo)}")
+        found += 1
+        print(f"[discover] {job['company']} -> {name or email_addr} <{email_addr}> "
+              f"({TIER_NAMES.get(tier)}, via {method})")
+    print(f"[discover] {found}/{len(todo)} listings got a real address")
 
 
 # ======================================================================
-# COMPOSE_SEND
+# COMPOSE
 # ======================================================================
-import glob, imaplib, os, smtplib, time
-from datetime import datetime, timezone
-from email.message import EmailMessage
+BANNED_RES = [(b, re.compile(r"\b" + re.escape(b.lower()) + r"\b")) for b in BANNED]
+STOPWORDS = {"the", "and", "for", "with", "role", "jobs", "job", "full", "time",
+             "part", "permanent", "contract", "based", "new", "our", "your"}
 
-def cv_path():
-    pdfs = glob.glob(os.path.join(CV_DIR, "*.pdf"))
-    return pdfs[0] if pdfs else None
 
 def slop_check(text):
     low = text.lower()
-    return [b for b in BANNED if b.lower() in low]
+    return [b for b, rx in BANNED_RES if rx.search(low)]
 
-def build_email(job):
+
+def normalise(text):
+    """Code owns punctuation and formatting; the model only supplies words."""
+    text = (text or "").replace("—", " - ").replace("–", "-")
+    text = text.replace("’", "'").replace("“", '"').replace("”", '"')
+    text = re.sub(r"[*_#`]+", "", text)
+    text = re.sub(r"!+", ".", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+SIGNOFF_LINE_RE = re.compile(
+    r"^(harry\b|best\b|kind regards|regards|thanks|cheers|sincerely|yours\b)",
+    re.I)
+
+
+def strip_signoff(body):
+    """Remove whatever sign-off the model produced so code can add the real one.
+    Cuts from the first sign-off marker in the last few lines to the end, so
+    'Best wishes,\\nH' goes entirely."""
+    lines = body.rstrip().split("\n")
+    cut = None
+    for i in range(max(0, len(lines) - 5), len(lines)):
+        line = lines[i].strip()
+        if SIGNOFF_LINE_RE.match(line) or PHONE in line or "cv attached" in line.lower():
+            cut = i
+            break
+    if cut is not None:
+        lines = lines[:cut]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines).rstrip()
+
+
+def assemble(body, greeting):
+    """Force the exact greeting and the exact sign-off around the model's copy."""
+    body = normalise(body)
+    lines = body.split("\n")
+    if lines and (lines[0].lower().startswith("hi") or lines[0].lower().startswith("hello")
+                  or lines[0].lower().startswith("dear")):
+        lines = lines[1:]
+    core = strip_signoff("\n".join(lines).strip())
+    return f"{greeting}\n\n{core}\n\nHarry\n{SIGNOFF}", core
+
+
+def word_count(text):
+    return len(re.findall(r"[A-Za-z0-9'/-]+", text))
+
+
+def role_tokens(title):
+    return [t for t in re.findall(r"[a-z]+", (title or "").lower())
+            if len(t) >= 4 and t not in STOPWORDS]
+
+
+def subject_names_role(subject, title):
+    low = subject.lower()
+    tokens = role_tokens(title)
+    if not tokens:
+        return True
+    return any(t[:5] in low for t in tokens)
+
+
+def email_problems(subject, core, job):
+    """Everything code refuses to send. Returned as feedback for the retry."""
+    problems = []
+    banned = slop_check(subject + " " + core)
+    if banned:
+        problems.append(f"banned phrases used: {banned}")
+
+    words = subject.split()
+    if len(words) > 8:
+        problems.append(f"subject is {len(words)} words, max is 8")
+    if "application for" in subject.lower():
+        problems.append("subject must not say 'Application for'")
+    if not subject_names_role(subject, job.get("title", "")):
+        problems.append(f"subject must name the role ({job.get('title')})")
+    if subject.isupper():
+        problems.append("subject must not be ALL CAPS")
+
+    first_line = next((l for l in core.split("\n") if l.strip()), "")
+    if not subject_names_role(first_line, job.get("title", "")):
+        problems.append(f"the first line must name the exact role "
+                        f"({job.get('title')}) plus one detail from the listing")
+
+    count = word_count(core)
+    if not 60 <= count <= 90:
+        problems.append(f"body is {count} words, must be 60-90 "
+                        f"(excluding greeting and sign-off)")
+    numbered = re.findall(r"^\s*(\d)[.)]\s+\S", core, re.M)
+    if len(numbered) < 2:
+        problems.append("body must contain 2 or 3 numbered proof points "
+                        "on their own lines, starting '1.' and '2.'")
+    if len(numbered) > 3:
+        problems.append("body must have at most 3 numbered proof points")
+    if core.count("?") != 1:
+        problems.append("body must end with exactly one question as the CTA")
+    return problems
+
+
+def build_email(job, attempts=3):
     family = pick_family(job["title"], job.get("description", ""))
-    t = TEMPLATES[family]
+    job["template_family"] = family
+    tpl = TEMPLATES[family]
     greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
-    prompt = (
-        'Fill this cold-email skeleton for the job below. Respond ONLY with JSON: '
-        '{"subject": "...", "body": "..."}\n\n'
+    base = (
+        'Write a cold job-application email by filling the skeleton below. '
+        'Respond ONLY with JSON: {"subject": "...", "body": "..."}\n\n'
         f"{STYLE_RULES}\n\n"
-        f"BANNED PHRASES (never use any): {', '.join(BANNED)}\n\n"
+        f"BANNED PHRASES (never use any of these): {'; '.join(BANNED)}\n\n"
         f"GREETING TO USE EXACTLY: {greeting}\n"
-        f"SUBJECT EXAMPLES (match this energy, adapt to the listing): {t['subject_examples']}\n\n"
-        f"SKELETON (keep its structure, replace the {{placeholders}}, tighten wording to fit the job):\n{t['skeleton']}\n\n"
-        f"CANDIDATE (for accuracy only, do not dump it all in):\n{CANDIDATE_PROFILE}\n\n"
-        f"JOB:\nTitle: {job['title']}\nCompany: {job['company']}\nLocation: {job['location']}\n"
-        f"Recipient: {job.get('contact_name') or 'unknown - generic hiring inbox'}\n"
-        f"Description: {job['description'][:2000]}"
+        f"SUBJECT EXAMPLES (match this energy, adapt to the listing): "
+        f"{tpl['subject_examples']}\n\n"
+        "SKELETON - keep this structure, replace every {placeholder} with real "
+        "copy, drop the third proof point if it does not help THIS job:\n"
+        f"{tpl['skeleton']}\n\n"
+        f"CANDIDATE FACTS (for accuracy only, never dump them all in):\n"
+        f"{CANDIDATE_PROFILE}\n\n"
+        f"THE JOB:\nTitle: {job['title']}\nCompany: {job['company']}\n"
+        f"Location: {job['location']}\n"
+        f"Recipient: {job.get('contact_name') or 'unknown, a shared hiring inbox'}\n"
+        f"Listing: {job['description'][:2000]}"
     )
-    for _ in range(2):
-        content = gemini_json(prompt, max_tokens=600)
-        if not content or "subject" not in content or "body" not in content:
+    prompt = base
+    best = None
+    for attempt in range(attempts):
+        content = gemini_json(prompt, max_tokens=900, temperature=0.6)
+        if not content or not content.get("subject") or not content.get("body"):
+            prompt = base  # bad shape, start clean
             continue
-        bad = slop_check(content["subject"] + " " + content["body"])
-        if bad:
-            prompt += f"\n\nPREVIOUS ATTEMPT USED BANNED PHRASES {bad}. Rewrite without them."
-            continue
-        if len(content["subject"].split()) > 10:
-            content["subject"] = " ".join(content["subject"].split()[:8])
-        return content
+        subject = normalise(str(content["subject"])).split("\n")[0].strip(' "')
+        body, core = assemble(str(content["body"]), greeting)
+        problems = email_problems(subject, core, job)
+        if not problems:
+            return {"subject": subject, "body": body, "family": family}
+        print(f"[compose] attempt {attempt + 1} rejected: {problems}")
+        if best is None or len(problems) < len(best[0]):
+            best = (problems, subject, body)
+        prompt = (base + "\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED:\n- "
+                  + "\n- ".join(problems)
+                  + "\nRewrite it, fixing every point. Keep everything else.")
+    if best:
+        job["compose_problems"] = best[0]
     return None
 
-def send_email(to_addr, subject, body, attach_cv=True):
+
+# ======================================================================
+# SEND
+# ======================================================================
+def cv_path():
+    for directory in CV_DIRS:
+        pdfs = sorted(glob.glob(os.path.join(directory, "*.pdf")))
+        if pdfs:
+            return pdfs[0]
+    return None
+
+
+def send_email(to_addr, subject, body, attach_cv=True, headers=None):
+    """Returns the Message-ID so follow-ups can thread onto the original."""
     msg = EmailMessage()
     msg["From"] = GMAIL_ADDRESS
     msg["To"] = to_addr
     msg["Subject"] = subject
+    msg["Message-ID"] = email.utils.make_msgid(domain="gmail.com")
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    for key, value in (headers or {}).items():
+        if value:
+            msg[key] = value
     msg.set_content(body)
     cv = cv_path()
     if attach_cv and cv:
         with open(cv, "rb") as f:
             msg.add_attachment(f.read(), maintype="application", subtype="pdf",
                                filename="Harry_Russell_CV.pdf")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as s:
         s.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
         s.send_message(msg)
+    return msg["Message-ID"]
 
-def run_sends(state):
+
+def run_sends(state, dry_run=False):
     if not cv_path():
-        print("[send] NO CV PDF IN cv/ FOLDER - not sending")
+        print("[send] no CV PDF in cv/ or repo root - refusing to send")
         return
+    if not dry_run and not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
+        print("[send] no Gmail credentials - refusing to send")
+        return
+
     ready = sorted(
         [j for j in state["jobs"].values() if j["status"] == "ready"],
         key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)),
     )
     sent = 0
     for job in ready:
-        if sent >= PER_RUN_SEND_CAP or sends_today(state) >= DAILY_SEND_CAP:
+        if sent >= PER_RUN_SEND_CAP:
+            print(f"[send] per-run cap ({PER_RUN_SEND_CAP}) reached")
             break
-        ckey = job["company"].lower().strip()
-        if ckey in state["companies_contacted"]:
-            job["status"] = "skipped"
-            job["skip_reason"] = "company already contacted"
+        if sends_today(state) >= DAILY_SEND_CAP:
+            print(f"[send] daily cap ({DAILY_SEND_CAP}) reached")
+            break
+        if not TEST_MODE and already_contacted(state, job):
+            job.update({"status": "skipped", "skip_reason": "company already contacted"})
             continue
-        content = build_email(job)
-        if not content or "subject" not in content:
-            continue
-        try:
-            send_email(job["contact_email"], content["subject"], content["body"])
-            job.update({"status": "sent", "sent_at": now(),
-                        "sent_subject": content["subject"]})
-            state["companies_contacted"][ckey] = now()
-            record_send(state)
-            sent += 1
-            print(f"[send] {job['title']} @ {job['company']} -> {job['contact_email']}")
-            time.sleep(30)
-        except Exception as e:
-            print(f"[send] failed {job['company']}: {e}")
-    print(f"[send] sent {sent}")
 
+        content = build_email(job)
+        if not content:
+            job["status"] = "compose_failed"
+            print(f"[compose] gave up on {job['title']} @ {job['company']}")
+            continue
+
+        real_to = job["contact_email"]
+        to_addr = GMAIL_ADDRESS if TEST_MODE else real_to
+        subject = (f"[TEST -> {real_to}] {content['subject']}"
+                   if TEST_MODE else content["subject"])
+
+        if dry_run:
+            print(f"\n--- DRY RUN -> {to_addr}\nSubject: {subject}\n\n{content['body']}\n")
+            job.update({"status": "ready", "draft_subject": subject,
+                        "draft_body": content["body"]})
+            sent += 1
+            continue
+
+        try:
+            message_id = send_email(to_addr, subject, content["body"])
+        except Exception as e:
+            job.update({"status": "send_failed", "send_error": str(e)[:200]})
+            print(f"[send] failed {job['company']}: {e}")
+            continue
+
+        job.update({
+            "status": "test_sent" if TEST_MODE else "sent",
+            "sent_at": now(),
+            "sent_to": to_addr,
+            "sent_subject": subject,
+            "sent_body": content["body"],
+            "message_id": message_id,
+            "template_family": content["family"],
+        })
+        record_send(state)
+        if not TEST_MODE:
+            mark_contacted(state, job)
+        sent += 1
+        label = "TEST" if TEST_MODE else "LIVE"
+        print(f"[send] {label} {job['title']} @ {job['company']} -> {to_addr}")
+        save(state)
+        if sent < PER_RUN_SEND_CAP:
+            time.sleep(SEND_INTERVAL_SECONDS)
+    print(f"[send] {sent} message(s) this run, {sends_today(state)} today")
+
+
+# ======================================================================
+# DAILY SUMMARY - one digest a day at 22:00 UK time
+# ======================================================================
+SUMMARY_HOUR_UK = 22
+SUMMARY_TZ = "Europe/London"
+
+
+def uk_now():
+    """Local UK time. Falls back to a BST approximation if tzdata is missing."""
+    utc = datetime.now(timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        return utc.astimezone(ZoneInfo(SUMMARY_TZ))
+    except Exception:
+        # BST runs from the last Sunday in March to the last Sunday in October
+        def last_sunday(month):
+            day = 31
+            while True:
+                candidate = datetime(utc.year, month, day, 1, tzinfo=timezone.utc)
+                if candidate.weekday() == 6:
+                    return candidate
+                day -= 1
+        bst = last_sunday(3) <= utc < last_sunday(10)
+        return utc + timedelta(hours=1) if bst else utc
+
+
+def summary_due(force=False):
+    """The workflow fires at 21:00 and 22:00 UTC; exactly one of those is 22:00
+    in the UK, whichever way the clocks are set."""
+    return force or uk_now().hour == SUMMARY_HOUR_UK
+
+
+def summary_window(state):
+    since = parse_ts(state.get("last_summary_at"))
+    floor = datetime.now(timezone.utc) - timedelta(hours=24)
+    return min(since, floor) if since else floor
+
+
+def collect_summary(state, since):
+    """What happened since the last digest."""
+    def after(value):
+        stamp = parse_ts(value)
+        return stamp is not None and stamp >= since
+
+    jobs = list(state["jobs"].values())
+    applications = sorted(
+        [j for j in jobs if after(j.get("sent_at"))],
+        key=lambda j: -(j.get("score") or 0))
+    return {
+        "applications": applications,
+        "followups": [j for j in jobs if after(j.get("followup_sent_at"))],
+        "replies": [j for j in jobs if after(j.get("replied_at"))],
+        "found": [j for j in jobs if after(j.get("found_at"))],
+        "no_email": [j for j in jobs if after(j.get("found_at"))
+                     and j.get("status") == "no_email"],
+        "queued": [j for j in jobs if j.get("status") == "ready"],
+        "waiting": [j for j in jobs if j.get("status") == "sent"
+                    and not j.get("followup_sent_at")],
+        "lifetime": sum(1 for j in jobs
+                        if j.get("status") in ("sent", "replied")
+                        or j.get("followup_sent_at")),
+    }
+
+
+def esc(text):
+    return (str(text or "").replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def summary_bodies(data):
+    """(subject, plain text, html) for the digest."""
+    apps = data["applications"]
+    tests = [j for j in apps if j.get("status") == "test_sent"]
+    day = uk_now().strftime("%A %d %B")
+
+    if not apps:
+        subject = f"Job machine: nothing sent today ({day})"
+    elif tests:
+        subject = f"Job machine: {len(apps)} TEST email(s) ({day})"
+    else:
+        subject = f"Job machine: {len(apps)} application(s) sent ({day})"
+
+    lines = [subject, "=" * len(subject), ""]
+    rows = []
+    for job in apps:
+        address = job.get("contact_email") or "unknown"
+        who = job.get("contact_name")
+        target = f"{who} <{address}>" if who else address
+        tier = TIER_NAMES.get(job.get("email_tier"), "unknown")
+        flag = " [TEST]" if job.get("status") == "test_sent" else ""
+        lines += [
+            f"{job.get('title')} - {job.get('company')}{flag}",
+            f"  {job.get('location')} | score {job.get('score')} | "
+            f"to {target} ({tier})",
+            f"  Subject: {job.get('sent_subject')}",
+            f"  Listing: {job.get('url') or 'n/a'}",
+            "",
+        ]
+        rows.append(
+            f"<tr><td><b>{esc(job.get('title'))}</b><br>"
+            f"<span class=m>{esc(job.get('company'))}{esc(flag)} - "
+            f"{esc(job.get('location'))}</span></td>"
+            f"<td>{esc(job.get('score'))}</td>"
+            f"<td>{esc(who) + '<br>' if who else ''}"
+            f"<span class=m>{esc(address)}<br>{esc(tier)}</span></td>"
+            f"<td>{esc(job.get('sent_subject'))}</td></tr>")
+
+    if not apps:
+        lines.append("No applications went out in the last 24 hours.\n")
+
+    extras = []
+    if data["replies"]:
+        extras.append("Replies received: " + ", ".join(
+            f"{j.get('company')} ({j.get('title')})" for j in data["replies"]))
+    if data["followups"]:
+        extras.append("Follow-ups sent: " + ", ".join(
+            j.get("company", "?") for j in data["followups"]))
+    extras += [
+        f"New listings found: {len(data['found'])}",
+        f"Found but no real email address: {len(data['no_email'])}",
+        f"Queued and ready to send: {len(data['queued'])}",
+        f"Awaiting a reply (follow-up due in 4 days): {len(data['waiting'])}",
+        f"Applications sent all time: {data['lifetime']}",
+    ]
+    lines += ["-" * 40] + extras
+
+    table = ("<table><thead><tr><th>Role</th><th>Score</th><th>Sent to</th>"
+             "<th>Subject line</th></tr></thead><tbody>"
+             + "".join(rows) + "</tbody></table>") if rows else (
+        "<p>No applications went out in the last 24 hours.</p>")
+    html = f"""<html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;
+color:#111;line-height:1.45">
+<style>
+table{{border-collapse:collapse;width:100%;max-width:720px;font-size:14px}}
+th,td{{border-bottom:1px solid #ddd;padding:8px 6px;text-align:left;vertical-align:top}}
+th{{background:#f4f4f4;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
+.m{{color:#666;font-size:12px}}
+ul{{font-size:14px;padding-left:18px}}
+</style>
+<h2 style="margin:0 0 4px">{esc(subject)}</h2>
+<p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
+{table}
+<ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
+</body></html>"""
+    return subject, "\n".join(lines), html
+
+
+def send_summary(state, force=False):
+    if not summary_due(force):
+        print(f"[summary] not 22:00 in the UK yet (local {uk_now():%H:%M}), skipping")
+        return
+    if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
+        print("[summary] no Gmail credentials")
+        return
+
+    since = summary_window(state)
+    subject, text, html = summary_bodies(collect_summary(state, since))
+    msg = EmailMessage()
+    msg["From"] = GMAIL_ADDRESS
+    msg["To"] = GMAIL_ADDRESS
+    msg["Subject"] = subject
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    msg["Message-ID"] = email.utils.make_msgid(domain="gmail.com")
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as s:
+        s.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+        s.send_message(msg)
+    state["last_summary_at"] = now()
+    print(f"[summary] sent: {subject}")
+
+
+# ======================================================================
+# FOLLOW-UP
+# ======================================================================
 def has_reply_from(addr):
+    """True/False, or None when the inbox could not be checked."""
     try:
         m = imaplib.IMAP4_SSL("imap.gmail.com")
         m.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-        m.select("INBOX")
-        _, data = m.search(None, "FROM", f'"{addr}"')
-        m.logout()
-        return bool(data[0].split())
+        try:
+            m.select("INBOX")
+            status, data = m.search(None, "FROM", f'"{addr}"')
+            if status != "OK":
+                return None
+            return bool(data and data[0].split())
+        finally:
+            try:
+                m.logout()
+            except Exception:
+                pass
     except Exception as e:
         print(f"[followup] imap error: {e}")
-        return True  # fail safe: assume replied, don't follow up
+        return None
+
 
 def run_followups(state):
+    if TEST_MODE:
+        print("[followup] disabled in TEST_MODE")
+        return
+    if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
+        return
+    done = 0
     for job in state["jobs"].values():
-        if job["status"] != "sent" or job.get("followup_sent_at"):
+        if job.get("status") != "sent" or job.get("followup_sent_at"):
             continue
-        sent_at = datetime.fromisoformat(job["sent_at"])
-        age = (datetime.now(timezone.utc) - sent_at).days
-        if age < FOLLOWUP_AFTER_DAYS:
+        sent_at = parse_ts(job.get("sent_at"))
+        if not sent_at:
             continue
-        if has_reply_from(job["contact_email"]):
-            job["status"] = "replied"
+        if datetime.now(timezone.utc) - sent_at < timedelta(days=FOLLOWUP_AFTER_DAYS):
             continue
+
+        replied = has_reply_from(job["contact_email"])
+        if replied is None:
+            continue  # could not check: leave it alone, try again next run
+        if replied:
+            job.update({"status": "replied", "replied_at": now()})
+            print(f"[followup] reply from {job['company']} - leaving it alone")
+            continue
+
+        greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
         body = (
-            f"Hi,\n\nJust following up on my application for the {job['title']} role "
-            f"I sent over on {sent_at.strftime('%A')}. Still very interested - happy to come in "
-            "for a chat any time that suits.\n\nBest,\nHarry Russell\n07398 530978"
+            f"{greeting}\n\n"
+            f"Following up on the note I sent {sent_at.strftime('%A')} about the "
+            f"{job['title']} role. Still interested, and happy to come in for a chat "
+            f"or do a short call whenever suits.\n\n"
+            f"Is it worth me sending anything else over?\n\n"
+            f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
         )
+        subject = job.get("sent_subject") or job["title"]
+        if not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
         try:
-            send_email(job["contact_email"], f"Re: {job.get('sent_subject', job['title'])}",
-                       body, attach_cv=False)
-            job["followup_sent_at"] = now()
+            send_email(job["contact_email"], subject, body, attach_cv=False,
+                       headers={"In-Reply-To": job.get("message_id"),
+                                "References": job.get("message_id")})
+            job.update({"followup_sent_at": now(), "followup_body": body})
+            done += 1
             print(f"[followup] {job['company']}")
-            time.sleep(15)
+            save(state)
+            time.sleep(FOLLOWUP_INTERVAL_SECONDS)
         except Exception as e:
             print(f"[followup] failed {job['company']}: {e}")
+    print(f"[followup] {done} sent")
 
 
 # ======================================================================
 # MAIN
 # ======================================================================
-def main():
+STATUSES = ("new", "scored", "ready", "sent", "test_sent", "replied",
+            "no_email", "compose_failed", "send_failed", "skipped")
+
+
+def stage(name, fn, *args):
+    try:
+        fn(*args)
+    except Exception as e:
+        print(f"[{name}] STAGE FAILED: {type(e).__name__}: {e}")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Job outreach pipeline")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="compose everything but send nothing")
+    parser.add_argument("--skip-harvest", action="store_true")
+    parser.add_argument("--summary", action="store_true",
+                        help="send the daily digest instead of running the pipeline")
+    parser.add_argument("--force", action="store_true",
+                        help="with --summary, send it whatever the UK clock says")
+    args = parser.parse_args(argv)
+
+    if args.summary:
+        state = load()
+        send_summary(state, force=args.force)
+        save(state)
+        return 0
+
+    print(f"=== job-machine {now()} ===")
+    print(f"TEST_MODE={'ON (nothing reaches an employer)' if TEST_MODE else 'OFF (LIVE)'} "
+          f"caps={PER_RUN_SEND_CAP}/run {DAILY_SEND_CAP}/day "
+          f"locations={','.join(SEARCH_LOCATIONS)} cv={cv_path() or 'MISSING'}")
+
     state = load()
-    harvest(state)
+    if not args.skip_harvest:
+        stage("harvest", harvest, state)
+        save(state)
+    stage("score", score_jobs, state)
     save(state)
-    score_jobs(state)
+    stage("discover", discover, state)
     save(state)
-    discover(state)
+    stage("send", run_sends, state, args.dry_run)
     save(state)
-    run_sends(state)
+    if not args.dry_run:
+        stage("followup", run_followups, state)
+    prune(state)
     save(state)
-    run_followups(state)
-    save(state)
-    jobs = state["jobs"].values()
+
+    jobs = list(state["jobs"].values())
     print("\n=== SUMMARY ===")
-    for s in ("new", "scored", "ready", "sent", "replied", "no_email", "skipped"):
-        print(f"{s}: {sum(1 for j in jobs if j['status'] == s)}")
+    for s in STATUSES:
+        count = sum(1 for j in jobs if j.get("status") == s)
+        if count:
+            print(f"{s}: {count}")
+    print(f"total tracked: {len(jobs)} | companies contacted ever: "
+          f"{len(state['companies_contacted'])} | sent today: {sends_today(state)}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
