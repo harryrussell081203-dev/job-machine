@@ -1,2 +1,163 @@
 # job-machine
-autopilot interviews to your email
+
+Automated job-application outreach for Harry Russell. One Python file, run by
+GitHub Actions three times a weekday, costing nothing.
+
+It finds fresh engineering/technician jobs in Scotland, scores them against
+Harry's profile, digs out a **real** email address for the employer, writes a
+short personalised email, sends it from Gmail with the CV attached, and chases
+once after four days if nobody replies.
+
+**TEST_MODE is ON by default.** Until you turn it off, every message is really
+sent through Gmail but lands in Harry's own inbox with the intended recipient in
+the subject line. No employer is contacted, and no company is burned.
+
+---
+
+## Pipeline
+
+| Stage | What happens |
+| --- | --- |
+| 1. Harvest | Adzuna + Reed, listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
+| 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
+| 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
+| 4. Compose | Role-family template (communications / electronics_technician / instrumentation_maintenance / events_production / general) picked from the title. Gemini fills a fixed skeleton; code enforces the rules and rejects-and-retries up to 3 times. |
+| 5. Send | Gmail SMTP over SSL, CV PDF attached, best contact tier first then highest score. One email per company **ever**. Caps per run and per day, 30s between sends. |
+| 6. Follow-up | 4 days after sending, IMAP checks the inbox for a reply from that address. No reply means one short follow-up, no attachment, threaded onto the original. Replied means marked `replied` and never touched again. |
+| 7. State | Everything in `data/state.json`, committed back by the workflow. |
+
+### Copy rules enforced in code, not just asked of the model
+
+- 60-90 words in the body, excluding greeting and sign-off
+- greeting by first name when one is known, otherwise `Hi,`
+- first line names the exact role plus one concrete detail from that listing
+- 2-3 numbered proof points, relevant to that job only
+- exactly one question as the call to action
+- sign-off is always `Harry / Harry Russell / 07398 530978 / CV attached`
+- subject max 8 words, must name the role, never "Application for"
+- no markdown, no em dashes, no exclamation marks
+- a banned-phrase list (`I hope this email finds you well`, `passionate`,
+  `leverage`, `delve`, `seamless`, `synergy`, `dynamic`, `thrilled`, ...) - any
+  hit and the draft is rejected and rewritten
+
+If a draft still fails after three attempts the job is marked `compose_failed`
+and nothing is sent.
+
+---
+
+## Setup
+
+### Secrets
+`Settings > Secrets and variables > Actions > Secrets`
+
+| Secret | Where it comes from |
+| --- | --- |
+| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | developer.adzuna.com (free) |
+| `REED_API_KEY` | reed.co.uk/developers (free) |
+| `GEMINI_API_KEY` | aistudio.google.com (free tier) |
+| `GMAIL_ADDRESS` | the Gmail account that sends |
+| `GMAIL_APP_PASSWORD` | Google account > Security > App passwords (needs 2FA on) |
+
+### Variables (all optional)
+`Settings > Secrets and variables > Actions > Variables`
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `TEST_MODE` | `1` | `1` = everything goes to your own inbox. Set to `0` to go live. |
+| `DAILY_SEND_CAP` | `20` | across all runs in a UTC day |
+| `PER_RUN_SEND_CAP` | `7` | the workflow runs 3x per weekday |
+| `SEARCH_LOCATIONS` | `Aberdeen,Dundee,Edinburgh,Glasgow,Inverness` | comma separated |
+| `SEARCH_RADIUS_MILES` | `25` | per location |
+| `SCORE_THRESHOLD` | `70` | |
+
+### CV
+
+The pipeline attaches the first `*.pdf` it finds in `cv/`, then the repo root.
+**No PDF means nothing is sent** - that is deliberate.
+
+`cv/Harry_Russell_CV.pdf` was generated from `cv/Harry_Russell_CV.docx` by
+`tools/build_cv_pdf.py`. If you would rather use Word's own "Save as PDF"
+output, drop that file into `cv/` and delete the generated one. After editing
+the .docx:
+
+```bash
+pip install reportlab
+python tools/build_cv_pdf.py
+```
+
+---
+
+## Running it
+
+The workflow runs at 08:00, 11:30 and 15:00 UTC on weekdays. You can also run it
+by hand from the Actions tab (**Run workflow**), which takes two inputs:
+
+- `test_mode` - override `TEST_MODE` for that one run
+- `dry_run` - compose everything and send nothing; drafts land in `state.json`
+  as `draft_subject` / `draft_body`
+
+Locally:
+
+```bash
+pip install requests dnspython
+export GEMINI_API_KEY=... ADZUNA_APP_ID=... ADZUNA_APP_KEY=... REED_API_KEY=...
+export GMAIL_ADDRESS=... GMAIL_APP_PASSWORD=...
+python job_machine.py --dry-run      # nothing is sent
+python job_machine.py                # TEST_MODE is on unless you unset it
+```
+
+Tests (no network, nothing is sent):
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+---
+
+## Going live
+
+1. Let it run in TEST_MODE for a day or two.
+2. Read the test emails in your inbox. Every one is also stored in
+   `data/state.json` as `sent_body`, so you can review a whole batch in one
+   place.
+3. Check the addresses in the `[TEST -> ...]` subject prefixes look like real
+   people or real hiring inboxes.
+4. When you are happy, set the repo variable `TEST_MODE` to `0`.
+
+Turning it back on is the same switch. Companies contacted while live are
+remembered forever in `companies_contacted` and are never emailed twice.
+
+---
+
+## Job statuses in `data/state.json`
+
+| Status | Meaning |
+| --- | --- |
+| `new` | harvested, not scored yet |
+| `scored` | scored >=70, waiting on an email address |
+| `ready` | has a real address, queued to send |
+| `sent` | emailed for real |
+| `test_sent` | emailed to your own inbox by TEST_MODE |
+| `replied` | they replied, so it is left alone forever |
+| `no_email` | no real address found; nothing was sent |
+| `compose_failed` | three drafts failed the style rules |
+| `send_failed` | SMTP error; the company is still free to try again |
+| `skipped` | below threshold, excluded title, or company already contacted |
+
+Dead listings (`skipped`, `no_email`, `compose_failed`, `send_failed`) are pruned
+after 45 days. Sent history and `companies_contacted` are kept forever.
+
+---
+
+## Notes and limits
+
+- Free tiers all round: Adzuna and Reed APIs, Gemini 2.5 Flash, Clearbit
+  autocomplete (no key), GitHub Actions minutes on a public repo.
+- Reed only publishes a posting date, not a time, so its 48h window is enforced
+  as "today or yesterday". Adzuna gives a timestamp and is filtered exactly.
+- TEST_MODE sends count towards `DAILY_SEND_CAP` - they are still real Gmail
+  sends, and Gmail has its own daily limits.
+- Scoring is capped at 40 listings and discovery at 15 per run to stay inside the
+  Gemini free tier.
+- Job boards and Gemini fail softly: a broken stage prints the error and the run
+  carries on, so state is never lost.
