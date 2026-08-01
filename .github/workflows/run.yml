@@ -1,0 +1,36 @@
+name: job-machine
+on:
+  schedule:
+    - cron: "0 8 * * 1-5"
+    - cron: "30 11 * * 1-5"
+    - cron: "0 15 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests dnspython
+      - name: Run pipeline
+        env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python job_machine.py
+      - name: Commit state
+        run: |
+          git config user.name "job-machine"
+          git config user.email "actions@github.com"
+          git add data/
+          git commit -m "state $(date -u +%F_%H%M)" || echo "no changes"
+          git push
