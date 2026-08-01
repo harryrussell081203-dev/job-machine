@@ -1,0 +1,72 @@
+<!doctype html>
+<!--
+  Stand-in for a Greenhouse/Lever style application form. Deliberately awkward:
+  labels wired up three different ways, a select whose wording does not match the
+  answer bank, a radio group, a consent checkbox, a file upload, a free-text
+  question, and two questions the agent must refuse to answer.
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply - Instrumentation Technician</title></head>
+<body>
+<h1>Apply for Instrumentation Technician</h1>
+<form id="application" action="/submitted.html" method="get">
+
+  <label for="fname">First name *</label>
+  <input id="fname" name="first_name" type="text" required>
+
+  <label for="lname">Surname *</label>
+  <input id="lname" name="last_name" type="text" required>
+
+  <label>Email address *
+    <input name="email" type="email" required>
+  </label>
+
+  <label>Mobile number
+    <input name="phone" type="tel">
+  </label>
+
+  <input name="town" type="text" aria-label="Town or city" required>
+
+  <label for="clearance">Do you hold a security clearance?</label>
+  <select id="clearance" name="clearance">
+    <option value="">Please select</option>
+    <option>None</option>
+    <option>SC</option>
+    <option>DV (Developed Vetting)</option>
+  </select>
+
+  <fieldset>
+    <legend>Do you have the right to work in the UK?</legend>
+    <label><input type="radio" name="rtw" value="y"> Yes</label>
+    <label><input type="radio" name="rtw" value="n"> No</label>
+  </fieldset>
+
+  <label for="current">Current job title</label>
+  <input id="current" name="current_title" type="text">
+
+  <label for="why">Why are you interested in this role? *</label>
+  <textarea id="why" name="why" maxlength="800" required></textarea>
+
+  <label for="cv">Upload your CV *</label>
+  <input id="cv" name="cv" type="file" required>
+
+  <label for="convictions">Do you have any unspent criminal convictions? *</label>
+  <select id="convictions" name="convictions" required>
+    <option value="">Please select</option>
+    <option>Yes</option>
+    <option>No</option>
+  </select>
+
+  <label for="ethnicity">Ethnic origin (voluntary)</label>
+  <select id="ethnicity" name="ethnicity">
+    <option value="">Prefer not to say</option>
+    <option>White Scottish</option>
+    <option>Other</option>
+  </select>
+
+  <label><input type="checkbox" name="privacy" required> I agree to the privacy policy</label>
+
+  <button type="submit">Submit application</button>
+</form>
+</body>
+</html>

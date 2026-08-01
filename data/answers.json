@@ -1,0 +1,66 @@
+{
+ "_README": [
+  "The portal agent answers application forms ONLY from this file. Anything set",
+  "to null is treated as 'I do not know' and the agent will refuse to guess - it",
+  "flags the application for you instead of inventing an answer.",
+  "Fill in the nulls below and far more applications will go through untouched."
+ ],
+
+ "first_name": "Harry",
+ "last_name": "Russell",
+ "full_name": "Harry Dean Russell",
+ "email": "harryrussell081203@gmail.com",
+ "phone": "07398 530978",
+
+ "address_line_1": "31 Cadenhead Road",
+ "city": "Aberdeen",
+ "county": "Aberdeenshire",
+ "postcode": "AB25 3AJ",
+ "country": "United Kingdom",
+
+ "linkedin": null,
+ "website": null,
+
+ "right_to_work_uk": "Yes",
+ "needs_sponsorship": "No",
+ "security_clearance": "DV (Developed Vetting)",
+ "armed_forces_veteran": "Yes",
+ "driving_licence": "No",
+ "forklift_licence": "Yes, counterbalance",
+
+ "notice_period": "None, available immediately",
+ "earliest_start_date": "Immediately",
+ "salary_expectation": "35000",
+ "willing_to_relocate": null,
+ "willing_to_travel": null,
+ "shift_work": "Yes",
+ "offshore_willing": null,
+
+ "current_employer": "Sonardyne International",
+ "current_job_title": "Workshop Technician",
+ "current_employment_from": "2023",
+ "current_employment_to": "2026",
+ "previous_employer": "Royal Navy (HMS Westminster)",
+ "previous_job_title": "Communications & Information Specialist",
+ "previous_employment_from": "2021",
+ "previous_employment_to": "2023",
+ "years_experience": "5",
+
+ "highest_qualification": "Engineering Modern Apprenticeship, SCQF Level 7",
+ "university": "Robert Gordon University",
+ "degree": "BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)",
+ "school_qualifications": "SQA Diploma in Engineering; NC Electrical Engineering (SCQF 6); SVQ Level 2 Performing Engineering Operations; Scottish Highers",
+
+ "how_did_you_hear": "Job board",
+ "reference_1": null,
+ "reference_2": null,
+
+ "_never_auto_filled": [
+  "Anything in this list is refused by code even if you put a value here, because",
+  "getting it wrong on your behalf is worse than a flagged application:",
+  "national insurance number, passport number, bank or sort code details,",
+  "date of birth, criminal convictions, DBS, medical or health questions,",
+  "ethnicity, gender, religion, sexual orientation, disability status.",
+  "Those forms get filled to the last safe field and then handed to you."
+ ]
+}

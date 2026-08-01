@@ -1,0 +1,89 @@
+name: job-machine portal
+
+# Opens employers' real application forms in a browser and fills them in.
+# Heavier than the email run, so once a weekday morning.
+on:
+  schedule:
+    - cron: "30 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: "Actually press submit on clean applications (true/false)"
+        required: false
+        default: "false"
+      limit:
+        description: "Max applications this run"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine-portal
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests dnspython playwright
+      - run: playwright install --with-deps chromium
+
+      - name: Harvest a month and work the queue
+        env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SEARCH_LOCATIONS: ${{ vars.SEARCH_LOCATIONS }}
+          SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
+          SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
+          # PORTAL_SUBMIT is unset by default, which means fill everything in,
+          # screenshot it and stop short of pressing submit.
+          PORTAL_SUBMIT: ${{ github.event.inputs.submit || vars.PORTAL_SUBMIT }}
+          PORTAL_MAX_AGE_DAYS: ${{ vars.PORTAL_MAX_AGE_DAYS }}
+          PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
+          PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
+        run: |
+          if [ -n "${{ github.event.inputs.limit }}" ]; then
+            python portal_agent.py --harvest --run --limit "${{ github.event.inputs.limit }}"
+          else
+            python portal_agent.py --harvest --run
+          fi
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-screenshots
+          path: screenshots/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Commit state
+        if: always()
+        run: |
+          git config user.name "job-machine"
+          git config user.email "actions@github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "no state changes"
+            exit 0
+          fi
+          git commit -m "portal $(date -u +%F_%H%M)"
+          for i in 1 2 3 4; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "push failed, retry $i"
+            sleep $((2 ** i))
+          done
+          echo "could not push state" >&2
+          exit 1
