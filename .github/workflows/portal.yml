@@ -6,7 +6,8 @@ on:
   schedule:
     - cron: "30 9 * * 1-5"
   push:
-    tags: ["fire-portal-*"]   # push a tag to force a run when the UI is not handy
+    tags: ["fire-portal-*"]        # push a tag to force a run when the UI is not handy
+    branches: ["fire-portal/**"]   # or create a branch with this name, then delete it
   workflow_dispatch:
     inputs:
       submit:
@@ -73,8 +74,8 @@ jobs:
       - name: Commit state
         if: always()
         env:
-          # a tag-triggered run still commits its state to the default branch
-          TARGET: ${{ github.ref_type == 'tag' && github.event.repository.default_branch || github.ref_name }}
+          # a fire-* triggered run still commits its state to the default branch
+          TARGET: ${{ (github.ref_type == 'tag' || startsWith(github.ref_name, 'fire-')) && github.event.repository.default_branch || github.ref_name }}
         run: |
           git config user.name "job-machine"
           git config user.email "actions@github.com"

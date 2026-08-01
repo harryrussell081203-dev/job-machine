@@ -6,7 +6,8 @@ on:
     - cron: "30 11 * * 1-5"   # 11:30 UTC weekdays
     - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
   push:
-    tags: ["fire-run-*"]      # push a tag to force a run when the UI is not handy
+    tags: ["fire-run-*"]        # push a tag to force a run when the UI is not handy
+    branches: ["fire-run/**"]   # or create a branch with this name, then delete it
   workflow_dispatch:
     inputs:
       test_mode:
@@ -66,8 +67,8 @@ jobs:
       - name: Commit state
         if: always()
         env:
-          # a tag-triggered run still commits its state to the default branch
-          TARGET: ${{ github.ref_type == 'tag' && github.event.repository.default_branch || github.ref_name }}
+          # a fire-* triggered run still commits its state to the default branch
+          TARGET: ${{ (github.ref_type == 'tag' || startsWith(github.ref_name, 'fire-')) && github.event.repository.default_branch || github.ref_name }}
         run: |
           git config user.name "job-machine"
           git config user.email "actions@github.com"
