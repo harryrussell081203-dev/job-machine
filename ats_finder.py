@@ -343,9 +343,12 @@ def careers_page_ats(domain, session=None):
     if not domain:
         return None
     get = (session or requests).get
-    pages = [f"https://{domain}", f"https://{domain}/careers",
-             f"https://{domain}/jobs", f"https://{domain}/vacancies",
-             f"https://{domain}/careers/vacancies"]
+    # The careers page first and the homepage last: the homepage always
+    # answers 200 and rarely carries the ATS link, so leading with it spent a
+    # request on every company to learn nothing.
+    pages = [f"https://{domain}/careers", f"https://{domain}/jobs",
+             f"https://{domain}/vacancies", f"https://{domain}/careers/vacancies",
+             f"https://{domain}"]
     seen_links, own_page, reachable = [], None, False
     for url in pages:
         try:
