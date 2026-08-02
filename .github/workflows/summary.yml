@@ -46,20 +46,6 @@ jobs:
 
       - name: Commit state
         if: always()
-        run: |
-          git config user.name "job-machine"
-          git config user.email "actions@github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "no state changes"
-            exit 0
-          fi
-          git commit -m "summary $(date -u +%F_%H%M)"
-          for i in 1 2 3 4; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
-              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
-            echo "push failed, retry $i"
-            sleep $((2 ** i))
-          done
-          echo "could not push state" >&2
-          exit 1
+        env:
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "summary"

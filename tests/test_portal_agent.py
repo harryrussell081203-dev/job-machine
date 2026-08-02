@@ -86,6 +86,51 @@ class TestQuestionsItRefusesToAnswer(unittest.TestCase):
             with self.subTest(question=question):
                 self.assertEqual(pa.refusal_reason(field(label=question)), reason)
 
+    def test_monitoring_questions_take_the_forms_own_prefer_not_to_say(self):
+        for label in ("What is your ethnic origin?", "Gender identity",
+                      "Do you consider yourself to have a disability?"):
+            with self.subTest(label=label):
+                f = field(index="0", label=label, type="select", required=True,
+                          options=["Yes", "No", "Prefer not to say"])
+                plan, flags = pa.plan_answers([f], JOB, pa.load_answers())
+                self.assertEqual(flags, [])
+                self.assertEqual(plan[0]["value"], "Prefer not to say")
+                self.assertTrue(plan[0]["source"].startswith("declined:"))
+
+    def test_decline_option_is_recognised_in_its_many_wordings(self):
+        for wording in ("Prefer not to say", "I would rather not say",
+                        "Do not wish to disclose", "Decline to answer",
+                        "Not disclosed"):
+            with self.subTest(wording=wording):
+                self.assertEqual(
+                    pa.decline_option(field(options=["Male", "Female", wording])),
+                    wording)
+
+    def test_monitoring_with_no_decline_option_is_still_flagged(self):
+        f = field(index="0", label="Ethnic origin", type="select", required=True,
+                  options=["White", "Black", "Asian", "Other"])
+        plan, flags = pa.plan_answers([f], JOB, pa.load_answers())
+        self.assertEqual(plan, [])
+        self.assertTrue(any("protected" in f for f in flags))
+
+    def test_identity_and_financial_fields_are_never_placeholder_filled(self):
+        # a placeholder here would be false information submitted under his name
+        for label in ("National Insurance number", "Bank account number",
+                      "Sort code", "Passport number", "Date of birth"):
+            with self.subTest(label=label):
+                f = field(index="0", label=label, required=True)
+                plan, flags = pa.plan_answers([f], JOB, pa.load_answers())
+                self.assertEqual(plan, [])
+                self.assertTrue(flags)
+
+    def test_convictions_are_never_answered_even_with_a_decline_option(self):
+        f = field(index="0", label="Do you have any unspent convictions?",
+                  type="select", required=True,
+                  options=["Yes", "No", "Prefer not to say"])
+        plan, flags = pa.plan_answers([f], JOB, pa.load_answers())
+        self.assertEqual(plan, [])
+        self.assertTrue(any("convictions" in f for f in flags))
+
     def test_ordinary_questions_are_not_refused(self):
         for question in ("First name", "Email address", "Current job title",
                          "Why are you interested in this role?",
@@ -181,7 +226,7 @@ class TestValueCoercion(unittest.TestCase):
 class TestPlanning(unittest.TestCase):
     def setUp(self):
         self.answers = pa.load_answers()
-        cv = mock.patch.object(jm, "cv_path", return_value="/tmp/cv.pdf")
+        cv = mock.patch.object(jm, "cv_for", return_value="/tmp/cv.pdf")
         cv.start()
         self.addCleanup(cv.stop)
 
@@ -215,7 +260,7 @@ class TestPlanning(unittest.TestCase):
         self.assertEqual(plan[0]["value"], "/tmp/cv.pdf")
 
     def test_missing_cv_is_flagged(self):
-        with mock.patch.object(jm, "cv_path", return_value=None):
+        with mock.patch.object(jm, "cv_for", return_value=None):
             _, flags = pa.plan_answers(
                 [field(index="0", type="file", label="Upload your CV", required=True)],
                 JOB, self.answers)
@@ -351,7 +396,7 @@ class TestAgainstALocalPortal(unittest.TestCase):
                               "Sonardyne, which is the same calibration work.",
                     "fact_used": "Sonardyne 2023-2026"}
         with mock.patch.object(jm, "gemini_json", return_value=grounded), \
-             mock.patch.object(jm, "cv_path", return_value=FIXTURE):
+             mock.patch.object(jm, "cv_for", return_value=FIXTURE):
             plan, flags = pa.plan_answers(fields, JOB, pa.load_answers())
             filled, failed = pa.apply_plan(self.page, plan)
 
@@ -372,17 +417,20 @@ class TestAgainstALocalPortal(unittest.TestCase):
             "() => document.getElementById('cv').files[0]?.name"),
             os.path.basename(FIXTURE))
 
-        # the convictions question is required, so the form is handed to Harry
+        # monitoring question answered with the form's own opt-out
+        self.assertEqual(values["ethnicity"], "Prefer not to say")
+        # convictions and NI number are required, so the form goes to Harry
         self.assertEqual(values["convictions"], "")
-        self.assertEqual(values.get("ethnicity", ""), "")
+        self.assertEqual(values["nino"], "")
         self.assertTrue(any("convictions" in f for f in flags))
+        self.assertTrue(any("identity" in f for f in flags))
 
     def test_a_flagged_form_is_never_submitted(self):
         job = dict(JOB)
         with mock.patch.object(jm, "gemini_json",
                                return_value={"answer": "Same work as my day job.",
                                              "fact_used": "Sonardyne"}), \
-             mock.patch.object(jm, "cv_path", return_value=FIXTURE), \
+             mock.patch.object(jm, "cv_for", return_value=FIXTURE), \
              mock.patch.object(pa, "shot", return_value=None), \
              mock.patch.object(pa, "click_submit") as submit:
             self.page.goto("file://" + FIXTURE)

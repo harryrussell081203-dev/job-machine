@@ -170,14 +170,20 @@ something up to fill a box.
 
 | It will not | Because |
 | --- | --- |
-| Answer convictions, DBS, health, disability, ethnicity, gender, religion, orientation | Only you can answer those, and a wrong answer follows you |
-| Enter your NI number, passport, bank details or date of birth | Identity data does not belong in an automated form-filler |
+| Answer convictions, DBS, health or certification declarations | Only you can answer those, and a wrong answer follows you |
+| Enter your NI number, passport, bank details or date of birth | A placeholder like `0000 0000` is false information submitted under your name. A real application form does not ask for bank details either - that is an onboarding step, so a form asking at this stage is a scam signal worth looking at yourself |
 | Tick "I certify the above is true and complete" | A machine cannot certify anything on your behalf |
 | Solve or work around a CAPTCHA | That is defeating bot protection, and it gets accounts banned |
 | Log into Workday, Taleo, LinkedIn, Indeed or Reed | They need an account and block automation; the digest links them for you |
 
 Hit any of those and the application is filled to the last safe field,
 screenshotted, and handed to you as `portal_review` rather than submitted.
+
+**Equal-opportunities monitoring is different.** Ethnicity, gender, disability
+and orientation questions nearly always offer "Prefer not to say" (in whatever
+wording), and the agent picks it. That is a real answer the form itself offers,
+so those questions stop blocking applications without anything being invented.
+If a monitoring question offers no opt-out, it is flagged like the rest.
 
 ### Portals it works on
 
@@ -193,6 +199,38 @@ bot check. Anything else is recorded as `portal_manual` with a direct link.
 | `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
 | `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
 | `PORTAL_DAILY_CAP` | `25` | Applications per day |
+
+## Converting applications into interviews
+
+Five levers run automatically on top of the basic apply loop:
+
+1. **Reply watcher** (`reply.yml`, every 2h on weekdays, plus every pipeline
+   run). Scans the inbox for replies from anyone we contacted and classifies
+   them. An **interview invitation gets an availability reply within minutes**
+   ("free any day this week, tomorrow included") threaded onto their message,
+   and you get an alert email flagged `[job-machine INTERVIEW]`. Questions and
+   anything unclassifiable get an alert flagged `NEEDS YOUR ANSWER` - the
+   machine never negotiates on your behalf. Automated receipts stay silent.
+   Set repo variable `REPLY_AUTORESPOND=0` to turn the auto-reply off.
+2. **Tailored CV per application.** The attached PDF is rebuilt per role family
+   (`cv_tailor.py`): the summary leads with what that kind of job cares about
+   and the key skills are reordered to match. Everything in it already exists in
+   the master CV - tailoring reorders and emphasises, it never invents.
+3. **The double-tap.** When the portal agent submits an application and a named
+   person was discovered, they get a short "just applied through your portal"
+   note with the CV attached, so the application does not sit unread in an ATS
+   queue.
+4. **Two follow-ups, then silence.** Day 4 and day 9. A reply at any point stops
+   everything.
+5. **Speculative outreach** (`data/targets.json`). Two notes a day to a curated
+   list of Aberdeen subsea/O&G and Scottish defence employers who are not
+   advertising - the hidden market. Honest copy ("nothing advertised that I can
+   see"), real scraped addresses only, one per company ever, and the one
+   concrete detail each email uses comes from the curated note, not from the
+   model's imagination. `SPEC_PER_DAY=0` turns it off.
+
+Freshly posted listings are also applied to first within a tier - being an early
+applicant is itself a conversion lever.
 
 ## The nightly digest
 

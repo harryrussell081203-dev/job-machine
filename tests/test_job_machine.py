@@ -505,11 +505,14 @@ class TestFollowups(unittest.TestCase):
         send.assert_not_called()
         self.assertEqual(job["status"], "sent")
 
-    def test_only_one_followup_ever(self):
-        state, job = self.state_with(9, followup_sent_at=jm.now())
+    def test_never_more_than_the_two_nudges(self):
+        state, job = self.state_with(30, followup_sent_at=jm.now(),
+                                     followup2_sent_at=jm.now())
         with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "has_reply_from") as check, \
              mock.patch.object(jm, "send_email") as send:
             jm.run_followups(state)
+        check.assert_not_called()
         send.assert_not_called()
 
 
@@ -635,6 +638,296 @@ class TestDailySummary(unittest.TestCase):
         self.assertEqual({p.get_content_subtype() for p in msg.iter_parts()},
                          {"plain", "html"})
         self.assertIn("last_summary_at", state)
+
+
+class TestReplyWatcher(unittest.TestCase):
+    def setUp(self):
+        patches = [mock.patch.object(jm, "save"),
+                   mock.patch.object(jm.time, "sleep"),
+                   mock.patch.object(jm, "TEST_MODE", False),
+                   mock.patch.object(jm.imaplib, "IMAP4_SSL"),
+                   mock.patch.object(jm, "GMAIL_ADDRESS", "harry@gmail.com"),
+                   mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw")]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def watched(self, **over):
+        fields = {"status": "sent", "sent_at": jm.now(), "message_id": "<orig>",
+                  "sent_subject": "Subsea tech for your Electronics Technician"}
+        fields.update(over)
+        job = make_job(**fields)
+        return {"jobs": {job["external_id"]: job}, "companies_contacted": {},
+                "send_counts": {}}, job
+
+    REPLY = {"subject": "RE: Subsea tech", "message_id": "<theirs>",
+             "text": "Thanks Harry, could you come in Thursday for a chat?"}
+
+    def test_interview_invite_gets_availability_reply_in_minutes(self):
+        state, job = self.watched()
+        with mock.patch.object(jm, "fetch_latest_reply", return_value=self.REPLY), \
+             mock.patch.object(jm, "classify_reply",
+                               return_value=("interview_invite", "wants Thursday")), \
+             mock.patch.object(jm, "send_email", return_value="<auto>") as send:
+            jm.check_replies(state)
+        # first send is the auto-reply to them, second is the alert to Harry
+        first = send.call_args_list[0]
+        self.assertEqual(first.args[0], "jane.smith@acme.com")
+        # replies keep their own subject line, whatever case they wrote it in
+        self.assertTrue(first.args[1].lower().startswith("re:"))
+        self.assertIn("Which day works best", first.args[2])
+        self.assertEqual(jm.slop_check(first.args[2]), [])
+        self.assertFalse(first.kwargs["attach_cv"])
+        self.assertEqual(first.kwargs["headers"]["In-Reply-To"], "<theirs>")
+        alert = send.call_args_list[1]
+        self.assertEqual(alert.args[0], "harry@gmail.com")
+        self.assertIn("INTERVIEW", alert.args[1])
+        self.assertEqual(job["status"], "replied")
+        self.assertIn("auto_replied_at", job)
+
+    def test_a_question_is_alerted_never_auto_answered(self):
+        state, job = self.watched()
+        with mock.patch.object(jm, "fetch_latest_reply", return_value=self.REPLY), \
+             mock.patch.object(jm, "classify_reply",
+                               return_value=("question", "asked about salary")), \
+             mock.patch.object(jm, "send_email", return_value="<a>") as send:
+            jm.check_replies(state)
+        self.assertEqual(send.call_count, 1)  # alert only
+        self.assertEqual(send.call_args.args[0], "harry@gmail.com")
+        self.assertIn("NEEDS YOUR ANSWER", send.call_args.args[1])
+        self.assertNotIn("auto_replied_at", job)
+
+    def test_automated_receipts_stay_silent(self):
+        state, job = self.watched()
+        with mock.patch.object(jm, "fetch_latest_reply", return_value=self.REPLY), \
+             mock.patch.object(jm, "classify_reply",
+                               return_value=("auto_acknowledgement", "receipt")), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.check_replies(state)
+        send.assert_not_called()
+        self.assertEqual(job["reply_category"], "auto_acknowledgement")
+
+    def test_unclassifiable_reply_still_alerts_but_never_auto_replies(self):
+        state, job = self.watched()
+        with mock.patch.object(jm, "fetch_latest_reply", return_value=self.REPLY), \
+             mock.patch.object(jm, "classify_reply", return_value=(None, None)), \
+             mock.patch.object(jm, "send_email", return_value="<a>") as send:
+            jm.check_replies(state)
+        self.assertEqual(send.call_count, 1)
+        self.assertNotIn("auto_replied_at", job)
+
+    def test_a_reply_is_only_handled_once(self):
+        state, job = self.watched(reply_handled_at=jm.now(), status="replied")
+        with mock.patch.object(jm, "fetch_latest_reply") as fetch, \
+             mock.patch.object(jm, "send_email") as send:
+            jm.check_replies(state)
+        fetch.assert_not_called()
+        send.assert_not_called()
+
+    def test_disabled_autorespond_still_alerts(self):
+        state, job = self.watched()
+        with mock.patch.object(jm, "REPLY_AUTORESPOND", False), \
+             mock.patch.object(jm, "fetch_latest_reply", return_value=self.REPLY), \
+             mock.patch.object(jm, "classify_reply",
+                               return_value=("interview_invite", "x")), \
+             mock.patch.object(jm, "send_email", return_value="<a>") as send:
+            jm.check_replies(state)
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(send.call_args.args[0], "harry@gmail.com")
+
+    def test_test_mode_never_touches_the_inbox(self):
+        state, _ = self.watched()
+        with mock.patch.object(jm, "TEST_MODE", True), \
+             mock.patch.object(jm, "fetch_latest_reply") as fetch:
+            jm.check_replies(state)
+        fetch.assert_not_called()
+
+
+class TestSecondFollowup(unittest.TestCase):
+    def setUp(self):
+        patches = [mock.patch.object(jm, "save"),
+                   mock.patch.object(jm.time, "sleep"),
+                   mock.patch.object(jm, "TEST_MODE", False),
+                   mock.patch.object(jm, "GMAIL_ADDRESS", "h@g.com"),
+                   mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw")]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def aged(self, days, **over):
+        job = make_job(status="sent", message_id="<orig>",
+                       sent_subject="Subsea tech",
+                       sent_at=(datetime.now(timezone.utc)
+                                - timedelta(days=days)).isoformat(), **over)
+        return {"jobs": {"j": job}, "companies_contacted": {},
+                "send_counts": {}}, job
+
+    def test_second_nudge_goes_out_at_nine_days(self):
+        state, job = self.aged(10, followup_sent_at=jm.now())
+        with mock.patch.object(jm, "has_reply_from", return_value=False), \
+             mock.patch.object(jm, "send_email", return_value="<f2>") as send:
+            jm.run_followups(state)
+        self.assertIn("Last note from me", send.call_args.args[2])
+        self.assertIn("followup2_sent_at", job)
+
+    def test_no_second_nudge_before_nine_days(self):
+        state, job = self.aged(6, followup_sent_at=jm.now())
+        with mock.patch.object(jm, "has_reply_from") as check, \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+        send.assert_not_called()
+
+    def test_after_both_nudges_silence(self):
+        state, job = self.aged(20, followup_sent_at=jm.now(),
+                               followup2_sent_at=jm.now())
+        with mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+        send.assert_not_called()
+
+
+class TestAppliedNotes(unittest.TestCase):
+    def test_note_goes_to_the_named_person_after_a_portal_submit(self):
+        job = make_job(status="portal_submitted", email_tier=3)
+        state = {"jobs": {"j": job}, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
+             mock.patch.object(jm, "cv_for", return_value="/tmp/cv.pdf"), \
+             mock.patch.object(jm, "send_email", return_value="<n>") as send:
+            jm.run_applied_notes(state)
+        to, subject, body = send.call_args.args[:3]
+        self.assertEqual(to, "jane.smith@acme.com")
+        self.assertIn("Just applied", subject)
+        self.assertIn("through the online portal", body)
+        self.assertEqual(jm.slop_check(body), [])
+        self.assertIn("applied_note_sent_at", job)
+
+    def test_no_note_to_generic_inboxes_and_never_twice(self):
+        a = make_job(external_id="a", status="portal_submitted", email_tier=2)
+        b = make_job(external_id="b", status="portal_submitted", email_tier=3,
+                     applied_note_sent_at=jm.now())
+        state = {"jobs": {"a": a, "b": b}, "companies_contacted": {},
+                 "send_counts": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_applied_notes(state)
+        send.assert_not_called()
+
+
+class TestSpeculative(unittest.TestCase):
+    def setUp(self):
+        patches = [mock.patch.object(jm, "save"),
+                   mock.patch.object(jm.time, "sleep"),
+                   mock.patch.object(jm, "TEST_MODE", False),
+                   mock.patch.object(jm, "cv_for", return_value="/tmp/cv.pdf"),
+                   mock.patch.object(jm, "has_mx", return_value=True),
+                   mock.patch.object(jm, "find_domain", return_value="acme.com"),
+                   mock.patch.object(jm, "scrape_site",
+                                     return_value=["careers@acme.com"])]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        self.content = {"subject": "DV-cleared technician asking about openings",
+                        "body": "Hi,\n\nbody\n\nHarry\n" + jm.SIGNOFF,
+                        "family": "speculative"}
+
+    def test_targets_ship_and_have_notes(self):
+        targets = jm.load_targets()
+        self.assertGreater(len(targets), 20)
+        for t in targets:
+            self.assertTrue(t.get("company") and t.get("note"))
+
+    def test_caps_at_spec_per_day(self):
+        with mock.patch.object(jm, "SPEC_PER_DAY", 2), \
+             mock.patch.object(jm, "build_email", return_value=self.content), \
+             mock.patch.object(jm, "send_email", return_value="<s>") as send:
+            jm.speculative(self.state)
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(jm.spec_sends_today(self.state), 2)
+        spec_jobs = [j for j in self.state["jobs"].values()
+                     if j["status"] == "spec_sent"]
+        self.assertEqual(len(spec_jobs), 2)
+        self.assertTrue(all(j["source"] == "speculative" for j in spec_jobs))
+
+    def test_never_a_company_already_contacted(self):
+        first = jm.load_targets()[0]["company"]
+        self.state["companies_contacted"][jm.company_key(first)] = {"at": jm.now()}
+        with mock.patch.object(jm, "SPEC_PER_DAY", 1), \
+             mock.patch.object(jm, "build_email", return_value=self.content), \
+             mock.patch.object(jm, "send_email", return_value="<s>") as send:
+            jm.speculative(self.state)
+        sent_to = [j["company"] for j in self.state["jobs"].values()]
+        self.assertNotIn(first, sent_to)
+
+    def test_no_real_address_means_no_send_and_no_retry(self):
+        with mock.patch.object(jm, "scrape_site", return_value=[]), \
+             mock.patch.object(jm, "SPEC_PER_DAY", 1), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.speculative(self.state)
+        send.assert_not_called()
+        self.assertTrue(all(v == "no real address"
+                            for v in self.state["spec_done"].values()))
+
+    def test_speculative_template_is_used_and_honest(self):
+        job = {"external_id": "spec_x", "source": "speculative",
+               "title": "Engineering Technician", "company": "Acme",
+               "location": "Aberdeen", "contact_name": None,
+               "description": "Speculative approach. What they do: subsea kit."}
+        good = {"subject": "DV-cleared technician asking about openings",
+                "body": ("Nothing advertised that I can see, so this is a "
+                         "speculative note. I know Acme make subsea kit in "
+                         "Aberdeen close to my old bench at Sonardyne.\n\n"
+                         "1. Three years at Sonardyne building and testing subsea "
+                         "electronics to IPC-A-610 Class 3 standard every day.\n"
+                         "2. Two years Royal Navy comms on a Type 23 frigate and "
+                         "I hold current DV clearance.\n\n"
+                         "Any technician openings coming up this year worth a "
+                         "conversation?\n\nHarry\n" + jm.SIGNOFF)}
+        with mock.patch.object(jm, "gemini_json", return_value=good):
+            content = jm.build_email(job)
+        self.assertIsNotNone(content)
+        self.assertEqual(job["template_family"], "speculative")
+        self.assertNotIn("listing", content["body"].lower())
+
+
+class TestTailoredCV(unittest.TestCase):
+    def test_each_family_builds_a_different_pdf(self):
+        import cv_tailor
+        paths = {f: cv_tailor.build(f) for f in
+                 ("communications", "electronics_technician",
+                  "instrumentation_maintenance", "events_production")}
+        for family, path in paths.items():
+            with self.subTest(family=family):
+                self.assertTrue(path and os.path.exists(path))
+        self.assertEqual(len(set(paths.values())), 4)
+
+    def test_general_and_unknown_fall_back_to_the_master_pdf(self):
+        import cv_tailor
+        self.assertIsNone(cv_tailor.build("general"))
+        self.assertIsNone(cv_tailor.build("nonsense"))
+        self.assertTrue(jm.cv_for(make_job(title="Stores Assistant",
+                                           description="")).endswith(
+                                               "Harry_Russell_CV.pdf"))
+
+    def test_summary_actually_changes_with_the_family(self):
+        import cv_tailor
+        paragraphs = list(cv_tailor.read_docx(cv_tailor.DOCX))
+        comms = cv_tailor.tailor_paragraphs(paragraphs, "communications")
+        events = cv_tailor.tailor_paragraphs(paragraphs, "events_production")
+        comms_text = " ".join(t for t, _ in comms)
+        events_text = " ".join(t for t, _ in events)
+        self.assertIn("cryptographic material in the Royal Navy", comms_text)
+        self.assertIn("Leads2Profit", events_text.split("WORK EXPERIENCE")[0])
+        # nothing invented: the facts all exist in the master CV already
+        self.assertIn("HARRY DEAN RUSSELL", comms_text)
+
+    def test_skills_are_reordered_not_rewritten(self):
+        import cv_tailor
+        paragraphs = list(cv_tailor.read_docx(cv_tailor.DOCX))
+        original = [t for t, b in paragraphs if b]
+        tailored = cv_tailor.tailor_paragraphs(paragraphs, "communications")
+        tailored_bullets = [t for t, b in tailored if b]
+        self.assertEqual(sorted(original), sorted(tailored_bullets))
 
 
 class TestState(unittest.TestCase):

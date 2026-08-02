@@ -1,0 +1,41 @@
+{
+ "_README": [
+  "Speculative outreach targets: employers worth a short note even when they have",
+  "no advert up. Curated for Harry - Aberdeen-first subsea/O&G, then Scottish",
+  "defence and comms employers known to hire ex-forces technicians. The 'note' is",
+  "the one concrete detail the email is allowed to use, so it stays factual.",
+  "Each company is emailed at most once ever, two per day across the list."
+ ],
+ "targets": [
+  {"company": "Kongsberg Maritime", "note": "subsea sensor and positioning systems work in Aberdeen, close to my Sonardyne background"},
+  {"company": "Fugro", "note": "remote operations and survey technology centre in Aberdeen"},
+  {"company": "Oceaneering", "note": "ROV and survey operations run out of Aberdeen"},
+  {"company": "Subsea7", "note": "subsea engineering and offshore operations base in Westhill"},
+  {"company": "TechnipFMC", "note": "subsea systems manufacturing and service work around Aberdeen"},
+  {"company": "Baker Hughes", "note": "oilfield equipment service and repair workshops in Aberdeen"},
+  {"company": "Halliburton", "note": "tool maintenance and workshop operations in Aberdeen"},
+  {"company": "SLB", "note": "wireline and drilling tool workshops in Aberdeen"},
+  {"company": "Wood", "note": "asset maintenance and instrumentation work across North Sea assets, headquartered in Aberdeen"},
+  {"company": "Petrofac", "note": "North Sea asset support and maintenance teams in Aberdeen"},
+  {"company": "EnerMech", "note": "mechanical, electrical and instrumentation services from Aberdeen"},
+  {"company": "Sparrows Group", "note": "crane and lifting engineering workshops in Aberdeen"},
+  {"company": "Bilfinger UK", "note": "maintenance, modifications and operations work on North Sea assets"},
+  {"company": "Stork", "note": "asset integrity and maintenance services in Aberdeen"},
+  {"company": "Aker Solutions", "note": "subsea services and North Sea maintenance from Aberdeen"},
+  {"company": "DOF", "note": "subsea vessel operations and survey teams in Aberdeen"},
+  {"company": "Ashtead Technology", "note": "subsea equipment rental, calibration and repair workshops in Aberdeen"},
+  {"company": "ROVOP", "note": "ROV operations and technician crews based in Westhill"},
+  {"company": "Motive Offshore Group", "note": "marine equipment manufacture and rental workshops in Boyndie and Aberdeen"},
+  {"company": "Score Group", "note": "valve engineering workshops in Peterhead, known for taking on time-served technicians"},
+  {"company": "Hydro Group", "note": "subsea cable and connector manufacturing in Aberdeen"},
+  {"company": "Viper Innovations", "note": "subsea electrical integrity products, engineering roles in Portishead and Aberdeen"},
+  {"company": "Nortek", "note": "acoustic doppler instruments, close cousin of the sonar kit I tested at Sonardyne"},
+  {"company": "Impact Subsea", "note": "subsea sensor design and production in Aberdeen"},
+  {"company": "Leonardo UK", "note": "defence electronics in Edinburgh, radar and sensor production with cleared roles"},
+  {"company": "Thales UK", "note": "sonar and optronics work in Glasgow, DV clearance is directly useful"},
+  {"company": "BAE Systems Naval Ships", "note": "Type 26 build on the Clyde, my Type 23 comms background maps straight across"},
+  {"company": "Babcock International", "note": "Rosyth dockyard and naval support, forces-friendly employer"},
+  {"company": "Raytheon UK", "note": "electronics manufacturing in Glenrothes with cleared technician roles"},
+  {"company": "QinetiQ", "note": "test and evaluation work for defence, DV clearance is directly useful"}
+ ]
+}

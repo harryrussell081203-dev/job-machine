@@ -89,8 +89,14 @@ SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 MAX_AGE_HOURS = 48
 HARVEST_PAGES = 1
 FOLLOWUP_AFTER_DAYS = 4
+FOLLOWUP2_AFTER_DAYS = 9          # one last nudge, then leave them alone
+REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
+SPEC_PER_DAY = env_int("SPEC_PER_DAY", 2)
+TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "data", "targets.json")
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
+IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
 MAX_SCORED_PER_RUN = 40          # keeps us inside the Gemini free tier
 MAX_DISCOVERED_PER_RUN = 15
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
@@ -244,6 +250,26 @@ Your {role} role stood out - {one specific detail from the venue or listing}.
 3. {optional third proof only if relevant: hands-on with AV, rigging, cabling, fault-finding under time pressure}
 
 {one question CTA}
+
+Harry
+""" + SIGNOFF,
+    },
+    "speculative": {
+        # never keyword-matched; only used when code asks for it by name
+        "keywords": [],
+        "subject_examples": [
+            "Ex-Navy subsea tech, Aberdeen - any technician roles?",
+            "DV-cleared technician asking about openings",
+        ],
+        "skeleton": """{greeting}
+
+Nothing advertised that I can see, so this is a speculative note. I know {company} {the one concrete detail provided about what they do}.
+
+1. {proof: 3 years at Sonardyne building, testing and fault-finding subsea electronics to IPC-A-610 Class 3}
+2. {proof: 2 years Royal Navy comms on a Type 23 frigate, DV cleared}
+3. {optional: completed SCQF L7 apprenticeship, available immediately}
+
+Any technician openings coming up this year worth a conversation?
 
 Harry
 """ + SIGNOFF,
@@ -558,13 +584,34 @@ def harvest(state):
 # SCORE
 # ======================================================================
 _gemini_thinking_supported = True
+_gemini_last_call = 0.0
+# The free tier allows roughly 10 requests a minute. Space every call out here
+# rather than trusting each caller to sleep, and batch wherever possible - a
+# 429 storm costs far more time than the gap does.
+GEMINI_MIN_INTERVAL = float(env_int("GEMINI_MIN_INTERVAL", 7))
+
+
+def _retry_delay(response, fallback):
+    """Google returns the delay it wants in the error body; honour it."""
+    try:
+        for detail in response.json().get("error", {}).get("details", []):
+            delay = detail.get("retryDelay")
+            if delay and delay.endswith("s"):
+                return min(90.0, float(delay[:-1]) + 1)
+    except Exception:
+        pass
+    return fallback
 
 
 def gemini(prompt, max_tokens=800, as_json=True, temperature=0.4):
     """One Gemini call. Returns the raw text, or raises."""
-    global _gemini_thinking_supported
+    global _gemini_thinking_supported, _gemini_last_call
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY not set")
+    wait = GEMINI_MIN_INTERVAL - (time.monotonic() - _gemini_last_call)
+    if wait > 0:
+        time.sleep(wait)
+    _gemini_last_call = time.monotonic()
     config = {"temperature": temperature, "maxOutputTokens": max_tokens}
     if as_json:
         config["responseMimeType"] = "application/json"
@@ -588,9 +635,10 @@ def gemini(prompt, max_tokens=800, as_json=True, temperature=0.4):
                 config.pop("thinkingConfig", None)
                 continue
             if r.status_code in (429, 500, 502, 503, 504):
-                wait = 10 * (attempt + 1)
-                print(f"[gemini] {r.status_code}, waiting {wait}s")
+                wait = _retry_delay(r, 15 * (attempt + 1))
+                print(f"[gemini] {r.status_code}, waiting {wait:.0f}s")
                 time.sleep(wait)
+                _gemini_last_call = time.monotonic()
                 last = RuntimeError(f"HTTP {r.status_code}")
                 continue
             r.raise_for_status()
@@ -624,42 +672,74 @@ def gemini_json(prompt, max_tokens=800, temperature=0.4):
     return None
 
 
+SCORE_BATCH = env_int("SCORE_BATCH", 10)
+
+
+def score_batch(batch):
+    """Score several listings in one call. Returns {index: (score, reason)}.
+    Batching is what keeps this inside the Gemini free tier - one call per
+    listing burns the whole daily quota on a single run."""
+    listings = "\n\n".join(
+        f"--- LISTING {i} ---\nTitle: {j['title']}\nCompany: {j['company']}\n"
+        f"Location: {j['location']}\n"
+        f"Salary: {j.get('salary_min')}-{j.get('salary_max')}\n"
+        f"Description: {j['description'][:1200]}"
+        for i, j in enumerate(batch))
+    prompt = (
+        f'Screen these {len(batch)} job listings for the candidate. Respond ONLY '
+        'with a JSON array, one object per listing, in the same order: '
+        '[{"listing": <index>, "score": <0-100>, "reason": "<one short sentence>"}]\n\n'
+        f"CANDIDATE:\n{CANDIDATE_PROFILE}\n\n"
+        "SCORE GUIDE: 85+ strong direct match in or near Aberdeen. "
+        "70-84 good match he could clearly do. 40-69 partial. "
+        "<40 poor, wrong field, or on his exclude list. "
+        "Penalise roles needing a completed degree plus years of design "
+        "experience, and roles outside his target list.\n\n"
+        f"{listings}")
+    result = gemini_json(prompt, max_tokens=180 * len(batch) + 200, temperature=0.2)
+    if isinstance(result, dict):  # a lone object, or {"results": [...]}
+        result = result.get("results") or result.get("listings") or [result]
+    if not isinstance(result, list):
+        return {}
+    out = {}
+    for i, entry in enumerate(result):
+        if not isinstance(entry, dict):
+            continue
+        index = entry.get("listing", entry.get("index", i))
+        try:
+            index = int(index)
+            score = max(0, min(100, int(float(entry.get("score", 0)))))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= index < len(batch):
+            out[index] = (score, str(entry.get("reason", ""))[:300])
+    return out
+
+
 def score_jobs(state):
     unscored = [j for j in state["jobs"].values()
                 if j["status"] == "new"][:MAX_SCORED_PER_RUN]
-    passed = 0
-    for job in unscored:
-        prompt = (
-            'Screen this job listing for the candidate. Respond ONLY with JSON: '
-            '{"score": <0-100>, "reason": "<one sentence>"}\n\n'
-            f"CANDIDATE:\n{CANDIDATE_PROFILE}\n\n"
-            "SCORE GUIDE: 85+ strong direct match in or near Aberdeen. "
-            "70-84 good match he could clearly do. 40-69 partial. "
-            "<40 poor, wrong field, or on his exclude list. "
-            "Penalise roles needing a completed degree plus years of design "
-            "experience, and roles outside his target list.\n\n"
-            f"LISTING:\nTitle: {job['title']}\nCompany: {job['company']}\n"
-            f"Location: {job['location']}\n"
-            f"Salary: {job.get('salary_min')}-{job.get('salary_max')}\n"
-            f"Description: {job['description'][:2500]}"
-        )
-        result = gemini_json(prompt, max_tokens=300, temperature=0.2)
-        if result is None:
-            continue
-        try:
-            score = int(float(result.get("score", 0)))
-        except (TypeError, ValueError):
-            score = 0
-        job["score"] = max(0, min(100, score))
-        job["score_reason"] = str(result.get("reason", ""))[:300]
-        if job["score"] >= SCORE_THRESHOLD:
-            job["status"] = "scored"
-            passed += 1
-        else:
-            job["status"] = "skipped"
-            job["skip_reason"] = f"score {job['score']}"
-        time.sleep(4)  # stay inside the free-tier rate limit
-    print(f"[score] scored {len(unscored)}, {passed} passed >= {SCORE_THRESHOLD}")
+    passed = done = 0
+    for start in range(0, len(unscored), SCORE_BATCH):
+        batch = unscored[start:start + SCORE_BATCH]
+        scores = score_batch(batch)
+        if not scores:
+            print(f"[score] batch at {start} returned nothing, leaving it for "
+                  f"the next run")
+            break  # quota or outage: stop, do not burn the rest of the budget
+        for i, job in enumerate(batch):
+            if i not in scores:
+                continue
+            job["score"], job["score_reason"] = scores[i]
+            done += 1
+            if job["score"] >= SCORE_THRESHOLD:
+                job["status"] = "scored"
+                passed += 1
+            else:
+                job["status"] = "skipped"
+                job["skip_reason"] = f"score {job['score']}"
+    print(f"[score] scored {done} in {-(-done // SCORE_BATCH)} call(s), "
+          f"{passed} passed >= {SCORE_THRESHOLD}")
 
 
 # ======================================================================
@@ -979,10 +1059,11 @@ def email_problems(subject, core, job):
     if subject.isupper():
         problems.append("subject must not be ALL CAPS")
 
-    first_line = next((l for l in core.split("\n") if l.strip()), "")
-    if not subject_names_role(first_line, job.get("title", "")):
-        problems.append(f"the first line must name the exact role "
-                        f"({job.get('title')}) plus one detail from the listing")
+    if job.get("source") != "speculative":
+        first_line = next((l for l in core.split("\n") if l.strip()), "")
+        if not subject_names_role(first_line, job.get("title", "")):
+            problems.append(f"the first line must name the exact role "
+                            f"({job.get('title')}) plus one detail from the listing")
 
     count = word_count(core)
     if not 60 <= count <= 90:
@@ -1000,7 +1081,8 @@ def email_problems(subject, core, job):
 
 
 def build_email(job, attempts=3):
-    family = pick_family(job["title"], job.get("description", ""))
+    family = ("speculative" if job.get("source") == "speculative"
+              else pick_family(job["title"], job.get("description", "")))
     job["template_family"] = family
     tpl = TEMPLATES[family]
     greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
@@ -1056,7 +1138,21 @@ def cv_path():
     return None
 
 
-def send_email(to_addr, subject, body, attach_cv=True, headers=None):
+def cv_for(job):
+    """The CV to attach for this job: tailored to its role family when the
+    tailoring pipeline is available, the master PDF otherwise."""
+    try:
+        import cv_tailor
+        family = pick_family(job.get("title", ""), job.get("description", ""))
+        tailored = cv_tailor.build(family)
+        if tailored:
+            return tailored
+    except Exception as e:
+        print(f"[cv] tailoring unavailable: {e}")
+    return cv_path()
+
+
+def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=None):
     """Returns the Message-ID so follow-ups can thread onto the original."""
     msg = EmailMessage()
     msg["From"] = GMAIL_ADDRESS
@@ -1068,7 +1164,7 @@ def send_email(to_addr, subject, body, attach_cv=True, headers=None):
         if value:
             msg[key] = value
     msg.set_content(body)
-    cv = cv_path()
+    cv = cv_file or cv_path()
     if attach_cv and cv:
         with open(cv, "rb") as f:
             msg.add_attachment(f.read(), maintype="application", subtype="pdf",
@@ -1087,10 +1183,12 @@ def run_sends(state, dry_run=False):
         print("[send] no Gmail credentials - refusing to send")
         return
 
-    ready = sorted(
-        [j for j in state["jobs"].values() if j["status"] == "ready"],
-        key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)),
-    )
+    # freshest first within equal tier+score - being an early applicant on a new
+    # listing is worth more than being late on a stale one
+    ready = sorted([j for j in state["jobs"].values() if j["status"] == "ready"],
+                   key=lambda j: (j.get("posted_at") or j.get("found_at") or ""),
+                   reverse=True)
+    ready.sort(key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)))
     sent = 0
     for job in ready:
         if sent >= PER_RUN_SEND_CAP:
@@ -1122,7 +1220,8 @@ def run_sends(state, dry_run=False):
             continue
 
         try:
-            message_id = send_email(to_addr, subject, content["body"])
+            message_id = send_email(to_addr, subject, content["body"],
+                                    cv_file=cv_for(job))
         except Exception as e:
             job.update({"status": "send_failed", "send_error": str(e)[:200]})
             print(f"[send] failed {job['company']}: {e}")
@@ -1147,6 +1246,278 @@ def run_sends(state, dry_run=False):
         if sent < PER_RUN_SEND_CAP:
             time.sleep(SEND_INTERVAL_SECONDS)
     print(f"[send] {sent} message(s) this run, {sends_today(state)} today")
+
+
+def run_applied_notes(state):
+    """The double-tap: after the portal agent submits an application, the named
+    person we found gets a short heads-up so it does not sit unread in an ATS.
+    Deterministic copy - no model in the loop for these."""
+    todo = [j for j in state["jobs"].values()
+            if j.get("status") == "portal_submitted"
+            and j.get("contact_email") and (j.get("email_tier") or 0) >= 3
+            and not j.get("applied_note_sent_at")]
+    for job in todo:
+        if sends_today(state) >= DAILY_SEND_CAP:
+            break
+        name = job.get("contact_name")
+        body = (
+            f"Hi {name}," if name else "Hi,") + (
+            f"\n\nI have just applied for your {job['title']} role through the "
+            f"online portal and wanted to reach out directly as well. Quick "
+            f"background: 3 years testing and fault-finding subsea electronics at "
+            f"Sonardyne to IPC-A-610 Class 3, Royal Navy communications before "
+            f"that, DV cleared and available immediately.\n\n"
+            f"If the application is worth a closer look, when suits a quick call?"
+            f"\n\nHarry\n{SIGNOFF}")
+        real_to = job["contact_email"]
+        to_addr = GMAIL_ADDRESS if TEST_MODE else real_to
+        subject = f"Just applied - {job['title']}"
+        if TEST_MODE:
+            subject = f"[TEST -> {real_to}] {subject}"
+        try:
+            message_id = send_email(to_addr, subject, body, cv_file=cv_for(job))
+            job.update({"applied_note_sent_at": now(), "message_id": message_id,
+                        "sent_at": job.get("sent_at") or now(),
+                        "sent_subject": subject, "sent_body": body})
+            record_send(state)
+            print(f"[note] applied-note -> {to_addr} ({job['company']})")
+            save(state)
+            time.sleep(SEND_INTERVAL_SECONDS)
+        except Exception as e:
+            print(f"[note] failed {job['company']}: {e}")
+
+
+# ======================================================================
+# SPECULATIVE - the hidden market: employers with no advert up
+# ======================================================================
+def load_targets():
+    try:
+        with open(TARGETS_PATH) as f:
+            return json.load(f).get("targets", [])
+    except Exception:
+        return []
+
+
+def spec_sends_today(state):
+    return state.setdefault("spec_counts", {}).get(today(), 0)
+
+
+def speculative(state):
+    """Two short notes a day to curated employers who are not advertising.
+    Real addresses only, one per company ever - same rules as everything else."""
+    targets = load_targets()
+    done = state.setdefault("spec_done", {})
+    sent = 0
+    for target in targets:
+        if spec_sends_today(state) >= SPEC_PER_DAY:
+            break
+        if sends_today(state) >= DAILY_SEND_CAP:
+            break
+        company = target["company"]
+        key = company_key(company)
+        if key in done or key in state["companies_contacted"]:
+            continue
+
+        domain = find_domain(company)
+        if not domain or not has_mx(domain):
+            done[key] = "no domain or MX"
+            continue
+        addr, name, tier = best_email(scrape_site(domain))
+        if not addr or tier < 1 or not has_mx(addr.split("@")[1]):
+            done[key] = "no real address"
+            continue
+
+        job = {
+            "external_id": f"spec_{key.replace(' ', '_')}",
+            "source": "speculative", "title": "Engineering Technician",
+            "company": company, "location": "Aberdeen / Scotland",
+            "company_domain": domain, "url": "",
+            "description": f"Speculative approach. What they do: {target['note']}.",
+            "score": None, "found_at": now(),
+            "contact_email": addr, "contact_name": name,
+            "email_method": "scraped", "email_tier": tier, "status": "ready",
+        }
+        content = build_email(job)
+        if not content:
+            done[key] = "compose failed"
+            continue
+        real_to = addr
+        to_addr = GMAIL_ADDRESS if TEST_MODE else real_to
+        subject = (f"[TEST -> {real_to}] {content['subject']}"
+                   if TEST_MODE else content["subject"])
+        try:
+            message_id = send_email(to_addr, subject, content["body"],
+                                    cv_file=cv_for(job))
+        except Exception as e:
+            print(f"[spec] failed {company}: {e}")
+            continue
+        job.update({"status": "test_sent" if TEST_MODE else "spec_sent",
+                    "sent_at": now(), "sent_to": to_addr, "sent_subject": subject,
+                    "sent_body": content["body"], "message_id": message_id})
+        state["jobs"][job["external_id"]] = job
+        done[key] = "sent"
+        record_send(state)
+        state["spec_counts"][today()] = spec_sends_today(state) + 1
+        if not TEST_MODE:
+            mark_contacted(state, job)
+        sent += 1
+        print(f"[spec] {'TEST' if TEST_MODE else 'LIVE'} {company} -> {to_addr}")
+        save(state)
+        time.sleep(SEND_INTERVAL_SECONDS)
+    print(f"[spec] {sent} speculative note(s) this run")
+
+
+# ======================================================================
+# REPLY WATCH - answer interview invitations in minutes, not days
+# ======================================================================
+REPLY_STATUSES = ("sent", "spec_sent", "portal_submitted")
+
+AUTOREPLY_BODY = (
+    "{greeting}\n\n"
+    "Thanks for getting back to me about the {title} role. Happy to meet "
+    "whenever suits - I am free any day this week, tomorrow included, and "
+    "flexible on time. If a call is easier my number is 07398 530978.\n\n"
+    "Which day works best for you?\n\n"
+    "Harry\nHarry Russell / 07398 530978")
+
+
+def _message_text(msg):
+    """Plain text of an email, minus the quoted trail."""
+    body = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                body = part.get_payload(decode=True).decode("utf-8", "ignore")
+                break
+    else:
+        payload = msg.get_payload(decode=True)
+        body = payload.decode("utf-8", "ignore") if payload else ""
+    lines = [l for l in body.splitlines() if not l.strip().startswith(">")]
+    return "\n".join(lines).strip()
+
+
+def fetch_latest_reply(conn, addr, since):
+    """Newest inbox message from this address after `since`, or None."""
+    import email as email_mod
+    status, data = conn.search(
+        None, "FROM", f'"{addr}"', "SINCE", since.strftime("%d-%b-%Y"))
+    if status != "OK" or not data or not data[0].split():
+        return None
+    status, msgdata = conn.fetch(data[0].split()[-1], "(RFC822)")
+    if status != "OK":
+        return None
+    msg = email_mod.message_from_bytes(msgdata[0][1])
+    return {"subject": msg.get("Subject", ""),
+            "message_id": msg.get("Message-ID"),
+            "text": _message_text(msg)[:3000]}
+
+
+def classify_reply(job, reply):
+    result = gemini_json(
+        'Classify this reply to a job application. Respond ONLY with JSON: '
+        '{"category": "<interview_invite|question|rejection|auto_acknowledgement'
+        '|other>", "summary": "<one sentence>"}\n\n'
+        "interview_invite = they want to meet, call, or arrange a time.\n"
+        "question = they asked the candidate something that needs a real answer.\n"
+        "rejection = a no.\n"
+        "auto_acknowledgement = automated receipt, no human involved.\n\n"
+        f"THE APPLICATION: {job.get('title')} at {job.get('company')}\n\n"
+        f"THEIR REPLY:\n{reply['text'][:1500]}", max_tokens=200, temperature=0.1)
+    if not result or result.get("category") not in (
+            "interview_invite", "question", "rejection",
+            "auto_acknowledgement", "other"):
+        return None, None
+    return result["category"], str(result.get("summary", ""))[:200]
+
+
+def alert_harry(job, reply, category, extra=""):
+    """A loud, labelled email to Harry's own inbox the moment a human replies."""
+    label = {"interview_invite": "INTERVIEW", "question": "NEEDS YOUR ANSWER",
+             "rejection": "rejection", None: "REPLY"}.get(category, "REPLY")
+    body = (f"{job.get('company')} replied about the {job.get('title')} role.\n"
+            f"From: {job.get('contact_email')}\n"
+            f"Category: {category or 'unclassified'}\n\n"
+            f"---- their message ----\n{reply['text'][:2500]}\n----\n\n{extra}")
+    send_email(GMAIL_ADDRESS,
+               f"[job-machine {label}] {job.get('company')} - {job.get('title')}",
+               body, attach_cv=False)
+
+
+def check_replies(state):
+    """Scan the inbox for replies from anyone we contacted. Interview invites
+    get an availability reply within minutes; everything human gets an alert."""
+    if TEST_MODE:
+        print("[replies] TEST_MODE, nothing was really sent, skipping")
+        return
+    if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
+        return
+    watch = [j for j in state["jobs"].values()
+             if j.get("status") in REPLY_STATUSES and j.get("contact_email")
+             and j.get("sent_at") and not j.get("reply_handled_at")]
+    if not watch:
+        print("[replies] nothing awaiting a reply")
+        return
+    try:
+        conn = imaplib.IMAP4_SSL("imap.gmail.com", timeout=IMAP_TIMEOUT)
+        conn.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+        conn.select("INBOX")
+    except Exception as e:
+        print(f"[replies] imap error: {e}")
+        return
+    handled = 0
+    try:
+        for job in watch:
+            sent_at = parse_ts(job["sent_at"])
+            reply = None
+            try:
+                reply = fetch_latest_reply(conn, job["contact_email"], sent_at)
+            except Exception as e:
+                print(f"[replies] fetch {job['contact_email']}: {e}")
+            if not reply or not reply["text"]:
+                continue
+
+            category, summary = classify_reply(job, reply)
+            job.update({"status": "replied", "replied_at": now(),
+                        "reply_category": category or "unclassified",
+                        "reply_summary": summary,
+                        "reply_excerpt": reply["text"][:500],
+                        "reply_handled_at": now()})
+            handled += 1
+            extra = ""
+            if category == "interview_invite" and REPLY_AUTORESPOND \
+                    and not job.get("auto_replied_at"):
+                greeting = (f"Hi {job['contact_name']},"
+                            if job.get("contact_name") else "Hi,")
+                body = AUTOREPLY_BODY.format(greeting=greeting,
+                                             title=job.get("title", "advertised"))
+                subject = reply["subject"] or job.get("sent_subject") or ""
+                if not subject.lower().startswith("re:"):
+                    subject = f"Re: {subject}"
+                try:
+                    send_email(job["contact_email"], subject, body,
+                               attach_cv=False,
+                               headers={"In-Reply-To": reply.get("message_id"),
+                                        "References": reply.get("message_id")})
+                    job["auto_replied_at"] = now()
+                    extra = ("An availability reply has already been sent for "
+                             "you. Jump in personally as soon as you can.")
+                    print(f"[replies] AUTO-REPLIED to {job['company']}")
+                except Exception as e:
+                    extra = f"Auto-reply failed ({e}) - answer this yourself."
+            elif category in (None, "question", "other"):
+                extra = "No automatic reply was sent - this one needs you."
+            if category != "auto_acknowledgement":
+                try:
+                    alert_harry(job, reply, category, extra)
+                except Exception as e:
+                    print(f"[replies] alert failed: {e}")
+            save(state)
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+    print(f"[replies] {handled} new repl{'y' if handled == 1 else 'ies'} handled")
 
 
 # ======================================================================
@@ -1298,7 +1669,9 @@ def summary_bodies(data):
     extras = []
     if data["replies"]:
         extras.append("Replies received: " + ", ".join(
-            f"{j.get('company')} ({j.get('title')})" for j in data["replies"]))
+            f"{j.get('company')} ({j.get('reply_category', 'reply')}"
+            + (", auto-replied with availability" if j.get("auto_replied_at") else "")
+            + ")" for j in data["replies"]))
     if data["followups"]:
         extras.append("Follow-ups sent: " + ", ".join(
             j.get("company", "?") for j in data["followups"]))
@@ -1364,7 +1737,7 @@ def send_summary(state, force=False):
 def has_reply_from(addr):
     """True/False, or None when the inbox could not be checked."""
     try:
-        m = imaplib.IMAP4_SSL("imap.gmail.com")
+        m = imaplib.IMAP4_SSL("imap.gmail.com", timeout=IMAP_TIMEOUT)
         m.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
         try:
             m.select("INBOX")
@@ -1390,13 +1763,24 @@ def run_followups(state):
         return
     done = 0
     for job in state["jobs"].values():
-        if job.get("status") != "sent" or job.get("followup_sent_at"):
+        if job.get("status") != "sent":
             continue
         sent_at = parse_ts(job.get("sent_at"))
         if not sent_at:
             continue
-        if datetime.now(timezone.utc) - sent_at < timedelta(days=FOLLOWUP_AFTER_DAYS):
-            continue
+        age = datetime.now(timezone.utc) - sent_at
+
+        # which nudge is due, if any
+        if not job.get("followup_sent_at"):
+            if age < timedelta(days=FOLLOWUP_AFTER_DAYS):
+                continue
+            which = 1
+        elif not job.get("followup2_sent_at"):
+            if age < timedelta(days=FOLLOWUP2_AFTER_DAYS):
+                continue
+            which = 2
+        else:
+            continue  # both nudges sent; from here silence is the polite option
 
         replied = has_reply_from(job["contact_email"])
         if replied is None:
@@ -1407,14 +1791,24 @@ def run_followups(state):
             continue
 
         greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
-        body = (
-            f"{greeting}\n\n"
-            f"Following up on the note I sent {sent_at.strftime('%A')} about the "
-            f"{job['title']} role. Still interested, and happy to come in for a chat "
-            f"or do a short call whenever suits.\n\n"
-            f"Is it worth me sending anything else over?\n\n"
-            f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
-        )
+        if which == 1:
+            body = (
+                f"{greeting}\n\n"
+                f"Following up on the note I sent {sent_at.strftime('%A')} about the "
+                f"{job['title']} role. Still interested, and happy to come in for a chat "
+                f"or do a short call whenever suits.\n\n"
+                f"Is it worth me sending anything else over?\n\n"
+                f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
+            )
+        else:
+            body = (
+                f"{greeting}\n\n"
+                f"Last note from me on the {job['title']} role - I know inboxes get "
+                f"buried. Still interested and available immediately if it is live. "
+                f"If the timing is wrong, no bother at all.\n\n"
+                f"Worth keeping my CV on file for the next opening?\n\n"
+                f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
+            )
         subject = job.get("sent_subject") or job["title"]
         if not subject.lower().startswith("re:"):
             subject = f"Re: {subject}"
@@ -1422,9 +1816,10 @@ def run_followups(state):
             send_email(job["contact_email"], subject, body, attach_cv=False,
                        headers={"In-Reply-To": job.get("message_id"),
                                 "References": job.get("message_id")})
-            job.update({"followup_sent_at": now(), "followup_body": body})
+            job[f"followup{'' if which == 1 else '2'}_sent_at"] = now()
+            job[f"followup{'' if which == 1 else '2'}_body"] = body
             done += 1
-            print(f"[followup] {job['company']}")
+            print(f"[followup] nudge {which} -> {job['company']}")
             save(state)
             time.sleep(FOLLOWUP_INTERVAL_SECONDS)
         except Exception as e:
@@ -1435,8 +1830,8 @@ def run_followups(state):
 # ======================================================================
 # MAIN
 # ======================================================================
-STATUSES = ("new", "scored", "ready", "sent", "test_sent", "replied",
-            "no_email", "compose_failed", "send_failed", "skipped")
+STATUSES = ("new", "scored", "ready", "sent", "spec_sent", "test_sent",
+            "replied", "no_email", "compose_failed", "send_failed", "skipped")
 
 
 def stage(name, fn, *args):
@@ -1455,11 +1850,19 @@ def main(argv=None):
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
                         help="with --summary, send it whatever the UK clock says")
+    parser.add_argument("--replies", action="store_true",
+                        help="only check the inbox and handle replies (fast)")
     args = parser.parse_args(argv)
 
     if args.summary:
         state = load()
         send_summary(state, force=args.force)
+        save(state)
+        return 0
+
+    if args.replies:
+        state = load()
+        stage("replies", check_replies, state)
         save(state)
         return 0
 
@@ -1479,7 +1882,13 @@ def main(argv=None):
     stage("send", run_sends, state, args.dry_run)
     save(state)
     if not args.dry_run:
+        stage("notes", run_applied_notes, state)
+        save(state)
+        stage("speculative", speculative, state)
+        save(state)
         stage("followup", run_followups, state)
+        save(state)
+        stage("replies", check_replies, state)
     prune(state)
     save(state)
 
