@@ -219,9 +219,23 @@ class TestCareersPage(unittest.TestCase):
             ats, url = af.careers_page_ats("acme.com")
         self.assertEqual(ats, "workday")
 
-    def test_a_site_with_no_ats_returns_nothing(self):
+    def test_a_firm_with_no_hosted_ats_hands_back_their_own_page(self):
+        """Not a failure. Of fourteen Aberdeen employers probed, one used a
+        hosted ATS - the rest take applications on a form of their own, and a
+        form is a form."""
         with mock.patch.object(af.requests, "get",
-                               return_value=response(text="<p>About us</p>")):
+                               return_value=response(
+                                   text="<p>About us</p>",
+                                   url="https://acme.com/careers")):
+            ats, url = af.careers_page_ats("acme.com")
+        self.assertIsNone(ats)
+        self.assertEqual(url, "https://acme.com/careers")
+
+    def test_a_site_that_cannot_be_read_at_all_gives_nothing(self):
+        """Distinct from 'they have no ATS' - a Cloudflare block used to look
+        identical to a careers page with nothing on it."""
+        with mock.patch.object(af.requests, "get",
+                               return_value=response(status=403, text="denied")):
             self.assertIsNone(af.careers_page_ats("acme.com"))
 
     def test_no_domain_means_no_lookup(self):

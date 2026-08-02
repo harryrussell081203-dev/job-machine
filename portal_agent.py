@@ -562,6 +562,23 @@ def bank_for_captcha(page, job, plan, flags):
           f"{len(job['captcha_answers'])} answers saved, needs a human CAPTCHA")
 
 
+def is_application_form(fields):
+    """Does this look like somewhere to apply for a job, or just a form?
+
+    Only asked of pages outside the known ATS platforms. An employer's own
+    careers page might carry a contact form, a site search or a newsletter
+    signup, and posting a CV into one of those is worse than doing nothing."""
+    text = " ".join(field_text(f) for f in fields).lower()
+    has_upload = any(f.get("type") == "file" for f in fields)
+    if has_upload and CV_PATTERNS.search(text + " " + " ".join(
+            f.get("name") or "" for f in fields)):
+        return True
+    keys = {match_key(f) for f in fields}
+    named = {"first_name", "last_name", "full_name"} & keys
+    return bool(has_upload and named) or bool(
+        named and "email" in keys and "phone" in keys and len(fields) >= 5)
+
+
 def apply_to_job(page, job, answers, submit):
     """One application, start to finish. Mutates job with the outcome."""
     page.goto(job["apply_url"], wait_until="domcontentloaded",
@@ -581,6 +598,16 @@ def apply_to_job(page, job, answers, submit):
                     "portal_reason": f"only {len(fields)} form fields found, "
                                      f"the application is probably behind a login",
                     "portal_screenshot": shot(page, job, "noform")})
+        return False
+
+    # On a recognised ATS every form is an application form. On an employer's
+    # own site it might be a contact form, a search box or a newsletter signup,
+    # and filling one of those in with a CV would be worse than doing nothing.
+    if not classify_url(job["apply_url"])[1] and not is_application_form(fields):
+        job.update({"status": "portal_manual",
+                    "portal_reason": "a form, but not an application form - "
+                                     "no CV upload and no name-and-email pair",
+                    "portal_screenshot": shot(page, job, "notanapplication")})
         return False
 
     plan, flags = plan_answers(fields, job, answers)
@@ -847,17 +874,25 @@ def run(state, submit=False, limit=None, headless=True):
             apply_url, ats = best_apply_url(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
                         "portal_attempted_at": jm.now()})
-            if not apply_url or not classify_url(apply_url)[1]:
+            known_ats, automatable = classify_url(apply_url or "")
+            # An unrecognised host is not a reason to give up. A probe across
+            # fourteen Aberdeen employers found exactly one hosted ATS, and it
+            # needed an account - most of them take applications on a form of
+            # their own. apply_to_job() already refuses anything that turns out
+            # not to be a real form, so let it look.
+            if not apply_url or (known_ats and not automatable):
                 if not apply_url and ats:
                     reason = (f"{ats} is where {job['company']} recruit, but this "
                               f"advert is not on their board - it is probably an "
                               f"agency listing")
+                elif not apply_url:
+                    reason = "no application page found for this advert"
                 else:
-                    reason = (f"{ats or 'unknown'} portal - needs an account or runs "
+                    reason = (f"{known_ats} portal - needs an account or runs "
                               f"a bot check, do this one by hand")
                 job.update({"status": "portal_manual", "portal_reason": reason})
-                print(f"[portal] MANUAL {job['company']} ({ats or 'unknown'}) "
-                      f"- not counted, moving on")
+                print(f"[portal] MANUAL {job['company']} "
+                      f"({known_ats or ats or 'unknown'}) - not counted, moving on")
                 continue
             attempted += 1
             try:

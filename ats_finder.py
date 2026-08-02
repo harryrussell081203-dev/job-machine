@@ -316,30 +316,36 @@ ATS_URL_RE = re.compile(
 
 
 def careers_page_ats(domain, session=None):
-    """Open the company's own site and look for the ATS its careers page links to.
+    """Open the company's own site and find where their applications go.
 
-    Unlike a guessed slug, a link on the company's own careers page is
-    authoritative - it is the employer telling us where their applications go."""
+    Returns (ats, url). A link on the employer's own careers page is
+    authoritative - unlike a guessed slug, it is the employer telling us. When
+    they run no hosted ATS at all, this returns (None, their own careers page),
+    which is not a failure: a probe run showed most Aberdeen employers taking
+    applications on a form of their own, and a form is a form."""
     if not domain:
         return None
     get = (session or requests).get
     pages = [f"https://{domain}", f"https://{domain}/careers",
              f"https://{domain}/jobs", f"https://{domain}/vacancies",
              f"https://{domain}/careers/vacancies"]
-    seen_links = []
-    for url in pages:
+    seen_links, own_page, reachable = [], None, False
+    for url in pages + seen_links:
         try:
             r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
         except Exception:
             continue
         if getattr(r, "status_code", 0) != 200 or not r.text:
             continue
+        reachable = True
         match = ATS_URL_RE.search(r.text)
         if match:
             found = match.group(0).rstrip(").,'\"")
             ats = portal_agent.classify_url(found)[0]
             print(f"[ats] {domain} careers page links to {ats}: {found}")
             return ats, found
+        if own_page is None and url != f"https://{domain}":
+            own_page = getattr(r, "url", url) or url   # a real careers page
         # remember internal careers links to try on the next pass
         for href in re.findall(r'href=["\']([^"\']+)["\']', r.text):
             if CAREERS_LINK_RE.search(href) and href.startswith(("/", "http")):
@@ -349,14 +355,23 @@ def careers_page_ats(domain, session=None):
     for url in seen_links[:4]:
         try:
             r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
-            match = ATS_URL_RE.search(r.text or "")
-            if match:
-                found = match.group(0).rstrip(").,'\"")
-                ats = portal_agent.classify_url(found)[0]
-                print(f"[ats] {domain} careers page links to {ats}: {found}")
-                return ats, found
         except Exception:
             continue
+        if getattr(r, "status_code", 0) != 200:
+            continue
+        reachable = True
+        match = ATS_URL_RE.search(r.text or "")
+        if match:
+            found = match.group(0).rstrip(").,'\"")
+            ats = portal_agent.classify_url(found)[0]
+            print(f"[ats] {domain} careers page links to {ats}: {found}")
+            return ats, found
+        own_page = own_page or getattr(r, "url", url) or url
+    if own_page:
+        print(f"[ats] {domain} runs no hosted ATS - their own page: {own_page}")
+        return None, own_page
+    if not reachable:
+        print(f"[ats] {domain} could not be read at all")
     return None
 
 
