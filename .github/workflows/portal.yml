@@ -7,7 +7,9 @@ on:
     - cron: "30 9 * * 1-5"
   push:
     tags: ["fire-portal-*"]        # push a tag to force a run when the UI is not handy
-    branches: ["fire-portal/**"]   # or create a branch with this name, then delete it
+    branches:
+      - "fire-portal/**"           # fill forms in, stop before submitting
+      - "fire-submit/**"           # fill in AND submit, one application only
   workflow_dispatch:
     inputs:
       submit:
@@ -23,7 +25,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: job-machine-portal
+  # shared with run.yml: both stages score listings, and two of them running at
+  # once is what produced a wall of Gemini 429s. They queue instead.
+  group: job-machine-gemini
   cancel-in-progress: false
 
 jobs:
@@ -37,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install requests dnspython playwright
+      - run: pip install requests dnspython playwright reportlab
       - run: playwright install --with-deps chromium
 
       - name: Harvest a month and work the queue
@@ -56,11 +60,15 @@ jobs:
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
         run: |
-          if [ -n "${{ github.event.inputs.limit }}" ]; then
-            python portal_agent.py --harvest --run --limit "${{ github.event.inputs.limit }}"
-          else
-            python portal_agent.py --harvest --run
+          ARGS="--harvest --run"
+          # a fire-submit/* branch means: really apply, and only to one job
+          if [[ "${GITHUB_REF_NAME}" == fire-submit/* ]]; then
+            ARGS="$ARGS --submit --limit 1"
+            echo "fire-submit branch: submitting ONE real application"
+          elif [ -n "${{ github.event.inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"
           fi
+          python portal_agent.py $ARGS
 
       - name: Keep the screenshots
         if: always()
@@ -74,22 +82,5 @@ jobs:
       - name: Commit state
         if: always()
         env:
-          # a fire-* triggered run still commits its state to the default branch
-          TARGET: ${{ (github.ref_type == 'tag' || startsWith(github.ref_name, 'fire-')) && github.event.repository.default_branch || github.ref_name }}
-        run: |
-          git config user.name "job-machine"
-          git config user.email "actions@github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "no state changes"
-            exit 0
-          fi
-          git commit -m "portal $(date -u +%F_%H%M)"
-          for i in 1 2 3 4; do
-            git pull --rebase --autostash origin "${TARGET}" \
-              && git push origin "HEAD:refs/heads/${TARGET}" && exit 0
-            echo "push failed, retry $i"
-            sleep $((2 ** i))
-          done
-          echo "could not push state" >&2
-          exit 1
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "portal"

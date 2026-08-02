@@ -57,12 +57,16 @@
     <option>No</option>
   </select>
 
-  <label for="ethnicity">Ethnic origin (voluntary)</label>
-  <select id="ethnicity" name="ethnicity">
-    <option value="">Prefer not to say</option>
+  <label for="ethnicity">Ethnic origin *</label>
+  <select id="ethnicity" name="ethnicity" required>
+    <option value="">Please select</option>
     <option>White Scottish</option>
     <option>Other</option>
+    <option>Prefer not to say</option>
   </select>
+
+  <label for="nino">National Insurance number *</label>
+  <input id="nino" name="nino" type="text" required>
 
   <label><input type="checkbox" name="privacy" required> I agree to the privacy policy</label>
 

@@ -136,6 +136,23 @@ REFUSED = {
 }
 REFUSED_RES = {name: re.compile(pattern, re.I) for name, pattern in REFUSED.items()}
 
+# Monitoring questions are the common blocker, and they nearly always offer a
+# real "rather not say" option. Choosing it is an honest answer that unblocks
+# the form. Categories NOT listed here are never answered automatically.
+DECLINABLE = ("protected", "health")
+DECLINE_OPTION = re.compile(
+    r"prefer not to (say|answer|disclose)|rather not say|do not wish to "
+    r"(say|disclose|answer)|not (disclosed|specified|stated)|decline to "
+    r"(answer|state)|undisclosed|choose not to", re.I)
+
+
+def decline_option(field):
+    """The form's own 'prefer not to say' choice, if it offers one."""
+    for option in field.get("options") or []:
+        if DECLINE_OPTION.search(option):
+            return option
+    return None
+
 # label/name/id patterns -> answer-bank key. First match wins, so order matters.
 FIELD_RULES = [
     ("first_name", r"first[\s_-]*name|forename|given[\s_-]*name"),
@@ -276,6 +293,13 @@ def plan_answers(fields, job, answers):
 
         refused = refusal_reason(field)
         if refused:
+            # monitoring questions: take the form's own "prefer not to say"
+            if refused in DECLINABLE:
+                option = decline_option(field)
+                if option:
+                    plan.append({"field": field, "value": option,
+                                 "kind": "choice", "source": f"declined:{refused}"})
+                    continue
             if field.get("required"):
                 flags.append(f"{refused}: '{field.get('label') or field.get('name')}' "
                              f"is required and only Harry can answer it")
@@ -283,7 +307,7 @@ def plan_answers(fields, job, answers):
 
         if field.get("type") == "file":
             if CV_PATTERNS.search(field_text(field)) or field.get("required"):
-                cv = jm.cv_path()
+                cv = jm.cv_for(job)
                 if cv:
                     plan.append({"field": field, "value": cv, "kind": "file",
                                  "source": "cv"})
