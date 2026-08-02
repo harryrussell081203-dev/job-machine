@@ -602,6 +602,57 @@ ATS_LINK_RE = re.compile(
     ) + r")[^\s\"'<>]*", re.I)
 
 
+BOARD_HOSTS = ("adzuna.co.uk", "adzuna.com", "reed.co.uk", "indeed.com",
+               "totaljobs.com", "cv-library.co.uk", "jobsite.co.uk")
+APPLY_LINK_JS = r"""
+() => {
+  const wanted = /apply|application|submit your|register interest/i;
+  const links = Array.from(document.querySelectorAll('a[href]'));
+  // an explicit apply link that leaves this site is what we are after
+  for (const a of links) {
+    const text = (a.innerText || '') + ' ' + (a.getAttribute('aria-label') || '');
+    if (!wanted.test(text) && !wanted.test(a.getAttribute('href') || '')) continue;
+    try {
+      const u = new URL(a.href, location.href);
+      if (u.hostname && u.hostname !== location.hostname) return u.href;
+    } catch (e) { /* skip malformed */ }
+  }
+  return null;
+}
+"""
+
+
+def on_board(url):
+    host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
+    return any(host == b or host.endswith("." + b) for b in BOARD_HOSTS)
+
+
+def resolve_in_browser(page, job):
+    """Follow a job board through to the employer's own page.
+
+    Adzuna and friends bounce via JavaScript, which plain HTTP cannot follow -
+    that is why every candidate looked like 'www.adzuna.co.uk' with an 11-field
+    search form. The browser is already open, so use it."""
+    url = job.get("url")
+    if not url:
+        return None, None
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+        page.wait_for_timeout(3000)          # let any JS redirect run
+        current = page.url
+        if on_board(current):
+            target = page.evaluate(APPLY_LINK_JS)
+            if target:
+                page.goto(target, wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(2500)
+                current = page.url
+        return current, classify_url(current)[0]
+    except Exception as e:
+        print(f"[portal] browser resolve failed for {url}: {type(e).__name__}")
+        return url, classify_url(url)[0]
+
+
 def resolve_apply_url(job):
     """Follow the board link and look for the employer's real application form."""
     url = job.get("url")
@@ -692,7 +743,7 @@ def run(state, submit=False, limit=None, headless=True):
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
                 break
-            apply_url, ats = resolve_apply_url(job)
+            apply_url, ats = resolve_in_browser(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
                         "portal_attempted_at": jm.now()})
             if not apply_url or not classify_url(apply_url)[1]:
@@ -762,7 +813,7 @@ def diagnose(state, limit=12, headless=True):
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
         for job in todo:
-            url, ats = resolve_apply_url(job)
+            url, ats = resolve_in_browser(page, job)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
             row = {"company": (job.get("company") or "?")[:28],
                    "title": (job.get("title") or "?")[:34],
@@ -770,10 +821,7 @@ def diagnose(state, limit=12, headless=True):
                    "fields": 0, "required": 0, "captcha": False,
                    "verdict": "", "url": url}
             try:
-                page.goto(url, wait_until="domcontentloaded",
-                          timeout=PAGE_TIMEOUT_MS)
-                page.wait_for_timeout(2500)
-                row["captcha"] = has_captcha(page)
+                row["captcha"] = has_captcha(page)   # already on the page
                 fields = collect_fields(page)
                 row["fields"] = len(fields)
                 row["required"] = sum(1 for f in fields if f.get("required"))
