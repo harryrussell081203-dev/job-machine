@@ -36,18 +36,6 @@
    "email": "africa.recruitment@enermech.com",
    "job": "spec_enermech"
   },
-  "hmh": {
-   "at": "2026-08-02T08:29:45.297671+00:00",
-   "company": "HMH",
-   "email": "giadung@hmh.com.vn",
-   "job": "adzuna_5821412743"
-  },
-  "hmh.com.vn": {
-   "at": "2026-08-02T08:29:45.297671+00:00",
-   "company": "HMH",
-   "email": "giadung@hmh.com.vn",
-   "job": "adzuna_5821412743"
-  },
   "hydrasun": {
    "at": "2026-08-02T08:30:56.418087+00:00",
    "company": "Hydrasun",
@@ -59,18 +47,6 @@
    "company": "Hydrasun",
    "email": "info@hydrasun.com",
    "job": "adzuna_5821873553"
-  },
-  "wood": {
-   "at": "2026-08-02T08:33:11.917180+00:00",
-   "company": "Wood",
-   "email": "info@woodforest.com",
-   "job": "spec_wood"
-  },
-  "woodforest.com": {
-   "at": "2026-08-02T08:33:11.917180+00:00",
-   "company": "Wood",
-   "email": "info@woodforest.com",
-   "job": "spec_wood"
   }
  },
  "jobs": {
@@ -2133,6 +2109,7 @@
    "listing_text_len": 5793,
    "location": "Aberdeen, Aberdeenshire",
    "message_id": "<178565938429.2908.6498948347815298032@gmail.com>",
+   "mis_targeted": "wrong company - Clearbit matched a similar name",
    "posted_at": "2026-07-30T18:23:15+00:00",
    "salary_max": 30798.97,
    "salary_min": 30798.97,
@@ -14662,6 +14639,7 @@
    "found_at": "2026-08-02T08:33:10.182810+00:00",
    "location": "Aberdeen / Scotland",
    "message_id": "<178565959125.2908.4319475022262720362@gmail.com>",
+   "mis_targeted": "wrong company - Clearbit matched a similar name",
    "score": null,
    "sent_at": "2026-08-02T08:33:11.917143+00:00",
    "sent_body": "Hi,\n\nNothing advertised that I can see, so this is a speculative note. I know Wood does asset maintenance and instrumentation work across North Sea assets.\n\n1. 3 years at Sonardyne building, testing and fault-finding subsea electronics to IPC-A-610 Class 3.\n2. 2 years Royal Navy comms on a Type 23 frigate, DV cleared.\n3. Completed SCQF L7 apprenticeship, available immediately.\n\nAny technician openings coming up this year worth a conversation?\n\nHarry\nHarry Russell / 07398 530978 / CV attached",
