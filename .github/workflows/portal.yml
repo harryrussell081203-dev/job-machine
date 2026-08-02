@@ -10,6 +10,7 @@ on:
     branches:
       - "fire-portal/**"           # fill forms in, stop before submitting
       - "fire-submit/**"           # fill in AND submit, one application only
+      - "fire-diagnose/**"         # just look at the pages, fill nothing
   workflow_dispatch:
     inputs:
       submit:
@@ -60,6 +61,12 @@ jobs:
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
         run: |
+          if [[ "${GITHUB_REF_NAME}" == fire-diagnose/* ]]; then
+            # reconnaissance only: open the pages, fill nothing, submit nothing
+            echo "fire-diagnose branch: inspecting pages only"
+            python portal_agent.py --harvest --diagnose 14
+            exit 0
+          fi
           ARGS="--harvest --run"
           # a fire-submit/* branch means: really apply, and only to one job
           if [[ "${GITHUB_REF_NAME}" == fire-submit/* ]]; then

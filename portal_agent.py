@@ -734,6 +734,87 @@ STATUS_LABELS = {
 }
 
 
+def diagnose(state, limit=12, headless=True):
+    """Open the top candidates' real application pages and report what is
+    actually there. Nothing is filled and nothing is submitted.
+
+    Three runs have reached zero forms, always because the candidate resolved
+    to something outside SUPPORTED_ATS. This answers the real question: is the
+    page unusable, or merely unrecognised? A page with a proper form and no bot
+    check is one we could apply through whether or not we know its brand."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[diagnose] playwright not installed")
+        return
+
+    todo = portal_candidates(state)[:limit]
+    if not todo:
+        print("[diagnose] no candidates in the queue")
+        return
+    print(f"[diagnose] inspecting {len(todo)} application page(s), "
+          f"filling nothing\n")
+
+    rows = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(user_agent=jm.UA["User-Agent"],
+                                      viewport={"width": 1366, "height": 900})
+        page = context.new_page()
+        for job in todo:
+            url, ats = resolve_apply_url(job)
+            host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
+            row = {"company": (job.get("company") or "?")[:28],
+                   "title": (job.get("title") or "?")[:34],
+                   "ats": ats or "unknown", "host": host[:38],
+                   "fields": 0, "required": 0, "captcha": False,
+                   "verdict": "", "url": url}
+            try:
+                page.goto(url, wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(2500)
+                row["captcha"] = has_captcha(page)
+                fields = collect_fields(page)
+                row["fields"] = len(fields)
+                row["required"] = sum(1 for f in fields if f.get("required"))
+                # does it look like an application form rather than an advert?
+                text = " ".join(field_text(f) for f in fields).lower()
+                row["has_cv"] = bool(CV_PATTERNS.search(text)) or any(
+                    f["type"] == "file" for f in fields)
+                shot(page, job, "diagnose")
+            except Exception as e:
+                row["verdict"] = f"error: {type(e).__name__}"
+                rows.append(row)
+                continue
+
+            if row["captcha"]:
+                row["verdict"] = "bot check - human only"
+            elif classify_url(url)[1]:
+                row["verdict"] = "SUPPORTED - can apply now"
+            elif row["fields"] >= 5 and row.get("has_cv"):
+                row["verdict"] = "usable form, brand unrecognised"
+            elif row["fields"] >= 5:
+                row["verdict"] = f"{row['fields']} fields, no CV upload"
+            else:
+                row["verdict"] = "no form - advert or login wall"
+            rows.append(row)
+        context.close()
+        browser.close()
+
+    print(f"{'COMPANY':30}{'ATS/HOST':40}{'FLDS':>5}{'REQ':>4}  VERDICT")
+    print("-" * 110)
+    for r in rows:
+        label = r["ats"] if r["ats"] != "unknown" else r["host"]
+        print(f"{r['company']:30}{label:40}{r['fields']:>5}{r['required']:>4}  "
+              f"{r['verdict']}")
+    usable = sum(1 for r in rows if "can apply" in r["verdict"]
+                 or "usable form" in r["verdict"])
+    print(f"\n[diagnose] {usable}/{len(rows)} page(s) look applicable by machine")
+    for r in rows:
+        if "usable form" in r["verdict"] or "can apply" in r["verdict"]:
+            print(f"  -> {r['company']}: {r['url']}")
+
+
 def harvest_month(state):
     """Same boards, same criteria, but a month wide instead of 48 hours.
     Scoring is capped per run, so a big backlog gets worked through over days
@@ -757,14 +838,22 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, help="cap this run")
     parser.add_argument("--headed", action="store_true", help="watch it work")
     parser.add_argument("--queue", action="store_true", help="show the queue and exit")
+    parser.add_argument("--diagnose", type=int, metavar="N", nargs="?", const=12,
+                        help="open the top N application pages and report what "
+                             "is there, filling and submitting nothing")
     args = parser.parse_args(argv)
 
     state = jm.load()
     if args.harvest:
         harvest_month(state)
         jm.save(state)
-        if not args.run:
+        if not args.run and args.diagnose is None:
             return 0
+
+    if args.diagnose is not None:
+        diagnose(state, limit=args.diagnose, headless=not args.headed)
+        jm.save(state)
+        return 0
 
     if args.queue or not args.run:
         todo = portal_candidates(state)
