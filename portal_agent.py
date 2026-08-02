@@ -957,7 +957,15 @@ def diagnose(state, limit=12, headless=True):
         context = browser.new_context(user_agent=jm.UA["User-Agent"],
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
+        deadline = time.monotonic() + PORTAL_RUN_BUDGET
         for job in todo:
+            if time.monotonic() > deadline:
+                # Without this a slow run is killed by the workflow timeout and
+                # prints no table at all, which is how five runs in a row
+                # produced no evidence.
+                print(f"[diagnose] {PORTAL_RUN_BUDGET}s spent, reporting on the "
+                      f"{len(rows)} page(s) looked at so far")
+                break
             print(f"  {job.get('company')}: {job.get('title')}")
             url, ats = best_apply_url(page, job)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
