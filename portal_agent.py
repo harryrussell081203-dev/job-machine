@@ -607,17 +607,21 @@ BOARD_HOSTS = ("adzuna.co.uk", "adzuna.com", "reed.co.uk", "indeed.com",
 APPLY_LINK_JS = r"""
 () => {
   const wanted = /apply|application|submit your|register interest/i;
-  const links = Array.from(document.querySelectorAll('a[href]'));
-  // an explicit apply link that leaves this site is what we are after
-  for (const a of links) {
+  // Adzuna's apply button points at its own /jobs/land/ad/... which only then
+  // redirects onward, so a same-host link can still be the way out.
+  const hop = /\/land\/|\/apply|\/redirect|\/out\/|\/click/i;
+  const offsite = [], onsite = [];
+  for (const a of Array.from(document.querySelectorAll('a[href]'))) {
+    const href = a.getAttribute('href') || '';
     const text = (a.innerText || '') + ' ' + (a.getAttribute('aria-label') || '');
-    if (!wanted.test(text) && !wanted.test(a.getAttribute('href') || '')) continue;
-    try {
-      const u = new URL(a.href, location.href);
-      if (u.hostname && u.hostname !== location.hostname) return u.href;
-    } catch (e) { /* skip malformed */ }
+    if (!wanted.test(text) && !wanted.test(href) && !hop.test(href)) continue;
+    let u;
+    try { u = new URL(a.href, location.href); } catch (e) { continue; }
+    if (!/^https?:$/.test(u.protocol)) continue;
+    (u.hostname && u.hostname !== location.hostname ? offsite : onsite)
+      .push({href: u.href, text: (text || '').trim().slice(0, 60)});
   }
-  return null;
+  return {offsite: offsite.slice(0, 6), onsite: onsite.slice(0, 6)};
 }
 """
 
@@ -627,26 +631,42 @@ def on_board(url):
     return any(host == b or host.endswith("." + b) for b in BOARD_HOSTS)
 
 
-def resolve_in_browser(page, job):
-    """Follow a job board through to the employer's own page.
+def resolve_in_browser(page, job, hops=3, verbose=False):
+    """Follow a job board through to the employer's own application page.
 
-    Adzuna and friends bounce via JavaScript, which plain HTTP cannot follow -
-    that is why every candidate looked like 'www.adzuna.co.uk' with an 11-field
-    search form. The browser is already open, so use it."""
+    Boards bounce via JavaScript, which plain HTTP cannot follow. They also
+    bounce via their own interstitial - Adzuna's apply button points at
+    /jobs/land/ad/... on its own domain before redirecting onward - so an
+    off-site link is not the only way out and we may need several hops."""
     url = job.get("url")
     if not url:
         return None, None
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
         page.wait_for_timeout(3000)          # let any JS redirect run
+        seen = set()
+        for _ in range(hops):
+            current = page.url
+            if not on_board(current):
+                return current, classify_url(current)[0]
+            links = page.evaluate(APPLY_LINK_JS) or {}
+            if verbose:
+                print(f"    apply links at {current[:60]}: "
+                      f"offsite={[l['href'][:70] for l in links.get('offsite', [])]} "
+                      f"onsite={[l['href'][:70] for l in links.get('onsite', [])]}")
+            # leaving the board outright beats another interstitial
+            target = next((l["href"] for l in links.get("offsite", [])
+                           if l["href"] not in seen), None)
+            if not target:
+                target = next((l["href"] for l in links.get("onsite", [])
+                               if l["href"] not in seen), None)
+            if not target:
+                break
+            seen.add(target)
+            page.goto(target, wait_until="domcontentloaded",
+                      timeout=PAGE_TIMEOUT_MS)
+            page.wait_for_timeout(2500)
         current = page.url
-        if on_board(current):
-            target = page.evaluate(APPLY_LINK_JS)
-            if target:
-                page.goto(target, wait_until="domcontentloaded",
-                          timeout=PAGE_TIMEOUT_MS)
-                page.wait_for_timeout(2500)
-                current = page.url
         return current, classify_url(current)[0]
     except Exception as e:
         print(f"[portal] browser resolve failed for {url}: {type(e).__name__}")
@@ -813,7 +833,8 @@ def diagnose(state, limit=12, headless=True):
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
         for job in todo:
-            url, ats = resolve_in_browser(page, job)
+            print(f"  {job.get('company')}: {job.get('url', '')[:80]}")
+            url, ats = resolve_in_browser(page, job, verbose=True)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
             row = {"company": (job.get("company") or "?")[:28],
                    "title": (job.get("title") or "?")[:34],

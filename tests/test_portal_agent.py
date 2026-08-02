@@ -384,40 +384,69 @@ class TestPortalTargeting(unittest.TestCase):
         self.assertFalse(pa.on_board("https://boards.greenhouse.io/acme/jobs/1"))
         self.assertFalse(pa.on_board("https://careers.hydrasun.com/apply"))
 
+    def chained_page(self, start, chain):
+        page = mock.MagicMock()
+        page.url = start
+        page.goto.side_effect = lambda url, **kw: setattr(page, "url", url)
+        page.evaluate.side_effect = lambda js: chain.get(
+            page.url, {"offsite": [], "onsite": []})
+        return page
+
     def test_browser_follows_a_board_through_to_the_employer(self):
         """Plain HTTP left every candidate stuck on www.adzuna.co.uk, because
         the board redirects with JavaScript."""
-        page = mock.MagicMock()
-        # lands on Adzuna, finds an off-site apply link, follows it
-        page.url = "https://www.adzuna.co.uk/jobs/details/123"
-        page.evaluate.return_value = "https://boards.greenhouse.io/acme/jobs/9"
-
-        def goto(url, **kw):
-            page.url = url
-        page.goto.side_effect = goto
-
+        page = self.chained_page(
+            "https://www.adzuna.co.uk/jobs/details/123",
+            {"https://www.adzuna.co.uk/jobs/details/123": {
+                "offsite": [{"href": "https://boards.greenhouse.io/acme/jobs/9",
+                             "text": "Apply"}], "onsite": []}})
         url, ats = pa.resolve_in_browser(
             page, {"url": "https://www.adzuna.co.uk/jobs/details/123"})
         self.assertEqual(url, "https://boards.greenhouse.io/acme/jobs/9")
         self.assertEqual(ats, "greenhouse")
 
+    def test_follows_the_boards_own_interstitial_before_leaving(self):
+        """Adzuna's apply button points at its OWN /jobs/land/ad/... which only
+        then redirects onward. Rejecting same-host links is what left the second
+        diagnose run still sitting on www.adzuna.co.uk."""
+        page = self.chained_page(
+            "https://www.adzuna.co.uk/jobs/details/1",
+            {"https://www.adzuna.co.uk/jobs/details/1": {
+                "offsite": [],
+                "onsite": [{"href": "https://www.adzuna.co.uk/jobs/land/ad/1",
+                            "text": "Apply"}]},
+             "https://www.adzuna.co.uk/jobs/land/ad/1": {
+                "offsite": [{"href": "https://apply.workable.com/acme/j/AB/",
+                             "text": "Apply now"}], "onsite": []}})
+        url, ats = pa.resolve_in_browser(
+            page, {"url": "https://www.adzuna.co.uk/jobs/details/1"})
+        self.assertEqual(url, "https://apply.workable.com/acme/j/AB/")
+        self.assertEqual(ats, "workable")
+
     def test_a_direct_employer_link_is_left_alone(self):
-        page = mock.MagicMock()
-        page.url = "https://boards.greenhouse.io/acme/jobs/9"
-        page.goto.side_effect = lambda url, **kw: None
+        page = self.chained_page("https://boards.greenhouse.io/acme/jobs/9", {})
         url, ats = pa.resolve_in_browser(
             page, {"url": "https://boards.greenhouse.io/acme/jobs/9"})
         page.evaluate.assert_not_called()      # no need to hunt for a link
         self.assertEqual(ats, "greenhouse")
 
     def test_a_board_with_no_apply_link_stays_put_rather_than_guessing(self):
-        page = mock.MagicMock()
-        page.url = "https://www.adzuna.co.uk/jobs/details/123"
-        page.goto.side_effect = lambda url, **kw: None
-        page.evaluate.return_value = None
+        page = self.chained_page("https://www.adzuna.co.uk/jobs/details/123", {})
         url, ats = pa.resolve_in_browser(
             page, {"url": "https://www.adzuna.co.uk/jobs/details/123"})
         self.assertEqual(url, "https://www.adzuna.co.uk/jobs/details/123")
+
+    def test_a_loop_of_interstitials_gives_up_rather_than_spinning(self):
+        page = self.chained_page(
+            "https://www.adzuna.co.uk/a",
+            {"https://www.adzuna.co.uk/a": {
+                "offsite": [], "onsite": [{"href": "https://www.adzuna.co.uk/b",
+                                           "text": "Apply"}]},
+             "https://www.adzuna.co.uk/b": {
+                "offsite": [], "onsite": [{"href": "https://www.adzuna.co.uk/a",
+                                           "text": "Apply"}]}})
+        url, ats = pa.resolve_in_browser(page, {"url": "https://www.adzuna.co.uk/a"})
+        self.assertTrue(pa.on_board(url))      # stayed on the board, but stopped
 
     def test_diagnose_never_fills_or_submits_anything(self):
         """Reconnaissance must stay read-only - it runs against live employer
