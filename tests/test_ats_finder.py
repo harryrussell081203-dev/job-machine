@@ -352,3 +352,55 @@ class TestEndToEndDiscovery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestWalkingAnEmployersOwnSite(unittest.TestCase):
+    """Most Aberdeen employers run no hosted ATS. Their careers page is an
+    index, so the vacancy is one click in and the form often one more."""
+    def page(self, links, apply_links=None, final="https://acme.com/apply/9"):
+        page = mock.MagicMock()
+        page.evaluate.side_effect = [links, apply_links if apply_links is not None
+                                     else {"offsite": [], "onsite": []}]
+        page.url = final
+        return page
+
+    def test_the_vacancy_is_found_and_its_apply_link_followed(self):
+        page = self.page(
+            [{"href": "https://acme.com/jobs/9", "text": "Instrumentation Technician"},
+             {"href": "https://acme.com/jobs/3", "text": "Head of Finance"}],
+            {"offsite": [], "onsite": [{"href": "https://acme.com/apply/9",
+                                        "text": "Apply now"}]})
+        url = af.own_site_application(page, "https://acme.com/careers",
+                                      "Instrumentation Technician")
+        self.assertEqual(url, "https://acme.com/apply/9")
+
+    def test_the_advert_itself_is_used_when_it_carries_the_form(self):
+        page = self.page(
+            [{"href": "https://acme.com/jobs/9", "text": "Instrumentation Technician"}],
+            {"offsite": [], "onsite": []})
+        url = af.own_site_application(page, "https://acme.com/careers",
+                                      "Instrumentation Technician")
+        self.assertEqual(url, "https://acme.com/jobs/9")
+
+    def test_a_careers_page_without_this_vacancy_gives_nothing(self):
+        page = self.page([{"href": "https://acme.com/jobs/3",
+                           "text": "Head of Finance"}])
+        self.assertIsNone(af.own_site_application(page, "https://acme.com/careers",
+                                                  "Instrumentation Technician"))
+
+    def test_no_browser_means_no_walk(self):
+        self.assertIsNone(af.own_site_application(None, "https://acme.com/careers",
+                                                  "Technician"))
+
+    def test_the_route_reaches_it_when_no_hosted_ats_exists(self):
+        job = {"company": "Acme Engineering", "title": "Instrumentation Technician",
+               "company_domain": "acme.com"}
+        with mock.patch.object(af, "find_board", return_value=None), \
+             mock.patch.object(af, "careers_page_ats",
+                               return_value=(None, "https://acme.com/careers")), \
+             mock.patch.object(af, "own_site_application",
+                               return_value="https://acme.com/apply/9") as walk:
+            url, ats = af.find_application_url(mock.MagicMock(), job)
+        self.assertEqual(url, "https://acme.com/apply/9")
+        self.assertIsNone(ats)
+        walk.assert_called_once()

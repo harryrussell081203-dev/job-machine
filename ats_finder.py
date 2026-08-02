@@ -453,6 +453,39 @@ def match_job_on_board(page, board_url, title, min_overlap=0.5):
 # ======================================================================
 # THE ROUTE
 # ======================================================================
+def own_site_application(page, careers_url, title):
+    """Walk an employer's own careers page through to this vacancy's form.
+
+    A careers page is an index, not a form: the vacancy is one click in and
+    the form is often one more after that. Composed of the two pieces that
+    already work - find the link whose text matches the advert, then follow
+    whatever the page calls 'apply'."""
+    if page is None or not careers_url:
+        return None
+    vacancy = match_job_on_board(page, careers_url, title)
+    if not vacancy:
+        return None
+    try:
+        page.goto(vacancy, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2000)
+    except Exception as e:
+        print(f"[ats] could not open {vacancy[:70]}: {type(e).__name__}")
+        return None
+    links = page.evaluate(portal_agent.APPLY_LINK_JS) or {}
+    target = next((l["href"] for l in
+                   list(links.get("offsite") or []) + list(links.get("onsite") or [])
+                   if l.get("href") != vacancy), None)
+    if not target:
+        return vacancy                     # the form may be on the advert itself
+    try:
+        page.goto(target, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2000)
+        print(f"[ats] followed '{title}' to {page.url[:80]}")
+        return page.url
+    except Exception:
+        return vacancy
+
+
 def find_application_url(page, job, session=None):
     """The employer's real application page for this job, or None.
 
@@ -498,6 +531,11 @@ def find_application_url(page, job, session=None):
         matched = match_job_on_board(page, url, title)
         if matched:
             return matched, ats
+    if ats is None:
+        # their own site: the careers page is an index, walk it to the vacancy
+        walked = own_site_application(page, url, title)
+        if walked:
+            return walked, None
     return url, ats
 
 
