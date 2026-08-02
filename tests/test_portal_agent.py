@@ -660,3 +660,128 @@ class TestAgainstALocalPortal(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestHarvestingEmployerBoards(unittest.TestCase):
+    """Vacancies straight off an employer's own board.
+
+    The job boards only carry what an employer chose to advertise there -
+    about four in-trade listings a day for Aberdeen. Their own ATS board
+    carries everything they have open.
+    """
+    def board(self, *postings):
+        return {"ats": "greenhouse", "slug": "acme", "whole_name": True,
+                "url": "https://boards.greenhouse.io/acme", "jobs": list(postings)}
+
+    def posting(self, title, where="Aberdeen, Scotland", url=None):
+        return {"title": title, "location": where,
+                "url": url or f"https://boards.greenhouse.io/acme/jobs/{title[:4]}",
+                "description": "Calibration of pressure instrumentation offshore."}
+
+    def state(self):
+        return {"jobs": {}, "companies_contacted": {}}
+
+    def harvest(self, board, state=None, targets=(("Acme",))):
+        import ats_finder
+        state = state or self.state()
+        with mock.patch.object(ats_finder, "find_board", return_value=board), \
+             mock.patch.object(jm, "load_targets",
+                               return_value=[{"company": c} for c in targets]):
+            pa.harvest_boards(state)
+        return state
+
+    def test_a_role_the_job_boards_never_showed_is_picked_up(self):
+        state = self.harvest(self.board(self.posting("Instrumentation Technician")))
+        self.assertEqual(len(state["jobs"]), 1)
+        job = next(iter(state["jobs"].values()))
+        self.assertEqual(job["company"], "Acme")
+        self.assertEqual(job["apply_url"], job["url"])
+        self.assertEqual(job["ats"], "greenhouse")
+
+    def test_a_role_on_the_other_side_of_the_world_is_not(self):
+        """Employer boards are global. Without this he gets offered Houston."""
+        state = self.harvest(self.board(
+            self.posting("Instrumentation Technician", "Houston, TX, USA")))
+        self.assertEqual(state["jobs"], {})
+
+    def test_a_role_outside_his_trade_is_not(self):
+        state = self.harvest(self.board(self.posting("Head of Tax", "Aberdeen")))
+        self.assertEqual(state["jobs"], {})
+
+    def test_the_same_vacancy_is_not_added_twice_across_runs(self):
+        """Python salts hash() per process, so an id built from it would
+        re-add every vacancy on every run."""
+        board = self.board(self.posting("Instrumentation Technician"))
+        state = self.harvest(board)
+        first = set(state["jobs"])
+        self.harvest(board, state)
+        self.assertEqual(set(state["jobs"]), first)
+
+    def test_a_vacancy_already_known_from_a_job_board_is_not_duplicated(self):
+        state = self.state()
+        state["jobs"]["adz_1"] = dict(JOB, company="Acme",
+                                      title="Instrumentation Technician")
+        self.harvest(self.board(self.posting("Instrumentation Technician")), state)
+        self.assertEqual(len(state["jobs"]), 1)
+
+    def test_it_arrives_ready_to_apply_with_no_job_board_to_resolve(self):
+        state = self.harvest(self.board(self.posting("Instrumentation Technician")))
+        job = next(iter(state["jobs"].values()))
+        url, ats = pa.best_apply_url(mock.MagicMock(), job)
+        self.assertEqual(url, job["url"])
+        self.assertEqual(ats, "greenhouse")
+
+
+class TestReachableLocations(unittest.TestCase):
+    def test_places_harry_could_actually_work(self):
+        for place in ("Aberdeen, Scotland", "Dyce", "Glasgow, UK",
+                      "Westhill, Aberdeenshire", "Montrose"):
+            self.assertTrue(pa.in_reach(place), place)
+
+    def test_places_he_could_not(self):
+        for place in ("Houston, TX", "London", "Remote - Singapore", ""):
+            self.assertFalse(pa.in_reach(place), place)
+
+
+class TestBoardDiscoveryIsRemembered(unittest.TestCase):
+    """Finding a board costs up to eighteen requests across six platforms;
+    listing a known one costs a single request."""
+    def setUp(self):
+        self.state = {"jobs": {}}
+        self.board = {"ats": "greenhouse", "slug": "acme", "jobs": [],
+                      "url": "https://boards.greenhouse.io/acme"}
+
+    def test_a_company_is_only_searched_for_once(self):
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_board",
+                               return_value=self.board) as find, \
+             mock.patch.object(ats_finder, "api_board",
+                               return_value=self.board) as listing:
+            pa.cached_board(self.state, "Acme")
+            pa.cached_board(self.state, "Acme Ltd")     # same company
+        find.assert_called_once()
+        listing.assert_called_once()                    # relisted, not researched
+
+    def test_a_company_with_no_board_is_not_searched_for_again(self):
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_board", return_value=None) as find:
+            self.assertIsNone(pa.cached_board(self.state, "Tiny Firm"))
+            self.assertIsNone(pa.cached_board(self.state, "Tiny Firm"))
+        find.assert_called_once()
+
+    def test_a_stale_answer_is_checked_again(self):
+        import ats_finder
+        self.state["ats_boards"] = {jm.company_key("Acme"): {
+            "ats": None, "slug": None, "checked_at": "2020-01-01T00:00:00+00:00"}}
+        with mock.patch.object(ats_finder, "find_board",
+                               return_value=self.board) as find:
+            pa.cached_board(self.state, "Acme")
+        find.assert_called_once()
+
+    def test_a_board_that_has_gone_away_is_forgotten(self):
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_board", return_value=self.board):
+            pa.cached_board(self.state, "Acme")
+        with mock.patch.object(ats_finder, "api_board", return_value=None):
+            self.assertIsNone(pa.cached_board(self.state, "Acme"))
+        self.assertIsNone(self.state["ats_boards"][jm.company_key("Acme")]["ats"])
