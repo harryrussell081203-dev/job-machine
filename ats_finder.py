@@ -81,13 +81,27 @@ NOT_A_BOARD = re.compile(
     r"account (is )?(suspended|closed)|no open (roles|positions|jobs)", re.I)
 
 
-def looks_like_a_board(text, ats):
-    """A 200 is not enough - these platforms serve friendly 404s."""
+def looks_like_a_board(text, ats, company):
+    """A 200 is not enough, and neither is a long page.
+
+    apply.workable.com serves a bot-check page for any slug at all, so the
+    first version of this probe matched fourteen unrelated companies to
+    Workable. A real board has to name the company it belongs to."""
     if not text or len(text) < 400:
         return False
     if NOT_A_BOARD.search(text[:4000]):
         return False
-    return True
+    low = text.lower()
+    # a bot check is not a board, whatever else is on the page
+    import portal_agent
+    if any(marker in low for marker in portal_agent.CAPTCHA_MARKERS):
+        return False
+    # the company's own name must appear, or this is someone else's board
+    words = [w for w in re.findall(r"[a-z0-9]+", (company or "").lower())
+             if w not in SLUG_NOISE and len(w) > 2]
+    if not words:
+        return False
+    return any(w in low for w in words)
 
 
 def probe_ats(company, session=None):
@@ -100,7 +114,7 @@ def probe_ats(company, session=None):
                 r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
             except Exception:
                 continue
-            if r.status_code == 200 and looks_like_a_board(r.text, ats):
+            if r.status_code == 200 and looks_like_a_board(r.text, ats, company):
                 print(f"[ats] {company} -> {ats} board at {url}")
                 return ats, r.url
     return None
