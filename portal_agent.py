@@ -1173,6 +1173,54 @@ def harvest_boards(state):
     return added
 
 
+def inspect_boards(state, limit=6, headless=True):
+    """Open the apply pages of roles found on employers' own boards.
+
+    These arrive with a real application URL rather than a job-board link, so
+    they are the first candidates in this project that should simply work.
+    They are also unscored when they arrive, which keeps them out of the
+    ordinary queue until Gemini catches up - and that would mean waiting days
+    to find out whether the pages are fillable. This looks now. It fills
+    nothing and submits nothing."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[inspect] playwright not installed")
+        return
+    todo = [j for j in state["jobs"].values()
+            if str(j.get("source", "")).startswith("board:")][:limit]
+    if not todo:
+        print("[inspect] no board-sourced roles in the queue yet")
+        return
+    print(f"[inspect] opening {len(todo)} employer application page(s)\n")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(user_agent=jm.UA["User-Agent"],
+                                      viewport={"width": 1366, "height": 900})
+        page = context.new_page()
+        for job in todo:
+            try:
+                page.goto(job["apply_url"], wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(3000)
+                fields = collect_fields(page)
+                required = sum(1 for f in fields if f.get("required"))
+                captcha = has_captcha(page)
+                upload = any(f["type"] == "file" for f in fields)
+                real = is_application_form(fields)
+                shot(page, job, "inspect")
+                print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
+                      f"{len(fields):>3} fields {required:>3} required  "
+                      f"{'CV upload' if upload else 'no upload':10} "
+                      f"{'BOT CHECK' if captcha else 'clear':10} "
+                      f"{'APPLICABLE' if real and not captcha else '-'}")
+            except Exception as e:
+                print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
+                      f"error: {type(e).__name__}")
+        context.close()
+        browser.close()
+
+
 def harvest_month(state):
     """Same boards, same criteria, but a month wide instead of 48 hours.
     Scoring is capped per run, so a big backlog gets worked through over days
@@ -1200,14 +1248,22 @@ def main(argv=None):
     parser.add_argument("--diagnose", type=int, metavar="N", nargs="?", const=12,
                         help="open the top N application pages and report what "
                              "is there, filling and submitting nothing")
+    parser.add_argument("--inspect", type=int, metavar="N", nargs="?", const=6,
+                        help="open N application pages found on employers' own "
+                             "boards, before they have been scored")
     args = parser.parse_args(argv)
 
     state = jm.load()
     if args.harvest:
         harvest_month(state)
         jm.save(state)
-        if not args.run and args.diagnose is None:
+        if not args.run and args.diagnose is None and args.inspect is None:
             return 0
+
+    if args.inspect is not None:
+        inspect_boards(state, limit=args.inspect, headless=not args.headed)
+        jm.save(state)
+        return 0
 
     if args.diagnose is not None:
         diagnose(state, limit=args.diagnose, headless=not args.headed)

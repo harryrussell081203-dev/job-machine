@@ -12,6 +12,7 @@ on:
       - "fire-submit/**"           # fill in AND submit, one application only
       - "fire-diagnose/**"         # just look at the pages, fill nothing
       - "fire-probe/**"            # ask the board APIs only - seconds, no browser
+      - "fire-inspect/**"          # open employer-board apply pages, fill nothing
   workflow_dispatch:
     inputs:
       submit:
@@ -67,6 +68,14 @@ jobs:
             # companies in the queue? No browser, no scoring, ~30 seconds.
             echo "fire-probe branch: querying the board APIs only"
             python ats_finder.py --check-queue 14
+            exit 0
+          fi
+          if [[ "${GITHUB_REF_NAME}" == fire-inspect/* ]]; then
+            # the roles found on employers' own boards arrive unscored, so they
+            # sit outside the ordinary queue for days. Look at their apply
+            # pages now: they are the ones that should simply work.
+            echo "fire-inspect branch: opening employer application pages"
+            python portal_agent.py --inspect 8
             exit 0
           fi
           if [[ "${GITHUB_REF_NAME}" == fire-diagnose/* ]]; then
