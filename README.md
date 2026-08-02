@@ -185,11 +185,61 @@ wording), and the agent picks it. That is a real answer the form itself offers,
 so those questions stop blocking applications without anything being invented.
 If a monitoring question offers no opt-out, it is flagged like the rest.
 
+### How it finds the form
+
+The job boards are a dead end: Adzuna's outbound page renders blank to a
+headless browser, proven over five runs. So the form is looked for in cost
+order, and the first route that answers wins:
+
+| # | Route | Cost |
+| --- | --- | --- |
+| 0 | The listing URL is already a portal | free |
+| 1 | The advert text names the portal — employers paste their link into the description all the time | free, no network |
+| 2 | The employer's **board API** — Greenhouse, Lever, Ashby, SmartRecruiters, Workable and Recruitee each publish a free JSON board that 404s honestly | 6 requests, asked in parallel |
+| 3 | The employer's **own careers page**, walked through to the vacancy and its apply link | a few page loads |
+| 4 | Last resort: follow the job board's own interstitial | a browser hop |
+
+Route 2 replaced guessing at board *pages*. Every one of those platforms
+answers `200` for a company that is not on it — SmartRecruiters serves a
+generic search page, Workable serves a bot check — so a `200` proved nothing
+and once matched two Aberdeen firms to **AECOM's** adverts. The APIs 404
+properly, and hand back the real postings with their real application URLs.
+
+**Route 3 matters more than it sounds.** Of fourteen employers probed in
+Aberdeen, exactly one used a hosted ATS, and it needed an account. The rest
+take applications on a form of their own. Off the known platforms a page has
+to look like an application — a CV upload, or a name/email/phone set — before
+anything is typed into it, so a contact form or a newsletter signup is never
+mistaken for a vacancy.
+
+### Roles the job boards never advertised
+
+An employer's own board carries every role they have open, not just the ones
+they paid to advertise. Once a company's board is known, listing it costs a
+single request, so `--harvest` also sweeps the thirty curated employers in
+`data/targets.json` plus any company whose advert already scored 60+, and adds
+anything that fits and is somewhere you could actually work. Those arrive with
+their application URL already known.
+
+Which ATS a company uses is remembered in `data/state.json` for three weeks —
+finding a board costs up to eighteen requests, re-listing a known one costs
+one, and firms do not change ATS often. The open roles themselves are always
+fetched live.
+
 ### Portals it works on
 
 Greenhouse, Lever, Workable, Ashby, SmartRecruiters, Recruitee, Teamtailor,
-JOIN and Personio — the ones that accept an application with no account and no
-bot check. Anything else is recorded as `portal_manual` with a direct link.
+JOIN and Personio — plus any employer's own form that has a CV upload and no
+bot check. Workday, Taleo, LinkedIn, Indeed and Reed need an account and are
+recorded as `portal_manual` with a direct link for you.
+
+### Checking it without waiting for a run
+
+Push any branch named `fire-probe/...` and the workflow reports, in about
+thirty seconds and with no browser, exactly what each platform answers for the
+companies currently in the queue. `fire-diagnose/...` opens the pages and
+reports what is on them without filling anything in. `fire-submit/...` really
+applies, to one job only.
 
 ### Portal variables
 
