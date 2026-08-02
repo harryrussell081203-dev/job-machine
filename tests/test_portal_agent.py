@@ -375,6 +375,50 @@ class TestPortalTargeting(unittest.TestCase):
         self.assertEqual(applied, ["good"])
         self.assertEqual(jobs["manual"]["status"], "portal_manual")
 
+    def test_board_hosts_are_recognised_as_not_being_the_employer(self):
+        for url in ("https://www.adzuna.co.uk/jobs/details/123",
+                    "https://www.reed.co.uk/jobs/technician/456",
+                    "https://uk.indeed.com/viewjob?jk=abc"):
+            with self.subTest(url=url):
+                self.assertTrue(pa.on_board(url))
+        self.assertFalse(pa.on_board("https://boards.greenhouse.io/acme/jobs/1"))
+        self.assertFalse(pa.on_board("https://careers.hydrasun.com/apply"))
+
+    def test_browser_follows_a_board_through_to_the_employer(self):
+        """Plain HTTP left every candidate stuck on www.adzuna.co.uk, because
+        the board redirects with JavaScript."""
+        page = mock.MagicMock()
+        # lands on Adzuna, finds an off-site apply link, follows it
+        page.url = "https://www.adzuna.co.uk/jobs/details/123"
+        page.evaluate.return_value = "https://boards.greenhouse.io/acme/jobs/9"
+
+        def goto(url, **kw):
+            page.url = url
+        page.goto.side_effect = goto
+
+        url, ats = pa.resolve_in_browser(
+            page, {"url": "https://www.adzuna.co.uk/jobs/details/123"})
+        self.assertEqual(url, "https://boards.greenhouse.io/acme/jobs/9")
+        self.assertEqual(ats, "greenhouse")
+
+    def test_a_direct_employer_link_is_left_alone(self):
+        page = mock.MagicMock()
+        page.url = "https://boards.greenhouse.io/acme/jobs/9"
+        page.goto.side_effect = lambda url, **kw: None
+        url, ats = pa.resolve_in_browser(
+            page, {"url": "https://boards.greenhouse.io/acme/jobs/9"})
+        page.evaluate.assert_not_called()      # no need to hunt for a link
+        self.assertEqual(ats, "greenhouse")
+
+    def test_a_board_with_no_apply_link_stays_put_rather_than_guessing(self):
+        page = mock.MagicMock()
+        page.url = "https://www.adzuna.co.uk/jobs/details/123"
+        page.goto.side_effect = lambda url, **kw: None
+        page.evaluate.return_value = None
+        url, ats = pa.resolve_in_browser(
+            page, {"url": "https://www.adzuna.co.uk/jobs/details/123"})
+        self.assertEqual(url, "https://www.adzuna.co.uk/jobs/details/123")
+
     def test_diagnose_never_fills_or_submits_anything(self):
         """Reconnaissance must stay read-only - it runs against live employer
         pages, so it may look and screenshot, nothing more."""
