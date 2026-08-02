@@ -129,28 +129,18 @@ class TestBoardApis(unittest.TestCase):
         with mock.patch.object(af.requests, "get", side_effect=get):
             self.assertIsNone(af.find_board("Hydrasun"))
 
-    def test_a_catch_all_bot_check_is_not_mistaken_for_a_board(self):
-        """apply.workable.com answers 200 for any slug with a bot-check page.
-        The first version of this probe matched fourteen unrelated companies
-        to Workable because of it."""
-        botcheck = "<div class='g-recaptcha'>Checking your browser</div>" + "x" * 900
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(text=botcheck)):
-            self.assertIsNone(af.probe_ats("ScottishPower"))
-
-    def test_a_board_must_name_the_company_it_belongs_to(self):
-        someone_else = "Open roles at Totally Different Corp " + "x" * 900
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(text=someone_else)):
-            self.assertIsNone(af.probe_ats("Dron & Dickson"))
-
-    def test_the_companys_own_board_is_still_accepted(self):
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(
-                                   text="Careers at Hydrasun " + "x" * 900)):
-            found = af.probe_ats("Hydrasun")
-        self.assertIsNotNone(found)
-        self.assertEqual(found[0], "greenhouse")
+    def test_an_html_page_is_never_a_board_whatever_it_says(self):
+        """These three used to be separate tests of looks_like_a_board, which
+        tried to judge a board from its HTML. It cannot be done: the platforms
+        answer 200 for any slug. Prose that merely mentions the company - even
+        the right company - is not evidence of a board."""
+        for page in ("<div class='g-recaptcha'>Checking your browser</div>",
+                     "Open roles at Totally Different Corp",
+                     "Careers at Hydrasun"):
+            with self.subTest(page=page[:30]):
+                with mock.patch.object(af.requests, "get",
+                                       return_value=response(text=page + "x" * 900)):
+                    self.assertIsNone(af.probe_ats("Hydrasun"))
 
     def test_network_failure_is_survived(self):
         with mock.patch.object(af.requests, "get", side_effect=OSError("down")):
