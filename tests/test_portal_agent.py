@@ -375,6 +375,40 @@ class TestPortalTargeting(unittest.TestCase):
         self.assertEqual(applied, ["good"])
         self.assertEqual(jobs["manual"]["status"], "portal_manual")
 
+    def test_diagnose_never_fills_or_submits_anything(self):
+        """Reconnaissance must stay read-only - it runs against live employer
+        pages, so it may look and screenshot, nothing more."""
+        jobs = {"a": dict(JOB, external_id="a", score=90, found_at=jm.now(),
+                          url="https://boards.greenhouse.io/acme/jobs/1")}
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        fake_page = mock.MagicMock()
+        fake_pw = mock.MagicMock()
+        fake_pw.sync_playwright.return_value.__enter__.return_value \
+            .chromium.launch.return_value.new_context.return_value \
+            .new_page.return_value = fake_page
+
+        with mock.patch.dict("sys.modules", {"playwright": mock.MagicMock(),
+                                             "playwright.sync_api": fake_pw}), \
+             mock.patch.object(pa, "collect_fields", return_value=[]), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "resolve_apply_url",
+                               return_value=("https://boards.greenhouse.io/acme/jobs/1",
+                                             "greenhouse")), \
+             mock.patch.object(pa, "apply_plan") as fill, \
+             mock.patch.object(pa, "click_submit") as submit, \
+             mock.patch.object(pa, "apply_to_job") as apply_job:
+            pa.diagnose(state, limit=5)
+
+        fill.assert_not_called()
+        submit.assert_not_called()
+        apply_job.assert_not_called()
+        fake_page.fill.assert_not_called()
+        fake_page.check.assert_not_called()
+        fake_page.set_input_files.assert_not_called()
+        # and the job's status is untouched by looking at it
+        self.assertEqual(jobs["a"]["status"], "scored")
+
     def test_queue_is_scored_recent_and_untried(self):
         state = {"jobs": {
             "good": dict(JOB, external_id="good", score=90, found_at=jm.now()),
