@@ -21,6 +21,11 @@ if [ ! -f data/state.json ]; then
   exit 0
 fi
 cp data/state.json /tmp/ours.json
+# Keep our merge script too. The reset below checks out the target branch,
+# which replaces tools/ with the target's copy - so a run on a branch that
+# adds a new state field would have that field merged by the OLD script and
+# silently dropped. That is exactly what happened to the ATS board cache.
+cp tools/merge_state.py /tmp/merge_state.py
 
 for attempt in 1 2 3 4 5; do
   git fetch origin "$TARGET" || { sleep $((2 ** attempt)); continue; }
@@ -33,7 +38,7 @@ for attempt in 1 2 3 4 5; do
     echo '{}' > /tmp/theirs.json
   fi
   mkdir -p data
-  python tools/merge_state.py /tmp/theirs.json /tmp/ours.json data/state.json || {
+  python /tmp/merge_state.py /tmp/theirs.json /tmp/ours.json data/state.json || {
     echo "merge failed, falling back to our own state"
     cp /tmp/ours.json data/state.json
   }
