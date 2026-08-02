@@ -38,6 +38,7 @@ import argparse
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -280,11 +281,27 @@ def api_board(ats, slug, company, get):
 
 
 def find_board(company, session=None):
-    """The company's real ATS board, or None."""
+    """The company's real ATS board, or None.
+
+    The six platforms are six different hosts, so they are asked at the same
+    time - serially this was the slowest thing in the run, and it happens for
+    every company on every pass. Slugs stay sequential: the first one usually
+    answers, and firing them all would multiply the load on platforms that
+    already rate-limit."""
     get = (session or requests).get
     for slug, whole_name in slug_plan(company):
+        with ThreadPoolExecutor(max_workers=len(API_BOARDS)) as pool:
+            found = {ats: pool.submit(api_board, ats, slug, company, get)
+                     for ats, _, _, _ in API_BOARDS}
+            results = {}
+            for ats, future in found.items():
+                try:
+                    results[ats] = future.result()
+                except Exception:
+                    results[ats] = None
+        # decided in API_BOARDS order, not in whichever order they answered
         for ats, _, _, _ in API_BOARDS:
-            board = api_board(ats, slug, company, get)
+            board = results.get(ats)
             if board:
                 board["whole_name"] = whole_name
                 print(f"[ats] {company} -> {ats} board '{board['slug']}' "
@@ -330,7 +347,7 @@ def careers_page_ats(domain, session=None):
              f"https://{domain}/jobs", f"https://{domain}/vacancies",
              f"https://{domain}/careers/vacancies"]
     seen_links, own_page, reachable = [], None, False
-    for url in pages + seen_links:
+    for url in pages:
         try:
             r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
         except Exception:
