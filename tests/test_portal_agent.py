@@ -662,6 +662,45 @@ if __name__ == "__main__":
     unittest.main(verbosity=2)
 
 
+    def test_a_role_off_an_employers_own_board_fills_in_end_to_end(self):
+        """Board-sourced roles are built by harvest_boards, not by the job-board
+        harvest: no posted_at, an apply_url already set, a source of
+        'board:<ats>'. This drives that exact record through the real filler
+        against a real browser, because a shape mismatch here would only show
+        up as a failed live application."""
+        import ats_finder
+        state = {"jobs": {}}
+        board = {"ats": "workable", "slug": "dof", "whole_name": True,
+                 "url": "https://apply.workable.com/dof/",
+                 "jobs": [{"title": "Hydraulic Engineer",
+                           "location": "Aberdeen, Scotland",
+                           "url": "https://apply.workable.com/j/39EE851D53/apply",
+                           "description": "Offshore hydraulic systems, "
+                                          "calibration and fault finding."}]}
+        with mock.patch.object(ats_finder, "find_board", return_value=board), \
+             mock.patch.object(jm, "load_targets", return_value=[{"company": "DOF"}]):
+            pa.harvest_boards(state)
+        job = next(iter(state["jobs"].values()))
+        self.assertEqual(job["source"], "board:workable")
+        self.assertIsNone(job["posted_at"])
+
+        job["apply_url"] = "file://" + FIXTURE          # the fixture stands in
+        with mock.patch.object(jm, "gemini_json",
+                               return_value={"answer": "Same work as my day job.",
+                                             "fact_used": "Sonardyne"}), \
+             mock.patch.object(jm, "cv_for", return_value=FIXTURE), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "click_submit") as submit:
+            pa.apply_to_job(self.page, job, pa.load_answers(), submit=False)
+
+        submit.assert_not_called()
+        values = self.page.evaluate(
+            "() => Object.fromEntries(new FormData(document.getElementById("
+            "'application')).entries())")
+        self.assertEqual(values["first_name"], "Harry")
+        self.assertEqual(values["town"], "Aberdeen")
+        self.assertTrue(job.get("portal_filled"))
+
 class TestHarvestingEmployerBoards(unittest.TestCase):
     """Vacancies straight off an employer's own board.
 
