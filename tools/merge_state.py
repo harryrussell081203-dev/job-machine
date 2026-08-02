@@ -1,0 +1,93 @@
+"""
+Merge two data/state.json files.
+
+Several workflows write state and they can finish at the same time, so a plain
+git rebase hits a conflict in a file that is really a set of independent
+records. This merges them properly instead:
+
+    python tools/merge_state.py theirs.json ours.json out.json
+
+Jobs are unioned, and where both sides know a job the one further along the
+pipeline wins. Counters take the higher count per day, contacted companies are
+unioned with the earliest contact kept.
+"""
+import json
+import sys
+
+# Later in this list beats earlier when the two sides disagree about a job.
+PROGRESS = ["new", "scored", "skipped", "no_email", "compose_failed",
+            "send_failed", "portal_manual", "portal_review", "portal_ready",
+            "ready", "portal_submitted", "test_sent", "spec_sent", "sent",
+            "replied"]
+
+
+def rank(job):
+    status = job.get("status", "new")
+    return PROGRESS.index(status) if status in PROGRESS else 0
+
+
+def pick(a, b):
+    """The more advanced record, breaking ties on how much we know."""
+    if rank(a) != rank(b):
+        return a if rank(a) > rank(b) else b
+    return a if len(a) >= len(b) else b
+
+
+def merge(theirs, ours):
+    out = dict(theirs)
+
+    jobs = dict(theirs.get("jobs", {}))
+    for key, job in ours.get("jobs", {}).items():
+        jobs[key] = pick(jobs[key], job) if key in jobs else job
+    out["jobs"] = jobs
+
+    contacted = dict(theirs.get("companies_contacted", {}))
+    for key, entry in ours.get("companies_contacted", {}).items():
+        if key not in contacted:
+            contacted[key] = entry
+        else:
+            existing = contacted[key]
+            if isinstance(entry, dict) and isinstance(existing, dict):
+                if str(entry.get("at", "")) < str(existing.get("at", "")):
+                    contacted[key] = entry
+    out["companies_contacted"] = contacted
+
+    for counter in ("send_counts", "portal_counts", "spec_counts"):
+        merged = dict(theirs.get(counter, {}))
+        for day, count in ours.get(counter, {}).items():
+            merged[day] = max(merged.get(day, 0), count)
+        if merged:
+            out[counter] = merged
+
+    spec_done = dict(theirs.get("spec_done", {}))
+    spec_done.update(ours.get("spec_done", {}))
+    if spec_done:
+        out["spec_done"] = spec_done
+
+    for stamp in ("last_summary_at",):
+        values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]
+        if values:
+            out[stamp] = max(values)
+    return out
+
+
+def load(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def main():
+    theirs_path, ours_path, out_path = sys.argv[1:4]
+    merged = merge(load(theirs_path), load(ours_path))
+    with open(out_path, "w") as f:
+        json.dump(merged, f, indent=1, sort_keys=True)
+    print(f"merged state: {len(merged.get('jobs', {}))} jobs, "
+          f"{len(merged.get('companies_contacted', {}))} companies contacted")
+
+
+if __name__ == "__main__":
+    main()

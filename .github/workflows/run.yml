@@ -23,7 +23,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: job-machine
+  group: job-machine-gemini
   cancel-in-progress: false
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install requests dnspython
+      - run: pip install requests dnspython reportlab
 
       - name: Run pipeline
         env:
@@ -67,22 +67,5 @@ jobs:
       - name: Commit state
         if: always()
         env:
-          # a fire-* triggered run still commits its state to the default branch
-          TARGET: ${{ (github.ref_type == 'tag' || startsWith(github.ref_name, 'fire-')) && github.event.repository.default_branch || github.ref_name }}
-        run: |
-          git config user.name "job-machine"
-          git config user.email "actions@github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "no state changes"
-            exit 0
-          fi
-          git commit -m "state $(date -u +%F_%H%M)"
-          for i in 1 2 3 4; do
-            git pull --rebase --autostash origin "${TARGET}" \
-              && git push origin "HEAD:refs/heads/${TARGET}" && exit 0
-            echo "push failed, retry $i"
-            sleep $((2 ** i))
-          done
-          echo "could not push state" >&2
-          exit 1
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "state"

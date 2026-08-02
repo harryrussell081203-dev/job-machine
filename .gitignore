@@ -3,3 +3,4 @@ __pycache__/
 data/state.json.tmp
 .venv/
 screenshots/
+cv/tailored/

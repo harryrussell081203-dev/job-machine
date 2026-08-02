@@ -1,0 +1,47 @@
+name: job-machine replies
+
+# Interviews are won in the first hour of a recruiter replying, so this checks
+# the inbox every two hours through the working day rather than waiting for the
+# next full pipeline run. Interview invitations get an availability reply
+# automatically; anything needing Harry raises an alert email immediately.
+on:
+  schedule:
+    - cron: "15 7-17/2 * * 1-5"   # 07:15..17:15 UTC, weekdays
+  push:
+    branches: ["fire-reply/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine-replies
+  cancel-in-progress: false
+
+jobs:
+  replies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests dnspython
+
+      - name: Check and handle replies
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TEST_MODE: ${{ vars.TEST_MODE }}
+          REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
+        run: python job_machine.py --replies
+
+      - name: Commit state
+        if: always()
+        env:
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "replies"
