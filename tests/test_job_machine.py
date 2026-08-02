@@ -640,6 +640,105 @@ class TestDailySummary(unittest.TestCase):
         self.assertIn("last_summary_at", state)
 
 
+class TestScoringBudget(unittest.TestCase):
+    def test_pre_filter_keeps_the_trades_and_drops_the_rest(self):
+        keep = ["Electronics Technician", "Instrumentation Engineer",
+                "Maintenance Fitter", "Subsea ROV Technician",
+                "Communications Officer", "Calibration Technician",
+                "Electrical Apprentice", "Test Engineer", "PLC Programmer"]
+        drop = ["Marketing Executive", "Care Assistant", "Retail Supervisor",
+                "Primary School Teacher", "Accounts Payable Clerk"]
+        for title in keep:
+            with self.subTest(title=title):
+                self.assertTrue(jm.worth_scoring({"title": title, "description": ""}))
+        for title in drop:
+            with self.subTest(title=title):
+                self.assertFalse(jm.worth_scoring({"title": title, "description": ""}))
+
+    def test_a_vague_title_is_rescued_by_its_description(self):
+        job = {"title": "Field Service Representative",
+               "description": "You will fault-find and calibrate test equipment "
+                              "on offshore assets."}
+        self.assertTrue(jm.worth_scoring(job))
+
+    def test_off_target_listings_never_reach_gemini(self):
+        state = {"jobs": {
+            "a": make_job(external_id="a", status="new", title="Electronics Technician"),
+            "b": make_job(external_id="b", status="new", title="Care Assistant",
+                          description="Support residents with daily living."),
+        }, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "score_batch",
+                               return_value={0: (88, "good match")}) as batch:
+            jm.score_jobs(state)
+        scored = batch.call_args.args[0]
+        self.assertEqual([j["external_id"] for j in scored], ["a"])
+        self.assertEqual(state["jobs"]["b"]["status"], "skipped")
+        self.assertIn("pre-filter", state["jobs"]["b"]["skip_reason"])
+        self.assertEqual(state["jobs"]["a"]["status"], "scored")
+
+    def test_batching_sends_one_call_per_ten_listings(self):
+        jobs = {str(i): make_job(external_id=str(i), status="new",
+                                 title="Electronics Technician") for i in range(25)}
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "score_batch",
+                               side_effect=lambda b: {i: (75, "ok")
+                                                      for i in range(len(b))}) as batch:
+            jm.score_jobs(state)
+        self.assertEqual(batch.call_count, 3)          # 25 listings, 3 calls
+        self.assertEqual(sum(1 for j in jobs.values()
+                             if j["status"] == "scored"), 25)
+
+    def test_an_empty_batch_stops_the_run_rather_than_burning_quota(self):
+        jobs = {str(i): make_job(external_id=str(i), status="new",
+                                 title="Electronics Technician") for i in range(30)}
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "score_batch",
+                               side_effect=[{0: (80, "ok")}, {}, {}]) as batch:
+            jm.score_jobs(state)
+        self.assertEqual(batch.call_count, 2)  # stopped after the empty one
+        self.assertEqual(sum(1 for j in jobs.values() if j["status"] == "new"), 29)
+
+    def test_score_batch_parses_the_array_and_clamps(self):
+        batch = [make_job(external_id=str(i)) for i in range(3)]
+        reply = [{"listing": 0, "score": 91, "reason": "strong"},
+                 {"listing": 1, "score": 150, "reason": "over"},
+                 {"listing": 2, "score": "not a number"}]
+        with mock.patch.object(jm, "gemini_json", return_value=reply):
+            scores = jm.score_batch(batch)
+        self.assertEqual(scores[0], (91, "strong"))
+        self.assertEqual(scores[1][0], 100)
+        self.assertNotIn(2, scores)
+
+    def test_score_batch_survives_a_wrapped_or_single_object(self):
+        batch = [make_job(external_id="0")]
+        for reply in ({"results": [{"listing": 0, "score": 80, "reason": "r"}]},
+                      {"listing": 0, "score": 80, "reason": "r"}):
+            with self.subTest(reply=reply):
+                with mock.patch.object(jm, "gemini_json", return_value=reply):
+                    self.assertEqual(jm.score_batch(batch)[0], (80, "r"))
+
+    def test_gemini_calls_are_spaced_out(self):
+        with mock.patch.object(jm, "GEMINI_MIN_INTERVAL", 5), \
+             mock.patch.object(jm, "_gemini_last_call", jm.time.monotonic()), \
+             mock.patch.object(jm, "GEMINI_API_KEY", "k"), \
+             mock.patch.object(jm.time, "sleep") as slept, \
+             mock.patch.object(jm.requests, "post") as post:
+            post.return_value = mock.Mock(
+                status_code=200,
+                json=lambda: {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]})
+            jm.gemini("hello")
+        self.assertTrue(slept.called)
+        self.assertGreater(slept.call_args_list[0].args[0], 0)
+
+    def test_a_429_honours_the_delay_google_asks_for(self):
+        response = mock.Mock(status_code=429)
+        response.json = lambda: {"error": {"details": [{"retryDelay": "42s"}]}}
+        self.assertEqual(jm._retry_delay(response, 10), 43.0)
+        broken = mock.Mock(status_code=429)
+        broken.json = mock.Mock(side_effect=ValueError)
+        self.assertEqual(jm._retry_delay(broken, 10), 10)
+
+
 class TestReplyWatcher(unittest.TestCase):
     def setUp(self):
         patches = [mock.patch.object(jm, "save"),
