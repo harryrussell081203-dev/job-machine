@@ -128,24 +128,45 @@ def names_agree(board_name, company):
 # ======================================================================
 # BOARD APIs
 # ======================================================================
+def _place(value):
+    """Every platform spells a location differently. Flatten it to text."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        parts = [value.get(k) for k in ("name", "city", "region", "state",
+                                        "country", "countryCode")]
+        return ", ".join(p for p in parts if isinstance(p, str) and p)
+    return ""
+
+
+def _posting(title, url, where="", text=""):
+    return {"title": title, "url": url, "location": _place(where),
+            "description": jm.strip_html(text or "")[:4000]}
+
+
 def _greenhouse(data, slug):
     if not isinstance(data, dict) or "jobs" not in data:
         return None
-    return None, [(j.get("title"), j.get("absolute_url"))
+    return None, [_posting(j.get("title"), j.get("absolute_url"),
+                           j.get("location"), j.get("content"))
                   for j in data["jobs"] if isinstance(j, dict)]
 
 
 def _lever(data, slug):
     if not isinstance(data, list):
         return None
-    return None, [(j.get("text"), j.get("applyUrl") or j.get("hostedUrl"))
+    return None, [_posting(j.get("text"), j.get("applyUrl") or j.get("hostedUrl"),
+                           (j.get("categories") or {}).get("location"),
+                           j.get("descriptionPlain") or j.get("description"))
                   for j in data if isinstance(j, dict)]
 
 
 def _ashby(data, slug):
     if not isinstance(data, dict) or "jobs" not in data:
         return None
-    return None, [(j.get("title"), j.get("applyUrl") or j.get("jobUrl"))
+    return None, [_posting(j.get("title"), j.get("applyUrl") or j.get("jobUrl"),
+                           j.get("location"),
+                           j.get("descriptionPlain") or j.get("descriptionHtml"))
                   for j in data["jobs"] if isinstance(j, dict)]
 
 
@@ -160,16 +181,19 @@ def _smartrecruiters(data, slug):
         name = name or company.get("name")
         ident = company.get("identifier") or slug
         if posting.get("id"):
-            jobs.append((posting.get("name"),
-                         f"https://jobs.smartrecruiters.com/{ident}/{posting['id']}"))
+            jobs.append(_posting(
+                posting.get("name"),
+                f"https://jobs.smartrecruiters.com/{ident}/{posting['id']}",
+                posting.get("location")))
     return name, jobs
 
 
 def _workable(data, slug):
     if not isinstance(data, dict) or "jobs" not in data:
         return None
-    jobs = [(j.get("title"), j.get("application_url") or j.get("url")
-             or j.get("shortlink"))
+    jobs = [_posting(j.get("title"),
+                     j.get("application_url") or j.get("url") or j.get("shortlink"),
+                     j.get("location") or j.get("city"), j.get("description"))
             for j in data["jobs"] if isinstance(j, dict)]
     return data.get("name"), jobs
 
@@ -177,15 +201,16 @@ def _workable(data, slug):
 def _recruitee(data, slug):
     if not isinstance(data, dict) or "offers" not in data:
         return None
-    return None, [(o.get("title"),
-                   o.get("careers_apply_url") or o.get("careers_url"))
+    return None, [_posting(o.get("title"),
+                           o.get("careers_apply_url") or o.get("careers_url"),
+                           o.get("location") or o.get("city"), o.get("description"))
                   for o in data["offers"] if isinstance(o, dict)]
 
 
 # Free, unauthenticated, and honest about a company that is not on the platform.
 API_BOARDS = (
     ("greenhouse",
-     "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
+     "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
      "https://job-boards.greenhouse.io/{slug}", _greenhouse),
     ("lever",
      "https://api.lever.co/v0/postings/{slug}?mode=json",
@@ -242,7 +267,7 @@ def api_board(ats, slug, company, get):
         if not parsed:
             continue
         board_name, raw = parsed
-        jobs = [{"title": t, "url": u} for t, u in raw if t and u]
+        jobs = [p for p in raw if p.get("title") and p.get("url")]
         if not jobs:
             continue                   # a board with no open roles is no use
         if board_name and not names_agree(board_name, company):

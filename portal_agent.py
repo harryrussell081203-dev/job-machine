@@ -25,6 +25,7 @@ this agent does not try to defeat bot protection.
     python portal_agent.py --run --submit   # actually press submit
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -984,6 +985,133 @@ def diagnose(state, limit=12, headless=True):
             print(f"  -> {r['company']}: {r['url']}")
 
 
+def in_reach(location):
+    """Is this posting somewhere Harry could actually take the job?
+
+    Employers' boards are worldwide. Without this, a Greenhouse board would
+    happily offer him a technician role in Houston."""
+    low = (location or "").lower()
+    if not low:
+        return False
+    return any(place.lower() in low for place in jm.SEARCH_LOCATIONS + NEARBY)
+
+
+NEARBY = ["scotland", "aberdeenshire", "grampian", "highland", "fife",
+          "perth", "stirling", "montrose", "peterhead", "fraserburgh",
+          "westhill", "portlethen", "altens", "dyce", "bridge of don"]
+
+BOARD_COMPANY_CAP = jm.env_int("BOARD_COMPANY_CAP", 40)
+# How long a company's ATS identity is trusted before we go looking again.
+# Whether a firm uses Greenhouse changes about once every never; which roles
+# are open on it changes daily, so only the identity is cached.
+BOARD_CACHE_DAYS = jm.env_int("BOARD_CACHE_DAYS", 21)
+BOARD_MISS_DAYS = jm.env_int("BOARD_MISS_DAYS", 10)
+
+
+def cached_board(state, company):
+    """This company's board, re-listed live but discovered only once.
+
+    Finding a board costs up to eighteen requests across six platforms;
+    listing a known one costs a single request. Over forty companies and three
+    runs a day that is the difference between minutes and hours."""
+    import ats_finder
+    cache = state.setdefault("ats_boards", {})
+    key = jm.company_key(company)
+    entry = cache.get(key)
+    checked = jm.parse_ts(entry.get("checked_at")) if entry else None
+    if entry and checked:
+        age = (datetime.now(timezone.utc) - checked).total_seconds() / 3600
+        ttl = (BOARD_CACHE_DAYS if entry.get("ats") else BOARD_MISS_DAYS) * 24
+        if age < ttl:
+            if not entry.get("ats"):
+                return None                      # known not to have one
+            board = ats_finder.api_board(entry["ats"], entry["slug"], company,
+                                         requests.get)
+            if board:
+                board["whole_name"] = True
+                return board
+            # they had a board and now they do not, or it has no open roles
+            cache[key] = {"ats": None, "slug": None, "checked_at": jm.now()}
+            return None
+
+    board = ats_finder.find_board(company)
+    cache[key] = {"ats": board["ats"] if board else None,
+                  "slug": board["slug"] if board else None,
+                  "checked_at": jm.now()}
+    return board
+
+
+def harvest_boards(state):
+    """Vacancies straight off employers' own boards.
+
+    The job boards only show what an employer chose to advertise there, and
+    Adzuna's Aberdeen feed yields about four in-trade listings a day. An
+    employer's own ATS board carries every open role they have - including the
+    ones that never reach a job board at all - and once their board is known,
+    listing it costs one HTTP request.
+
+    Everything harvested here already has its application URL, so it skips the
+    whole resolve-the-job-board problem."""
+    import ats_finder
+    companies, seen_company = [], set()
+    for target in jm.load_targets():
+        name = (target.get("company") or "").strip()
+        if name and jm.company_key(name) not in seen_company:
+            seen_company.add(jm.company_key(name))
+            companies.append(name)
+    # employers already met on a job board are worth asking too - the advert
+    # that reached us is rarely the only role they have open
+    for job in state["jobs"].values():
+        name = (job.get("company") or "").strip()
+        key = jm.company_key(name)
+        if name and key not in seen_company and (job.get("score") or 0) >= 60:
+            seen_company.add(key)
+            companies.append(name)
+
+    known = {dedupe for dedupe in (jm.dedupe_key(j)
+                                   for j in state["jobs"].values())}
+    added = boards = 0
+    for company in companies[:BOARD_COMPANY_CAP]:
+        board = cached_board(state, company)
+        if not board:
+            continue
+        boards += 1
+        for posting in board["jobs"]:
+            job = {
+                # a stable id: Python's hash() is salted per process, so using
+                # it here would re-add every vacancy on every run
+                "external_id": "board-{}-{}".format(
+                    board["ats"],
+                    hashlib.sha1(posting["url"].encode()).hexdigest()[:12]),
+                "title": posting["title"],
+                "company": company,
+                "location": posting["location"],
+                "description": posting["description"],
+                "url": posting["url"],
+                "apply_url": posting["url"],
+                "ats": board["ats"],
+                "source": f"board:{board['ats']}",
+                "found_at": jm.now(),
+                "posted_at": None,
+                "status": "new",
+            }
+            if job["external_id"] in state["jobs"]:
+                continue
+            if not in_reach(posting["location"]):
+                continue
+            if jm.title_excluded(job["title"]) or not jm.worth_scoring(job):
+                continue
+            key = jm.dedupe_key(job)
+            if key in known:
+                continue                # already have it from a job board
+            known.add(key)
+            state["jobs"][job["external_id"]] = job
+            added += 1
+    print(f"[boards] {boards} employer board(s) found, "
+          f"{added} vacancy(s) a job board never showed us")
+    return added
+
+
 def harvest_month(state):
     """Same boards, same criteria, but a month wide instead of 48 hours.
     Scoring is capped per run, so a big backlog gets worked through over days
@@ -993,6 +1121,7 @@ def harvest_month(state):
     print(f"[portal] harvesting the last {PORTAL_MAX_AGE_DAYS} days "
           f"({jm.HARVEST_PAGES} pages per search)")
     jm.harvest(state)
+    harvest_boards(state)
     jm.save(state)
     jm.score_jobs(state)
 

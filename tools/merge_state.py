@@ -64,6 +64,20 @@ def merge(theirs, ours):
     if spec_done:
         out["spec_done"] = spec_done
 
+    # Which ATS a company uses, remembered so it is not re-discovered every
+    # run. The fresher answer wins; a found board beats a same-age miss.
+    boards = dict(theirs.get("ats_boards", {}))
+    for key, entry in ours.get("ats_boards", {}).items():
+        old = boards.get(key)
+        if not old:
+            boards[key] = entry
+            continue
+        newer = str(entry.get("checked_at", "")) > str(old.get("checked_at", ""))
+        if newer or (entry.get("ats") and not old.get("ats")):
+            boards[key] = entry
+    if boards:
+        out["ats_boards"] = boards
+
     for stamp in ("last_summary_at",):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]
         if values:
