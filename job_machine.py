@@ -822,9 +822,37 @@ def plausible_first_name(word):
     return word[:2] in ONSETS and word[2] in VOWELS
 
 
+# A role word anywhere in the local part means a shared inbox, not a person.
+# 'mysupporthr@' slipped through a startswith check and got greeted by name.
+ROLE_WORDS = ("hr", "recruit", "career", "job", "vacanc", "hiring", "talent",
+              "support", "admin", "info", "sales", "team", "help", "service",
+              "enquir", "inquir", "office", "apply", "contact", "payroll",
+              "finance", "invoice", "account", "marketing", "press", "media",
+              "legal", "privacy", "people", "reception", "general", "hello",
+              "workforce", "resourcing", "personnel")
+
+
+ROLE_WORDS_LONG = tuple(w for w in ROLE_WORDS if len(w) >= 5)
+ROLE_WORDS_SHORT = tuple(w for w in ROLE_WORDS if len(w) < 5)
+
+
+def has_role_word(local):
+    """Short words need a boundary: 'hr' sits inside 'chris', so matching it
+    anywhere would refuse to greet a man called Chris Brown."""
+    if any(word in local for word in ROLE_WORDS_LONG):
+        return True
+    for segment in (s for s in re.split(r"[._\-0-9]+", local) if s):
+        if any(segment.startswith(w) or segment.endswith(w)
+               for w in ROLE_WORDS_SHORT):
+            return True
+    return False
+
+
 def is_personal(local):
     """True only if the local part belongs to an individual rather than a shared
     inbox: jane.smith, j.smith and jane all qualify, careers and info do not."""
+    if has_role_word(local):
+        return False
     if local in GENERIC_PREFIXES or local in HIRING_PREFIXES:
         return False
     if local.startswith(BAD_PREFIXES):
@@ -854,9 +882,10 @@ def classify(address):
     local = address.split("@")[0].lower()
     if is_personal(local):
         return 3, name_from_email(local)
-    if local.startswith(HIRING_PREFIXES):
+    # a hiring word anywhere counts - 'mysupporthr' is still an HR inbox
+    if local.startswith(HIRING_PREFIXES) or any(w in local for w in HIRING_PREFIXES):
         return 2, None
-    if local.startswith(GENERIC_PREFIXES):
+    if local.startswith(GENERIC_PREFIXES) or any(w in local for w in GENERIC_PREFIXES):
         return 1, None
     return 0, None
 
@@ -888,24 +917,51 @@ def clean_emails(raw, domain=None):
     return sorted(out)
 
 
+# Harry is job-hunting in Scotland. A domain on a far-flung ccTLD is a sign
+# Clearbit matched a different company with a similar name, not his employer.
+PLAUSIBLE_TLDS = (".com", ".co.uk", ".uk", ".org", ".org.uk", ".net", ".io",
+                  ".scot", ".eu", ".ie", ".no", ".nl", ".de", ".fr", ".dk",
+                  ".se", ".fi", ".it", ".es", ".ltd", ".plc", ".group", ".energy")
+
+
+def plausible_domain(domain):
+    return bool(domain) and domain.lower().endswith(PLAUSIBLE_TLDS)
+
+
+def name_tokens(name):
+    return {t for t in company_key(name).split() if t}
+
+
 def find_domain(company):
-    """Clearbit autocomplete: free, no key. Only accepts a confident name match."""
+    """Clearbit autocomplete: free, no key.
+
+    Only a confident match is accepted. Matching on a raw substring is what put
+    a note meant for Wood plc into the inbox of Woodforest National Bank, so
+    every word of the company name now has to appear as a whole word in the
+    match, and the domain has to sit on a plausible TLD."""
+    wanted = company_key(company)
+    wanted_tokens = name_tokens(company)
+    if not wanted_tokens:
+        return None
     try:
         r = requests.get("https://autocomplete.clearbit.com/v1/companies/suggest",
                          params={"query": company}, headers=UA, timeout=15)
         r.raise_for_status()
-        wanted = company_key(company)
         hits = r.json()
         if not isinstance(hits, list):
             return None
         for hit in hits:
-            if hit.get("domain") and company_key(hit.get("name", "")) == wanted:
-                return hit["domain"]
-        first = hits[0] if hits else None
-        if first and first.get("domain"):
-            name = company_key(first.get("name", ""))
-            if name and (name in wanted or wanted in name):
-                return first["domain"]
+            domain = hit.get("domain")
+            if not domain or not plausible_domain(domain):
+                continue
+            hit_key = company_key(hit.get("name", ""))
+            if hit_key == wanted:
+                return domain
+            # every word Harry's listing gave us must be a whole word in the
+            # match - 'wood' must not match 'woodforest'
+            if wanted_tokens and wanted_tokens <= name_tokens(hit.get("name", "")):
+                return domain
+        print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
         print(f"[discover] clearbit '{company}': {e}")
     return None

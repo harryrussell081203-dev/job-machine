@@ -93,6 +93,54 @@ class TestEmailClassification(unittest.TestCase):
         self.assertEqual(cleaned, [])
 
 
+class TestWrongCompanyRegression(unittest.TestCase):
+    """The first live run emailed Woodforest National Bank (Texas) a note meant
+    for Wood plc, and greeted an HR inbox as 'Hi Mysupporthr'. Both here."""
+
+    def clearbit(self, hits):
+        response = mock.Mock()
+        response.raise_for_status = lambda: None
+        response.json = lambda: hits
+        return mock.patch.object(jm.requests, "get", return_value=response)
+
+    def test_wood_does_not_match_woodforest(self):
+        with self.clearbit([{"name": "Woodforest National Bank",
+                             "domain": "woodforest.com"}]):
+            self.assertIsNone(jm.find_domain("Wood"))
+
+    def test_a_real_whole_word_match_still_works(self):
+        with self.clearbit([{"name": "Baker Hughes Company",
+                             "domain": "bakerhughes.com"}]):
+            self.assertEqual(jm.find_domain("Baker Hughes"), "bakerhughes.com")
+        with self.clearbit([{"name": "EnerMech", "domain": "enermech.com"}]):
+            self.assertEqual(jm.find_domain("EnerMech"), "enermech.com")
+
+    def test_a_foreign_lookalike_domain_is_rejected(self):
+        with self.clearbit([{"name": "HMH", "domain": "hmh.com.vn"}]):
+            self.assertIsNone(jm.find_domain("HMH"))
+        self.assertFalse(jm.plausible_domain("hmh.com.vn"))
+        self.assertTrue(jm.plausible_domain("hydrasun.com"))
+        self.assertTrue(jm.plausible_domain("sonardyne.co.uk"))
+
+    def test_shared_inboxes_are_never_greeted_by_name(self):
+        for local in ("mysupporthr", "hrsupport", "jobsteam", "recruitmentuk",
+                      "careersaberdeen", "infodesk", "salesteam"):
+            with self.subTest(local=local):
+                self.assertFalse(jm.is_personal(local))
+                self.assertIsNone(jm.classify(f"{local}@acme.com")[1])
+
+    def test_an_hr_inbox_is_still_usable_as_a_hiring_tier(self):
+        # not a person, but a good address - it should not be thrown away
+        self.assertEqual(jm.classify("mysupporthr@bakerhughes.com"), (2, None))
+        self.assertEqual(jm.classify("hrsupport@acme.com")[0], 2)
+
+    def test_real_people_are_still_recognised(self):
+        for local in ("jane.smith", "fraser.mackay", "gary", "chris.brown"):
+            with self.subTest(local=local):
+                self.assertTrue(jm.is_personal(local))
+        self.assertEqual(jm.classify("jane.smith@acme.com"), (3, "Jane"))
+
+
 class TestSlopFilter(unittest.TestCase):
     def test_every_banned_phrase_is_caught(self):
         for phrase in jm.BANNED:
