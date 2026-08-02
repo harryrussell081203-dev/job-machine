@@ -41,8 +41,8 @@ import job_machine as jm
 # ======================================================================
 PORTAL_MAX_AGE_DAYS = jm.env_int("PORTAL_MAX_AGE_DAYS", 30)
 PORTAL_SUBMIT = jm.env_flag("PORTAL_SUBMIT", False)
-PORTAL_PER_RUN_CAP = jm.env_int("PORTAL_PER_RUN_CAP", 10)
-PORTAL_DAILY_CAP = jm.env_int("PORTAL_DAILY_CAP", 25)
+PORTAL_PER_RUN_CAP = jm.env_int("PORTAL_PER_RUN_CAP", 40)
+PORTAL_DAILY_CAP = jm.env_int("PORTAL_DAILY_CAP", 150)
 PORTAL_SCORE_THRESHOLD = jm.env_int("PORTAL_SCORE_THRESHOLD", jm.SCORE_THRESHOLD)
 PAGE_TIMEOUT_MS = 45000
 
@@ -535,15 +535,42 @@ def shot(page, job, tag):
         return None
 
 
+def bank_for_captcha(page, job, plan, flags):
+    """Park a CAPTCHA-blocked application with every answer saved.
+
+    A CAPTCHA is tied to a live browser session that dies with this run, so
+    there is no way to pause here and resume days later. What survives is the
+    answers: they are stored against the job, and tools/handoff.py turns them
+    into a page where one click fills the form so Harry only does the CAPTCHA
+    and presses submit."""
+    job.update({
+        "status": "portal_awaiting_captcha",
+        "portal_reason": "form filled, blocked by a bot check - needs you",
+        "captcha_answers": [{"label": p["field"].get("label")
+                                      or p["field"].get("name") or "",
+                             "name": p["field"].get("name") or "",
+                             "type": p["field"].get("type"),
+                             "value": str(p["value"]),
+                             "source": p["source"]}
+                            for p in plan if p["kind"] != "file"],
+        "captcha_flags": flags,
+        "captcha_banked_at": jm.now(),
+        "portal_screenshot": shot(page, job, "captcha"),
+    })
+    print(f"[portal] BANKED {job['title']} @ {job['company']} - "
+          f"{len(job['captcha_answers'])} answers saved, needs a human CAPTCHA")
+
+
 def apply_to_job(page, job, answers, submit):
     """One application, start to finish. Mutates job with the outcome."""
     page.goto(job["apply_url"], wait_until="domcontentloaded",
               timeout=PAGE_TIMEOUT_MS)
     page.wait_for_timeout(2500)  # let the form render
 
-    if has_captcha(page):
+    # A bot check up front means we cannot even read the form. Nothing to bank.
+    if has_captcha(page) and not collect_fields(page):
         job.update({"status": "portal_manual",
-                    "portal_reason": "captcha or bot check on the form",
+                    "portal_reason": "bot check before the form loaded",
                     "portal_screenshot": shot(page, job, "captcha")})
         return False
 
@@ -561,6 +588,12 @@ def apply_to_job(page, job, answers, submit):
     job.update({"portal_fields_seen": len(fields), "portal_filled": filled,
                 "portal_flags": flags,
                 "portal_screenshot": shot(page, job, "filled")})
+
+    # Fill first, then check for a bot check: a filled form is worth banking
+    # even when a CAPTCHA stops us submitting it.
+    if has_captcha(page):
+        bank_for_captcha(page, job, plan, flags)
+        return False
 
     if flags:
         job.update({"status": "portal_review",
@@ -763,7 +796,13 @@ def run(state, submit=False, limit=None, headless=True):
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
                 break
-            apply_url, ats = resolve_in_browser(page, job)
+            # Go at the employer directly. The board route ends on a blank
+            # interstitial - proven over three diagnose runs - so it is only a
+            # fallback for listings that already point off-board.
+            import ats_finder
+            apply_url, ats = ats_finder.find_application_url(page, job)
+            if not apply_url:
+                apply_url, ats = resolve_in_browser(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
                         "portal_attempted_at": jm.now()})
             if not apply_url or not classify_url(apply_url)[1]:
@@ -832,9 +871,12 @@ def diagnose(state, limit=12, headless=True):
         context = browser.new_context(user_agent=jm.UA["User-Agent"],
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
+        import ats_finder
         for job in todo:
-            print(f"  {job.get('company')}: {job.get('url', '')[:80]}")
-            url, ats = resolve_in_browser(page, job, verbose=True)
+            print(f"  {job.get('company')}: {job.get('title')}")
+            url, ats = ats_finder.find_application_url(page, job)
+            if not url:
+                url, ats = resolve_in_browser(page, job, verbose=True)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
             row = {"company": (job.get("company") or "?")[:28],
                    "title": (job.get("title") or "?")[:34],
