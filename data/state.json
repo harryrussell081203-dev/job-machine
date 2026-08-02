@@ -10214,6 +10214,7 @@
   },
   "adzuna_5824351315": {
    "company": "Survitec Group",
+   "company_domain": "survitecgroup.com",
    "description": "Offshore Service Technician LOCATION: Findon EMPLOYMENT TYPE: Permanent JOB DESCRIPTION Service Technician Job Family \u2013 Service Operations This family is dedicated to delivering excellence in all safety servicing activity for the full range of Survitec safety solutions, through the relentless pursuit of improvement to process, systems, data, standardisation of work and continuous improvement practices Job Summary This role installs, maintains or repairs Survitec products across one or more prod\u2026",
    "external_id": "adzuna_5824351315",
    "found_at": "2026-08-02T08:21:25.188406+00:00",
@@ -10299,6 +10300,7 @@
   },
   "adzuna_5824353900": {
    "company": "Dron & Dickson",
+   "company_domain": "drondickson.com",
    "description": "Description Location : Aberdeen Job Type : Full-Time Reporting To : Maintenance & Inspections Delivery Manager About the Role Dron & Dickson is looking for an experienced and driven Project Coordinator to support the successful delivery of electrical maintenance, inspection and project activities across our offshore contracts. This is a varied role that combines project planning, cost control, technical oversight and people management. You'll act as the key link between our clients, offshore te\u2026",
    "external_id": "adzuna_5824353900",
    "found_at": "2026-08-02T08:21:25.188374+00:00",
@@ -11254,6 +11256,7 @@
   },
   "adzuna_5824471454": {
    "company": "Matchtech",
+   "company_domain": "matchtech.com",
    "description": "We are recruiting on behalf of a leading engineering organisation in the Glasgow area for a Hydraulic Engineer / Mechanical Fitter. This is an excellent opportunity to join a busy engineering team working across a diverse range of marine and industrial projects. The successful candidate will have a strong mechanical fitting background, experience working with hydraulic systems, and be comfortable supporting projects across multiple sites. This role offers varied work, excellent overtime opportu\u2026",
    "external_id": "adzuna_5824471454",
    "found_at": "2026-08-01T20:57:53.733151+00:00",
@@ -11636,6 +11639,7 @@
   },
   "adzuna_5824830762": {
    "company": "ScottishPower",
+   "company_domain": "scottishpower.co.uk",
    "description": "Transmission Technician (Protection, SCADA & System Monitoring) Location: Eurocentral office (this role is predominantly site based on sites across our transmission network) Salary: &pound;37,560 - &pound;46,950 Permanent / Full-time &ndash; 37 hours per week Closing date: 12th August 2026 Help us create a better future, quicker! SP Energy Networks (SPEN) is at the heart of the UK&rsquo;s journey to Net Zero. Over the next five years, we will invest over &pound;12 billion in modernising a\u2026",
    "external_id": "adzuna_5824830762",
    "found_at": "2026-08-02T01:27:08.905300+00:00",
@@ -12597,6 +12601,23 @@
    "status": "skipped",
    "title": "Team Member - Guest Experience Lead",
    "url": "https://www.adzuna.co.uk/jobs/details/5825660315?utm_medium=api&utm_source=afe77721"
+  },
+  "adzuna_5825737164": {
+   "company": "JDR - Just Dynamic Recruitment",
+   "description": "JDR Recruitment are recruiting for Cleaners to work at leisure sites based in Glasgow Key Responsibilities Clean and sanitise public areas including reception areas, changing rooms, toilets, shower facilities, gyms, sports halls, caf\u00e9s, and staff areas. Sweep, mop, vacuum, and polish floors as required. Empty bins and dispose of waste in accordance with site procedures. Replenish consumables such as soap, toilet paper, paper towels, and cleaning supplies. Carry out routine cleaning of equipment\u2026",
+   "external_id": "adzuna_5825737164",
+   "found_at": "2026-08-02T14:36:12.350796+00:00",
+   "location": "Hillhead, Glasgow City Centre",
+   "posted_at": "2026-08-02T15:17:07+00:00",
+   "salary_max": 26436,
+   "salary_min": 0,
+   "score": null,
+   "search_location": "Glasgow",
+   "skip_reason": "title excluded (cleaner)",
+   "source": "adzuna",
+   "status": "skipped",
+   "title": "Cleaner",
+   "url": "https://www.adzuna.co.uk/jobs/details/5825737164?utm_medium=api&utm_source=afe77721"
   },
   "reed_56395865": {
    "company": "IT Career Switch",
