@@ -580,15 +580,24 @@ class TestAgainstALocalPortal(unittest.TestCase):
         self.assertEqual(job["status"], "portal_review")
         self.assertTrue(any("convictions" in f for f in job["portal_flags"]))
 
-    def test_captcha_stops_the_agent_rather_than_being_solved(self):
+    def test_captcha_banks_the_filled_form_rather_than_being_solved(self):
+        """A bot check is never fought. On a real form the work is kept: every
+        answer is banked so Harry only solves the CAPTCHA and submits."""
         job = dict(JOB, apply_url="file://" + FIXTURE)
-        with mock.patch.object(pa, "has_captcha", return_value=True), \
+        with mock.patch.object(jm, "gemini_json",
+                               return_value={"answer": "Same work as my day job.",
+                                             "fact_used": "Sonardyne"}), \
+             mock.patch.object(jm, "cv_for", return_value=FIXTURE), \
+             mock.patch.object(pa, "has_captcha", return_value=True), \
              mock.patch.object(pa, "shot", return_value=None), \
              mock.patch.object(pa, "click_submit") as submit:
             pa.apply_to_job(self.page, job, pa.load_answers(), submit=True)
         submit.assert_not_called()
-        self.assertEqual(job["status"], "portal_manual")
-        self.assertIn("captcha", job["portal_reason"])
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
+        # the real form was read and answered before the bot check stopped us
+        self.assertGreater(len(job["captcha_answers"]), 3)
+        values = {a["label"]: a["value"] for a in job["captcha_answers"]}
+        self.assertIn("Harry", values.values())
 
 
 if __name__ == "__main__":

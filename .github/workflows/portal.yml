@@ -4,7 +4,7 @@ name: job-machine portal
 # Heavier than the email run, so once a weekday morning.
 on:
   schedule:
-    - cron: "30 9 * * 1-5"
+    - cron: "30 9,13,17 * * 1-5"   # three passes a weekday to work the backlog
   push:
     tags: ["fire-portal-*"]        # push a tag to force a run when the UI is not handy
     branches:
@@ -76,6 +76,19 @@ jobs:
             ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"
           fi
           python portal_agent.py $ARGS
+
+      - name: Build the CAPTCHA handoff page
+        if: always()
+        run: python tools/handoff.py
+
+      - name: Keep the handoff page
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captcha-handoff
+          path: handoff/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Keep the screenshots
         if: always()

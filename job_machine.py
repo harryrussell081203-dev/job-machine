@@ -97,8 +97,8 @@ TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
-MAX_SCORED_PER_RUN = 40          # keeps us inside the Gemini free tier
-MAX_DISCOVERED_PER_RUN = 15
+MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
+MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
 
