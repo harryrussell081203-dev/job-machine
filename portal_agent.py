@@ -864,9 +864,14 @@ def run(state, submit=False, limit=None, headless=True):
             accept_downloads=False,
         )
         page = context.new_page()
+        deadline = time.monotonic() + PORTAL_RUN_BUDGET
         for job in todo:
             if attempted >= budget:
                 print(f"[portal] budget of {budget} application(s) used")
+                break
+            if time.monotonic() > deadline:
+                print(f"[portal] {PORTAL_RUN_BUDGET}s spent, stopping so this "
+                      f"run's work is saved rather than killed mid-application")
                 break
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
@@ -1041,6 +1046,11 @@ BOARD_COMPANY_CAP = jm.env_int("BOARD_COMPANY_CAP", 40)
 # are open on it changes daily, so only the identity is cached.
 BOARD_CACHE_DAYS = jm.env_int("BOARD_CACHE_DAYS", 21)
 BOARD_MISS_DAYS = jm.env_int("BOARD_MISS_DAYS", 10)
+# Wall-clock budgets. A run that overruns the workflow's sixty minutes is
+# killed mid-flight and loses everything it found, which is worse than
+# covering fewer companies and picking the rest up next time.
+BOARD_DISCOVERY_BUDGET = jm.env_int("BOARD_DISCOVERY_BUDGET", 600)
+PORTAL_RUN_BUDGET = jm.env_int("PORTAL_RUN_BUDGET", 1800)
 
 
 def cached_board(state, company):
@@ -1106,7 +1116,15 @@ def harvest_boards(state):
     known = {dedupe for dedupe in (jm.dedupe_key(j)
                                    for j in state["jobs"].values())}
     added = boards = 0
+    deadline = time.monotonic() + BOARD_DISCOVERY_BUDGET
     for company in companies[:BOARD_COMPANY_CAP]:
+        if time.monotonic() > deadline:
+            # The workflow gets sixty minutes. Overrunning loses the whole
+            # harvest, and the companies not reached this time are simply
+            # first in the queue next time.
+            print(f"[boards] {BOARD_DISCOVERY_BUDGET}s spent on discovery, "
+                  f"leaving the rest for the next run")
+            break
         board = cached_board(state, company)
         if not board:
             continue
