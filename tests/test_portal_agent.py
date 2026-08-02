@@ -785,3 +785,73 @@ class TestBoardDiscoveryIsRemembered(unittest.TestCase):
         with mock.patch.object(ats_finder, "api_board", return_value=None):
             self.assertIsNone(pa.cached_board(self.state, "Acme"))
         self.assertIsNone(self.state["ats_boards"][jm.company_key("Acme")]["ats"])
+
+
+class TestApplyingOffTheKnownPlatforms(unittest.TestCase):
+    """A probe across fourteen Aberdeen employers found exactly one hosted
+    ATS, and it needed an account. Most of them take applications on a form of
+    their own, so refusing every unrecognised host means refusing the market.
+    """
+    def form(self, *labels, upload=False):
+        fields = [field(index=str(i), label=l, name=l.lower().replace(" ", "_"))
+                  for i, l in enumerate(labels)]
+        if upload:
+            fields.append(field(index="9", type="file", label="Upload your CV",
+                                name="cv"))
+        return fields
+
+    def test_a_real_application_form_is_recognised_without_a_brand(self):
+        self.assertTrue(pa.is_application_form(
+            self.form("First name", "Last name", "Email", "Phone",
+                      "Why this role?", upload=True)))
+
+    def test_a_contact_form_is_not_mistaken_for_one(self):
+        self.assertFalse(pa.is_application_form(
+            self.form("Your name", "Email", "Message")))
+
+    def test_a_newsletter_signup_is_not_mistaken_for_one(self):
+        self.assertFalse(pa.is_application_form(self.form("Email address")))
+
+    def test_name_email_and_phone_together_are_enough_without_an_upload(self):
+        self.assertTrue(pa.is_application_form(
+            self.form("First name", "Last name", "Email", "Mobile number",
+                      "Current job title")))
+
+    def test_an_unrecognised_host_is_no_longer_refused_out_of_hand(self):
+        """It used to be marked manual before anyone looked at the page."""
+        jobs = {"own": dict(JOB, external_id="own", score=95, found_at=jm.now(),
+                            url="https://drondickson.com/careers",
+                            status="scored")}
+        state = {"jobs": jobs, "portal_counts": {}, "companies_contacted": {}}
+        looked = []
+
+        fake_pw = mock.MagicMock()
+        with mock.patch.dict("sys.modules", {"playwright": mock.MagicMock(),
+                                             "playwright.sync_api": fake_pw}), \
+             mock.patch.object(pa, "best_apply_url",
+                               return_value=("https://drondickson.com/apply", None)), \
+             mock.patch.object(pa, "apply_to_job",
+                               side_effect=lambda p, j, a, s: looked.append(j) or False), \
+             mock.patch.object(jm, "save"), mock.patch.object(pa.time, "sleep"):
+            pa.run(state, submit=False)
+
+        self.assertEqual(len(looked), 1)
+        self.assertEqual(jobs["own"]["apply_url"], "https://drondickson.com/apply")
+
+    def test_a_login_portal_is_still_refused_without_looking(self):
+        jobs = {"wd": dict(JOB, external_id="wd", score=95, found_at=jm.now(),
+                           url="https://x.wd5.myworkdayjobs.com/j", status="scored")}
+        state = {"jobs": jobs, "portal_counts": {}, "companies_contacted": {}}
+
+        fake_pw = mock.MagicMock()
+        with mock.patch.dict("sys.modules", {"playwright": mock.MagicMock(),
+                                             "playwright.sync_api": fake_pw}), \
+             mock.patch.object(pa, "best_apply_url",
+                               return_value=("https://x.wd5.myworkdayjobs.com/j",
+                                             "workday")), \
+             mock.patch.object(pa, "apply_to_job") as apply_job, \
+             mock.patch.object(jm, "save"), mock.patch.object(pa.time, "sleep"):
+            pa.run(state, submit=False)
+
+        apply_job.assert_not_called()
+        self.assertEqual(jobs["wd"]["status"], "portal_manual")
