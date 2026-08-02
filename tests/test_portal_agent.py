@@ -855,3 +855,27 @@ class TestApplyingOffTheKnownPlatforms(unittest.TestCase):
 
         apply_job.assert_not_called()
         self.assertEqual(jobs["wd"]["status"], "portal_manual")
+
+
+class TestWallClockBudgets(unittest.TestCase):
+    """A run that overruns the workflow's sixty minutes is killed mid-flight
+    and loses everything it found."""
+    def test_discovery_stops_at_its_budget_and_keeps_what_it_has(self):
+        import ats_finder
+        state = {"jobs": {}}
+        clock = iter([0, 0, 1e9, 1e9, 1e9])   # first company fits, then time is up
+        board = {"ats": "greenhouse", "slug": "acme", "whole_name": True,
+                 "url": "https://boards.greenhouse.io/acme",
+                 "jobs": [{"title": "Instrumentation Technician",
+                           "location": "Aberdeen",
+                           "url": "https://boards.greenhouse.io/acme/jobs/1",
+                           "description": "offshore calibration"}]}
+        with mock.patch.object(ats_finder, "find_board", return_value=board), \
+             mock.patch.object(jm, "load_targets",
+                               return_value=[{"company": "Acme"},
+                                             {"company": "Beta"},
+                                             {"company": "Gamma"}]), \
+             mock.patch.object(pa.time, "monotonic", side_effect=lambda: next(clock)):
+            added = pa.harvest_boards(state)
+        self.assertEqual(added, 1)
+        self.assertEqual(len(state["jobs"]), 1)
