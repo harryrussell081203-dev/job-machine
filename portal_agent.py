@@ -730,6 +730,53 @@ def resolve_apply_url(job):
         return url, ats
 
 
+def ats_url_in_listing(job):
+    """The employer's own application link, pasted into the advert text.
+
+    Free, offline, and the first thing to try: every listing already carries up
+    to 4000 characters of description, and agencies and employers routinely put
+    'apply at https://boards.greenhouse.io/...' straight into it. No board to
+    follow, no slug to guess."""
+    text = " ".join(str(job.get(k) or "") for k in ("description", "apply_hint"))
+    match = ATS_LINK_RE.search(text)
+    if not match:
+        return None, None
+    found = match.group(0).rstrip(").,'\"")
+    ats = classify_url(found)[0]
+    print(f"[portal] the advert itself links to {ats}: {found[:80]}")
+    return found, ats
+
+
+def best_apply_url(page, job):
+    """Where this job's application form actually lives, best route first.
+
+    Kept in one place because run() and diagnose() have to agree: three of the
+    five diagnose runs measured a route the real run did not take."""
+    # 0. the listing already points at a portal - nothing to resolve
+    url = job.get("url")
+    if url and classify_url(url)[1]:
+        return url, classify_url(url)[0]
+
+    # 1. the advert text names the portal
+    found, ats = ats_url_in_listing(job)
+    if found and classify_url(found)[1]:
+        return found, ats
+
+    # 2. the employer's board API, then their own careers page
+    import ats_finder
+    board_url, board_ats = ats_finder.find_application_url(page, job)
+    if board_url:
+        return board_url, board_ats
+    if board_ats:
+        # We know where they recruit; this advert just is not on their board.
+        # Following the job board from here only ends on Adzuna's blank
+        # interstitial, so say so plainly instead of burning a browser hop.
+        return None, board_ats
+
+    # 3. last resort: follow the job board's own interstitial
+    return resolve_in_browser(page, job)
+
+
 def portal_candidates(state):
     """Scored, in-criteria jobs from the last month that we have not tried yet."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=PORTAL_MAX_AGE_DAYS)
@@ -796,20 +843,18 @@ def run(state, submit=False, limit=None, headless=True):
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
                 break
-            # Go at the employer directly. The board route ends on a blank
-            # interstitial - proven over three diagnose runs - so it is only a
-            # fallback for listings that already point off-board.
-            import ats_finder
-            apply_url, ats = ats_finder.find_application_url(page, job)
-            if not apply_url:
-                apply_url, ats = resolve_in_browser(page, job)
+            apply_url, ats = best_apply_url(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
                         "portal_attempted_at": jm.now()})
             if not apply_url or not classify_url(apply_url)[1]:
-                job.update({"status": "portal_manual",
-                            "portal_reason": f"{ats or 'unknown'} portal - needs an "
-                                             f"account or runs a bot check, do this one "
-                                             f"by hand"})
+                if not apply_url and ats:
+                    reason = (f"{ats} is where {job['company']} recruit, but this "
+                              f"advert is not on their board - it is probably an "
+                              f"agency listing")
+                else:
+                    reason = (f"{ats or 'unknown'} portal - needs an account or runs "
+                              f"a bot check, do this one by hand")
+                job.update({"status": "portal_manual", "portal_reason": reason})
                 print(f"[portal] MANUAL {job['company']} ({ats or 'unknown'}) "
                       f"- not counted, moving on")
                 continue
@@ -871,20 +916,27 @@ def diagnose(state, limit=12, headless=True):
         context = browser.new_context(user_agent=jm.UA["User-Agent"],
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
-        import ats_finder
         for job in todo:
             print(f"  {job.get('company')}: {job.get('title')}")
-            url, ats = ats_finder.find_application_url(page, job)
-            if not url:
-                url, ats = resolve_in_browser(page, job, verbose=True)
+            url, ats = best_apply_url(page, job)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
             row = {"company": (job.get("company") or "?")[:28],
                    "title": (job.get("title") or "?")[:34],
                    "ats": ats or "unknown", "host": host[:38],
                    "fields": 0, "required": 0, "captcha": False,
                    "verdict": "", "url": url}
+            if not url:
+                row["verdict"] = (f"not on {ats}'s board - agency listing"
+                                  if ats else "no application page found")
+                rows.append(row)
+                continue
             try:
-                row["captcha"] = has_captcha(page)   # already on the page
+                # The API route never opens a browser, so the page we are about
+                # to measure has to be loaded here rather than assumed.
+                page.goto(url, wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(2500)
+                row["captcha"] = has_captcha(page)
                 fields = collect_fields(page)
                 row["fields"] = len(fields)
                 row["required"] = sum(1 for f in fields if f.get("required"))
@@ -898,14 +950,20 @@ def diagnose(state, limit=12, headless=True):
                 rows.append(row)
                 continue
 
+            # Evidence first, brand second. The previous order asked whether
+            # the host was a known ATS and answered "SUPPORTED - can apply now"
+            # for nine pages that had no form on them at all.
+            known = classify_url(url)[1]
             if row["captcha"]:
                 row["verdict"] = "bot check - human only"
-            elif classify_url(url)[1]:
-                row["verdict"] = "SUPPORTED - can apply now"
             elif row["fields"] >= 5 and row.get("has_cv"):
-                row["verdict"] = "usable form, brand unrecognised"
+                row["verdict"] = ("SUPPORTED - can apply now" if known
+                                  else "usable form, brand unrecognised")
             elif row["fields"] >= 5:
                 row["verdict"] = f"{row['fields']} fields, no CV upload"
+            elif known:
+                row["verdict"] = (f"{row['ats']} page, only {row['fields']} "
+                                  f"field(s) - form is behind a button or a login")
             else:
                 row["verdict"] = "no form - advert or login wall"
             rows.append(row)

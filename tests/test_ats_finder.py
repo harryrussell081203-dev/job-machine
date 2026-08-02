@@ -2,7 +2,14 @@
 Tests for finding an employer's application form without a job board.
 
 All offline. Nothing here touches a real ATS or a real employer's site.
+
+Several of these are regressions for false positives that reached production:
+every one of these platforms answers 200 for a company that is not on it, and
+believing those 200s put fourteen unrelated companies on Workable, matched
+'Morson Edge' to an AECOM advert, and sent 'Future Engineering' to recruitee's
+marketing homepage.
 """
+import json
 import os
 import sys
 import unittest
@@ -14,10 +21,34 @@ import ats_finder as af  # noqa: E402
 import job_machine as jm  # noqa: E402
 
 
-def response(status=200, text="x" * 1000, url="https://example.com"):
-    r = mock.Mock(status_code=status, text=text, url=url)
+def response(status=200, payload=None, text=None, url="https://example.com"):
+    """A requests-like response. payload=None means .json() raises, which is
+    what an HTML bot check or a redirect to a marketing page really does."""
+    body = text if text is not None else (json.dumps(payload)
+                                          if payload is not None else "<html>hi")
+    r = mock.Mock(status_code=status, text=body, url=url)
+    if payload is None:
+        r.json.side_effect = ValueError("not json")
+    else:
+        r.json.return_value = payload
     r.raise_for_status = lambda: None
     return r
+
+
+def api(routes, default=None):
+    """side_effect that answers only the URLs given, 404 for everything else."""
+    default = default or response(status=404, text="Not Found")
+
+    def get(url, **kw):
+        for fragment, resp in routes.items():
+            if fragment in url:
+                return resp
+        return default
+    return get
+
+
+GREENHOUSE = "boards-api.greenhouse.io/v1/boards/{}/jobs"
+SMARTRECRUITERS = "api.smartrecruiters.com/v1/companies/{}/postings"
 
 
 class TestSlugs(unittest.TestCase):
@@ -36,57 +67,88 @@ class TestSlugs(unittest.TestCase):
         self.assertEqual(af.slug_candidates(""), [])
         self.assertEqual(af.slug_candidates("Ltd"), [])
 
-    def test_first_word_is_tried_for_multiword_firms(self):
-        self.assertIn("survitec", af.slug_candidates("Survitec Group"))
+    def test_abbreviations_are_marked_as_the_weaker_guess(self):
+        """'speedy' could be anyone's board; 'speedyservices' could only be
+        theirs. The plan has to say which is which."""
+        plan = dict(af.slug_plan("Speedy Services Hire"))
+        self.assertTrue(plan["speedyhire"])
+        self.assertFalse(plan["speedy"])
+
+    def test_a_noise_word_is_not_what_makes_a_name_whole(self):
+        """'Survitec Group' is just Survitec - dropping 'Group' loses nothing,
+        so the remaining slug is still the whole name."""
+        self.assertEqual(af.slug_plan("Survitec Group")[0], ("survitec", True))
+
+    def test_a_single_word_company_is_its_own_whole_name(self):
+        self.assertEqual(af.slug_plan("Hydrasun")[0], ("hydrasun", True))
 
 
-class TestProbing(unittest.TestCase):
-    def test_finds_a_real_greenhouse_board(self):
-        def get(url, **kw):
-            if url == "https://boards.greenhouse.io/hydrasun":
-                return response(text="Open roles at Hydrasun " + "x" * 900,
-                                url=url)
-            return response(status=404, text="Page not found")
+class TestBoardApis(unittest.TestCase):
+    def test_a_real_greenhouse_board_is_found(self):
+        get = api({GREENHOUSE.format("hydrasun"): response(payload={"jobs": [
+            {"title": "Mobile Service Van Technician",
+             "absolute_url": "https://boards.greenhouse.io/hydrasun/jobs/7"}]})})
         with mock.patch.object(af.requests, "get", side_effect=get):
-            self.assertEqual(af.probe_ats("Hydrasun"),
-                             ("greenhouse", "https://boards.greenhouse.io/hydrasun"))
+            board = af.find_board("Hydrasun")
+        self.assertEqual(board["ats"], "greenhouse")
+        self.assertEqual(len(board["jobs"]), 1)
 
-    def test_a_friendly_404_is_not_mistaken_for_a_board(self):
-        """These platforms return 200 with a 'page not found' body."""
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(text="Page not found " + "x" * 900)):
-            self.assertIsNone(af.probe_ats("Nonexistent Engineering"))
+    def test_a_company_on_no_platform_at_all_gets_nothing(self):
+        with mock.patch.object(af.requests, "get", side_effect=api({})):
+            self.assertIsNone(af.find_board("Nonexistent Engineering"))
 
-    def test_a_thin_page_is_not_a_board(self):
-        with mock.patch.object(af.requests, "get", return_value=response(text="hi")):
-            self.assertIsNone(af.probe_ats("Tiny Co"))
+    def test_a_board_belonging_to_someone_else_is_refused(self):
+        """The regression: careers.smartrecruiters.com/morsonedge served
+        AECOM's adverts, and the HTML probe called it a match."""
+        get = api({SMARTRECRUITERS.format("morsonedge"): response(payload={
+            "content": [{"id": "744000141127109", "name": "QA & QC Engineer",
+                         "company": {"identifier": "AECOM2", "name": "AECOM"}}]})})
+        with mock.patch.object(af.requests, "get", side_effect=get):
+            self.assertIsNone(af.find_board("Morson Edge"))
 
-    def test_a_catch_all_bot_check_is_not_mistaken_for_a_board(self):
-        """apply.workable.com answers 200 for any slug with a bot-check page.
-        The first version of this probe matched fourteen unrelated companies
-        to Workable because of it."""
-        botcheck = "<div class='g-recaptcha'>Checking your browser</div>" + "x" * 900
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(text=botcheck)):
-            self.assertIsNone(af.probe_ats("ScottishPower"))
+    def test_a_bot_check_served_at_the_api_url_is_not_a_board(self):
+        """apply.workable.com answers 200 for any slug. It is not JSON, so it
+        cannot be mistaken for a board any more."""
+        botcheck = response(text="<div class='g-recaptcha'>Checking your browser")
+        with mock.patch.object(af.requests, "get", return_value=botcheck):
+            self.assertIsNone(af.find_board("ScottishPower"))
 
-    def test_a_board_must_name_the_company_it_belongs_to(self):
-        someone_else = "Open roles at Totally Different Corp " + "x" * 900
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(text=someone_else)):
-            self.assertIsNone(af.probe_ats("Dron & Dickson"))
+    def test_a_redirect_to_the_platforms_marketing_site_is_not_a_board(self):
+        """futureengineering.recruitee.com redirected to recruitee.com's own
+        homepage, which the HTML probe scored as a hit."""
+        marketing = response(text="<html><body>Recruitee: hiring software</body>",
+                             url="https://recruitee.com/")
+        with mock.patch.object(af.requests, "get", return_value=marketing):
+            self.assertIsNone(af.find_board("Future Engineering Recruitment Ltd"))
 
-    def test_the_companys_own_board_is_still_accepted(self):
-        with mock.patch.object(af.requests, "get",
-                               return_value=response(
-                                   text="Careers at Hydrasun " + "x" * 900)):
-            found = af.probe_ats("Hydrasun")
-        self.assertIsNotNone(found)
-        self.assertEqual(found[0], "greenhouse")
+    def test_a_board_with_no_open_roles_is_no_use_to_us(self):
+        get = api({GREENHOUSE.format("hydrasun"): response(payload={"jobs": []})})
+        with mock.patch.object(af.requests, "get", side_effect=get):
+            self.assertIsNone(af.find_board("Hydrasun"))
 
     def test_network_failure_is_survived(self):
         with mock.patch.object(af.requests, "get", side_effect=OSError("down")):
-            self.assertIsNone(af.probe_ats("Acme"))
+            self.assertIsNone(af.find_board("Acme"))
+
+    def test_lever_returns_a_bare_list_not_an_object(self):
+        get = api({"api.lever.co/v0/postings/acme": response(payload=[
+            {"text": "Field Service Engineer",
+             "applyUrl": "https://jobs.lever.co/acme/1/apply"}])})
+        with mock.patch.object(af.requests, "get", side_effect=get):
+            board = af.find_board("Acme")
+        self.assertEqual(board["ats"], "lever")
+        self.assertEqual(board["jobs"][0]["url"],
+                         "https://jobs.lever.co/acme/1/apply")
+
+    def test_smartrecruiters_postings_become_real_apply_links(self):
+        get = api({SMARTRECRUITERS.format("oceaneering"): response(payload={
+            "content": [{"id": "744000123", "name": "Workshop Technician",
+                         "company": {"identifier": "Oceaneering",
+                                     "name": "Oceaneering"}}]})})
+        with mock.patch.object(af.requests, "get", side_effect=get):
+            board = af.find_board("Oceaneering")
+        self.assertEqual(board["jobs"][0]["url"],
+                         "https://jobs.smartrecruiters.com/Oceaneering/744000123")
 
 
 class TestCareersPage(unittest.TestCase):
@@ -99,6 +161,15 @@ class TestCareersPage(unittest.TestCase):
         self.assertEqual(ats, "lever")
         self.assertTrue(url.startswith("https://jobs.lever.co/acme"))
 
+    def test_a_portal_we_cannot_automate_is_still_worth_the_link(self):
+        """Workday needs a human, but a direct link beats handing Harry an
+        Adzuna advert to hunt through."""
+        html = '<a href="https://acme.wd3.myworkdayjobs.com/careers">Apply</a>'
+        with mock.patch.object(af.requests, "get",
+                               return_value=response(text=html)):
+            ats, url = af.careers_page_ats("acme.com")
+        self.assertEqual(ats, "workday")
+
     def test_a_site_with_no_ats_returns_nothing(self):
         with mock.patch.object(af.requests, "get",
                                return_value=response(text="<p>About us</p>")):
@@ -110,76 +181,102 @@ class TestCareersPage(unittest.TestCase):
         get.assert_not_called()
 
 
+class TestSlugFromUrl(unittest.TestCase):
+    def test_the_company_identifier_is_read_back_out_of_a_board_link(self):
+        self.assertEqual(
+            af.slug_from_board_url("https://boards.greenhouse.io/hydrasun/jobs/7"),
+            "hydrasun")
+        self.assertEqual(
+            af.slug_from_board_url("https://acme.recruitee.com/o/technician"),
+            "acme")
+        self.assertEqual(
+            af.slug_from_board_url("https://apply.workable.com/dron-dickson/"),
+            "dron-dickson")
+
+    def test_a_link_with_no_identifier_gives_nothing(self):
+        self.assertIsNone(af.slug_from_board_url("https://acme.com/careers"))
+
+
 class TestMatchingTheAdvert(unittest.TestCase):
-    def board(self, links):
-        page = mock.MagicMock()
-        page.evaluate.return_value = links
-        return page
+    def jobs(self, *titles):
+        return [{"title": t, "url": f"https://x/{i}"} for i, t in enumerate(titles)]
 
     def test_the_right_advert_is_picked_off_a_board(self):
-        page = self.board([
-            {"href": "https://boards.greenhouse.io/acme/jobs/1",
-             "text": "Senior Software Developer"},
-            {"href": "https://boards.greenhouse.io/acme/jobs/2",
-             "text": "Instrumentation Technician - Aberdeen"},
-            {"href": "https://boards.greenhouse.io/acme/jobs/3",
-             "text": "Finance Manager"}])
-        url = af.match_job_on_board(page, "https://boards.greenhouse.io/acme",
-                                    "Instrumentation Technician")
-        self.assertEqual(url, "https://boards.greenhouse.io/acme/jobs/2")
+        url = af.match_posting(
+            self.jobs("Senior Software Developer",
+                      "Instrumentation Technician - Aberdeen", "Finance Manager"),
+            "Instrumentation Technician")
+        self.assertEqual(url, "https://x/1")
 
     def test_a_board_with_nothing_similar_returns_none(self):
         """Applying to the wrong vacancy is worse than not applying."""
-        page = self.board([
-            {"href": "https://boards.greenhouse.io/acme/jobs/1",
-             "text": "Head of Marketing"},
-            {"href": "https://boards.greenhouse.io/acme/jobs/2",
-             "text": "Legal Counsel"}])
-        self.assertIsNone(af.match_job_on_board(
-            page, "https://boards.greenhouse.io/acme", "Instrumentation Technician"))
+        self.assertIsNone(af.match_posting(
+            self.jobs("Head of Marketing", "Legal Counsel"),
+            "Instrumentation Technician"))
 
     def test_a_partial_match_below_the_threshold_is_refused(self):
-        page = self.board([{"href": "https://x/1", "text": "Technician"}])
-        # only 1 of 2 significant words - below the 50% bar? it is exactly 50%
-        self.assertEqual(
-            af.match_job_on_board(page, "https://x", "Instrumentation Technician"),
-            "https://x/1")
-        self.assertIsNone(af.match_job_on_board(
-            page, "https://x", "Instrumentation Calibration Control Technician",
+        one = self.jobs("Technician")
+        self.assertEqual(af.match_posting(one, "Instrumentation Technician"),
+                         "https://x/0")
+        self.assertIsNone(af.match_posting(
+            one, "Instrumentation Calibration Control Technician",
             min_overlap=0.6))
 
-    def test_an_unreadable_board_does_not_crash(self):
+    def test_an_unreadable_browser_board_does_not_crash(self):
         page = mock.MagicMock()
         page.goto.side_effect = OSError("timeout")
         self.assertIsNone(af.match_job_on_board(page, "https://x", "Technician"))
 
 
 class TestEndToEndDiscovery(unittest.TestCase):
-    def test_probe_then_match_gives_the_application_url(self):
+    def test_board_then_match_gives_the_application_url(self):
         job = {"company": "Hydrasun", "title": "Instrumentation Technician"}
-        page = mock.MagicMock()
-        page.evaluate.return_value = [
-            {"href": "https://boards.greenhouse.io/hydrasun/jobs/9",
-             "text": "Instrumentation Technician"}]
-        with mock.patch.object(af, "probe_ats",
-                               return_value=("greenhouse",
-                                             "https://boards.greenhouse.io/hydrasun")):
-            url, ats = af.find_application_url(page, job)
+        board = {"ats": "greenhouse", "whole_name": True,
+                 "jobs": [{"title": "Instrumentation Technician",
+                           "url": "https://boards.greenhouse.io/hydrasun/jobs/9"}]}
+        with mock.patch.object(af, "find_board", return_value=board):
+            url, ats = af.find_application_url(None, job)
         self.assertEqual(url, "https://boards.greenhouse.io/hydrasun/jobs/9")
         self.assertEqual(ats, "greenhouse")
 
-    def test_falls_back_to_the_board_url_when_the_advert_is_not_listed(self):
-        job = {"company": "Hydrasun", "title": "Instrumentation Technician"}
-        page = mock.MagicMock()
-        page.evaluate.return_value = []
-        with mock.patch.object(af, "probe_ats",
-                               return_value=("lever", "https://jobs.lever.co/hydrasun")):
-            url, ats = af.find_application_url(page, job)
-        self.assertEqual(url, "https://jobs.lever.co/hydrasun")
+    def test_a_real_board_without_this_advert_reports_the_ats_and_no_url(self):
+        """An agency posted it; the employer's board does not carry it. That is
+        a different answer from 'we found nothing', and run() says so."""
+        job = {"company": "Hydrasun", "title": "Mobile Service Van Technician"}
+        board = {"ats": "greenhouse", "whole_name": True,
+                 "jobs": [{"title": "Finance Manager", "url": "https://x/1"}]}
+        with mock.patch.object(af, "find_board", return_value=board):
+            url, ats = af.find_application_url(None, job)
+        self.assertIsNone(url)
+        self.assertEqual(ats, "greenhouse")
+
+    def test_an_abbreviated_slug_needs_a_much_closer_title_match(self):
+        """'speedy' on Teamtailor could be any Speedy. A 50% title overlap is
+        not enough to believe it is this one."""
+        job = {"company": "Speedy Services", "title": "Test and Run Technician"}
+        board = {"ats": "lever", "whole_name": False,
+                 "jobs": [{"title": "Technician", "url": "https://x/1"}]}
+        with mock.patch.object(af, "find_board", return_value=board), \
+             mock.patch.object(jm, "find_domain", return_value=None):
+            url, ats = af.find_application_url(None, job)
+        self.assertIsNone(url)
+
+    def test_the_careers_page_route_lists_the_board_and_matches_the_advert(self):
+        job = {"company": "Acme Engineering", "title": "Field Service Engineer",
+               "company_domain": "acme.com"}
+        listing = {"jobs": [{"title": "Field Service Engineer",
+                             "url": "https://jobs.lever.co/acme/1/apply"}]}
+        with mock.patch.object(af, "find_board", return_value=None), \
+             mock.patch.object(af, "careers_page_ats",
+                               return_value=("lever", "https://jobs.lever.co/acme")), \
+             mock.patch.object(af, "api_board", return_value=listing):
+            url, ats = af.find_application_url(None, job)
+        self.assertEqual(url, "https://jobs.lever.co/acme/1/apply")
+        self.assertEqual(ats, "lever")
 
     def test_no_ats_anywhere_means_no_url_rather_than_a_guess(self):
         job = {"company": "Some Local Firm", "title": "Technician"}
-        with mock.patch.object(af, "probe_ats", return_value=None), \
+        with mock.patch.object(af, "find_board", return_value=None), \
              mock.patch.object(af, "careers_page_ats", return_value=None), \
              mock.patch.object(jm, "find_domain", return_value=None):
             url, ats = af.find_application_url(mock.MagicMock(), job)

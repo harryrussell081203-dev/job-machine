@@ -334,6 +334,64 @@ class TestPortalTargeting(unittest.TestCase):
         self.assertEqual(pa.classify_url("https://careers.acme.co.uk/apply"),
                          (None, False))
 
+    def test_the_advert_text_itself_can_name_the_portal(self):
+        """The cheapest route of all: no network, no slug, no board. Employers
+        and agencies routinely paste the link into the description."""
+        job = {"description": "Great role in Aberdeen. Apply here: "
+                              "https://boards.greenhouse.io/acme/jobs/99 - "
+                              "no agencies."}
+        self.assertEqual(pa.ats_url_in_listing(job),
+                         ("https://boards.greenhouse.io/acme/jobs/99",
+                          "greenhouse"))
+
+    def test_an_advert_with_no_portal_link_gives_nothing(self):
+        self.assertEqual(pa.ats_url_in_listing({"description": "Call us on 01224"}),
+                         (None, None))
+
+    def test_a_listing_that_is_already_a_portal_needs_no_lookup(self):
+        job = {"url": "https://jobs.lever.co/acme/abc-123"}
+        with mock.patch.object(pa, "ats_url_in_listing") as listing:
+            url, ats = pa.best_apply_url(mock.MagicMock(), job)
+        self.assertEqual((url, ats), ("https://jobs.lever.co/acme/abc-123", "lever"))
+        listing.assert_not_called()
+
+    def test_a_known_employer_board_beats_following_the_job_board(self):
+        """resolve_in_browser is the last resort, not the first: five diagnose
+        runs proved Adzuna's interstitial renders blank to a headless browser."""
+        job = {"url": "https://www.adzuna.co.uk/jobs/details/1",
+               "company": "Acme", "description": ""}
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_application_url",
+                               return_value=("https://jobs.lever.co/acme/1", "lever")), \
+             mock.patch.object(pa, "resolve_in_browser") as browser:
+            url, ats = pa.best_apply_url(mock.MagicMock(), job)
+        self.assertEqual(url, "https://jobs.lever.co/acme/1")
+        browser.assert_not_called()
+
+    def test_a_real_board_without_this_advert_stops_rather_than_guessing(self):
+        job = {"url": "https://www.adzuna.co.uk/jobs/details/1",
+               "company": "Acme", "description": ""}
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_application_url",
+                               return_value=(None, "greenhouse")), \
+             mock.patch.object(pa, "resolve_in_browser") as browser:
+            url, ats = pa.best_apply_url(mock.MagicMock(), job)
+        self.assertIsNone(url)
+        self.assertEqual(ats, "greenhouse")
+        browser.assert_not_called()
+
+    def test_an_unknown_employer_still_falls_back_to_the_job_board(self):
+        job = {"url": "https://www.adzuna.co.uk/jobs/details/1",
+               "company": "Tiny Local Firm", "description": ""}
+        import ats_finder
+        with mock.patch.object(ats_finder, "find_application_url",
+                               return_value=(None, None)), \
+             mock.patch.object(pa, "resolve_in_browser",
+                               return_value=("https://careers.tiny.co.uk/1", None)) as b:
+            url, ats = pa.best_apply_url(mock.MagicMock(), job)
+        self.assertEqual(url, "https://careers.tiny.co.uk/1")
+        b.assert_called_once()
+
     def test_apply_link_is_dug_out_of_the_employers_page(self):
         html = ('<a href="https://boards.greenhouse.io/acme/jobs/99">Apply</a>')
         response = mock.Mock(url="https://careers.acme.co.uk/roles/1", text=html)
@@ -365,9 +423,9 @@ class TestPortalTargeting(unittest.TestCase):
         with mock.patch.dict("sys.modules", {"playwright": mock.MagicMock(),
                                              "playwright.sync_api": fake_pw}), \
              mock.patch.object(pa, "apply_to_job", side_effect=fake_apply), \
-             mock.patch.object(pa, "resolve_apply_url",
-                               side_effect=lambda j: (j["url"],
-                                                      pa.classify_url(j["url"])[0])), \
+             mock.patch.object(pa, "best_apply_url",
+                               side_effect=lambda page, j: (
+                                   j["url"], pa.classify_url(j["url"])[0])), \
              mock.patch.object(jm, "save"), mock.patch.object(pa.time, "sleep"), \
              mock.patch.object(jm, "mark_contacted"):
             pa.run(state, submit=True, limit=1)
@@ -465,7 +523,7 @@ class TestPortalTargeting(unittest.TestCase):
              mock.patch.object(pa, "collect_fields", return_value=[]), \
              mock.patch.object(pa, "has_captcha", return_value=False), \
              mock.patch.object(pa, "shot", return_value=None), \
-             mock.patch.object(pa, "resolve_apply_url",
+             mock.patch.object(pa, "best_apply_url",
                                return_value=("https://boards.greenhouse.io/acme/jobs/1",
                                              "greenhouse")), \
              mock.patch.object(pa, "apply_plan") as fill, \
