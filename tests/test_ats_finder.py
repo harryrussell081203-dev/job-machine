@@ -67,12 +67,15 @@ class TestSlugs(unittest.TestCase):
         self.assertEqual(af.slug_candidates(""), [])
         self.assertEqual(af.slug_candidates("Ltd"), [])
 
-    def test_abbreviations_are_marked_as_the_weaker_guess(self):
-        """'speedy' could be anyone's board; 'speedyservices' could only be
-        theirs. The plan has to say which is which."""
+    def test_an_abbreviation_is_never_asked_about(self):
+        """A probe run asked greenhouse about 'future', from 'Future
+        Engineering Recruitment Ltd', and got five real postings belonging to
+        an unrelated AI company. Abbreviations found one wrong board and no
+        right ones across fourteen companies, so they are not asked about."""
         plan = dict(af.slug_plan("Speedy Services Hire"))
-        self.assertTrue(plan["speedyhire"])
-        self.assertFalse(plan["speedy"])
+        self.assertIn("speedyhire", plan)
+        self.assertNotIn("speedy", plan)
+        self.assertNotIn("future", dict(af.slug_plan("Future Engineering Ltd")))
 
     def test_a_noise_word_is_not_what_makes_a_name_whole(self):
         """'Survitec Group' is just Survitec - dropping 'Group' loses nothing,
@@ -139,6 +142,52 @@ class TestBoardApis(unittest.TestCase):
         self.assertEqual(board["ats"], "lever")
         self.assertEqual(board["jobs"][0]["url"],
                          "https://jobs.lever.co/acme/1/apply")
+
+    def test_smartrecruiters_is_asked_in_its_own_capitalisation(self):
+        """Their identifier is case-sensitive - their posting URLs read
+        jobs.smartrecruiters.com/AECOM2/... - so a lowercase slug gets a polite
+        200 with zero postings even for a company that really is on there.
+        Oceaneering was missed exactly this way."""
+        asked = []
+
+        def get(url, **kw):
+            asked.append(url)
+            if SMARTRECRUITERS.format("BakerHughes") in url:
+                return response(payload={"content": [
+                    {"id": "9", "name": "Field Engineer",
+                     "company": {"identifier": "BakerHughes",
+                                 "name": "Baker Hughes"}}]})
+            return response(payload={"content": []})
+
+        with mock.patch.object(af.requests, "get", side_effect=get):
+            board = af.find_board("Baker Hughes")
+        self.assertEqual(board["slug"], "BakerHughes")
+        self.assertTrue(any("bakerhughes/postings" in u for u in asked),
+                        "the plain lowercase spelling should still be tried first")
+
+    def test_only_smartrecruiters_gets_the_capitalisation_treatment(self):
+        self.assertEqual(af.slug_forms("greenhouse", "baker-hughes"),
+                         ["baker-hughes"])
+        self.assertIn("BakerHughes", af.slug_forms("smartrecruiters",
+                                                   "baker-hughes"))
+
+    def test_a_rate_limited_platform_is_retried_rather_than_written_off(self):
+        """Workable started 429ing partway through a fourteen-company probe."""
+        replies = [response(status=429, text="slow down"),
+                   response(payload={"name": "Acme", "jobs": [
+                       {"title": "Technician",
+                        "url": "https://apply.workable.com/acme/j/1/"}]})]
+
+        def get(url, **kw):
+            if "apply.workable.com" not in url:
+                return response(status=404, text="Not Found")
+            return replies.pop(0) if replies else replies_last
+        replies_last = response(status=404, text="Not Found")
+        with mock.patch.object(af.requests, "get", side_effect=get), \
+             mock.patch.object(af.time, "sleep"):
+            board = af.find_board("Acme")
+        self.assertIsNotNone(board)
+        self.assertEqual(board["ats"], "workable")
 
     def test_smartrecruiters_postings_become_real_apply_links(self):
         get = api({SMARTRECRUITERS.format("oceaneering"): response(payload={
@@ -250,9 +299,9 @@ class TestEndToEndDiscovery(unittest.TestCase):
         self.assertIsNone(url)
         self.assertEqual(ats, "greenhouse")
 
-    def test_an_abbreviated_slug_needs_a_much_closer_title_match(self):
-        """'speedy' on Teamtailor could be any Speedy. A 50% title overlap is
-        not enough to believe it is this one."""
+    def test_a_board_found_by_an_unproven_slug_needs_a_much_closer_match(self):
+        """Nothing generates these any more, but the careers-page route can
+        still hand us a slug we did not derive, so the guard stays."""
         job = {"company": "Speedy Services", "title": "Test and Run Technician"}
         board = {"ats": "lever", "whole_name": False,
                  "jobs": [{"title": "Technician", "url": "https://x/1"}]}

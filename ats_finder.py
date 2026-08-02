@@ -35,9 +35,9 @@ Platforms with no public API (Teamtailor, JOIN, Personio) are reachable only by
 route 2, deliberately: a guessed slug on those cannot be verified.
 """
 import argparse
-import json
 import re
 import sys
+import time
 
 import requests
 
@@ -85,10 +85,28 @@ def slug_candidates(company, whole_name_only=False):
 
 
 def slug_plan(company):
-    """[(slug, is_whole_name)] in the order they should be tried."""
-    whole = slug_candidates(company, whole_name_only=True)
-    return ([(s, True) for s in whole]
-            + [(s, False) for s in slug_candidates(company) if s not in whole])
+    """The slugs worth asking about, in order.
+
+    Whole-name slugs only. A probe run asked about abbreviations too, and
+    'future' - from 'Future Engineering Recruitment Ltd' - returned five real
+    postings belonging to an unrelated AI company. Across fourteen companies
+    the abbreviations found one wrong board and no right ones, and a wrong
+    board means an application sent to a company that never advertised."""
+    return [(s, True) for s in slug_candidates(company, whole_name_only=True)]
+
+
+def slug_forms(ats, slug):
+    """The spellings of a slug this platform might want.
+
+    SmartRecruiters' company identifier is case-sensitive - their own posting
+    URLs read jobs.smartrecruiters.com/AECOM2/... - so a lowercase slug gets a
+    polite 200 with zero postings even for a company that really is on there."""
+    if ats != "smartrecruiters":
+        return [slug]
+    words = [w for w in re.split(r"[-_]", slug) if w]
+    return list(dict.fromkeys([slug,
+                               "".join(w.capitalize() for w in words),
+                               slug.capitalize()]))
 
 
 def significant_words(name):
@@ -192,34 +210,48 @@ def api_board(ats, slug, company, get):
 
     None covers every failure equally: a 404, a redirect to somebody's
     marketing site, a payload we do not recognise, an empty board. Guessing
-    is what produced nine bogus 'can apply now' verdicts."""
+    is what produced nine bogus 'can apply now' verdicts.
+
+    The empty-board check is load-bearing rather than tidy-minded. A probe run
+    showed SmartRecruiters answering 200 for every slug it was given and
+    Workable answering 200 while echoing the slug back as the account name -
+    'Baker', 'ORION', 'fisher'. Both are catch-alls; what neither can fake is a
+    list of real postings."""
     spec = next((s for s in API_BOARDS if s[0] == ats), None)
     if not spec:
         return None
     _, api_url, board_pattern, parse = spec
-    try:
-        r = get(api_url.format(slug=slug), headers=jm.UA, timeout=TIMEOUT,
-                allow_redirects=True)
-    except Exception:
-        return None
-    if getattr(r, "status_code", 0) != 200:
-        return None
-    try:
-        data = r.json()
-    except Exception:
-        return None
-    parsed = parse(data, slug)
-    if not parsed:
-        return None
-    board_name, raw = parsed
-    jobs = [{"title": t, "url": u} for t, u in raw if t and u]
-    if not jobs:
-        return None                       # a board with no open roles is no use
-    if board_name and not names_agree(board_name, company):
-        print(f"[ats] {company}: {ats}/{slug} belongs to '{board_name}', skipping")
-        return None
-    return {"ats": ats, "slug": slug, "url": board_pattern.format(slug=slug),
-            "name": board_name, "jobs": jobs}
+    for form in slug_forms(ats, slug):
+        r = None
+        for attempt in range(2):
+            try:
+                r = get(api_url.format(slug=form), headers=jm.UA,
+                        timeout=TIMEOUT, allow_redirects=True)
+            except Exception:
+                return None
+            if getattr(r, "status_code", 0) != 429:
+                break
+            time.sleep(2 + attempt * 3)      # Workable rate-limits a long run
+        if getattr(r, "status_code", 0) != 200:
+            continue
+        try:
+            data = r.json()
+        except Exception:
+            continue
+        parsed = parse(data, form)
+        if not parsed:
+            continue
+        board_name, raw = parsed
+        jobs = [{"title": t, "url": u} for t, u in raw if t and u]
+        if not jobs:
+            continue                   # a board with no open roles is no use
+        if board_name and not names_agree(board_name, company):
+            print(f"[ats] {company}: {ats}/{form} belongs to "
+                  f"'{board_name}', skipping")
+            continue
+        return {"ats": ats, "slug": form, "name": board_name, "jobs": jobs,
+                "url": board_pattern.format(slug=form)}
+    return None
 
 
 def find_board(company, session=None):
@@ -230,7 +262,7 @@ def find_board(company, session=None):
             board = api_board(ats, slug, company, get)
             if board:
                 board["whole_name"] = whole_name
-                print(f"[ats] {company} -> {ats} board '{slug}' "
+                print(f"[ats] {company} -> {ats} board '{board['slug']}' "
                       f"({len(board['jobs'])} open role(s))")
                 return board
     return None
@@ -464,8 +496,15 @@ def check(companies):
                     elif not note:
                         note = "200 but not a board payload"
                 print(f"  {ats:16} {slug:24} {r.status_code} {note}")
+        # Route 2 matters more than route 1 for this queue: most of these
+        # firms are agencies or run their own site, so the question is what
+        # their careers page links to.
+        company = company.strip()
+        domain = jm.find_domain(company)
+        print(f"  {'careers page':16} {domain or '(no domain found)':24} "
+              f"{careers_page_ats(domain) if domain else ''}")
         if title.strip():
-            board = find_board(company.strip())
+            board = find_board(company)
             if board:
                 print(f"  -> would apply to: "
                       f"{match_posting(board['jobs'], title.strip())}")
