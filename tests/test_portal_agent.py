@@ -342,6 +342,39 @@ class TestPortalTargeting(unittest.TestCase):
         self.assertEqual((url, ats), ("https://boards.greenhouse.io/acme/jobs/99",
                                       "greenhouse"))
 
+    def test_an_unsupported_portal_does_not_eat_the_run_budget(self):
+        """A --limit 1 run must apply to one real form, not stop at the first
+        council portal it cannot use."""
+        jobs = {
+            "manual": dict(JOB, external_id="manual", score=99,
+                           found_at=jm.now(), url="https://acme.taleo.net/x",
+                           company="Council"),
+            "good": dict(JOB, external_id="good", score=90, found_at=jm.now(),
+                         url="https://boards.greenhouse.io/acme/jobs/1",
+                         company="Acme"),
+        }
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        applied = []
+
+        def fake_apply(page, job, answers, submit):
+            applied.append(job["external_id"])
+            job["status"] = "portal_submitted"
+            return True
+
+        fake_pw = mock.MagicMock()
+        with mock.patch.dict("sys.modules", {"playwright": mock.MagicMock(),
+                                             "playwright.sync_api": fake_pw}), \
+             mock.patch.object(pa, "apply_to_job", side_effect=fake_apply), \
+             mock.patch.object(pa, "resolve_apply_url",
+                               side_effect=lambda j: (j["url"],
+                                                      pa.classify_url(j["url"])[0])), \
+             mock.patch.object(jm, "save"), mock.patch.object(pa.time, "sleep"), \
+             mock.patch.object(jm, "mark_contacted"):
+            pa.run(state, submit=True, limit=1)
+
+        self.assertEqual(applied, ["good"])
+        self.assertEqual(jobs["manual"]["status"], "portal_manual")
+
     def test_queue_is_scored_recent_and_untried(self):
         state = {"jobs": {
             "good": dict(JOB, external_id="good", score=90, found_at=jm.now()),
