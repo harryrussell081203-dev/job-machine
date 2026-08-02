@@ -37,6 +37,7 @@ route 2, deliberately: a guessed slug on those cannot be verified.
 import argparse
 import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -250,14 +251,12 @@ def api_board(ats, slug, company, get):
     for form in slug_forms(ats, slug):
         r = None
         for attempt in range(2):
-            try:
-                r = get(api_url.format(slug=form), headers=jm.UA,
-                        timeout=TIMEOUT, allow_redirects=True)
-            except Exception:
-                return None
-            if getattr(r, "status_code", 0) != 429:
+            r = fetch(get, api_url.format(slug=form))
+            if r is None or getattr(r, "status_code", 0) != 429:
                 break
             time.sleep(2 + attempt * 3)      # Workable rate-limits a long run
+        if r is None:
+            continue
         if getattr(r, "status_code", 0) != 200:
             continue
         try:
@@ -332,6 +331,41 @@ ATS_URL_RE = re.compile(
     + r")[^\s\"'<>)]*", re.I)
 
 
+HARD_TIMEOUT = jm.env_int("ATS_HARD_TIMEOUT", 20)
+
+
+def fetch(get, url, hard=None):
+    """A GET that really does give up.
+
+    requests' timeout bounds each socket read, not the whole request, so a
+    server that dribbles bytes holds the connection open indefinitely - a
+    diagnose run sat on one past its sixty-minute workflow timeout and printed
+    nothing. The abandoned thread costs nothing; the stuck run cost everything
+    it had found.
+
+    It has to be a daemon thread. A ThreadPoolExecutor waits for its workers
+    when the `with` block exits, so future.result(timeout=...) returns on time
+    and then the shutdown blocks for exactly as long as the hung read - the cap
+    does nothing at all. A daemon thread is simply abandoned, and does not hold
+    up interpreter exit either.
+    """
+    caught = {}
+
+    def work():
+        try:
+            caught["r"] = get(url, headers=jm.UA, timeout=TIMEOUT,
+                              allow_redirects=True)
+        except Exception:
+            caught["r"] = None
+
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    worker.join(hard or HARD_TIMEOUT)
+    if worker.is_alive():
+        print(f"[ats] {url[:60]} never finished sending, abandoned")
+    return caught.get("r")
+
+
 def careers_page_ats(domain, session=None):
     """Open the company's own site and find where their applications go.
 
@@ -351,11 +385,8 @@ def careers_page_ats(domain, session=None):
              f"https://{domain}"]
     seen_links, own_page, reachable = [], None, False
     for url in pages:
-        try:
-            r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
-        except Exception:
-            continue
-        if getattr(r, "status_code", 0) != 200 or not r.text:
+        r = fetch(get, url)
+        if r is None or getattr(r, "status_code", 0) != 200 or not r.text:
             continue
         reachable = True
         match = ATS_URL_RE.search(r.text)
@@ -373,11 +404,8 @@ def careers_page_ats(domain, session=None):
                 if full not in pages and full not in seen_links:
                     seen_links.append(full)
     for url in seen_links[:4]:
-        try:
-            r = get(url, headers=jm.UA, timeout=TIMEOUT, allow_redirects=True)
-        except Exception:
-            continue
-        if getattr(r, "status_code", 0) != 200:
+        r = fetch(get, url)
+        if r is None or getattr(r, "status_code", 0) != 200:
             continue
         reachable = True
         match = ATS_URL_RE.search(r.text or "")

@@ -404,3 +404,38 @@ class TestWalkingAnEmployersOwnSite(unittest.TestCase):
         self.assertEqual(url, "https://acme.com/apply/9")
         self.assertIsNone(ats)
         walk.assert_called_once()
+
+
+class TestGivingUpOnAHungServer(unittest.TestCase):
+    """requests' timeout bounds each socket read, not the whole request. A
+    diagnose run sat on a dribbling server past its sixty-minute workflow
+    timeout and printed nothing at all."""
+    def test_a_hung_read_is_abandoned_rather_than_waited_out(self):
+        import time as clock
+
+        def hangs(url, **kw):
+            clock.sleep(10)
+            return response()
+
+        started = clock.monotonic()
+        out = af.fetch(hangs, "https://slow.example.com", hard=0.3)
+        self.assertIsNone(out)
+        self.assertLess(clock.monotonic() - started, 3,
+                        "fetch waited for the hung read instead of giving up")
+
+    def test_a_healthy_fetch_still_comes_back(self):
+        self.assertEqual(af.fetch(lambda url, **kw: "fine", "https://x", hard=5),
+                         "fine")
+
+    def test_a_failing_fetch_is_just_a_miss(self):
+        def boom(url, **kw):
+            raise OSError("refused")
+        self.assertIsNone(af.fetch(boom, "https://x", hard=5))
+
+    def test_the_careers_route_survives_a_hung_site(self):
+        def hangs(url, **kw):
+            import time as clock
+            clock.sleep(10)
+        with mock.patch.object(af.requests, "get", side_effect=hangs), \
+             mock.patch.object(af, "HARD_TIMEOUT", 0.2):
+            self.assertIsNone(af.careers_page_ats("slow.example.com"))
