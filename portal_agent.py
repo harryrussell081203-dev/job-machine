@@ -664,13 +664,19 @@ def run(state, submit=False, limit=None, headless=True):
         return
 
     answers = load_answers()
-    todo = portal_candidates(state)[:limit or PORTAL_PER_RUN_CAP]
+    budget = limit or PORTAL_PER_RUN_CAP
+    # Look at every candidate, but only count the ones we can really apply to.
+    # A portal that needs an account costs nothing but a link, so it must not
+    # eat the run's budget - that is how a --limit 1 run ends up applying to
+    # nothing at all.
+    todo = portal_candidates(state)
     if not todo:
         print("[portal] nothing to apply to")
         return
-    print(f"[portal] {len(todo)} candidate(s), submit={'ON' if submit else 'OFF'}")
+    print(f"[portal] {len(todo)} candidate(s), budget={budget}, "
+          f"submit={'ON' if submit else 'OFF'}")
 
-    done = 0
+    done = attempted = 0
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(
@@ -680,6 +686,9 @@ def run(state, submit=False, limit=None, headless=True):
         )
         page = context.new_page()
         for job in todo:
+            if attempted >= budget:
+                print(f"[portal] budget of {budget} application(s) used")
+                break
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
                 break
@@ -691,8 +700,10 @@ def run(state, submit=False, limit=None, headless=True):
                             "portal_reason": f"{ats or 'unknown'} portal - needs an "
                                              f"account or runs a bot check, do this one "
                                              f"by hand"})
-                print(f"[portal] MANUAL {job['company']} ({ats or 'unknown'})")
+                print(f"[portal] MANUAL {job['company']} ({ats or 'unknown'}) "
+                      f"- not counted, moving on")
                 continue
+            attempted += 1
             try:
                 submitted = apply_to_job(page, job, answers, submit)
             except Exception as e:

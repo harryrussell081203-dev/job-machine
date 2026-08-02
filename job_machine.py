@@ -674,6 +674,31 @@ def gemini_json(prompt, max_tokens=800, temperature=0.4):
 
 SCORE_BATCH = env_int("SCORE_BATCH", 10)
 
+# Deterministic pre-filter. Gemini's free tier is the scarcest resource in the
+# whole pipeline, so nothing reaches it unless a human would agree the title is
+# at least in the right trade. This is cheap, offline, and cuts the AI load by
+# roughly four fifths.
+RELEVANT_TITLE = re.compile(
+    r"technician|engineer|electr|instrument|maintenance|mechanic|fitter|"
+    r"calibrat|workshop|assembl|test(er|ing)?\b|repair|subsea|offshore|rov\b|"
+    r"comms?\b|communication|radio|network|telecom|satellite|avionic|"
+    r"control (system|room)|automation|plc\b|hydraulic|pneumatic|"
+    r"inspector|inspection|survey|operative|apprentice|technical|"
+    r"fabricat|draught|cad\b|it support|helpdesk|service desk", re.I)
+# A description can rescue a vague title like "Field Service Representative".
+RELEVANT_BODY = re.compile(
+    r"fault[- ]find|diagnos|ipc-a-610|soldering|calibration|test equipment|"
+    r"instrumentation|electrical systems|electronic (assembly|equipment)|"
+    r"maintenance schedule|planned preventative|subsea|offshore|"
+    r"security clearance|ex-forces|service leaver", re.I)
+
+
+def worth_scoring(job):
+    """True if this listing is plausibly in Harry's trade at all."""
+    if RELEVANT_TITLE.search(job.get("title") or ""):
+        return True
+    return bool(RELEVANT_BODY.search((job.get("description") or "")[:1500]))
+
 
 def score_batch(batch):
     """Score several listings in one call. Returns {index: (score, reason)}.
@@ -683,7 +708,7 @@ def score_batch(batch):
         f"--- LISTING {i} ---\nTitle: {j['title']}\nCompany: {j['company']}\n"
         f"Location: {j['location']}\n"
         f"Salary: {j.get('salary_min')}-{j.get('salary_max')}\n"
-        f"Description: {j['description'][:1200]}"
+        f"Description: {j['description'][:900]}"
         for i, j in enumerate(batch))
     prompt = (
         f'Screen these {len(batch)} job listings for the candidate. Respond ONLY '
@@ -717,8 +742,20 @@ def score_batch(batch):
 
 
 def score_jobs(state):
-    unscored = [j for j in state["jobs"].values()
-                if j["status"] == "new"][:MAX_SCORED_PER_RUN]
+    # spend the AI budget only on listings that are in the right trade
+    pool, filtered = [], 0
+    for job in state["jobs"].values():
+        if job.get("status") != "new":
+            continue
+        if worth_scoring(job):
+            pool.append(job)
+        else:
+            job.update({"status": "skipped", "skip_reason": "off target (pre-filter)"})
+            filtered += 1
+    if filtered:
+        print(f"[score] pre-filter set aside {filtered} off-target listing(s) "
+              f"without spending a call")
+    unscored = pool[:MAX_SCORED_PER_RUN]
     passed = done = 0
     for start in range(0, len(unscored), SCORE_BATCH):
         batch = unscored[start:start + SCORE_BATCH]
