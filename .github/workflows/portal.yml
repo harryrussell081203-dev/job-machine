@@ -69,6 +69,10 @@ jobs:
             # employer where being ex-forces moves Harry from the pile to the
             # shortlist, so this is the most valuable data in the project.
             echo "fire-covenant branch: rebuilding the Covenant list"
+            # Report what the register really looks like before trusting a
+            # scrape of it - the first attempt found 51 names out of thousands
+            # because it assumed the wrong page structure.
+            python tools/covenant_list.py --inspect || true
             python tools/covenant_list.py --write
             exit 0
           fi
