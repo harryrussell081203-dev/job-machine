@@ -1556,3 +1556,44 @@ class TestFindingTheRotationalMarket(unittest.TestCase):
     def test_every_search_carries_its_own_radius(self):
         for where, radius, kw in jm.adzuna_searches():
             self.assertIn(radius, (jm.SEARCH_RADIUS_MILES, jm.ROTATIONAL_RADIUS))
+
+
+class TestAnsweringAnInterviewInvite(unittest.TestCase):
+    """The reply that books the interview. Mobility is the first thing an
+    offshore operator screens for, so leaving them to ask it is a wasted
+    exchange when the answer is an unqualified yes."""
+
+    def test_an_offshore_advert_is_recognised(self):
+        for job in ({"title": "ROV Technician", "description": "3/3 rotation"},
+                    {"title": "Technician", "description": "offshore, vessel based"},
+                    {"title": "Electrician", "description": "back-to-back rota"},
+                    {"title": "Tech", "description": "FIFO to the platform"}):
+            with self.subTest(job=job["description"]):
+                self.assertTrue(jm.rotational(job))
+
+    def test_an_ordinary_workshop_job_is_not(self):
+        self.assertFalse(jm.rotational(
+            {"title": "Workshop Technician",
+             "description": "Dayshift in our Aberdeen workshop, Monday to Friday."}))
+
+    def test_the_offshore_reply_answers_the_mobility_question_unasked(self):
+        body = jm.autoreply_body({"title": "ROV Technician",
+                                  "description": "offshore 3/3 rotation"})
+        text = body.format(greeting="Hi,", title="ROV Technician").lower()
+        self.assertIn("rotation", text)
+        self.assertIn("overseas", text)
+        self.assertIn("available immediately", text)
+
+    def test_it_still_offers_a_time_and_a_phone_number(self):
+        """Whatever else it says, the job of this email is to book a meeting."""
+        for job in ({"title": "X", "description": "offshore rota"},
+                    {"title": "X", "description": "workshop dayshift"}):
+            text = jm.autoreply_body(job).format(greeting="Hi,", title="X")
+            with self.subTest(job=job["description"]):
+                self.assertIn("07398 530978", text)
+                self.assertIn("Which day works best", text)
+
+    def test_an_onshore_reply_does_not_volunteer_irrelevant_detail(self):
+        text = jm.autoreply_body({"title": "Workshop Technician",
+                                  "description": "Aberdeen workshop"}).lower()
+        self.assertNotIn("offshore", text)

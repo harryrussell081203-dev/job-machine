@@ -1724,6 +1724,36 @@ AUTOREPLY_BODY = (
     "Which day works best for you?\n\n"
     "Harry\nHarry Russell / 07398 530978")
 
+# The same reply, for a posting that is offshore or on a rotation. Mobility is
+# the first thing an operator screens for on those, and leaving them to ask is
+# a wasted exchange when the answer is an unqualified yes.
+AUTOREPLY_ROTATIONAL = (
+    "{greeting}\n\n"
+    "Thanks for getting back to me about the {title} role. Happy to meet "
+    "whenever suits - I am free any day this week, tomorrow included, and "
+    "flexible on time. If a call is easier my number is 07398 530978.\n\n"
+    "To save you asking: I am fine with rotation and with travelling for it, "
+    "onshore or offshore, UK or overseas. Available immediately, and I hold DV "
+    "clearance.\n\n"
+    "Which day works best for you?\n\n"
+    "Harry\nHarry Russell / 07398 530978")
+
+ROTATIONAL_ADVERT = re.compile(
+    r"offshore|rotation|rota\b|\d\s*[/:]\s*\d\s*(week|rotation)?|back[- ]to[- ]back|"
+    r"fly[- ]in|fifo|vessel|rig\b|platform\b|swing|trip[- ]based|"
+    r"field[- ]based overseas|expat", re.I)
+
+
+def rotational(job):
+    """Is this posting offshore or on a rotation?"""
+    blob = " ".join(str(job.get(k) or "") for k in
+                    ("title", "location", "description"))[:3000]
+    return bool(ROTATIONAL_ADVERT.search(blob))
+
+
+def autoreply_body(job):
+    return AUTOREPLY_ROTATIONAL if rotational(job) else AUTOREPLY_BODY
+
 
 def _message_text(msg):
     """Plain text of an email, minus the quoted trail."""
@@ -1832,8 +1862,8 @@ def check_replies(state):
                     and not job.get("auto_replied_at"):
                 greeting = (f"Hi {job['contact_name']},"
                             if job.get("contact_name") else "Hi,")
-                body = AUTOREPLY_BODY.format(greeting=greeting,
-                                             title=job.get("title", "advertised"))
+                body = autoreply_body(job).format(
+                    greeting=greeting, title=job.get("title", "advertised"))
                 subject = reply["subject"] or job.get("sent_subject") or ""
                 if not subject.lower().startswith("re:"):
                     subject = f"Re: {subject}"
