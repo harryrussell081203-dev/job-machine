@@ -1647,3 +1647,65 @@ class TestCourseAdvertsAreNotVacancies(unittest.TestCase):
              mock.patch.object(jm, "reed", return_value=[]):
             jm.harvest(state)
         self.assertEqual(state["jobs"]["adzuna_1"]["status"], "skipped")
+
+
+class TestScoringDoesNotEatTheWholeRun(unittest.TestCase):
+    """Sending is the point of a run; scoring is only preparation for it.
+
+    Gemini's free tier answers 429 with a retry delay of up to a minute, so a
+    dozen batches can swallow the workflow's whole allowance and produce a run
+    that judges a hundred listings and emails nobody. A live run demonstrated
+    exactly that.
+    """
+    def queue(self, n):
+        jobs = {}
+        for i in range(n):
+            j = make_job(external_id=f"n{i}", status="new",
+                         title="Instrumentation Technician",
+                         description="Calibration of subsea instrumentation.")
+            j.pop("score", None)
+            jobs[j["external_id"]] = j
+        return {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+
+    def test_scoring_stops_at_its_budget(self):
+        state = self.queue(60)
+        # the first reading sets the deadline, the second is the loop's check
+        clock = iter([0, 0] + [1e9] * 50)   # one batch fits, then time is up
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}) as sb:
+            jm.score_jobs(state)
+        self.assertEqual(sb.call_count, 1)
+
+    def test_what_it_did_score_is_kept(self):
+        """Stopping early must not throw away the work already done."""
+        state = self.queue(30)
+        clock = iter([0, 0] + [1e9] * 50)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}):
+            jm.score_jobs(state)
+        scored = [j for j in state["jobs"].values() if j.get("status") == "scored"]
+        self.assertEqual(len(scored), 10)
+
+    def test_the_rest_stay_queued_for_the_next_run(self):
+        state = self.queue(30)
+        clock = iter([0, 0] + [1e9] * 50)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}):
+            jm.score_jobs(state)
+        still_new = [j for j in state["jobs"].values() if j.get("status") == "new"]
+        self.assertEqual(len(still_new), 20)
+
+    def test_an_unhurried_run_scores_everything(self):
+        state = self.queue(30)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", return_value=0), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}) as sb:
+            jm.score_jobs(state)
+        self.assertEqual(sb.call_count, 3)
