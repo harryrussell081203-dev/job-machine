@@ -22,13 +22,13 @@ marked as contacted, and follow-ups are off.
 
 | Stage | What happens |
 | --- | --- |
-| 0. Schedule | `run.yml` at 08:00, 11:30 and 15:00 UTC weekdays; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
+| 0. Schedule | `run.yml` five times a weekday, two of them landing inside the Tue-Thu 9-11am UK window that replies best; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
 | 1. Harvest | Adzuna + Reed, listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
 | 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
 | 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
 | 4. Compose | Role-family template (communications / electronics_technician / instrumentation_maintenance / events_production / general) picked from the title. Gemini fills a fixed skeleton; code enforces the rules and rejects-and-retries up to 3 times. |
-| 5. Send | Gmail SMTP over SSL, CV PDF attached, best contact tier first then highest score. One email per company **ever**. Caps per run and per day, 30s between sends. |
-| 6. Follow-up | 4 days after sending, IMAP checks the inbox for a reply from that address. No reply means one short follow-up, no attachment, threaded onto the original. Replied means marked `replied` and never touched again. |
+| 5. Send | Gmail SMTP over SSL, CV PDF attached. Covenant employers first, then best contact tier, then score, freshest first within that. One email per **employer** ever; agencies get up to four, one per vacancy. Off-peak runs hold the queue back for the window but always send anything posted in the last 14 hours. Caps per run and per day, 30s between sends. |
+| 6. Follow-up | Day 4 and day 9 nudges to the same person, threaded, no attachment. Day 16, if a second real address at that company is known, one fresh approach to them with the CV. Any reply stops everything. |
 | 7. State | Everything in `data/state.json`, committed back by the workflow. |
 
 ### Copy rules enforced in code, not just asked of the model
@@ -94,7 +94,8 @@ python tools/build_cv_pdf.py
 
 ## Running it
 
-The workflow runs at 08:00, 11:30 and 15:00 UTC on weekdays. You can also run it
+The workflow runs five times a weekday, weighted towards Tuesday to
+Thursday mid-morning. You can also run it
 by hand from the Actions tab (**Run workflow**), which takes two inputs:
 
 - `test_mode` - override `TEST_MODE` for that one run
@@ -116,7 +117,7 @@ python job_machine.py --summary --force   # send tonight's digest right now
 Tests (no network, nothing is sent, no real portal is touched):
 
 ```bash
-python -m unittest discover -s tests -v          # 86 tests
+python -m unittest discover -s tests -v          # 270 tests
 PORTAL_BROWSER_TESTS=1 python -m unittest discover -s tests   # + drives Chromium
 ```
 
