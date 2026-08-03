@@ -2204,6 +2204,14 @@ STATUSES = ("new", "scored", "ready", "sent", "spec_sent", "test_sent",
             "replied", "no_email", "compose_failed", "send_failed", "skipped")
 
 
+def harvest_from_inbox(state):
+    """Adverts out of job-alert email. Imported here rather than at the top so
+    that a problem in the alert reader can never stop the main pipeline."""
+    import alert_harvest
+    if alert_harvest.harvest_alerts(state):
+        alert_harvest.enrich(state)
+
+
 def stage(name, fn, *args):
     try:
         fn(*args)
@@ -2244,6 +2252,10 @@ def main(argv=None):
     state = load()
     if not args.skip_harvest:
         stage("harvest", harvest, state)
+        # Job-alert email from Harry's own inbox. The boards that carry most of
+        # this market - CV-Library, Totaljobs, s1jobs, Oil and Gas Job Search -
+        # have no free API, but every one of them will email him alerts.
+        stage("alerts", harvest_from_inbox, state)
         save(state)
     stage("score", score_jobs, state)
     save(state)
