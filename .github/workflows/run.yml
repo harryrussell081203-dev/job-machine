@@ -75,6 +75,7 @@ jobs:
           SEARCH_LOCATIONS: ${{ vars.SEARCH_LOCATIONS }}
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
+          SUPPORT_PER_RUN: ${{ vars.SUPPORT_PER_RUN }}
         run: |
           # The charities and training bodies that may fund the offshore
           # tickets and the driving licence. One approach each, ever.

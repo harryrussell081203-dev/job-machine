@@ -51,7 +51,11 @@ import time
 import job_machine as jm
 
 SUPPORT_PATH = os.path.join(jm.ROOT, "data", "support_orgs.json")
-SUPPORT_PER_RUN = jm.env_int("SUPPORT_PER_RUN", 4)
+# The real bound on this is one approach per organisation, ever, against a
+# hand-written list of sixteen. The per-run number is only pacing, so it is set
+# high enough to clear the list in a single run rather than leaving letters
+# sitting unsent between fires.
+SUPPORT_PER_RUN = jm.env_int("SUPPORT_PER_RUN", 12)
 SUPPORT_INTERVAL_SECONDS = jm.env_int("SUPPORT_INTERVAL_SECONDS", 45)
 
 # What he is actually asking for, worst-first in terms of what blocks him.
