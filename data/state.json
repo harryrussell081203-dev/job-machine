@@ -22690,10 +22690,35 @@
   "wood": "sent"
  },
  "support_asked": {
+  "ecitb": {
+   "at": "2026-08-03T21:26:36.328781+00:00",
+   "email": "ace@ecitb.org.uk",
+   "name": "ECITB"
+  },
+  "energy transition zone": {
+   "at": "2026-08-03T21:28:38.879882+00:00",
+   "email": "information@etzltd.com",
+   "name": "Energy Transition Zone"
+  },
+  "help for heroes": {
+   "at": "2026-08-03T21:23:17.459506+00:00",
+   "email": "fundraise@helpforheroes.org.uk",
+   "name": "Help for Heroes"
+  },
   "legion scotland": {
    "at": "2026-08-03T21:14:03",
    "email": "events@legionscotland.org.uk",
    "name": "Legion Scotland"
+  },
+  "north east scotland college": {
+   "at": "2026-08-03T21:25:17.736124+00:00",
+   "email": "library@nescol.ac.uk",
+   "name": "North East Scotland College"
+  },
+  "opito": {
+   "at": "2026-08-03T21:27:39.004212+00:00",
+   "email": "americas@opito.com",
+   "name": "OPITO"
   },
   "poppyscotland": {
    "at": "2026-08-03T21:11:57",
