@@ -66,10 +66,6 @@ class TestMergingTheBoardCache(unittest.TestCase):
         self.assertEqual(out["ats_boards"]["acme"]["ats"], "lever")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestReopenedListings(unittest.TestCase):
     """A rescore sets a listing back to 'new' on purpose, and 'new' ranks below
     'skipped'. The ordinary more-advanced-wins rule therefore reverted every
@@ -103,3 +99,58 @@ class TestReopenedListings(unittest.TestCase):
         out = ms.merge({"jobs": {"a": {"status": "sent", "to": "x@y.com"}}},
                        {"jobs": {"a": {"status": "new"}}})
         self.assertEqual(out["jobs"]["a"]["status"], "sent")
+
+
+class TestTheSupportRegister(unittest.TestCase):
+    """Which charities and training bodies have been written to. One approach
+    each, ever - so an entry lost here is a second letter to somebody who has
+    already had one. This is exactly what happened: four letters went out, the
+    merge had no rule for the key, and main came back without it."""
+
+    def test_a_run_that_writes_letters_does_not_lose_the_record(self):
+        out = ms.merge({"jobs": {}},
+                       {"jobs": {}, "support_asked": {
+                           "poppyscotland": {"at": "2026-08-03T21:11:57",
+                                             "email": "f.b@poppyscotland.org.uk"}}})
+        self.assertIn("poppyscotland", out.get("support_asked", {}))
+
+    def test_both_runs_letters_are_remembered(self):
+        out = ms.merge({"support_asked": {"ssafa": {"at": "2026-08-03"}}},
+                       {"support_asked": {"legion scotland": {"at": "2026-08-04"}}})
+        self.assertEqual(set(out["support_asked"]), {"ssafa", "legion scotland"})
+
+    def test_the_first_approach_is_the_one_remembered(self):
+        out = ms.merge({"support_asked": {"ssafa": {"at": "2026-08-03"}}},
+                       {"support_asked": {"ssafa": {"at": "2026-07-01"}}})
+        self.assertEqual(out["support_asked"]["ssafa"]["at"], "2026-07-01")
+
+
+class TestKeysNobodyHasWrittenARuleFor(unittest.TestCase):
+    """Three separate keys have now been silently dropped by this file - the
+    board cache, the rescore, the support register - each found only after a
+    run had already lost work. The default has to stop being 'discard'."""
+
+    def test_an_unrecognised_key_survives_the_merge(self):
+        out = ms.merge({"jobs": {}}, {"jobs": {}, "invented_later": {"a": 1}})
+        self.assertEqual(out["invented_later"], {"a": 1})
+
+    def test_both_sides_records_under_an_unknown_key_are_kept(self):
+        out = ms.merge({"invented_later": {"a": 1}},
+                       {"invented_later": {"b": 2}})
+        self.assertEqual(out["invented_later"], {"a": 1, "b": 2})
+
+    def test_a_scalar_already_on_main_is_not_overwritten(self):
+        out = ms.merge({"invented_later": "theirs"}, {"invented_later": "ours"})
+        self.assertEqual(out["invented_later"], "theirs")
+
+    def test_the_known_keys_keep_their_own_rules(self):
+        """The catch-all must not reach a key that has a real rule, or it would
+        quietly undo it - here, by letting a stale board answer win."""
+        out = ms.merge(
+            {"ats_boards": {"acme": {"ats": "lever", "checked_at": "2026-07-01"}}},
+            {"ats_boards": {"acme": {"ats": None, "checked_at": "2026-08-01"}}})
+        self.assertIsNone(out["ats_boards"]["acme"]["ats"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

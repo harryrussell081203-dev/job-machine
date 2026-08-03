@@ -10,6 +10,13 @@ records. This merges them properly instead:
 Jobs are unioned, and where both sides know a job the one further along the
 pipeline wins. Counters take the higher count per day, contacted companies are
 unioned with the earliest contact kept.
+
+Anything this file does not have a rule for is still carried across, because it
+used to be silently dropped: the merge started from a copy of `theirs` and then
+copied over only the keys it recognised, so every new top-level key was thrown
+away the first time a run tried to save one. That cost the ATS board cache, and
+then the record of which charities had already been written to - which is worse
+than losing data, because a lost record of a letter means sending it twice.
 """
 import json
 import sys
@@ -46,6 +53,49 @@ def pick(a, b):
     return a if len(a) >= len(b) else b
 
 
+def union_earliest(theirs, ours):
+    """Union of two 'we have already approached these' registers.
+
+    The earliest timestamp wins, because the question these answer is 'has this
+    ever been done', and the first time is the true answer."""
+    out = dict(theirs)
+    for key, entry in ours.items():
+        existing = out.get(key)
+        if existing is None:
+            out[key] = entry
+        elif isinstance(entry, dict) and isinstance(existing, dict):
+            if str(entry.get("at", "")) < str(existing.get("at", "")):
+                out[key] = entry
+    return out
+
+
+# Keys with a rule of their own below. Everything else is carried across by
+# carry_unknown(), so a new one is never lost while nobody has written its rule.
+KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
+         "portal_counts", "spec_counts", "spec_done", "ats_boards",
+         "last_summary_at"}
+
+
+def carry_unknown(out, theirs, ours):
+    """Keep top-level keys no rule covers, rather than dropping them.
+
+    Two dicts are unioned and theirs wins a clash: without knowing what the key
+    means, keeping both sides' records is the choice that cannot lose one. It
+    says so out loud, because a key showing up here wants a real rule."""
+    for key, value in ours.items():
+        if key in KNOWN:
+            continue
+        mine = theirs.get(key)
+        if isinstance(value, dict) and isinstance(mine, dict):
+            merged = dict(value)
+            merged.update(mine)
+            out[key] = merged
+        elif key not in theirs:
+            out[key] = value
+        print(f"merge: '{key}' has no merge rule, carried across as-is",
+              file=sys.stderr)
+
+
 def merge(theirs, ours):
     out = dict(theirs)
 
@@ -54,16 +104,15 @@ def merge(theirs, ours):
         jobs[key] = pick(jobs[key], job) if key in jobs else job
     out["jobs"] = jobs
 
-    contacted = dict(theirs.get("companies_contacted", {}))
-    for key, entry in ours.get("companies_contacted", {}).items():
-        if key not in contacted:
-            contacted[key] = entry
-        else:
-            existing = contacted[key]
-            if isinstance(entry, dict) and isinstance(existing, dict):
-                if str(entry.get("at", "")) < str(existing.get("at", "")):
-                    contacted[key] = entry
-    out["companies_contacted"] = contacted
+    out["companies_contacted"] = union_earliest(
+        theirs.get("companies_contacted", {}), ours.get("companies_contacted", {}))
+
+    # The charities and training bodies. One approach each, ever - so this
+    # register losing an entry means an organisation gets written to twice.
+    asked = union_earliest(theirs.get("support_asked", {}),
+                           ours.get("support_asked", {}))
+    if asked:
+        out["support_asked"] = asked
 
     for counter in ("send_counts", "portal_counts", "spec_counts"):
         merged = dict(theirs.get(counter, {}))
@@ -95,6 +144,8 @@ def merge(theirs, ours):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]
         if values:
             out[stamp] = max(values)
+
+    carry_unknown(out, theirs, ours)
     return out
 
 
