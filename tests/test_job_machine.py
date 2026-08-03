@@ -93,6 +93,54 @@ class TestEmailClassification(unittest.TestCase):
         self.assertEqual(cleaned, [])
 
 
+class TestAPlaceIsNotAPerson(unittest.TestCase):
+    """Every address below is real, and every one of them was written to.
+
+    Two applications opened 'Dear Canada' and 'Dear Africa' - to
+    canada@matchtech.com and africa.recruitment@enermech.com, the wrong
+    continent's office of the right company. Letters to charities went to
+    fundraise@, library@ and corporate@, all classified as people with first
+    names Fundraise, Library and Corporate.
+
+    The cost is not only the greeting. A department inbox scored as a named
+    person outranks the actual hiring inbox, so the wrong desk was chosen
+    first and then addressed by a name nobody has."""
+
+    def test_a_regional_inbox_is_never_greeted_by_name(self):
+        for address in ("canada@matchtech.com", "americas@opito.com",
+                        "africa.recruitment@enermech.com", "emea@acme.com",
+                        "houston@acme.com", "apac.jobs@acme.com"):
+            with self.subTest(address=address):
+                self.assertIsNone(jm.classify(address)[1])
+
+    def test_a_department_inbox_is_never_greeted_by_name(self):
+        for address in ("fundraise@helpforheroes.org.uk",
+                        "library@nescol.ac.uk", "corporate@ssafa.org.uk",
+                        "events@legionscotland.org.uk", "donations@acme.org",
+                        "membership@acme.org", "training@acme.com"):
+            with self.subTest(address=address):
+                self.assertIsNone(jm.classify(address)[1])
+
+    def test_the_aberdeen_office_is_still_worth_writing_to(self):
+        """A place is a shared inbox, not a useless one - and at a company
+        with an Aberdeen office it is one of the better desks to reach."""
+        tier, name = jm.classify("aberdeen@ashtead-technology.com")
+        self.assertGreaterEqual(tier, 1)
+        self.assertIsNone(name)
+        self.assertTrue(jm.is_home_place("aberdeen"))
+        self.assertFalse(jm.is_home_place("houston"))
+
+    def test_people_whose_names_contain_a_place_are_not_lost(self):
+        """A prefix rule would read Frances as France and Normanton as Norman.
+        Getting this wrong costs a real person their name."""
+        for address, first in (("frances@acme.com", "Frances"),
+                               ("norman.watt@acme.com", "Norman"),
+                               ("chris.brown@acme.com", "Chris"),
+                               ("jane.smith@acme.com", "Jane")):
+            with self.subTest(address=address):
+                self.assertEqual(jm.classify(address), (3, first))
+
+
 class TestWrongCompanyRegression(unittest.TestCase):
     """The first live run emailed Woodforest National Bank (Texas) a note meant
     for Wood plc, and greeted an HR inbox as 'Hi Mysupporthr'. Both here."""
@@ -1507,6 +1555,62 @@ class TestRescoringAfterTheProfileChanges(unittest.TestCase):
         state = self.state(make_job(external_id="sent", status="sent", score=91))
         jm.rescore(state)
         self.assertEqual(state["jobs"]["sent"]["status"], "sent")
+
+
+class TestPortalFallback(unittest.TestCase):
+    """A form we cannot drive is not a job we cannot apply for.
+
+    'portal_manual' was terminal in every direction: the email route only
+    reads 'scored', and the portal agent skips anything already parked so it
+    does not retry it. Sixty-eight listings had collected there - Oceaneering,
+    Survitec, Trescal, Dron & Dickson, scoring 88 to 90 in exactly Harry's
+    trade - found, judged, matched, and then silently dropped, most of them
+    because the portal wanted an account or ran a bot check.
+    """
+    def state(self, **over):
+        job = make_job(external_id="p1", status="portal_manual", score=90,
+                       portal_reason="unknown portal - needs an account")
+        job.update(over)
+        return {"jobs": {job["external_id"]: job}}
+
+    def test_a_blocked_portal_goes_back_on_the_email_route(self):
+        state = self.state()
+        jm.portal_fallback(state)
+        self.assertEqual(state["jobs"]["p1"]["status"], "scored")
+
+    def test_a_job_awaiting_review_is_included_too(self):
+        state = self.state(status="portal_review")
+        jm.portal_fallback(state)
+        self.assertEqual(state["jobs"]["p1"]["status"], "scored")
+
+    def test_it_happens_once_and_cannot_loop(self):
+        state = self.state()
+        self.assertEqual(jm.portal_fallback(state), 1)
+        state["jobs"]["p1"]["status"] = "portal_manual"
+        self.assertEqual(jm.portal_fallback(state), 0)
+        self.assertEqual(state["jobs"]["p1"]["status"], "portal_manual")
+
+    def test_a_stale_advert_is_not_revived(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        state = self.state(posted_at=old, found_at=old)
+        jm.portal_fallback(state)
+        self.assertEqual(state["jobs"]["p1"]["status"], "portal_manual")
+
+    def test_an_application_already_submitted_is_never_disturbed(self):
+        for status in ("portal_submitted", "sent", "replied"):
+            with self.subTest(status=status):
+                state = self.state(status=status)
+                jm.portal_fallback(state)
+                self.assertEqual(state["jobs"]["p1"]["status"], status)
+
+    def test_the_score_is_kept_because_it_was_never_in_doubt(self):
+        """Unlike a rescore, nothing here says the judgement was wrong - only
+        that the way in was blocked. Dropping the score would send it back
+        through the scorer and spend a Gemini call re-deciding a settled
+        question."""
+        state = self.state()
+        jm.portal_fallback(state)
+        self.assertEqual(state["jobs"]["p1"]["score"], 90)
 
 
 class TestWhereHarryCanWork(unittest.TestCase):

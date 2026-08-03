@@ -115,6 +115,10 @@ MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
 # for discovery and sending.
 SCORE_BUDGET_SECONDS = env_int("SCORE_BUDGET_SECONDS", 900)
 MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
+# How old a listing can be and still be worth emailing after its application
+# portal defeated us. Matches the portal agent's own window: if it was fresh
+# enough to try to apply through, it is fresh enough to write to.
+PORTAL_FALLBACK_MAX_AGE_DAYS = env_int("PORTAL_FALLBACK_MAX_AGE_DAYS", 30)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -1032,16 +1036,67 @@ ROLE_WORDS = ("hr", "recruit", "career", "job", "vacanc", "hiring", "talent",
               "enquir", "inquir", "office", "apply", "contact", "payroll",
               "finance", "invoice", "account", "marketing", "press", "media",
               "legal", "privacy", "people", "reception", "general", "hello",
-              "workforce", "resourcing", "personnel")
+              "workforce", "resourcing", "personnel",
+              # Departments that are plainly not a person once you look, but
+              # were being greeted by name: 'Dear Fundraise', 'Dear Library',
+              # 'Dear Corporate'. Every one of these is a real inbox at a real
+              # organisation this project has written to.
+              "fundrais", "donat", "legac", "volunteer", "member", "librar",
+              "event", "corporate", "training", "course", "admission",
+              "alumni", "booking", "ticket", "shop", "retail", "estates",
+              "facilit", "procure", "supplier", "tender", "compliance",
+              "quality", "safety", "hse", "communit", "partnership",
+              "sponsor", "welfare", "advice", "referral")
+
+# A place is not a person. 'canada@matchtech.com' was greeted 'Dear Canada'
+# and 'africa.recruitment@enermech.com' was greeted 'Dear Africa' - both real
+# applications, both to the wrong continent's office of the right company.
+# These are regional inboxes, which makes them shared inboxes twice over.
+PLACE_WORDS = ("canada", "america", "americas", "africa", "asia", "europe",
+               "emea", "apac", "middleeast", "nordics", "benelux", "iberia",
+               "usa", "uk", "eu", "india", "china", "japan", "brazil", "mexico",
+               "australia", "singapore", "malaysia", "norway", "netherlands",
+               "germany", "france", "spain", "italy", "poland", "romania",
+               "houston", "dubai", "aberdeen", "london", "glasgow", "edinburgh",
+               "manchester", "bristol", "leeds", "cardiff", "belfast",
+               "scotland", "england", "wales", "ireland", "north", "south",
+               "east", "west", "global", "international", "worldwide")
+
+# Of those, the ones that are a reason to prefer an address rather than to be
+# wary of it. The Aberdeen office of a company is the right desk to write to.
+HOME_PLACES = ("aberdeen", "scotland", "glasgow", "edinburgh", "uk")
 
 
 ROLE_WORDS_LONG = tuple(w for w in ROLE_WORDS if len(w) >= 5)
 ROLE_WORDS_SHORT = tuple(w for w in ROLE_WORDS if len(w) < 5)
 
 
+def place_segments(local):
+    """The parts of an address that name somewhere rather than someone.
+
+    Whole segments, matched exactly. A prefix rule looks tidier and is wrong:
+    'frances' starts with 'france', and a woman called Frances is not a
+    regional office. Plurals are listed rather than derived for the same
+    reason."""
+    return [segment for segment in re.split(r"[._\-0-9]+", local)
+            if segment in PLACE_WORDS]
+
+
+def is_place(local):
+    return bool(place_segments(local))
+
+
+def is_home_place(local):
+    """A regional inbox Harry would actually want: the Aberdeen office beats
+    the Houston one, and both beat a person who is not there."""
+    return any(segment.startswith(HOME_PLACES) for segment in place_segments(local))
+
+
 def has_role_word(local):
     """Short words need a boundary: 'hr' sits inside 'chris', so matching it
     anywhere would refuse to greet a man called Chris Brown."""
+    if is_place(local):
+        return True
     if any(word in local for word in ROLE_WORDS_LONG):
         return True
     for segment in (s for s in re.split(r"[._\-0-9]+", local) if s):
@@ -1089,6 +1144,11 @@ def classify(address):
     if local.startswith(HIRING_PREFIXES) or any(w in local for w in HIRING_PREFIXES):
         return 2, None
     if local.startswith(GENERIC_PREFIXES) or any(w in local for w in GENERIC_PREFIXES):
+        return 1, None
+    # A regional inbox is a real desk, just not a person's. 'aberdeen@' is one
+    # of the better addresses at a company with an Aberdeen office; the only
+    # thing that must never happen is greeting it by name.
+    if is_place(local):
         return 1, None
     return 0, None
 
@@ -2379,6 +2439,48 @@ def harvest_from_inbox(state):
         alert_harvest.enrich(state)
 
 
+def portal_fallback(state, max_age_days=PORTAL_FALLBACK_MAX_AGE_DAYS):
+    """Put jobs whose application form defeated us back on the email route.
+
+    'portal_manual' is a terminal status. The email route only looks at
+    'scored', and the portal agent explicitly excludes anything already marked
+    portal_manual so it does not retry it. Nothing else reads it. So a listing
+    that reached it was found, judged, matched - and then quietly dropped.
+
+    Sixty-eight had collected there, and they were not the dregs: Oceaneering,
+    Survitec, Trescal, Dron & Dickson, Konecranes, scoring 88 to 90 in exactly
+    Harry's trade in Aberdeen. Two thirds of them were parked for a reason that
+    has nothing to do with the job - the portal wanted an account, or ran a bot
+    check, or rendered its form in a way the agent could not read.
+
+    Being unable to drive somebody's web form is not a reason not to apply to
+    them. This puts those listings back on the ordinary route: find a real,
+    MX-checked address at the employer and write to a human. That route is not
+    speculative - it is the one every application that has actually gone out
+    used.
+
+    Once each, marked so it cannot loop. A job that comes back from that route
+    with no real address has genuinely run out of options and stays where it
+    lands. The send caps, the company-dedupe and the agency limits all still
+    apply, because this only re-enters the queue - it does not send anything."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    woken = 0
+    for job in state["jobs"].values():
+        if job.get("status") not in ("portal_manual", "portal_review"):
+            continue
+        if job.get("portal_fallback_at"):
+            continue
+        # A form we could not fill is worth an email. A stale advert is not.
+        found = parse_ts(job.get("posted_at")) or parse_ts(job.get("found_at"))
+        if found and found < cutoff:
+            continue
+        job.update({"status": "scored", "portal_fallback_at": now()})
+        woken += 1
+    print(f"[fallback] {woken} listing(s) whose portal we could not drive "
+          f"put back on the email route")
+    return woken
+
+
 def rescore(state, floor=55):
     """Re-open listings that were judged under an out-of-date profile.
 
@@ -2462,6 +2564,11 @@ def main(argv=None):
         stage("alerts", harvest_from_inbox, state)
         save(state)
     stage("score", score_jobs, state)
+    save(state)
+    # Anything the portal agent could not apply through is worth an email
+    # instead. It runs before discover so those listings are in the same queue
+    # as everything else, ordered on merit rather than on how they got here.
+    stage("fallback", portal_fallback, state)
     save(state)
     stage("discover", discover, state)
     save(state)

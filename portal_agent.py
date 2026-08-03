@@ -885,6 +885,12 @@ def portal_candidates(state):
         if job.get("status") in ("portal_submitted", "portal_manual",
                                  "portal_review", "portal_ready", "portal_failed"):
             continue
+        # Already handed to the email route because this portal defeated us.
+        # Without this it would be picked up as an ordinary 'scored' job, fail
+        # on the same form for the same reason, and be parked again - taking it
+        # back out of the queue it was deliberately put into.
+        if job.get("portal_fallback_at"):
+            continue
         found = jm.parse_ts(job.get("posted_at")) or jm.parse_ts(job.get("found_at"))
         if found and found < cutoff:
             continue
