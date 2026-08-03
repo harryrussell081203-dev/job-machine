@@ -1455,3 +1455,70 @@ class TestInboundReminder(unittest.TestCase):
             subject, text, html = jm.summary_bodies(data)
         self.assertIn("RightJob", text)
         self.assertIn("RightJob", html)
+
+
+class TestRescoringAfterTheProfileChanges(unittest.TestCase):
+    """A score is a judgement against CANDIDATE_PROFILE at the moment it was
+    made, so changing the profile silently invalidates every score in the file.
+
+    When the profile said 'Aberdeen strongly preferred', fifty-two listings
+    that matched Harry's trade exactly were marked down to 65 and binned for
+    being in Dundee, Inverness or Perth - one of them an Electro-Technical
+    Officer post, about as close to his Navy trade as an advert gets.
+    """
+    def state(self, *jobs):
+        return {"jobs": {j["external_id"]: j for j in jobs}}
+
+    def skipped(self, eid, score, reason=None):
+        return make_job(external_id=eid, status="skipped", score=score,
+                        skip_reason=reason or f"score {score}",
+                        score_reason="but it is not in Aberdeen")
+
+    def test_a_near_miss_goes_back_in_the_queue(self):
+        state = self.state(self.skipped("near", 65))
+        jm.rescore(state)
+        job = state["jobs"]["near"]
+        self.assertEqual(job["status"], "new")
+        self.assertNotIn("score", job)
+        self.assertNotIn("score_reason", job)
+
+    def test_a_genuinely_poor_match_stays_binned(self):
+        state = self.state(self.skipped("poor", 20))
+        jm.rescore(state)
+        self.assertEqual(state["jobs"]["poor"]["status"], "skipped")
+
+    def test_the_floor_can_be_moved(self):
+        state = self.state(self.skipped("mid", 45))
+        jm.rescore(state, floor=40)
+        self.assertEqual(state["jobs"]["mid"]["status"], "new")
+
+    def test_listings_the_scorer_never_judged_are_left_alone(self):
+        """The title filter and the pre-filter were not judgement calls, so a
+        change to the profile says nothing about them."""
+        for reason in ("off target (pre-filter)", "title excluded (chef)",
+                       "company already contacted", "no real address found"):
+            with self.subTest(reason=reason):
+                state = self.state(make_job(external_id="x", status="skipped",
+                                            score=65, skip_reason=reason))
+                jm.rescore(state)
+                self.assertEqual(state["jobs"]["x"]["status"], "skipped")
+
+    def test_work_already_sent_is_never_disturbed(self):
+        state = self.state(make_job(external_id="sent", status="sent", score=91))
+        jm.rescore(state)
+        self.assertEqual(state["jobs"]["sent"]["status"], "sent")
+
+
+class TestWhereHarryCanWork(unittest.TestCase):
+    def test_the_profile_no_longer_treats_aberdeen_as_a_requirement(self):
+        """He can take work anywhere that comes with the arrangements to live
+        it, and the scorer was quietly costing him every rotational role."""
+        profile = jm.CANDIDATE_PROFILE.lower()
+        self.assertNotIn("aberdeen strongly preferred", profile)
+        for expected in ("rotational", "fly-in", "accommodation", "not a requirement"):
+            self.assertIn(expected, profile)
+
+    def test_it_still_records_that_he_does_not_drive(self):
+        """A rotational posting is fine; a remote site with no transport is
+        not, and the difference matters."""
+        self.assertIn("does not drive", jm.CANDIDATE_PROFILE.lower())

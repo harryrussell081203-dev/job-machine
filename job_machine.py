@@ -140,7 +140,17 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
-- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife. Aberdeen strongly preferred.
+- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife.
+- WHERE HE CAN WORK: Aberdeen is home and a daily commute there is ideal, but it
+  is NOT a requirement and must not be scored as one. He will take work anywhere
+  in the world that comes with the arrangements to live it: offshore and
+  rotational postings (2/2, 3/3, 4/4, back-to-back), fly-in fly-out, residential
+  or camp accommodation, and roles that pay travel and lodging. A role that
+  matches his trade in Dundee, Inverness, Perth Australia, Norway or the Gulf is
+  worth as much as the same role in Aberdeen. Only mark a location down when the
+  job genuinely needs him to already live somewhere he cannot get to and offers
+  nothing towards it - and note that he does not drive, so a remote site with no
+  transport laid on is a real problem where a rotational one is not.
 - EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
@@ -2268,6 +2278,36 @@ def harvest_from_inbox(state):
         alert_harvest.enrich(state)
 
 
+def rescore(state, floor=55):
+    """Re-open listings that were judged under an out-of-date profile.
+
+    A score is a judgement against CANDIDATE_PROFILE at the moment it was made,
+    so changing that profile silently invalidates every score already in the
+    file. When the profile said 'Aberdeen strongly preferred', fifty-two
+    listings that matched Harry's trade exactly were marked down to 65 and
+    binned for being in Dundee, Inverness or Perth - including an
+    Electro-Technical Officer post that is about as close to his Navy trade as
+    an advert gets. Correcting the profile without re-opening those would leave
+    every one of them in the bin."""
+    woken = 0
+    for job in state["jobs"].values():
+        if job.get("status") != "skipped":
+            continue
+        # only listings the scorer rejected, never ones the title filter or the
+        # pre-filter threw out - those were not judgement calls
+        if not str(job.get("skip_reason") or "").startswith("score "):
+            continue
+        if (job.get("score") or 0) < floor:
+            continue
+        job.pop("score", None)
+        job.pop("score_reason", None)
+        job.update({"status": "new", "skip_reason": None, "rescored_at": now()})
+        woken += 1
+    print(f"[rescore] {woken} listing(s) put back in the queue to be judged "
+          f"against the current profile")
+    return woken
+
+
 def stage(name, fn, *args):
     try:
         fn(*args)
@@ -2280,6 +2320,10 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true",
                         help="compose everything but send nothing")
     parser.add_argument("--skip-harvest", action="store_true")
+    parser.add_argument("--rescore", type=int, nargs="?", const=55, metavar="FLOOR",
+                        help="put listings skipped for a low score back in the "
+                             "queue, so a change to the candidate profile is "
+                             "applied to what was already judged under the old one")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -2306,6 +2350,9 @@ def main(argv=None):
           f"locations={','.join(SEARCH_LOCATIONS)} cv={cv_path() or 'MISSING'}")
 
     state = load()
+    if args.rescore is not None:
+        stage("rescore", rescore, state, args.rescore)
+        save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)
         # Job-alert email from Harry's own inbox. The boards that carry most of
