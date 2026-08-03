@@ -26,8 +26,21 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else 0
 
 
+def reopened(job):
+    """Was this record deliberately put back in the queue to be judged again?"""
+    return str(job.get("rescored_at") or "")
+
+
 def pick(a, b):
-    """The more advanced record, breaking ties on how much we know."""
+    """The more advanced record, breaking ties on how much we know.
+
+    Except when one side was deliberately re-opened. A rescore sets a listing
+    back to 'new' on purpose, and 'new' ranks below 'skipped', so the ordinary
+    rule quietly undid the whole thing - a re-judging run reported 'no state
+    changes' because every listing it re-opened was reverted by this function.
+    A deliberate step backwards has to beat an accidental step forwards."""
+    if reopened(a) != reopened(b):
+        return a if reopened(a) > reopened(b) else b
     if rank(a) != rank(b):
         return a if rank(a) > rank(b) else b
     return a if len(a) >= len(b) else b

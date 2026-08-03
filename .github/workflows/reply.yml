@@ -33,6 +33,12 @@ jobs:
 
       - name: Check and handle replies
         env:
+          # Python block-buffers stdout when it is a pipe, which is
+          # what Actions gives it. Every log in this repo was flushed
+          # in one lump at exit, so a run that was killed printed
+          # nothing at all - forty-five minutes of silence that read
+          # like a hang and was really an empty buffer.
+          PYTHONUNBUFFERED: "1"
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
