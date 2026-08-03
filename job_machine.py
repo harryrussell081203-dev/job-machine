@@ -110,6 +110,10 @@ SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
 MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
+# Sending is the point; scoring is preparation. The workflow gets 45 minutes and
+# a rate-limited scorer can eat all of it, so scoring is boxed in to leave room
+# for discovery and sending.
+SCORE_BUDGET_SECONDS = env_int("SCORE_BUDGET_SECONDS", 900)
 MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -946,7 +950,17 @@ def score_jobs(state):
               f"without spending a call")
     unscored = pool[:MAX_SCORED_PER_RUN]
     passed = done = 0
+    deadline = time.monotonic() + SCORE_BUDGET_SECONDS
     for start in range(0, len(unscored), SCORE_BATCH):
+        # Sending is the point of this run; scoring is only preparation for it.
+        # Gemini's free tier answers 429 with a retry delay of up to a minute,
+        # so a dozen batches can swallow the workflow's whole allowance and
+        # leave nothing for discovery and sending - a run that judges a hundred
+        # listings and emails nobody. Whatever is left is judged next run.
+        if time.monotonic() > deadline:
+            print(f"[score] {SCORE_BUDGET_SECONDS}s spent scoring, stopping so "
+                  f"there is time left to actually send something")
+            break
         batch = unscored[start:start + SCORE_BATCH]
         scores = score_batch(batch)
         if not scores:
