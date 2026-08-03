@@ -13,6 +13,7 @@ on:
       - "fire-diagnose/**"         # just look at the pages, fill nothing
       - "fire-probe/**"            # ask the board APIs only - seconds, no browser
       - "fire-inspect/**"          # open employer-board apply pages, fill nothing
+      - "fire-covenant/**"         # rebuild the Armed Forces Covenant list
   workflow_dispatch:
     inputs:
       submit:
@@ -63,6 +64,14 @@ jobs:
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
         run: |
+          if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
+            # The MoD register of Covenant signatories. Every name on it is an
+            # employer where being ex-forces moves Harry from the pile to the
+            # shortlist, so this is the most valuable data in the project.
+            echo "fire-covenant branch: rebuilding the Covenant list"
+            python tools/covenant_list.py --write
+            exit 0
+          fi
           if [[ "${GITHUB_REF_NAME}" == fire-probe/* ]]; then
             # ground truth: what do the board APIs really answer for the
             # companies in the queue? No browser, no scoring, ~30 seconds.
