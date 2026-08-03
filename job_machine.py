@@ -104,6 +104,8 @@ REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
 SPEC_PER_DAY = env_int("SPEC_PER_DAY", 2)
 TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "data", "targets.json")
+VETERAN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "data", "veteran_employers.json")
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
@@ -142,6 +144,21 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
+
+# Added to the prompt only for employers listed in data/veteran_employers.json.
+# It asks a question rather than making a claim: Harry's service is a fact
+# about Harry, and whether they run a scheme is for them to say. That way a
+# wrong entry in that file can put no false statement in his name.
+VETERAN_INSTRUCTION = """
+
+THIS EMPLOYER HAS PUBLICLY COMMITTED TO THE ARMED FORCES COVENANT.
+Many signatories run a guaranteed interview scheme for veterans who meet the
+minimum criteria, and Harry qualifies as a veteran. So:
+- Proof point 1 must be his Royal Navy service, stated plainly.
+- The call to action must ASK whether they run a guaranteed interview scheme
+  for veterans, or words to that effect. Ask - never state or assume that they
+  do, and never mention awards, medals or scheme names.
+- Everything else about the rules is unchanged."""
 PHONE = "07398 530978"
 
 
@@ -1328,6 +1345,7 @@ def build_email(job, attempts=3):
         f"Location: {job['location']}\n"
         f"Recipient: {job.get('contact_name') or 'unknown, a shared hiring inbox'}\n"
         f"Listing: {job['description'][:2000]}"
+        + (VETERAN_INSTRUCTION if veteran_friendly(job) else "")
     )
     prompt = base
     best = None
@@ -1414,7 +1432,11 @@ def run_sends(state, dry_run=False):
     ready = sorted([j for j in state["jobs"].values() if j["status"] == "ready"],
                    key=lambda j: (j.get("posted_at") or j.get("found_at") or ""),
                    reverse=True)
-    ready.sort(key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)))
+    # An employer running a guaranteed interview scheme converts an application
+    # into an interview by policy rather than by persuasion, so they go first
+    # whatever else is in the queue.
+    ready.sort(key=lambda j: (-int(veteran_friendly(j)),
+                              -(j.get("email_tier") or 0), -(j.get("score") or 0)))
 
     budget = PER_RUN_SEND_CAP if in_peak_window() else OFF_PEAK_SEND_CAP
     if not in_peak_window():
@@ -1531,6 +1553,47 @@ def run_applied_notes(state):
 # ======================================================================
 # SPECULATIVE - the hidden market: employers with no advert up
 # ======================================================================
+_VETERAN_KEYS = None
+
+
+def veteran_employers():
+    """Normalised names of employers who have committed to the Armed Forces
+    Covenant. Read once and kept."""
+    global _VETERAN_KEYS
+    if _VETERAN_KEYS is None:
+        try:
+            with open(VETERAN_PATH) as f:
+                entries = json.load(f).get("employers", [])
+            _VETERAN_KEYS = {company_key(e.get("company")) for e in entries
+                             if e.get("company")}
+        except Exception:
+            _VETERAN_KEYS = set()
+    return _VETERAN_KEYS
+
+
+def veteran_friendly(job):
+    """Has this employer publicly committed to the Armed Forces Covenant?
+
+    Many signatories run a guaranteed interview scheme: a veteran who meets the
+    minimum criteria for a role is interviewed. Harry served two years as a
+    Royal Navy Communications and Information Specialist, so where such a
+    scheme exists he qualifies for it - which is worth more than any number of
+    extra cold emails, because it converts an application into an interview by
+    policy rather than by persuasion.
+
+    Nothing in the code ever tells an employer they hold an award. The email
+    asks whether they run a scheme, which is true whoever reads it."""
+    key = company_key(job.get("company"))
+    if not key:
+        return False
+    known = veteran_employers()
+    if key in known:
+        return True
+    # 'Babcock International Group' should match 'Babcock International'
+    return any(k and (key.startswith(k + " ") or k.startswith(key + " "))
+               for k in known)
+
+
 def load_targets():
     try:
         with open(TARGETS_PATH) as f:

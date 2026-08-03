@@ -1345,3 +1345,73 @@ class TestReachingASecondPerson(unittest.TestCase):
             jm.run_followups(state)
         send.assert_not_called()
         self.assertEqual(job["status"], "replied")
+
+
+class TestVeteranEmployers(unittest.TestCase):
+    """The Armed Forces Covenant carries a guaranteed interview scheme at many
+    signatories: a veteran meeting the minimum criteria gets interviewed. That
+    converts an application into an interview by policy rather than by
+    persuasion, which is worth more than any number of extra cold emails."""
+
+    def test_the_shipped_list_is_usable(self):
+        for company in ("Thales", "Leonardo", "Babcock International",
+                        "NHS Grampian", "Police Scotland"):
+            with self.subTest(company=company):
+                self.assertTrue(jm.veteran_friendly({"company": company}))
+
+    def test_a_longer_legal_name_still_matches(self):
+        self.assertTrue(jm.veteran_friendly({"company": "Thales UK Ltd"}))
+        self.assertTrue(jm.veteran_friendly({"company": "Babcock International Group"}))
+
+    def test_an_unlisted_employer_is_not_assumed_to_run_a_scheme(self):
+        for company in ("Hydrasun", "Dron & Dickson", "Some Local Firm", ""):
+            with self.subTest(company=company):
+                self.assertFalse(jm.veteran_friendly({"company": company}))
+
+    def test_they_are_written_to_first(self):
+        """Ahead of a better contact and a higher score at an ordinary firm."""
+        jobs = {
+            "ordinary": dict(make_job(external_id="ordinary", status="ready",
+                                      company="Some Firm", score=99,
+                                      email_tier=3, contact_email="jane@f.com")),
+            "veteran": dict(make_job(external_id="veteran", status="ready",
+                                     company="Leonardo", score=72,
+                                     email_tier=1, contact_email="info@l.com")),
+        }
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "in_peak_window", return_value=True), \
+             mock.patch.object(jm, "build_email",
+                               return_value={"subject": "s", "body": "b",
+                                             "family": "general"}), \
+             mock.patch.object(jm, "cv_for", return_value=None), \
+             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(state)
+        self.assertEqual(send.call_args_list[0].args[0], "info@l.com")
+
+    def test_the_email_asks_about_the_scheme_and_never_claims_one(self):
+        """A wrong entry in the list must be incapable of putting a false
+        statement in his name, so the instruction asks rather than asserts."""
+        text = jm.VETERAN_INSTRUCTION.lower()
+        self.assertIn("ask", text)
+        self.assertIn("never state or assume", text)
+        self.assertIn("never mention awards", text)
+
+    def test_the_instruction_is_only_added_for_listed_employers(self):
+        captured = {}
+
+        def fake_gemini(prompt, **kw):
+            captured[prompt.count("ARMED FORCES COVENANT")] = True
+            return {"subject": "Ex-Navy tech for your role",
+                    "body": "Hi,\n\n1. x\n2. y\n\nWorth a chat?\n\nHarry\n"
+                            + jm.SIGNOFF}
+
+        for company, expected in (("Leonardo", 1), ("Hydrasun", 0)):
+            captured.clear()
+            with self.subTest(company=company), \
+                 mock.patch.object(jm, "gemini_json", side_effect=fake_gemini):
+                jm.build_email(make_job(company=company, status="ready"))
+            self.assertIn(expected, captured)
