@@ -78,6 +78,11 @@ GMAIL_APP_PASSWORD = env_str("GMAIL_APP_PASSWORD")
 TEST_MODE = env_flag("TEST_MODE", False)
 DAILY_SEND_CAP = env_int("DAILY_SEND_CAP", 20)
 PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 7)
+# Outside the best send window the queue holds back, so the strongest leads
+# land when they are most likely to be read. Anything genuinely fresh ignores
+# this - see the comment in send_batch.
+OFF_PEAK_SEND_CAP = env_int("OFF_PEAK_SEND_CAP", 3)
+BRAND_NEW_HOURS = env_int("BRAND_NEW_HOURS", 14)
 SEARCH_LOCATIONS = env_list(
     "SEARCH_LOCATIONS", ["Aberdeen", "Dundee", "Edinburgh", "Glasgow", "Inverness"])
 SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
@@ -274,6 +279,33 @@ Any technician openings coming up this year worth a conversation?
 Harry
 """ + SIGNOFF,
     },
+    # A consultant is not a hiring manager. They are matching a person against
+    # a list of live vacancies, often several at once, and what they need is
+    # the facts that let them do it: trade, location, availability, salary,
+    # tickets. Research on cold outreach puts a targeted note to a named human
+    # at 15-25% reply against 2-5% for a blind application, and an agency
+    # consultant is the easiest named human in this market to reach.
+    "agency": {
+        "keywords": [],
+        "subject_examples": [
+            "Aberdeen tech, available now - {role}",
+            "Electronics tech for your {role}",
+        ],
+        "skeleton": """{greeting}
+
+Saw you are recruiting a {role} - {one specific detail from the listing}.
+
+1. {proof: what he does - 2 years Royal Navy Communications and Information
+   Specialist, 3 years at Sonardyne testing and fault-finding subsea electronics}
+2. {proof: the practical facts a consultant needs - Aberdeen based, available
+   immediately, looking around 35k, DV cleared}
+3. {optional: one ticket or qualification that matches THIS vacancy}
+
+{one question CTA - ask whether this one fits or whether they have something closer}
+
+Harry
+""" + SIGNOFF,
+    },
     "general": {
         "keywords": [],
         "subject_examples": [
@@ -296,9 +328,15 @@ Harry
 }
 
 
-def pick_family(title, description=""):
+def pick_family(title, description="", company=""):
     """Route a listing to a template family. The title decides; the description
-    is only a tie-breaker."""
+    is only a tie-breaker.
+
+    An agency advert is answered as an agency advert whatever trade is in the
+    title: the reader is a consultant matching a person to a list, not the
+    manager who will supervise the work."""
+    if is_agency({"company": company, "description": description}):
+        return "agency"
     title_l = f" {title.lower()} "
     desc_l = description[:600].lower()
     best, best_score = "general", 0.0
@@ -374,17 +412,79 @@ def company_key(name):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def already_contacted(state, job):
-    """One email per company, ever - by normalised name or by domain."""
+# A recruitment agency is not an employer and must not be rationed like one.
+# An employer has the one job they advertised, and a second unsolicited email
+# about a different role reads as pestering. An agency is *paid* to place
+# people, holds dozens of roles at once, and expects to hear from candidates
+# more than once - six of the fourteen firms in the last portal run were
+# agencies, and under the one-email-ever rule each of them was worth exactly
+# one approach forever.
+AGENCY_NAME = re.compile(
+    r"\brecruit|resourcing|staffing|personnel|manpower|talent|search "
+    r"(and|&) selection|employment agency|\bagency\b|consultancy|"
+    r"\bhays\b|matchtech|morson|randstad|adecco|manpower|reed specialist|"
+    r"orion (group|electrotech)|nes fircroft|petroplan|airswift|brunel|"
+    r"cammach|thorpe molloy|activate group|first achieve|contract scotland",
+    re.I)
+AGENCY_BODY = re.compile(
+    r"our client|on behalf of (our|a) client|we are recruiting for|"
+    r"my client|the successful candidate will be employed by|"
+    r"acting as an (employment|recruitment) (agency|business)", re.I)
+
+AGENCY_MAX_APPROACHES = env_int("AGENCY_MAX_APPROACHES", 4)
+AGENCY_GAP_DAYS = env_int("AGENCY_GAP_DAYS", 6)
+
+
+def is_agency(job):
+    """Is this a recruiter placing someone else's vacancy?
+
+    Name first, then the give-away phrases agencies are legally required to
+    use in the advert itself ('acting as an employment agency', 'our client')."""
+    if AGENCY_NAME.search(job.get("company") or ""):
+        return True
+    return bool(AGENCY_BODY.search((job.get("description") or "")[:2000]))
+
+
+def contact_history(state, job):
     keys = [company_key(job.get("company"))]
     if job.get("company_domain"):
         keys.append(job["company_domain"].lower())
-    return any(k and k in state["companies_contacted"] for k in keys)
+    for key in keys:
+        entry = state["companies_contacted"].get(key)
+        if entry:
+            return entry
+    return None
+
+
+def already_contacted(state, job):
+    """One email per employer, ever. Agencies get a working relationship.
+
+    For an agency the limit is a few approaches spaced out, one per role, on
+    the grounds that a consultant with a live vacancy wants to hear from a
+    candidate who fits it - that is their business model, not an imposition."""
+    entry = contact_history(state, job)
+    if not entry:
+        return False
+    if not is_agency(job):
+        return True
+    approaches = entry.get("count", 1)
+    if approaches >= AGENCY_MAX_APPROACHES:
+        return True
+    last = parse_ts(entry.get("at"))
+    if last and (datetime.now(timezone.utc) - last).days < AGENCY_GAP_DAYS:
+        return True
+    # never twice about the same vacancy
+    return job.get("external_id") in (entry.get("jobs") or [])
 
 
 def mark_contacted(state, job):
+    previous = contact_history(state, job) or {}
     entry = {"at": now(), "company": job.get("company"),
-             "email": job.get("contact_email"), "job": job.get("external_id")}
+             "email": job.get("contact_email"), "job": job.get("external_id"),
+             "count": (previous.get("count", 0) + 1),
+             "jobs": (previous.get("jobs") or [])[-9:] + [job.get("external_id")]}
+    if previous.get("first_at") or previous.get("at"):
+        entry["first_at"] = previous.get("first_at") or previous["at"]
     for key in (company_key(job.get("company")),
                 (job.get("company_domain") or "").lower()):
         if key:
@@ -1175,7 +1275,8 @@ def email_problems(subject, core, job):
 
 def build_email(job, attempts=3):
     family = ("speculative" if job.get("source") == "speculative"
-              else pick_family(job["title"], job.get("description", "")))
+              else pick_family(job["title"], job.get("description", ""),
+                               job.get("company", "")))
     job["template_family"] = family
     tpl = TEMPLATES[family]
     greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
@@ -1236,7 +1337,8 @@ def cv_for(job):
     tailoring pipeline is available, the master PDF otherwise."""
     try:
         import cv_tailor
-        family = pick_family(job.get("title", ""), job.get("description", ""))
+        family = pick_family(job.get("title", ""), job.get("description", ""),
+                             job.get("company", ""))
         tailored = cv_tailor.build(family)
         if tailored:
             return tailored
@@ -1282,10 +1384,25 @@ def run_sends(state, dry_run=False):
                    key=lambda j: (j.get("posted_at") or j.get("found_at") or ""),
                    reverse=True)
     ready.sort(key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)))
+
+    budget = PER_RUN_SEND_CAP if in_peak_window() else OFF_PEAK_SEND_CAP
+    if not in_peak_window():
+        print(f"[send] outside the Tuesday-Thursday 9-11am window, holding all "
+              f"but {budget} back for it (fresh listings still go now)")
     sent = 0
     for job in ready:
+        # The per-run cap is absolute: it is what keeps a burst of new listings
+        # from putting twenty emails through one Gmail session.
         if sent >= PER_RUN_SEND_CAP:
             print(f"[send] per-run cap ({PER_RUN_SEND_CAP}) reached")
+            break
+        # Under that, two findings pull against each other. Applying within
+        # 24-48 hours produces two to three times the interviews; a Tuesday-to-
+        # Thursday, 9-11am send gets the best open and reply rates. Speed is
+        # measured in days and timing in hours, so speed wins for anything
+        # genuinely fresh and timing decides the rest of the queue.
+        if sent >= budget and not brand_new(job):
+            print(f"[send] {sent} sent, holding the rest for the window")
             break
         if sends_today(state) >= DAILY_SEND_CAP:
             print(f"[send] daily cap ({DAILY_SEND_CAP}) reached")
@@ -1637,6 +1754,23 @@ def uk_now():
                 day -= 1
         bst = last_sunday(3) <= utc < last_sunday(10)
         return utc + timedelta(hours=1) if bst else utc
+
+
+def in_peak_window(when=None):
+    """Tuesday to Thursday, 9-11am UK - the window cold-outreach studies
+    consistently find gets the highest open and reply rates. Monday's inbox is
+    a backlog and Friday's reader has checked out."""
+    now_uk = when or uk_now()
+    return now_uk.weekday() in (1, 2, 3) and 9 <= now_uk.hour < 12
+
+
+def brand_new(job, hours=None):
+    """Posted so recently that being early beats being well-timed."""
+    posted = parse_ts(job.get("posted_at")) or parse_ts(job.get("found_at"))
+    if not posted:
+        return False
+    age = (datetime.now(timezone.utc) - posted).total_seconds() / 3600
+    return age <= (hours if hours is not None else BRAND_NEW_HOURS)
 
 
 def summary_due(force=False):

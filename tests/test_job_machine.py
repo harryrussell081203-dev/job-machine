@@ -447,6 +447,47 @@ class TestSending(unittest.TestCase):
             jm.run_sends(self.state)
         self.assertEqual(send.call_count, 2)
 
+    def test_the_per_run_cap_is_never_exceeded_by_fresh_listings(self):
+        """The throttle a fresh listing skips is the off-peak one, not the cap
+        that keeps twenty emails out of a single Gmail session."""
+        fresh = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        for i in range(9):
+            self.add(external_id=f"f{i}", company=f"Firm {i}", posted_at=fresh,
+                     contact_email=f"jane@f{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=False), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 4), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 1), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 4)
+
+    def test_off_peak_holds_the_stale_queue_back_for_the_window(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        for i in range(6):
+            self.add(external_id=f"s{i}", company=f"Old Firm {i}", posted_at=old,
+                     contact_email=f"jane@s{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=False), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 7), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 2), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 2)
+
+    def test_in_the_window_the_whole_run_budget_is_used(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        for i in range(6):
+            self.add(external_id=f"w{i}", company=f"Firm {i}", posted_at=old,
+                     contact_email=f"jane@w{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=True), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 5), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 2), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 5)
+
     def test_daily_cap(self):
         self.state["send_counts"][jm.today()] = 20
         self.add()
@@ -1096,3 +1137,125 @@ class TestState(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestRecruitmentAgencies(unittest.TestCase):
+    """An agency is not an employer and must not be rationed like one.
+
+    An employer has the one job they advertised. An agency is paid to place
+    people, holds dozens of roles, and expects to hear from candidates - six of
+    the fourteen firms in the last portal run were agencies, and the
+    one-email-per-company-ever rule made each of them worth a single approach
+    for the rest of time.
+    """
+    def state(self):
+        return {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+
+    def test_agencies_are_recognised_by_name(self):
+        for name in ("Matchtech", "Orion Electrotech", "Morson Edge",
+                     "Future Engineering Recruitment Ltd", "Cammach Bryant",
+                     "NES Fircroft", "Thorpe Molloy Recruitment"):
+            with self.subTest(name=name):
+                self.assertTrue(jm.is_agency({"company": name}), name)
+
+    def test_agencies_are_recognised_by_the_wording_they_must_use(self):
+        for body in ("Our client is a leading subsea contractor",
+                     "acting as an employment agency in relation to this vacancy",
+                     "We are recruiting for a well established Aberdeen firm"):
+            with self.subTest(body=body[:30]):
+                self.assertTrue(jm.is_agency({"company": "ABC Ltd",
+                                              "description": body}))
+
+    def test_a_real_employer_is_not_mistaken_for_one(self):
+        for name in ("Hydrasun", "Baker Hughes", "Dron & Dickson", "EnerMech",
+                     "ScottishPower"):
+            with self.subTest(name=name):
+                self.assertFalse(jm.is_agency({"company": name,
+                                               "description": "Join our team"}))
+
+    def test_an_employer_still_gets_one_email_ever(self):
+        state = self.state()
+        job = {"company": "Hydrasun", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, job)
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Hydrasun", "external_id": "b", "description": ""}))
+
+    def test_an_agency_can_be_approached_again_about_a_different_role(self):
+        state = self.state()
+        first = {"company": "Matchtech", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, first)
+        entry = state["companies_contacted"][jm.company_key("Matchtech")]
+        entry["at"] = "2026-01-01T09:00:00+00:00"          # long enough ago
+        self.assertFalse(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "b", "description": ""}))
+
+    def test_never_twice_about_the_same_vacancy(self):
+        state = self.state()
+        job = {"company": "Matchtech", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, job)
+        state["companies_contacted"][jm.company_key("Matchtech")]["at"] = \
+            "2026-01-01T09:00:00+00:00"
+        self.assertTrue(jm.already_contacted(state, job))
+
+    def test_an_agency_is_not_emailed_twice_in_the_same_week(self):
+        state = self.state()
+        jm.mark_contacted(state, {"company": "Matchtech", "external_id": "a",
+                                  "description": ""})
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "b", "description": ""}))
+
+    def test_an_agency_is_not_pestered_for_ever(self):
+        state = self.state()
+        for n in range(jm.AGENCY_MAX_APPROACHES):
+            job = {"company": "Matchtech", "external_id": f"job{n}",
+                   "description": ""}
+            jm.mark_contacted(state, job)
+            state["companies_contacted"][jm.company_key("Matchtech")]["at"] = \
+                "2026-01-01T09:00:00+00:00"
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "last",
+                    "description": ""}))
+
+    def test_an_agency_advert_gets_the_consultants_email_whatever_the_trade(self):
+        self.assertEqual(
+            jm.pick_family("Instrumentation Technician",
+                           "Our client is a subsea contractor", "Matchtech"),
+            "agency")
+        self.assertNotEqual(
+            jm.pick_family("Instrumentation Technician",
+                           "Join our Aberdeen team", "Hydrasun"),
+            "agency")
+
+
+class TestWhenItSends(unittest.TestCase):
+    """Tuesday to Thursday, 9-11am gets the best open and reply rates; applying
+    within 24-48 hours produces two to three times the interviews. Speed is
+    measured in days and timing in hours, so both can be had."""
+    def at(self, day, hour):
+        # 3 Aug 2026 is a Monday
+        return datetime(2026, 8, 3 + day, hour, tzinfo=timezone.utc)
+
+    def test_the_window_is_tuesday_to_thursday_mid_morning(self):
+        self.assertTrue(jm.in_peak_window(self.at(1, 10)))    # Tue 10am
+        self.assertTrue(jm.in_peak_window(self.at(3, 9)))     # Thu 9am
+
+    def test_monday_and_friday_are_not_the_window(self):
+        self.assertFalse(jm.in_peak_window(self.at(0, 10)))
+        self.assertFalse(jm.in_peak_window(self.at(4, 10)))
+
+    def test_early_morning_and_afternoon_are_not_the_window(self):
+        self.assertFalse(jm.in_peak_window(self.at(1, 7)))
+        self.assertFalse(jm.in_peak_window(self.at(1, 15)))
+
+    def test_a_listing_posted_hours_ago_does_not_wait_for_the_window(self):
+        fresh = {"posted_at": (datetime.now(timezone.utc)
+                               - timedelta(hours=2)).isoformat()}
+        self.assertTrue(jm.brand_new(fresh))
+
+    def test_a_listing_from_two_days_ago_can_wait(self):
+        stale = {"posted_at": (datetime.now(timezone.utc)
+                               - timedelta(hours=48)).isoformat()}
+        self.assertFalse(jm.brand_new(stale))
+
+    def test_a_listing_with_no_date_is_not_treated_as_fresh(self):
+        self.assertFalse(jm.brand_new({}))

@@ -2,7 +2,16 @@ name: job-machine
 
 on:
   schedule:
-    - cron: "0 8 * * 1-5"     # 08:00 UTC weekdays
+    # Cold-outreach studies put the best open and reply rates on Tuesday to
+    # Thursday, 9-11am in the reader's time zone. GitHub cron is UTC and does
+    # not shift with British Summer Time, so both 8 and 9 UTC are scheduled on
+    # those days: one of them is inside 9-11am UK whatever the season.
+    - cron: "0 8 * * 2-4"     # 09:00 BST / 08:00 GMT - peak window
+    - cron: "0 9 * * 2-4"     # 10:00 BST / 09:00 GMT - peak window
+    # The other runs still harvest and score, and still send anything posted in
+    # the last few hours, because being an early applicant beats being a
+    # well-timed one. They just hold the bulk of the queue for the window.
+    - cron: "0 8 * * 1,5"     # Monday and Friday morning
     - cron: "30 11 * * 1-5"   # 11:30 UTC weekdays
     - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
   push:
