@@ -16,7 +16,9 @@ on:
     - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
   push:
     tags: ["fire-run-*"]        # push a tag to force a run when the UI is not handy
-    branches: ["fire-run/**"]   # or create a branch with this name, then delete it
+    branches:
+      - "fire-run/**"           # force an ordinary run
+      - "fire-rescore/**"       # re-judge listings scored under an old profile
   workflow_dispatch:
     inputs:
       test_mode:
@@ -67,10 +69,18 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
         run: |
+          # A change to CANDIDATE_PROFILE invalidates every score already in
+          # the file, so this re-opens the listings the scorer rejected and
+          # judges them again before the run does anything else.
+          ARGS=""
+          if [[ "${GITHUB_REF_NAME}" == fire-rescore/* ]]; then
+            echo "fire-rescore branch: re-judging against the current profile"
+            ARGS="--rescore 55"
+          fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python job_machine.py --dry-run
+            python job_machine.py --dry-run $ARGS
           else
-            python job_machine.py
+            python job_machine.py $ARGS
           fi
 
       - name: Commit state
