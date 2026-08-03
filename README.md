@@ -22,13 +22,13 @@ marked as contacted, and follow-ups are off.
 
 | Stage | What happens |
 | --- | --- |
-| 0. Schedule | `run.yml` at 08:00, 11:30 and 15:00 UTC weekdays; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
-| 1. Harvest | Adzuna + Reed, listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
+| 0. Schedule | `run.yml` five times a weekday, two of them landing inside the Tue-Thu 9-11am UK window that replies best; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
+| 1. Harvest | Adzuna + Reed + **job-alert email in Harry's own inbox** (`alert_harvest.py`, which is where most boards come from), listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
 | 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
 | 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
 | 4. Compose | Role-family template (communications / electronics_technician / instrumentation_maintenance / events_production / general) picked from the title. Gemini fills a fixed skeleton; code enforces the rules and rejects-and-retries up to 3 times. |
-| 5. Send | Gmail SMTP over SSL, CV PDF attached, best contact tier first then highest score. One email per company **ever**. Caps per run and per day, 30s between sends. |
-| 6. Follow-up | 4 days after sending, IMAP checks the inbox for a reply from that address. No reply means one short follow-up, no attachment, threaded onto the original. Replied means marked `replied` and never touched again. |
+| 5. Send | Gmail SMTP over SSL, CV PDF attached. Covenant employers first, then best contact tier, then score, freshest first within that. One email per **employer** ever; agencies get up to four, one per vacancy. Off-peak runs hold the queue back for the window but always send anything posted in the last 14 hours. Caps per run and per day, 30s between sends. |
+| 6. Follow-up | Day 4 and day 9 nudges to the same person, threaded, no attachment. Day 16, if a second real address at that company is known, one fresh approach to them with the CV. Any reply stops everything. |
 | 7. State | Everything in `data/state.json`, committed back by the workflow. |
 
 ### Copy rules enforced in code, not just asked of the model
@@ -94,7 +94,8 @@ python tools/build_cv_pdf.py
 
 ## Running it
 
-The workflow runs at 08:00, 11:30 and 15:00 UTC on weekdays. You can also run it
+The workflow runs five times a weekday, weighted towards Tuesday to
+Thursday mid-morning. You can also run it
 by hand from the Actions tab (**Run workflow**), which takes two inputs:
 
 - `test_mode` - override `TEST_MODE` for that one run
@@ -116,7 +117,7 @@ python job_machine.py --summary --force   # send tonight's digest right now
 Tests (no network, nothing is sent, no real portal is touched):
 
 ```bash
-python -m unittest discover -s tests -v          # 86 tests
+python -m unittest discover -s tests -v          # 270 tests
 PORTAL_BROWSER_TESTS=1 python -m unittest discover -s tests   # + drives Chromium
 ```
 
@@ -185,11 +186,61 @@ wording), and the agent picks it. That is a real answer the form itself offers,
 so those questions stop blocking applications without anything being invented.
 If a monitoring question offers no opt-out, it is flagged like the rest.
 
+### How it finds the form
+
+The job boards are a dead end: Adzuna's outbound page renders blank to a
+headless browser, proven over five runs. So the form is looked for in cost
+order, and the first route that answers wins:
+
+| # | Route | Cost |
+| --- | --- | --- |
+| 0 | The listing URL is already a portal | free |
+| 1 | The advert text names the portal — employers paste their link into the description all the time | free, no network |
+| 2 | The employer's **board API** — Greenhouse, Lever, Ashby, SmartRecruiters, Workable and Recruitee each publish a free JSON board that 404s honestly | 6 requests, asked in parallel |
+| 3 | The employer's **own careers page**, walked through to the vacancy and its apply link | a few page loads |
+| 4 | Last resort: follow the job board's own interstitial | a browser hop |
+
+Route 2 replaced guessing at board *pages*. Every one of those platforms
+answers `200` for a company that is not on it — SmartRecruiters serves a
+generic search page, Workable serves a bot check — so a `200` proved nothing
+and once matched two Aberdeen firms to **AECOM's** adverts. The APIs 404
+properly, and hand back the real postings with their real application URLs.
+
+**Route 3 matters more than it sounds.** Of fourteen employers probed in
+Aberdeen, exactly one used a hosted ATS, and it needed an account. The rest
+take applications on a form of their own. Off the known platforms a page has
+to look like an application — a CV upload, or a name/email/phone set — before
+anything is typed into it, so a contact form or a newsletter signup is never
+mistaken for a vacancy.
+
+### Roles the job boards never advertised
+
+An employer's own board carries every role they have open, not just the ones
+they paid to advertise. Once a company's board is known, listing it costs a
+single request, so `--harvest` also sweeps the thirty curated employers in
+`data/targets.json` plus any company whose advert already scored 60+, and adds
+anything that fits and is somewhere you could actually work. Those arrive with
+their application URL already known.
+
+Which ATS a company uses is remembered in `data/state.json` for three weeks —
+finding a board costs up to eighteen requests, re-listing a known one costs
+one, and firms do not change ATS often. The open roles themselves are always
+fetched live.
+
 ### Portals it works on
 
 Greenhouse, Lever, Workable, Ashby, SmartRecruiters, Recruitee, Teamtailor,
-JOIN and Personio — the ones that accept an application with no account and no
-bot check. Anything else is recorded as `portal_manual` with a direct link.
+JOIN and Personio — plus any employer's own form that has a CV upload and no
+bot check. Workday, Taleo, LinkedIn, Indeed and Reed need an account and are
+recorded as `portal_manual` with a direct link for you.
+
+### Checking it without waiting for a run
+
+Push any branch named `fire-probe/...` and the workflow reports, in about
+thirty seconds and with no browser, exactly what each platform answers for the
+companies currently in the queue. `fire-diagnose/...` opens the pages and
+reports what is on them without filling anything in. `fire-submit/...` really
+applies, to one job only.
 
 ### Portal variables
 
@@ -199,6 +250,95 @@ bot check. Anything else is recorded as `portal_manual` with a direct link.
 | `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
 | `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
 | `PORTAL_DAILY_CAP` | `25` | Applications per day |
+
+## The inbox is the widest source of jobs (`alert_harvest.py`)
+
+Adzuna and Reed have APIs and between them yield a median of **four** in-trade
+Aberdeen listings a day. CV-Library, Totaljobs, s1jobs, Oil and Gas Job Search,
+Rigzone and Energy Jobline carry most of the rest of this market and have **no
+free API at all**.
+
+Every one of them will email you a daily alert. So the machine reads your own
+inbox.
+
+**No account is ever automated.** Indeed and LinkedIn ban accounts for
+automated access, their detection is good, and a banned account is a real loss
+to a real job search - while every auto-apply tool that logs in reports the
+2-5% response rate that is the worst channel there is. Reading your own email
+is a different thing entirely: the alert was addressed to you because you
+asked for it.
+
+### Setting it up - one evening, then never again
+
+On each site below: sign in as yourself, search for the roles and area you
+want, and **save the search as a daily email alert** to the Gmail address the
+machine uses. That is the whole integration.
+
+| Site | Worth it because |
+| --- | --- |
+| CV-Library | biggest UK trade board with no API |
+| Totaljobs / Jobsite | large technician volume |
+| s1jobs | Scotland only, agencies post here first |
+| Oil and Gas Job Search | Aberdeen energy market |
+| Energy Jobline | offshore and renewables |
+| Rigzone | offshore operators |
+| Indeed | set the alert, never the login |
+| LinkedIn | set the alert, never the login |
+| Google Alerts | free, for phrases like `"instrumentation technician" Aberdeen` |
+| Employers' own career pages | many have "register for alerts" - the best source of all, since these never reach a board |
+
+While you are on those sites, **upload your CV to each one's database**.
+Recruiters search those databases, and most rank by how recently a CV was
+touched - so refreshing it weekly puts you at the top of their search results.
+That is inbound: they come to you.
+
+Once the alerts are arriving:
+
+```bash
+python alert_harvest.py --dry-run     # see what it would pull out, change nothing
+python alert_harvest.py --days 7      # read the last week
+```
+
+The main pipeline runs it automatically at every harvest.
+
+## What the research says works, and where it lives in the code
+
+The methods here are not guesses. Cold outreach to a named human replies at
+15-25% against 2-5% for a blind online application; applying within 24-48
+hours produces two to three times the interviews; three touches capture about
+93% of the replies a sequence will ever earn.
+
+| Finding | Where it is implemented |
+| --- | --- |
+| A named human beats an application form, 15-25% vs 2-5% | the whole email path - real addresses only, ranked named person > hiring inbox > generic |
+| 50-125 word emails reply ~50% better than long ones | the 60-90 word rule enforced in `check_copy` |
+| Apply within 24-48 hours: 2-3x the interviews | harvest every run; freshest first in the queue; `brand_new()` sends today's listings immediately |
+| Tue-Thu 9-11am gets the best open and reply rates | `in_peak_window()`, and two crons that land inside it in BST and GMT |
+| Three touches capture ~93% of replies; a fourth to the same person reads as pressure | day 4 and day 9 nudges, then stop |
+| A *different* person at the same company is the exception | `next_stakeholder()` - day 16, new conversation, CV attached |
+| Referrals are ~7x more likely to be hired | no honest way to automate this one; see below |
+| **A guaranteed interview scheme beats all of it** | `data/veteran_employers.json` - Armed Forces Covenant signatories, written to first |
+
+**The Covenant route is the only one that produces an interview by right**
+rather than by persuasion. Many signatories guarantee an interview to a
+veteran who meets the minimum criteria for the role, and Harry served two
+years in the Royal Navy. Expanding `data/veteran_employers.json` is the
+highest-value thing anyone can do to this repository - each name added is an
+employer where being ex-forces moves him from the pile to the shortlist.
+
+The email never claims an employer holds an award or runs a scheme. It asks.
+His service is a fact about him; whether they run a scheme is theirs to state.
+
+**Agencies are not employers.** An employer has the one job they advertised
+and a second unsolicited email reads as pestering, so they get one, ever. A
+recruitment agency is paid to place people and holds dozens of live roles, so
+it gets up to four approaches, one per vacancy, six days apart - with its own
+template, because a consultant is matching a person against a list and needs
+the facts that let them do it.
+
+**Referrals** are the one well-evidenced channel left unautomated. Doing it
+properly needs to know who Harry actually knows, and inventing a connection
+would be worse than not claiming one.
 
 ## Converting applications into interviews
 

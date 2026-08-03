@@ -78,6 +78,11 @@ GMAIL_APP_PASSWORD = env_str("GMAIL_APP_PASSWORD")
 TEST_MODE = env_flag("TEST_MODE", False)
 DAILY_SEND_CAP = env_int("DAILY_SEND_CAP", 20)
 PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 7)
+# Outside the best send window the queue holds back, so the strongest leads
+# land when they are most likely to be read. Anything genuinely fresh ignores
+# this - see the comment in send_batch.
+OFF_PEAK_SEND_CAP = env_int("OFF_PEAK_SEND_CAP", 3)
+BRAND_NEW_HOURS = env_int("BRAND_NEW_HOURS", 14)
 SEARCH_LOCATIONS = env_list(
     "SEARCH_LOCATIONS", ["Aberdeen", "Dundee", "Edinburgh", "Glasgow", "Inverness"])
 SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
@@ -89,15 +94,26 @@ SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 MAX_AGE_HOURS = 48
 HARVEST_PAGES = 1
 FOLLOWUP_AFTER_DAYS = 4
-FOLLOWUP2_AFTER_DAYS = 9          # one last nudge, then leave them alone
+FOLLOWUP2_AFTER_DAYS = 9          # one last nudge to that person
+# Then, once, a different human at the same company. Three touches to one
+# inbox capture about 93% of the replies a sequence will ever earn; a fourth
+# to the same person is pestering, but a first to a new one is a new
+# conversation - the one documented reason to go past three.
+STAKEHOLDER_AFTER_DAYS = env_int("STAKEHOLDER_AFTER_DAYS", 16)
 REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
 SPEC_PER_DAY = env_int("SPEC_PER_DAY", 2)
 TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "data", "targets.json")
+VETERAN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "data", "veteran_employers.json")
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
 MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
+# Sending is the point; scoring is preparation. The workflow gets 45 minutes and
+# a rate-limited scorer can eat all of it, so scoring is boxed in to leave room
+# for discovery and sending.
+SCORE_BUDGET_SECONDS = env_int("SCORE_BUDGET_SECONDS", 900)
 MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -113,6 +129,22 @@ REED_KEYWORDS = ["engineering technician", "electronics technician",
                  "instrumentation technician", "maintenance technician",
                  "communications technician"]
 
+# The rotational market does not live within twenty-five miles of anywhere.
+# An offshore or fly-in-fly-out posting is advertised against a base, a vessel
+# or a whole country, so a radius search around Aberdeen never sees it - and it
+# is the market Harry's trade actually sits in, now that he can take work
+# anywhere that comes with the arrangements to live it. These phrases are
+# specific enough to sweep the whole UK without dragging in noise.
+ROTATIONAL_KEYWORDS = [
+    "offshore technician", "rotational technician", "subsea technician",
+    "rov technician", "electro technical officer", "offshore electrician",
+    "offshore instrument technician", "commissioning technician offshore",
+    "field service engineer offshore", "marine electronics technician",
+    "hydrographic survey technician", "offshore maintenance technician",
+]
+ROTATIONAL_WHERE = env_str("ROTATIONAL_WHERE", "United Kingdom")
+ROTATIONAL_RADIUS = env_int("ROTATIONAL_RADIUS", 500)
+
 # Titles that are never worth a Gemini call.
 TITLE_EXCLUSIONS = [
     "chartered", "principal engineer", "head of", "director", "graduate scheme",
@@ -121,6 +153,23 @@ TITLE_EXCLUSIONS = [
     "waiter", "waitress", "bartender", "cleaner", "warehouse operative",
 ]
 
+# Course adverts dressed up as vacancies. They turned up five at a time in the
+# real queue - "Trainee Incident Response Engineer - job guarantee", "IT
+# Technician No experience needed!" - all from a training provider selling a
+# course, all scoring just under the bar because the trade words match. They
+# are not jobs, and an email to the seller of one is a wasted approach.
+NOT_A_VACANCY = re.compile(
+    r"job guarantee|guaranteed job|no experience needed|"
+    r"course fee|tuition|payment plan|enrol|bootcamp|"
+    r"training (provider|programme|program|academy|course)|"
+    r"funded training|traineeship|study (with|at) us|"
+    r"once qualified we|after completing the course", re.I)
+
+
+def is_course_advert(job):
+    blob = f"{job.get('title') or ''} {(job.get('description') or '')[:1500]}"
+    return bool(NOT_A_VACANCY.search(blob))
+
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
 - Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
@@ -128,10 +177,35 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
-- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife. Aberdeen strongly preferred.
+- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife.
+- WHERE HE CAN WORK: Aberdeen is home and a daily commute there is ideal, but it
+  is NOT a requirement and must not be scored as one. He will take work anywhere
+  in the world that comes with the arrangements to live it: offshore and
+  rotational postings (2/2, 3/3, 4/4, back-to-back), fly-in fly-out, residential
+  or camp accommodation, and roles that pay travel and lodging. A role that
+  matches his trade in Dundee, Inverness, Perth Australia, Norway or the Gulf is
+  worth as much as the same role in Aberdeen. Only mark a location down when the
+  job genuinely needs him to already live somewhere he cannot get to and offers
+  nothing towards it - and note that he does not drive, so a remote site with no
+  transport laid on is a real problem where a rotational one is not.
 - EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
+
+# Added to the prompt only for employers listed in data/veteran_employers.json.
+# It asks a question rather than making a claim: Harry's service is a fact
+# about Harry, and whether they run a scheme is for them to say. That way a
+# wrong entry in that file can put no false statement in his name.
+VETERAN_INSTRUCTION = """
+
+THIS EMPLOYER HAS PUBLICLY COMMITTED TO THE ARMED FORCES COVENANT.
+Many signatories run a guaranteed interview scheme for veterans who meet the
+minimum criteria, and Harry qualifies as a veteran. So:
+- Proof point 1 must be his Royal Navy service, stated plainly.
+- The call to action must ASK whether they run a guaranteed interview scheme
+  for veterans, or words to that effect. Ask - never state or assume that they
+  do, and never mention awards, medals or scheme names.
+- Everything else about the rules is unchanged."""
 PHONE = "07398 530978"
 
 
@@ -274,6 +348,33 @@ Any technician openings coming up this year worth a conversation?
 Harry
 """ + SIGNOFF,
     },
+    # A consultant is not a hiring manager. They are matching a person against
+    # a list of live vacancies, often several at once, and what they need is
+    # the facts that let them do it: trade, location, availability, salary,
+    # tickets. Research on cold outreach puts a targeted note to a named human
+    # at 15-25% reply against 2-5% for a blind application, and an agency
+    # consultant is the easiest named human in this market to reach.
+    "agency": {
+        "keywords": [],
+        "subject_examples": [
+            "Aberdeen tech, available now - {role}",
+            "Electronics tech for your {role}",
+        ],
+        "skeleton": """{greeting}
+
+Saw you are recruiting a {role} - {one specific detail from the listing}.
+
+1. {proof: what he does - 2 years Royal Navy Communications and Information
+   Specialist, 3 years at Sonardyne testing and fault-finding subsea electronics}
+2. {proof: the practical facts a consultant needs - Aberdeen based, available
+   immediately, looking around 35k, DV cleared}
+3. {optional: one ticket or qualification that matches THIS vacancy}
+
+{one question CTA - ask whether this one fits or whether they have something closer}
+
+Harry
+""" + SIGNOFF,
+    },
     "general": {
         "keywords": [],
         "subject_examples": [
@@ -296,9 +397,15 @@ Harry
 }
 
 
-def pick_family(title, description=""):
+def pick_family(title, description="", company=""):
     """Route a listing to a template family. The title decides; the description
-    is only a tie-breaker."""
+    is only a tie-breaker.
+
+    An agency advert is answered as an agency advert whatever trade is in the
+    title: the reader is a consultant matching a person to a list, not the
+    manager who will supervise the work."""
+    if is_agency({"company": company, "description": description}):
+        return "agency"
     title_l = f" {title.lower()} "
     desc_l = description[:600].lower()
     best, best_score = "general", 0.0
@@ -374,17 +481,79 @@ def company_key(name):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def already_contacted(state, job):
-    """One email per company, ever - by normalised name or by domain."""
+# A recruitment agency is not an employer and must not be rationed like one.
+# An employer has the one job they advertised, and a second unsolicited email
+# about a different role reads as pestering. An agency is *paid* to place
+# people, holds dozens of roles at once, and expects to hear from candidates
+# more than once - six of the fourteen firms in the last portal run were
+# agencies, and under the one-email-ever rule each of them was worth exactly
+# one approach forever.
+AGENCY_NAME = re.compile(
+    r"\brecruit|resourcing|staffing|personnel|manpower|talent|search "
+    r"(and|&) selection|employment agency|\bagency\b|consultancy|"
+    r"\bhays\b|matchtech|morson|randstad|adecco|manpower|reed specialist|"
+    r"orion (group|electrotech)|nes fircroft|petroplan|airswift|brunel|"
+    r"cammach|thorpe molloy|activate group|first achieve|contract scotland",
+    re.I)
+AGENCY_BODY = re.compile(
+    r"our client|on behalf of (our|a) client|we are recruiting for|"
+    r"my client|the successful candidate will be employed by|"
+    r"acting as an (employment|recruitment) (agency|business)", re.I)
+
+AGENCY_MAX_APPROACHES = env_int("AGENCY_MAX_APPROACHES", 4)
+AGENCY_GAP_DAYS = env_int("AGENCY_GAP_DAYS", 6)
+
+
+def is_agency(job):
+    """Is this a recruiter placing someone else's vacancy?
+
+    Name first, then the give-away phrases agencies are legally required to
+    use in the advert itself ('acting as an employment agency', 'our client')."""
+    if AGENCY_NAME.search(job.get("company") or ""):
+        return True
+    return bool(AGENCY_BODY.search((job.get("description") or "")[:2000]))
+
+
+def contact_history(state, job):
     keys = [company_key(job.get("company"))]
     if job.get("company_domain"):
         keys.append(job["company_domain"].lower())
-    return any(k and k in state["companies_contacted"] for k in keys)
+    for key in keys:
+        entry = state["companies_contacted"].get(key)
+        if entry:
+            return entry
+    return None
+
+
+def already_contacted(state, job):
+    """One email per employer, ever. Agencies get a working relationship.
+
+    For an agency the limit is a few approaches spaced out, one per role, on
+    the grounds that a consultant with a live vacancy wants to hear from a
+    candidate who fits it - that is their business model, not an imposition."""
+    entry = contact_history(state, job)
+    if not entry:
+        return False
+    if not is_agency(job):
+        return True
+    approaches = entry.get("count", 1)
+    if approaches >= AGENCY_MAX_APPROACHES:
+        return True
+    last = parse_ts(entry.get("at"))
+    if last and (datetime.now(timezone.utc) - last).days < AGENCY_GAP_DAYS:
+        return True
+    # never twice about the same vacancy
+    return job.get("external_id") in (entry.get("jobs") or [])
 
 
 def mark_contacted(state, job):
+    previous = contact_history(state, job) or {}
     entry = {"at": now(), "company": job.get("company"),
-             "email": job.get("contact_email"), "job": job.get("external_id")}
+             "email": job.get("contact_email"), "job": job.get("external_id"),
+             "count": (previous.get("count", 0) + 1),
+             "jobs": (previous.get("jobs") or [])[-9:] + [job.get("external_id")]}
+    if previous.get("first_at") or previous.get("at"):
+        entry["first_at"] = previous.get("first_at") or previous["at"]
     for key in (company_key(job.get("company")),
                 (job.get("company_domain") or "").lower()):
         if key:
@@ -439,55 +608,69 @@ def fresh_enough(posted, granularity="hours"):
     return posted.date() >= threshold
 
 
+def adzuna_searches():
+    """(where, radius, keywords) for every sweep this run should make.
+
+    The first is the local one: his own city and the ones near it, tight
+    radius, broad trade terms. The second is the rotational sweep - the whole
+    country, narrow phrases - because an offshore posting is advertised
+    against a base or a vessel rather than a town, and a radius search around
+    Aberdeen has never once seen one."""
+    for location in SEARCH_LOCATIONS:
+        for kw in SEARCH_KEYWORDS:
+            yield location, SEARCH_RADIUS_MILES, kw
+    for kw in ROTATIONAL_KEYWORDS:
+        yield ROTATIONAL_WHERE, ROTATIONAL_RADIUS, kw
+
+
 def adzuna():
     jobs = []
     if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
         print("[harvest] adzuna: no credentials, skipping")
         return jobs
     max_days = max(1, -(-MAX_AGE_HOURS // 24))
-    for location in SEARCH_LOCATIONS:
-        for kw in SEARCH_KEYWORDS:
-            for page in range(1, HARVEST_PAGES + 1):
-                try:
-                    r = requests.get(
-                        f"https://api.adzuna.com/v1/api/jobs/gb/search/{page}",
-                        params={
-                            "app_id": ADZUNA_APP_ID,
-                            "app_key": ADZUNA_APP_KEY,
-                            "results_per_page": 50,
-                            "what_or": kw,
-                            "where": location,
-                            "distance": SEARCH_RADIUS_MILES,
-                            "max_days_old": max_days,
-                            "sort_by": "date",
-                            "content-type": "application/json",
-                        },
-                        headers=UA, timeout=30,
-                    )
-                    r.raise_for_status()
-                    results = r.json().get("results", [])
-                    for j in results:
-                        posted = parse_ts(j.get("created"))
-                        if not fresh_enough(posted, "hours"):
-                            continue
-                        jobs.append({
-                            "external_id": f"adzuna_{j['id']}",
-                            "source": "adzuna",
-                            "title": j.get("title", "") or "",
-                            "company": (j.get("company") or {}).get("display_name", ""),
-                            "location": (j.get("location") or {}).get("display_name", ""),
-                            "search_location": location,
-                            "url": j.get("redirect_url", ""),
-                            "description": strip_html(j.get("description") or "")[:4000],
-                            "salary_min": j.get("salary_min"),
-                            "salary_max": j.get("salary_max"),
-                            "posted_at": posted.isoformat() if posted else None,
-                        })
-                    if len(results) < 50:
-                        break
-                except Exception as e:
-                    print(f"[harvest] adzuna {location} p{page}: {e}")
+    for location, radius, kw in adzuna_searches():
+        for page in range(1, HARVEST_PAGES + 1):
+            try:
+                r = requests.get(
+                    f"https://api.adzuna.com/v1/api/jobs/gb/search/{page}",
+                    params={
+                        "app_id": ADZUNA_APP_ID,
+                        "app_key": ADZUNA_APP_KEY,
+                        "results_per_page": 50,
+                        "what_or": kw,
+                        "where": location,
+                        "distance": radius,
+                        "max_days_old": max_days,
+                        "sort_by": "date",
+                        "content-type": "application/json",
+                    },
+                    headers=UA, timeout=30,
+                )
+                r.raise_for_status()
+                results = r.json().get("results", [])
+                for j in results:
+                    posted = parse_ts(j.get("created"))
+                    if not fresh_enough(posted, "hours"):
+                        continue
+                    jobs.append({
+                        "external_id": f"adzuna_{j['id']}",
+                        "source": "adzuna",
+                        "title": j.get("title", "") or "",
+                        "company": (j.get("company") or {}).get("display_name", ""),
+                        "location": (j.get("location") or {}).get("display_name", ""),
+                        "search_location": location,
+                        "url": j.get("redirect_url", ""),
+                        "description": strip_html(j.get("description") or "")[:4000],
+                        "salary_min": j.get("salary_min"),
+                        "salary_max": j.get("salary_max"),
+                        "posted_at": posted.isoformat() if posted else None,
+                    })
+                if len(results) < 50:
                     break
+            except Exception as e:
+                print(f"[harvest] adzuna {location} p{page}: {e}")
+                break
     return jobs
 
 
@@ -557,6 +740,16 @@ def title_excluded(title):
     return next((x for x in TITLE_EXCLUSIONS if x in low), None)
 
 
+def not_worth_applying(job):
+    """A reason to bin this listing before it costs a Gemini call or a send."""
+    excluded = title_excluded(job.get("title"))
+    if excluded:
+        return f"title excluded ({excluded})"
+    if is_course_advert(job):
+        return "a training course being sold, not a vacancy"
+    return None
+
+
 def harvest(state):
     seen = {dedupe_key(j) for j in state["jobs"].values()}
     new = dropped = 0
@@ -569,14 +762,14 @@ def harvest(state):
             continue
         seen.add(key)
         job.update({"status": "new", "score": None, "found_at": now()})
-        excluded = title_excluded(job["title"])
-        if excluded:
-            job.update({"status": "skipped", "skip_reason": f"title excluded ({excluded})"})
+        reason = not_worth_applying(job)
+        if reason:
+            job.update({"status": "skipped", "skip_reason": reason})
             dropped += 1
         else:
             new += 1
         state["jobs"][eid] = job
-    print(f"[harvest] {new} new listings ({dropped} dropped on title) "
+    print(f"[harvest] {new} new listings ({dropped} dropped as unsuitable) "
           f"across {len(SEARCH_LOCATIONS)} locations")
 
 
@@ -757,7 +950,17 @@ def score_jobs(state):
               f"without spending a call")
     unscored = pool[:MAX_SCORED_PER_RUN]
     passed = done = 0
+    deadline = time.monotonic() + SCORE_BUDGET_SECONDS
     for start in range(0, len(unscored), SCORE_BATCH):
+        # Sending is the point of this run; scoring is only preparation for it.
+        # Gemini's free tier answers 429 with a retry delay of up to a minute,
+        # so a dozen batches can swallow the workflow's whole allowance and
+        # leave nothing for discovery and sending - a run that judges a hundred
+        # listings and emails nobody. Whatever is left is judged next run.
+        if time.monotonic() > deadline:
+            print(f"[score] {SCORE_BUDGET_SECONDS}s spent scoring, stopping so "
+                  f"there is time left to actually send something")
+            break
         batch = unscored[start:start + SCORE_BATCH]
         scores = score_batch(batch)
         if not scores:
@@ -1016,6 +1219,26 @@ def best_email(candidates):
     return best
 
 
+def ranked_emails(candidates):
+    """Every real address found for this employer, best first.
+
+    Outreach research is clear that a second, different person at the same
+    company is worth reaching when the first goes quiet - it is the one thing
+    that justifies going past three touches. These are addresses already found
+    and already real; keeping them costs nothing and saves discovering them
+    again weeks later."""
+    seen, out = set(), []
+    for address in candidates:
+        key = address.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tier, name = classify(address)
+        if tier >= 1:
+            out.append({"email": address, "name": name, "tier": tier})
+    return sorted(out, key=lambda c: -c["tier"])
+
+
 def discover(state):
     todo = [j for j in state["jobs"].values()
             if j["status"] == "scored"][:MAX_DISCOVERED_PER_RUN]
@@ -1024,7 +1247,9 @@ def discover(state):
         # 1) addresses printed in the advert itself - directly tied to this job
         text = job.get("description", "") + " " + fetch_listing_text(job)
         job["listing_text_len"] = len(text)
-        email_addr, name, tier = best_email(clean_emails(EMAIL_RE.findall(text)))
+        found_here = clean_emails(EMAIL_RE.findall(text))
+        email_addr, name, tier = best_email(found_here)
+        ranked = ranked_emails(found_here)
         method = "listing"
 
         # 2) the company's own website
@@ -1041,7 +1266,9 @@ def discover(state):
             if not has_mx(domain):
                 job.update({"status": "no_email", "skip_reason": "domain has no MX"})
                 continue
-            email_addr, name, tier = best_email(scrape_site(domain))
+            scraped = scrape_site(domain)
+            email_addr, name, tier = best_email(scraped)
+            ranked = ranked_emails(scraped)
             method = "scraped"
 
         # 3) nothing real found -> do not send. No guessing, ever.
@@ -1053,7 +1280,9 @@ def discover(state):
             continue
 
         job.update({"contact_email": email_addr, "contact_name": name,
-                    "email_method": method, "email_tier": tier, "status": "ready"})
+                    "email_method": method, "email_tier": tier, "status": "ready",
+                    "other_contacts": [c for c in ranked
+                                       if c["email"].lower() != email_addr.lower()][:3]})
         found += 1
         print(f"[discover] {job['company']} -> {name or email_addr} <{email_addr}> "
               f"({TIER_NAMES.get(tier)}, via {method})")
@@ -1175,7 +1404,8 @@ def email_problems(subject, core, job):
 
 def build_email(job, attempts=3):
     family = ("speculative" if job.get("source") == "speculative"
-              else pick_family(job["title"], job.get("description", "")))
+              else pick_family(job["title"], job.get("description", ""),
+                               job.get("company", "")))
     job["template_family"] = family
     tpl = TEMPLATES[family]
     greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
@@ -1196,6 +1426,7 @@ def build_email(job, attempts=3):
         f"Location: {job['location']}\n"
         f"Recipient: {job.get('contact_name') or 'unknown, a shared hiring inbox'}\n"
         f"Listing: {job['description'][:2000]}"
+        + (VETERAN_INSTRUCTION if veteran_friendly(job) else "")
     )
     prompt = base
     best = None
@@ -1236,7 +1467,8 @@ def cv_for(job):
     tailoring pipeline is available, the master PDF otherwise."""
     try:
         import cv_tailor
-        family = pick_family(job.get("title", ""), job.get("description", ""))
+        family = pick_family(job.get("title", ""), job.get("description", ""),
+                             job.get("company", ""))
         tailored = cv_tailor.build(family)
         if tailored:
             return tailored
@@ -1281,11 +1513,30 @@ def run_sends(state, dry_run=False):
     ready = sorted([j for j in state["jobs"].values() if j["status"] == "ready"],
                    key=lambda j: (j.get("posted_at") or j.get("found_at") or ""),
                    reverse=True)
-    ready.sort(key=lambda j: (-(j.get("email_tier") or 0), -(j.get("score") or 0)))
+    # An employer running a guaranteed interview scheme converts an application
+    # into an interview by policy rather than by persuasion, so they go first
+    # whatever else is in the queue.
+    ready.sort(key=lambda j: (-int(veteran_friendly(j)),
+                              -(j.get("email_tier") or 0), -(j.get("score") or 0)))
+
+    budget = PER_RUN_SEND_CAP if in_peak_window() else OFF_PEAK_SEND_CAP
+    if not in_peak_window():
+        print(f"[send] outside the Tuesday-Thursday 9-11am window, holding all "
+              f"but {budget} back for it (fresh listings still go now)")
     sent = 0
     for job in ready:
+        # The per-run cap is absolute: it is what keeps a burst of new listings
+        # from putting twenty emails through one Gmail session.
         if sent >= PER_RUN_SEND_CAP:
             print(f"[send] per-run cap ({PER_RUN_SEND_CAP}) reached")
+            break
+        # Under that, two findings pull against each other. Applying within
+        # 24-48 hours produces two to three times the interviews; a Tuesday-to-
+        # Thursday, 9-11am send gets the best open and reply rates. Speed is
+        # measured in days and timing in hours, so speed wins for anything
+        # genuinely fresh and timing decides the rest of the queue.
+        if sent >= budget and not brand_new(job):
+            print(f"[send] {sent} sent, holding the rest for the window")
             break
         if sends_today(state) >= DAILY_SEND_CAP:
             print(f"[send] daily cap ({DAILY_SEND_CAP}) reached")
@@ -1383,6 +1634,47 @@ def run_applied_notes(state):
 # ======================================================================
 # SPECULATIVE - the hidden market: employers with no advert up
 # ======================================================================
+_VETERAN_KEYS = None
+
+
+def veteran_employers():
+    """Normalised names of employers who have committed to the Armed Forces
+    Covenant. Read once and kept."""
+    global _VETERAN_KEYS
+    if _VETERAN_KEYS is None:
+        try:
+            with open(VETERAN_PATH) as f:
+                entries = json.load(f).get("employers", [])
+            _VETERAN_KEYS = {company_key(e.get("company")) for e in entries
+                             if e.get("company")}
+        except Exception:
+            _VETERAN_KEYS = set()
+    return _VETERAN_KEYS
+
+
+def veteran_friendly(job):
+    """Has this employer publicly committed to the Armed Forces Covenant?
+
+    Many signatories run a guaranteed interview scheme: a veteran who meets the
+    minimum criteria for a role is interviewed. Harry served two years as a
+    Royal Navy Communications and Information Specialist, so where such a
+    scheme exists he qualifies for it - which is worth more than any number of
+    extra cold emails, because it converts an application into an interview by
+    policy rather than by persuasion.
+
+    Nothing in the code ever tells an employer they hold an award. The email
+    asks whether they run a scheme, which is true whoever reads it."""
+    key = company_key(job.get("company"))
+    if not key:
+        return False
+    known = veteran_employers()
+    if key in known:
+        return True
+    # 'Babcock International Group' should match 'Babcock International'
+    return any(k and (key.startswith(k + " ") or k.startswith(key + " "))
+               for k in known)
+
+
 def load_targets():
     try:
         with open(TARGETS_PATH) as f:
@@ -1472,6 +1764,36 @@ AUTOREPLY_BODY = (
     "flexible on time. If a call is easier my number is 07398 530978.\n\n"
     "Which day works best for you?\n\n"
     "Harry\nHarry Russell / 07398 530978")
+
+# The same reply, for a posting that is offshore or on a rotation. Mobility is
+# the first thing an operator screens for on those, and leaving them to ask is
+# a wasted exchange when the answer is an unqualified yes.
+AUTOREPLY_ROTATIONAL = (
+    "{greeting}\n\n"
+    "Thanks for getting back to me about the {title} role. Happy to meet "
+    "whenever suits - I am free any day this week, tomorrow included, and "
+    "flexible on time. If a call is easier my number is 07398 530978.\n\n"
+    "To save you asking: I am fine with rotation and with travelling for it, "
+    "onshore or offshore, UK or overseas. Available immediately, and I hold DV "
+    "clearance.\n\n"
+    "Which day works best for you?\n\n"
+    "Harry\nHarry Russell / 07398 530978")
+
+ROTATIONAL_ADVERT = re.compile(
+    r"offshore|rotation|rota\b|\d\s*[/:]\s*\d\s*(week|rotation)?|back[- ]to[- ]back|"
+    r"fly[- ]in|fifo|vessel|rig\b|platform\b|swing|trip[- ]based|"
+    r"field[- ]based overseas|expat", re.I)
+
+
+def rotational(job):
+    """Is this posting offshore or on a rotation?"""
+    blob = " ".join(str(job.get(k) or "") for k in
+                    ("title", "location", "description"))[:3000]
+    return bool(ROTATIONAL_ADVERT.search(blob))
+
+
+def autoreply_body(job):
+    return AUTOREPLY_ROTATIONAL if rotational(job) else AUTOREPLY_BODY
 
 
 def _message_text(msg):
@@ -1581,8 +1903,8 @@ def check_replies(state):
                     and not job.get("auto_replied_at"):
                 greeting = (f"Hi {job['contact_name']},"
                             if job.get("contact_name") else "Hi,")
-                body = AUTOREPLY_BODY.format(greeting=greeting,
-                                             title=job.get("title", "advertised"))
+                body = autoreply_body(job).format(
+                    greeting=greeting, title=job.get("title", "advertised"))
                 subject = reply["subject"] or job.get("sent_subject") or ""
                 if not subject.lower().startswith("re:"):
                     subject = f"Re: {subject}"
@@ -1639,6 +1961,23 @@ def uk_now():
         return utc + timedelta(hours=1) if bst else utc
 
 
+def in_peak_window(when=None):
+    """Tuesday to Thursday, 9-11am UK - the window cold-outreach studies
+    consistently find gets the highest open and reply rates. Monday's inbox is
+    a backlog and Friday's reader has checked out."""
+    now_uk = when or uk_now()
+    return now_uk.weekday() in (1, 2, 3) and 9 <= now_uk.hour < 12
+
+
+def brand_new(job, hours=None):
+    """Posted so recently that being early beats being well-timed."""
+    posted = parse_ts(job.get("posted_at")) or parse_ts(job.get("found_at"))
+    if not posted:
+        return False
+    age = (datetime.now(timezone.utc) - posted).total_seconds() / 3600
+    return age <= (hours if hours is not None else BRAND_NEW_HOURS)
+
+
 def summary_due(force=False):
     """The workflow fires at 21:00 and 22:00 UTC; exactly one of those is 22:00
     in the UK, whichever way the clocks are set."""
@@ -1687,6 +2026,57 @@ def esc(text):
             .replace("<", "&lt;").replace(">", "&gt;"))
 
 
+# The outbound side of this project writes to employers. This is the other
+# direction: places where a recruiter finds Harry. Registering is a one-off he
+# does himself, but CV databases rank by how recently a CV was touched, so the
+# ranking decays every week whether he does anything or not - which is the one
+# part worth a standing reminder.
+INBOUND_TASKS = [
+    ("RightJob - Forces Employment Charity",
+     "https://www.rfea.org.uk/jobseekers/",
+     "free to veterans, and they work with around 8,000 employers who "
+     "specifically want to hire ex-forces. If you do one thing on this list, "
+     "this is it. Set its alerts to this inbox and the machine reads them."),
+    ("CV-Library", "https://www.cv-library.co.uk/",
+     "refresh the CV so you rank top of recruiter searches"),
+    ("Totaljobs / Jobsite", "https://www.totaljobs.com/",
+     "same - recruiters search by last updated"),
+    ("Oil and Gas Job Search", "https://www.oilandgasjobsearch.com/",
+     "the Aberdeen energy market searches here"),
+    ("Energy Jobline", "https://www.energyjobline.com/",
+     "offshore and renewables recruiters"),
+    ("Reed", "https://www.reed.co.uk/",
+     "keep the profile live even though we use their API"),
+    ("LinkedIn - Open to Work",
+     "https://www.linkedin.com/",
+     "set it to recruiters only; they filter on it"),
+]
+
+
+def inbound_reminder(when=None):
+    """A short weekly list of the places recruiters go looking, or None.
+
+    Sunday evening, because it is a ten minute job and Monday is when
+    recruiters start searching."""
+    now_uk = when or uk_now()
+    if now_uk.weekday() != 6:
+        return None, None
+    text = ["Recruiters search CV databases by how recently a CV was touched,",
+            "so ten minutes here puts you at the top of next week's searches.",
+            ""]
+    items = []
+    for name, url, why in INBOUND_TASKS:
+        text.append(f"  {name} - {why}")
+        text.append(f"      {url}")
+        items.append(f"<li><b>{esc(name)}</b> - {esc(why)}<br>"
+                     f'<a href="{esc(url)}">{esc(url)}</a></li>')
+    html = ("<h2>Inbound - 10 minutes, once a week</h2>"
+            "<p class=m>Recruiters search CV databases by how recently a CV was "
+            "touched, so ten minutes here puts you at the top of next week's "
+            "searches.</p><ul>" + "".join(items) + "</ul>")
+    return text, html
+
+
 def summary_bodies(data):
     """(subject, plain text, html) for the digest."""
     apps = data["applications"]
@@ -1727,6 +2117,10 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    inbound_text, inbound_html = inbound_reminder()
+    if inbound_text:
+        lines += ["", "INBOUND - 10 MINUTES, ONCE A WEEK", "-" * 33] + inbound_text
 
     portal_html = ""
     if data.get("portal_submitted") or data.get("portal_review") or \
@@ -1794,6 +2188,7 @@ ul{{font-size:14px;padding-left:18px}}
 <p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
 {table}
 {portal_html}
+{inbound_html or ''}
 <ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
 </body></html>"""
     return subject, "\n".join(lines), html
@@ -1848,6 +2243,16 @@ def has_reply_from(addr):
         return None
 
 
+def next_stakeholder(job):
+    """The next real person at this company we have not written to yet."""
+    used = {(job.get("contact_email") or "").lower(),
+            (job.get("stakeholder_email") or "").lower()}
+    for contact in job.get("other_contacts") or []:
+        if contact.get("email") and contact["email"].lower() not in used:
+            return contact
+    return None
+
+
 def run_followups(state):
     if TEST_MODE:
         print("[followup] disabled in TEST_MODE")
@@ -1872,8 +2277,17 @@ def run_followups(state):
             if age < timedelta(days=FOLLOWUP2_AFTER_DAYS):
                 continue
             which = 2
+        elif not job.get("stakeholder_sent_at") and next_stakeholder(job):
+            # Three touches to one person capture about 93% of the replies a
+            # sequence will ever get, and a fourth to the same inbox is
+            # pestering. A fourth to a *different* person at the same company
+            # is the one documented exception - it is a new conversation, not
+            # a fourth ask.
+            if age < timedelta(days=STAKEHOLDER_AFTER_DAYS):
+                continue
+            which = 3
         else:
-            continue  # both nudges sent; from here silence is the polite option
+            continue  # said everything there is to say; silence is the polite option
 
         replied = has_reply_from(job["contact_email"])
         if replied is None:
@@ -1883,7 +2297,13 @@ def run_followups(state):
             print(f"[followup] reply from {job['company']} - leaving it alone")
             continue
 
-        greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
+        target = job["contact_email"]
+        target_name = job.get("contact_name")
+        if which == 3:
+            other = next_stakeholder(job)
+            target, target_name = other["email"], other.get("name")
+
+        greeting = f"Hi {target_name}," if target_name else "Hi,"
         if which == 1:
             body = (
                 f"{greeting}\n\n"
@@ -1892,6 +2312,17 @@ def run_followups(state):
                 f"or do a short call whenever suits.\n\n"
                 f"Is it worth me sending anything else over?\n\n"
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
+            )
+        elif which == 3:
+            body = (
+                f"{greeting}\n\n"
+                f"I wrote to a colleague about the {job['title']} role a couple of "
+                f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
+                f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
+                f"based and free to start now.\n\n"
+                f"Is that role still open, or is there someone better placed for me "
+                f"to speak to?\n\n"
+                f"Harry\n{SIGNOFF}"
             )
         else:
             body = (
@@ -1903,16 +2334,29 @@ def run_followups(state):
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
             )
         subject = job.get("sent_subject") or job["title"]
-        if not subject.lower().startswith("re:"):
-            subject = f"Re: {subject}"
+        if which == 3:
+            # A fresh conversation with a new person, so no Re: and no
+            # threading headers - and the CV goes with it, because this
+            # reader has never seen it.
+            headers, attach = {}, True
+        else:
+            if not subject.lower().startswith("re:"):
+                subject = f"Re: {subject}"
+            headers = {"In-Reply-To": job.get("message_id"),
+                       "References": job.get("message_id")}
+            attach = False
         try:
-            send_email(job["contact_email"], subject, body, attach_cv=False,
-                       headers={"In-Reply-To": job.get("message_id"),
-                                "References": job.get("message_id")})
-            job[f"followup{'' if which == 1 else '2'}_sent_at"] = now()
-            job[f"followup{'' if which == 1 else '2'}_body"] = body
+            send_email(target, subject, body, attach_cv=attach, headers=headers)
+            stamp = {1: "followup_sent_at", 2: "followup2_sent_at",
+                     3: "stakeholder_sent_at"}[which]
+            job[stamp] = now()
+            job[{1: "followup_body", 2: "followup2_body",
+                 3: "stakeholder_body"}[which]] = body
+            if which == 3:
+                job["stakeholder_email"] = target
             done += 1
-            print(f"[followup] nudge {which} -> {job['company']}")
+            print(f"[followup] {'second contact' if which == 3 else f'nudge {which}'}"
+                  f" -> {job['company']} <{target}>")
             save(state)
             time.sleep(FOLLOWUP_INTERVAL_SECONDS)
         except Exception as e:
@@ -1927,6 +2371,44 @@ STATUSES = ("new", "scored", "ready", "sent", "spec_sent", "test_sent",
             "replied", "no_email", "compose_failed", "send_failed", "skipped")
 
 
+def harvest_from_inbox(state):
+    """Adverts out of job-alert email. Imported here rather than at the top so
+    that a problem in the alert reader can never stop the main pipeline."""
+    import alert_harvest
+    if alert_harvest.harvest_alerts(state):
+        alert_harvest.enrich(state)
+
+
+def rescore(state, floor=55):
+    """Re-open listings that were judged under an out-of-date profile.
+
+    A score is a judgement against CANDIDATE_PROFILE at the moment it was made,
+    so changing that profile silently invalidates every score already in the
+    file. When the profile said 'Aberdeen strongly preferred', fifty-two
+    listings that matched Harry's trade exactly were marked down to 65 and
+    binned for being in Dundee, Inverness or Perth - including an
+    Electro-Technical Officer post that is about as close to his Navy trade as
+    an advert gets. Correcting the profile without re-opening those would leave
+    every one of them in the bin."""
+    woken = 0
+    for job in state["jobs"].values():
+        if job.get("status") != "skipped":
+            continue
+        # only listings the scorer rejected, never ones the title filter or the
+        # pre-filter threw out - those were not judgement calls
+        if not str(job.get("skip_reason") or "").startswith("score "):
+            continue
+        if (job.get("score") or 0) < floor:
+            continue
+        job.pop("score", None)
+        job.pop("score_reason", None)
+        job.update({"status": "new", "skip_reason": None, "rescored_at": now()})
+        woken += 1
+    print(f"[rescore] {woken} listing(s) put back in the queue to be judged "
+          f"against the current profile")
+    return woken
+
+
 def stage(name, fn, *args):
     try:
         fn(*args)
@@ -1939,6 +2421,10 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true",
                         help="compose everything but send nothing")
     parser.add_argument("--skip-harvest", action="store_true")
+    parser.add_argument("--rescore", type=int, nargs="?", const=55, metavar="FLOOR",
+                        help="put listings skipped for a low score back in the "
+                             "queue, so a change to the candidate profile is "
+                             "applied to what was already judged under the old one")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -1965,8 +2451,15 @@ def main(argv=None):
           f"locations={','.join(SEARCH_LOCATIONS)} cv={cv_path() or 'MISSING'}")
 
     state = load()
+    if args.rescore is not None:
+        stage("rescore", rescore, state, args.rescore)
+        save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)
+        # Job-alert email from Harry's own inbox. The boards that carry most of
+        # this market - CV-Library, Totaljobs, s1jobs, Oil and Gas Job Search -
+        # have no free API, but every one of them will email him alerts.
+        stage("alerts", harvest_from_inbox, state)
         save(state)
     stage("score", score_jobs, state)
     save(state)

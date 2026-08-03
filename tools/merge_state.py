@@ -26,8 +26,21 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else 0
 
 
+def reopened(job):
+    """Was this record deliberately put back in the queue to be judged again?"""
+    return str(job.get("rescored_at") or "")
+
+
 def pick(a, b):
-    """The more advanced record, breaking ties on how much we know."""
+    """The more advanced record, breaking ties on how much we know.
+
+    Except when one side was deliberately re-opened. A rescore sets a listing
+    back to 'new' on purpose, and 'new' ranks below 'skipped', so the ordinary
+    rule quietly undid the whole thing - a re-judging run reported 'no state
+    changes' because every listing it re-opened was reverted by this function.
+    A deliberate step backwards has to beat an accidental step forwards."""
+    if reopened(a) != reopened(b):
+        return a if reopened(a) > reopened(b) else b
     if rank(a) != rank(b):
         return a if rank(a) > rank(b) else b
     return a if len(a) >= len(b) else b
@@ -63,6 +76,20 @@ def merge(theirs, ours):
     spec_done.update(ours.get("spec_done", {}))
     if spec_done:
         out["spec_done"] = spec_done
+
+    # Which ATS a company uses, remembered so it is not re-discovered every
+    # run. The fresher answer wins; a found board beats a same-age miss.
+    boards = dict(theirs.get("ats_boards", {}))
+    for key, entry in ours.get("ats_boards", {}).items():
+        old = boards.get(key)
+        if not old:
+            boards[key] = entry
+            continue
+        newer = str(entry.get("checked_at", "")) > str(old.get("checked_at", ""))
+        if newer or (entry.get("ats") and not old.get("ats")):
+            boards[key] = entry
+    if boards:
+        out["ats_boards"] = boards
 
     for stamp in ("last_summary_at",):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]

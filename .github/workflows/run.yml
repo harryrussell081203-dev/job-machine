@@ -2,12 +2,23 @@ name: job-machine
 
 on:
   schedule:
-    - cron: "0 8 * * 1-5"     # 08:00 UTC weekdays
+    # Cold-outreach studies put the best open and reply rates on Tuesday to
+    # Thursday, 9-11am in the reader's time zone. GitHub cron is UTC and does
+    # not shift with British Summer Time, so both 8 and 9 UTC are scheduled on
+    # those days: one of them is inside 9-11am UK whatever the season.
+    - cron: "0 8 * * 2-4"     # 09:00 BST / 08:00 GMT - peak window
+    - cron: "0 9 * * 2-4"     # 10:00 BST / 09:00 GMT - peak window
+    # The other runs still harvest and score, and still send anything posted in
+    # the last few hours, because being an early applicant beats being a
+    # well-timed one. They just hold the bulk of the queue for the window.
+    - cron: "0 8 * * 1,5"     # Monday and Friday morning
     - cron: "30 11 * * 1-5"   # 11:30 UTC weekdays
     - cron: "0 15 * * 1-5"    # 15:00 UTC weekdays
   push:
     tags: ["fire-run-*"]        # push a tag to force a run when the UI is not handy
-    branches: ["fire-run/**"]   # or create a branch with this name, then delete it
+    branches:
+      - "fire-run/**"           # force an ordinary run
+      - "fire-rescore/**"       # re-judge listings scored under an old profile
   workflow_dispatch:
     inputs:
       test_mode:
@@ -41,6 +52,12 @@ jobs:
 
       - name: Run pipeline
         env:
+          # Python block-buffers stdout when it is a pipe, which is
+          # what Actions gives it. Every log in this repo was flushed
+          # in one lump at exit, so a run that was killed printed
+          # nothing at all - forty-five minutes of silence that read
+          # like a hang and was really an empty buffer.
+          PYTHONUNBUFFERED: "1"
           # secrets
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
@@ -58,10 +75,18 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
         run: |
+          # A change to CANDIDATE_PROFILE invalidates every score already in
+          # the file, so this re-opens the listings the scorer rejected and
+          # judges them again before the run does anything else.
+          ARGS=""
+          if [[ "${GITHUB_REF_NAME}" == fire-rescore/* ]]; then
+            echo "fire-rescore branch: re-judging against the current profile"
+            ARGS="--rescore 55"
+          fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python job_machine.py --dry-run
+            python job_machine.py --dry-run $ARGS
           else
-            python job_machine.py
+            python job_machine.py $ARGS
           fi
 
       - name: Commit state
