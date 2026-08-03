@@ -1259,3 +1259,89 @@ class TestWhenItSends(unittest.TestCase):
 
     def test_a_listing_with_no_date_is_not_treated_as_fresh(self):
         self.assertFalse(jm.brand_new({}))
+
+
+class TestReachingASecondPerson(unittest.TestCase):
+    """Three touches to one inbox capture about 93% of the replies a sequence
+    will ever earn. A fourth to the same person is pestering; a first to a
+    different person at the same company is a new conversation, and it is the
+    one documented reason to go past three."""
+
+    def job(self, **over):
+        base = {"external_id": "j1", "status": "sent", "title": "Test Technician",
+                "company": "Acme Subsea", "contact_email": "jane@acme.com",
+                "contact_name": "Jane", "message_id": "<m1>",
+                "sent_subject": "Ex-Navy tech for your Test Technician",
+                "sent_at": (datetime.now(timezone.utc)
+                            - timedelta(days=20)).isoformat(),
+                "followup_sent_at": "2026-07-20T09:00:00+00:00",
+                "followup2_sent_at": "2026-07-25T09:00:00+00:00",
+                "other_contacts": [{"email": "ops@acme.com", "name": None,
+                                    "tier": 2}]}
+        base.update(over)
+        return base
+
+    def run_one(self, job):
+        state = {"jobs": {job["external_id"]: job}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "has_reply_from", return_value=False), \
+             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_followups(state)
+        return send
+
+    def test_discovery_keeps_the_addresses_it_did_not_use(self):
+        self.assertEqual(
+            [c["email"] for c in jm.ranked_emails(
+                ["info@acme.com", "jane.smith@acme.com", "careers@acme.com"])],
+            ["jane.smith@acme.com", "careers@acme.com", "info@acme.com"])
+
+    def test_a_fourth_touch_goes_to_a_different_person(self):
+        job = self.job()
+        send = self.run_one(job)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0], "ops@acme.com")
+        self.assertEqual(job["stakeholder_email"], "ops@acme.com")
+
+    def test_it_is_a_new_conversation_not_a_reply(self):
+        """No Re:, no threading headers, and the CV goes with it - this reader
+        has never seen any of it."""
+        job = self.job()
+        send = self.run_one(job)
+        subject = send.call_args.args[1]
+        self.assertFalse(subject.lower().startswith("re:"))
+        self.assertTrue(send.call_args.kwargs["attach_cv"])
+        self.assertEqual(send.call_args.kwargs["headers"], {})
+
+    def test_nobody_is_written_to_twice(self):
+        job = self.job(stakeholder_sent_at="2026-08-01T09:00:00+00:00")
+        self.run_one(job).assert_not_called()
+
+    def test_with_no_second_address_the_sequence_simply_ends(self):
+        job = self.job(other_contacts=[])
+        self.run_one(job).assert_not_called()
+
+    def test_the_first_contact_is_never_the_second_contact(self):
+        job = self.job(other_contacts=[{"email": "JANE@acme.com", "name": "Jane",
+                                        "tier": 3}])
+        self.run_one(job).assert_not_called()
+
+    def test_it_waits_a_fortnight_before_trying_anyone_else(self):
+        job = self.job(sent_at=(datetime.now(timezone.utc)
+                                - timedelta(days=11)).isoformat())
+        self.run_one(job).assert_not_called()
+
+    def test_a_reply_stops_the_whole_sequence(self):
+        job = self.job()
+        state = {"jobs": {"j1": job}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "has_reply_from", return_value=True), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+        send.assert_not_called()
+        self.assertEqual(job["status"], "replied")

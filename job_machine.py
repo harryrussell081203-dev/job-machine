@@ -94,7 +94,12 @@ SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 MAX_AGE_HOURS = 48
 HARVEST_PAGES = 1
 FOLLOWUP_AFTER_DAYS = 4
-FOLLOWUP2_AFTER_DAYS = 9          # one last nudge, then leave them alone
+FOLLOWUP2_AFTER_DAYS = 9          # one last nudge to that person
+# Then, once, a different human at the same company. Three touches to one
+# inbox capture about 93% of the replies a sequence will ever earn; a fourth
+# to the same person is pestering, but a first to a new one is a new
+# conversation - the one documented reason to go past three.
+STAKEHOLDER_AFTER_DAYS = env_int("STAKEHOLDER_AFTER_DAYS", 16)
 REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
 SPEC_PER_DAY = env_int("SPEC_PER_DAY", 2)
 TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1116,6 +1121,26 @@ def best_email(candidates):
     return best
 
 
+def ranked_emails(candidates):
+    """Every real address found for this employer, best first.
+
+    Outreach research is clear that a second, different person at the same
+    company is worth reaching when the first goes quiet - it is the one thing
+    that justifies going past three touches. These are addresses already found
+    and already real; keeping them costs nothing and saves discovering them
+    again weeks later."""
+    seen, out = set(), []
+    for address in candidates:
+        key = address.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tier, name = classify(address)
+        if tier >= 1:
+            out.append({"email": address, "name": name, "tier": tier})
+    return sorted(out, key=lambda c: -c["tier"])
+
+
 def discover(state):
     todo = [j for j in state["jobs"].values()
             if j["status"] == "scored"][:MAX_DISCOVERED_PER_RUN]
@@ -1124,7 +1149,9 @@ def discover(state):
         # 1) addresses printed in the advert itself - directly tied to this job
         text = job.get("description", "") + " " + fetch_listing_text(job)
         job["listing_text_len"] = len(text)
-        email_addr, name, tier = best_email(clean_emails(EMAIL_RE.findall(text)))
+        found_here = clean_emails(EMAIL_RE.findall(text))
+        email_addr, name, tier = best_email(found_here)
+        ranked = ranked_emails(found_here)
         method = "listing"
 
         # 2) the company's own website
@@ -1141,7 +1168,9 @@ def discover(state):
             if not has_mx(domain):
                 job.update({"status": "no_email", "skip_reason": "domain has no MX"})
                 continue
-            email_addr, name, tier = best_email(scrape_site(domain))
+            scraped = scrape_site(domain)
+            email_addr, name, tier = best_email(scraped)
+            ranked = ranked_emails(scraped)
             method = "scraped"
 
         # 3) nothing real found -> do not send. No guessing, ever.
@@ -1153,7 +1182,9 @@ def discover(state):
             continue
 
         job.update({"contact_email": email_addr, "contact_name": name,
-                    "email_method": method, "email_tier": tier, "status": "ready"})
+                    "email_method": method, "email_tier": tier, "status": "ready",
+                    "other_contacts": [c for c in ranked
+                                       if c["email"].lower() != email_addr.lower()][:3]})
         found += 1
         print(f"[discover] {job['company']} -> {name or email_addr} <{email_addr}> "
               f"({TIER_NAMES.get(tier)}, via {method})")
@@ -1982,6 +2013,16 @@ def has_reply_from(addr):
         return None
 
 
+def next_stakeholder(job):
+    """The next real person at this company we have not written to yet."""
+    used = {(job.get("contact_email") or "").lower(),
+            (job.get("stakeholder_email") or "").lower()}
+    for contact in job.get("other_contacts") or []:
+        if contact.get("email") and contact["email"].lower() not in used:
+            return contact
+    return None
+
+
 def run_followups(state):
     if TEST_MODE:
         print("[followup] disabled in TEST_MODE")
@@ -2006,8 +2047,17 @@ def run_followups(state):
             if age < timedelta(days=FOLLOWUP2_AFTER_DAYS):
                 continue
             which = 2
+        elif not job.get("stakeholder_sent_at") and next_stakeholder(job):
+            # Three touches to one person capture about 93% of the replies a
+            # sequence will ever get, and a fourth to the same inbox is
+            # pestering. A fourth to a *different* person at the same company
+            # is the one documented exception - it is a new conversation, not
+            # a fourth ask.
+            if age < timedelta(days=STAKEHOLDER_AFTER_DAYS):
+                continue
+            which = 3
         else:
-            continue  # both nudges sent; from here silence is the polite option
+            continue  # said everything there is to say; silence is the polite option
 
         replied = has_reply_from(job["contact_email"])
         if replied is None:
@@ -2017,7 +2067,13 @@ def run_followups(state):
             print(f"[followup] reply from {job['company']} - leaving it alone")
             continue
 
-        greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
+        target = job["contact_email"]
+        target_name = job.get("contact_name")
+        if which == 3:
+            other = next_stakeholder(job)
+            target, target_name = other["email"], other.get("name")
+
+        greeting = f"Hi {target_name}," if target_name else "Hi,"
         if which == 1:
             body = (
                 f"{greeting}\n\n"
@@ -2026,6 +2082,17 @@ def run_followups(state):
                 f"or do a short call whenever suits.\n\n"
                 f"Is it worth me sending anything else over?\n\n"
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
+            )
+        elif which == 3:
+            body = (
+                f"{greeting}\n\n"
+                f"I wrote to a colleague about the {job['title']} role a couple of "
+                f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
+                f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
+                f"based and free to start now.\n\n"
+                f"Is that role still open, or is there someone better placed for me "
+                f"to speak to?\n\n"
+                f"Harry\n{SIGNOFF}"
             )
         else:
             body = (
@@ -2037,16 +2104,29 @@ def run_followups(state):
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
             )
         subject = job.get("sent_subject") or job["title"]
-        if not subject.lower().startswith("re:"):
-            subject = f"Re: {subject}"
+        if which == 3:
+            # A fresh conversation with a new person, so no Re: and no
+            # threading headers - and the CV goes with it, because this
+            # reader has never seen it.
+            headers, attach = {}, True
+        else:
+            if not subject.lower().startswith("re:"):
+                subject = f"Re: {subject}"
+            headers = {"In-Reply-To": job.get("message_id"),
+                       "References": job.get("message_id")}
+            attach = False
         try:
-            send_email(job["contact_email"], subject, body, attach_cv=False,
-                       headers={"In-Reply-To": job.get("message_id"),
-                                "References": job.get("message_id")})
-            job[f"followup{'' if which == 1 else '2'}_sent_at"] = now()
-            job[f"followup{'' if which == 1 else '2'}_body"] = body
+            send_email(target, subject, body, attach_cv=attach, headers=headers)
+            stamp = {1: "followup_sent_at", 2: "followup2_sent_at",
+                     3: "stakeholder_sent_at"}[which]
+            job[stamp] = now()
+            job[{1: "followup_body", 2: "followup2_body",
+                 3: "stakeholder_body"}[which]] = body
+            if which == 3:
+                job["stakeholder_email"] = target
             done += 1
-            print(f"[followup] nudge {which} -> {job['company']}")
+            print(f"[followup] {'second contact' if which == 3 else f'nudge {which}'}"
+                  f" -> {job['company']} <{target}>")
             save(state)
             time.sleep(FOLLOWUP_INTERVAL_SECONDS)
         except Exception as e:
