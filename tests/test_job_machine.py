@@ -1522,3 +1522,37 @@ class TestWhereHarryCanWork(unittest.TestCase):
         """A rotational posting is fine; a remote site with no transport is
         not, and the difference matters."""
         self.assertIn("does not drive", jm.CANDIDATE_PROFILE.lower())
+
+
+class TestFindingTheRotationalMarket(unittest.TestCase):
+    """An offshore posting is advertised against a base, a vessel or a whole
+    country, so a twenty-five mile radius around Aberdeen has never once seen
+    one - and that is the market Harry's trade actually sits in."""
+
+    def test_the_local_sweep_is_unchanged(self):
+        first = list(jm.adzuna_searches())[0]
+        self.assertEqual(first[0], jm.SEARCH_LOCATIONS[0])
+        self.assertEqual(first[1], jm.SEARCH_RADIUS_MILES)
+
+    def test_a_second_sweep_covers_the_whole_country(self):
+        wide = [s for s in jm.adzuna_searches() if s[1] == jm.ROTATIONAL_RADIUS]
+        self.assertTrue(wide)
+        self.assertTrue(all(s[0] == jm.ROTATIONAL_WHERE for s in wide))
+
+    def test_it_looks_for_the_roles_his_trade_actually_holds(self):
+        terms = " ".join(s[2] for s in jm.adzuna_searches()).lower()
+        for expected in ("offshore technician", "rov technician",
+                         "electro technical officer", "subsea technician"):
+            self.assertIn(expected, terms)
+
+    def test_the_wide_sweep_uses_narrow_phrases(self):
+        """A whole-country search on 'technician' would drag in everything;
+        these have to be specific enough to be worth the width."""
+        for where, radius, kw in jm.adzuna_searches():
+            if radius == jm.ROTATIONAL_RADIUS:
+                with self.subTest(kw=kw):
+                    self.assertGreaterEqual(len(kw.split()), 2)
+
+    def test_every_search_carries_its_own_radius(self):
+        for where, radius, kw in jm.adzuna_searches():
+            self.assertIn(radius, (jm.SEARCH_RADIUS_MILES, jm.ROTATIONAL_RADIUS))
