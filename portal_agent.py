@@ -465,12 +465,76 @@ def collect_fields(page):
     return unique
 
 
-def has_captcha(page):
+# Does the page show a puzzle a person has to solve, or merely score the
+# session in the background? Both put the word 'recaptcha' in the HTML, and
+# telling them apart is the difference between an application Harry has to
+# finish by hand and one the agent can send on its own.
+CAPTCHA_KIND_JS = r"""
+() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 20 && r.height > 20 &&
+           s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+  };
+  // A challenge a human must complete renders an interactive frame.
+  const frames = document.querySelectorAll(
+    'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"],' +
+    'iframe[src*="hcaptcha.com/captcha"], iframe[src*="challenges.cloudflare.com"],' +
+    'iframe[title*="captcha" i]');
+  for (const f of frames) if (visible(f)) return 'challenge';
+  let widget = false;
+  const boxes = document.querySelectorAll(
+    '.g-recaptcha, .h-captcha, .cf-turnstile, [data-sitekey]');
+  for (const b of boxes) {
+    widget = true;
+    const size = (b.getAttribute('data-size') || '').toLowerCase();
+    if (size !== 'invisible' && visible(b)) return 'challenge';
+  }
+  // A score-based check leaves only a badge and a render= script.
+  if (document.querySelector('.grecaptcha-badge')) return 'scored';
+  // A widget that declares itself invisible, or is not rendered at all, asks
+  // the user nothing. Answering 'scored' here matters: falling through would
+  // reach the text scan below, which sees the word 'recaptcha' in the class
+  // name and calls every one of them a challenge.
+  if (widget) return 'scored';
+  const scripts = Array.from(document.querySelectorAll('script[src]'))
+                       .map(s => s.src);
+  if (scripts.some(s => /recaptcha\/(api|enterprise)\.js\?.*render=/.test(s)))
+    return 'scored';
+  return null;
+}
+"""
+
+
+def captcha_kind(page):
+    """'challenge' if a person must solve something, 'scored' for an invisible
+    check, None for neither.
+
+    Every application form found on an employer's Workable board reported a bot
+    check under the old test, which only looked for the word 'recaptcha' in the
+    HTML. That word is present either way. An invisible v3 check is not a
+    blocker - the form submits normally and the score is judged server-side -
+    so treating it as one would have banked 46 applications that nobody needed
+    to touch."""
+    try:
+        kind = page.evaluate(CAPTCHA_KIND_JS)
+    except Exception:
+        kind = None
+    if kind:
+        return kind
+    # Fall back to the old text scan, but only to say 'something is here':
+    # unrecognised bot protection is treated as a challenge, never waved past.
     try:
         html = page.content().lower()
     except Exception:
-        return False
-    return any(marker in html for marker in CAPTCHA_MARKERS)
+        return None
+    return "challenge" if any(m in html for m in CAPTCHA_MARKERS) else None
+
+
+def has_captcha(page):
+    """True only when a human is genuinely needed."""
+    return captcha_kind(page) == "challenge"
 
 
 def apply_plan(page, plan):
@@ -619,9 +683,15 @@ def apply_to_job(page, job, answers, submit):
 
     # Fill first, then check for a bot check: a filled form is worth banking
     # even when a CAPTCHA stops us submitting it.
-    if has_captcha(page):
+    kind = captcha_kind(page)
+    if kind == "challenge":
         bank_for_captcha(page, job, plan, flags)
         return False
+    if kind == "scored":
+        # An invisible check judges the session server-side rather than asking
+        # anything. Recorded, because if submissions ever start bouncing this
+        # is the first place to look.
+        job["portal_bot_check"] = "invisible, submitted anyway"
 
     if flags:
         job.update({"status": "portal_review",
@@ -1205,15 +1275,17 @@ def inspect_boards(state, limit=6, headless=True):
                 page.wait_for_timeout(3000)
                 fields = collect_fields(page)
                 required = sum(1 for f in fields if f.get("required"))
-                captcha = has_captcha(page)
+                kind = captcha_kind(page)
                 upload = any(f["type"] == "file" for f in fields)
                 real = is_application_form(fields)
                 shot(page, job, "inspect")
+                bot = {"challenge": "NEEDS A HUMAN", "scored": "invisible",
+                       None: "clear"}[kind]
                 print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
                       f"{len(fields):>3} fields {required:>3} required  "
                       f"{'CV upload' if upload else 'no upload':10} "
-                      f"{'BOT CHECK' if captcha else 'clear':10} "
-                      f"{'APPLICABLE' if real and not captcha else '-'}")
+                      f"{bot:14} "
+                      f"{'APPLICABLE' if real and kind != 'challenge' else '-'}")
             except Exception as e:
                 print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
                       f"error: {type(e).__name__}")
