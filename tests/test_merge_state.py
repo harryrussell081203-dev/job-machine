@@ -68,3 +68,38 @@ class TestMergingTheBoardCache(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestReopenedListings(unittest.TestCase):
+    """A rescore sets a listing back to 'new' on purpose, and 'new' ranks below
+    'skipped'. The ordinary more-advanced-wins rule therefore reverted every
+    listing a re-judging run re-opened, and that run reported 'no state
+    changes' - it had been structurally incapable of saving its work."""
+
+    def test_a_deliberate_step_back_beats_an_accidental_step_forward(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "skipped", "score": 65}}},
+            {"jobs": {"a": {"status": "new", "rescored_at": "2026-08-03T15:00:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "new")
+
+    def test_it_works_whichever_side_the_rescore_is_on(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "new", "rescored_at": "2026-08-03T15:00:00"}}},
+            {"jobs": {"a": {"status": "skipped", "score": 65}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "new")
+
+    def test_the_newer_rescore_wins_when_both_were_reopened(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "skipped", "rescored_at": "2026-08-01T09:00:00"}}},
+            {"jobs": {"a": {"status": "new", "rescored_at": "2026-08-03T15:00:00"}}})
+        self.assertEqual(out["jobs"]["a"]["rescored_at"], "2026-08-03T15:00:00")
+
+    def test_ordinary_progress_is_unaffected(self):
+        out = ms.merge({"jobs": {"a": {"status": "scored"}}},
+                       {"jobs": {"a": {"status": "sent"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "sent")
+
+    def test_a_send_is_still_never_undone(self):
+        out = ms.merge({"jobs": {"a": {"status": "sent", "to": "x@y.com"}}},
+                       {"jobs": {"a": {"status": "new"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "sent")

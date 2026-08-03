@@ -52,6 +52,12 @@ jobs:
 
       - name: Run pipeline
         env:
+          # Python block-buffers stdout when it is a pipe, which is
+          # what Actions gives it. Every log in this repo was flushed
+          # in one lump at exit, so a run that was killed printed
+          # nothing at all - forty-five minutes of silence that read
+          # like a hang and was really an empty buffer.
+          PYTHONUNBUFFERED: "1"
           # secrets
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
