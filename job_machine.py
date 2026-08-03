@@ -125,6 +125,22 @@ REED_KEYWORDS = ["engineering technician", "electronics technician",
                  "instrumentation technician", "maintenance technician",
                  "communications technician"]
 
+# The rotational market does not live within twenty-five miles of anywhere.
+# An offshore or fly-in-fly-out posting is advertised against a base, a vessel
+# or a whole country, so a radius search around Aberdeen never sees it - and it
+# is the market Harry's trade actually sits in, now that he can take work
+# anywhere that comes with the arrangements to live it. These phrases are
+# specific enough to sweep the whole UK without dragging in noise.
+ROTATIONAL_KEYWORDS = [
+    "offshore technician", "rotational technician", "subsea technician",
+    "rov technician", "electro technical officer", "offshore electrician",
+    "offshore instrument technician", "commissioning technician offshore",
+    "field service engineer offshore", "marine electronics technician",
+    "hydrographic survey technician", "offshore maintenance technician",
+]
+ROTATIONAL_WHERE = env_str("ROTATIONAL_WHERE", "United Kingdom")
+ROTATIONAL_RADIUS = env_int("ROTATIONAL_RADIUS", 500)
+
 # Titles that are never worth a Gemini call.
 TITLE_EXCLUSIONS = [
     "chartered", "principal engineer", "head of", "director", "graduate scheme",
@@ -571,55 +587,69 @@ def fresh_enough(posted, granularity="hours"):
     return posted.date() >= threshold
 
 
+def adzuna_searches():
+    """(where, radius, keywords) for every sweep this run should make.
+
+    The first is the local one: his own city and the ones near it, tight
+    radius, broad trade terms. The second is the rotational sweep - the whole
+    country, narrow phrases - because an offshore posting is advertised
+    against a base or a vessel rather than a town, and a radius search around
+    Aberdeen has never once seen one."""
+    for location in SEARCH_LOCATIONS:
+        for kw in SEARCH_KEYWORDS:
+            yield location, SEARCH_RADIUS_MILES, kw
+    for kw in ROTATIONAL_KEYWORDS:
+        yield ROTATIONAL_WHERE, ROTATIONAL_RADIUS, kw
+
+
 def adzuna():
     jobs = []
     if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
         print("[harvest] adzuna: no credentials, skipping")
         return jobs
     max_days = max(1, -(-MAX_AGE_HOURS // 24))
-    for location in SEARCH_LOCATIONS:
-        for kw in SEARCH_KEYWORDS:
-            for page in range(1, HARVEST_PAGES + 1):
-                try:
-                    r = requests.get(
-                        f"https://api.adzuna.com/v1/api/jobs/gb/search/{page}",
-                        params={
-                            "app_id": ADZUNA_APP_ID,
-                            "app_key": ADZUNA_APP_KEY,
-                            "results_per_page": 50,
-                            "what_or": kw,
-                            "where": location,
-                            "distance": SEARCH_RADIUS_MILES,
-                            "max_days_old": max_days,
-                            "sort_by": "date",
-                            "content-type": "application/json",
-                        },
-                        headers=UA, timeout=30,
-                    )
-                    r.raise_for_status()
-                    results = r.json().get("results", [])
-                    for j in results:
-                        posted = parse_ts(j.get("created"))
-                        if not fresh_enough(posted, "hours"):
-                            continue
-                        jobs.append({
-                            "external_id": f"adzuna_{j['id']}",
-                            "source": "adzuna",
-                            "title": j.get("title", "") or "",
-                            "company": (j.get("company") or {}).get("display_name", ""),
-                            "location": (j.get("location") or {}).get("display_name", ""),
-                            "search_location": location,
-                            "url": j.get("redirect_url", ""),
-                            "description": strip_html(j.get("description") or "")[:4000],
-                            "salary_min": j.get("salary_min"),
-                            "salary_max": j.get("salary_max"),
-                            "posted_at": posted.isoformat() if posted else None,
-                        })
-                    if len(results) < 50:
-                        break
-                except Exception as e:
-                    print(f"[harvest] adzuna {location} p{page}: {e}")
+    for location, radius, kw in adzuna_searches():
+        for page in range(1, HARVEST_PAGES + 1):
+            try:
+                r = requests.get(
+                    f"https://api.adzuna.com/v1/api/jobs/gb/search/{page}",
+                    params={
+                        "app_id": ADZUNA_APP_ID,
+                        "app_key": ADZUNA_APP_KEY,
+                        "results_per_page": 50,
+                        "what_or": kw,
+                        "where": location,
+                        "distance": radius,
+                        "max_days_old": max_days,
+                        "sort_by": "date",
+                        "content-type": "application/json",
+                    },
+                    headers=UA, timeout=30,
+                )
+                r.raise_for_status()
+                results = r.json().get("results", [])
+                for j in results:
+                    posted = parse_ts(j.get("created"))
+                    if not fresh_enough(posted, "hours"):
+                        continue
+                    jobs.append({
+                        "external_id": f"adzuna_{j['id']}",
+                        "source": "adzuna",
+                        "title": j.get("title", "") or "",
+                        "company": (j.get("company") or {}).get("display_name", ""),
+                        "location": (j.get("location") or {}).get("display_name", ""),
+                        "search_location": location,
+                        "url": j.get("redirect_url", ""),
+                        "description": strip_html(j.get("description") or "")[:4000],
+                        "salary_min": j.get("salary_min"),
+                        "salary_max": j.get("salary_max"),
+                        "posted_at": posted.isoformat() if posted else None,
+                    })
+                if len(results) < 50:
                     break
+            except Exception as e:
+                print(f"[harvest] adzuna {location} p{page}: {e}")
+                break
     return jobs
 
 
