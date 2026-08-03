@@ -1415,3 +1415,43 @@ class TestVeteranEmployers(unittest.TestCase):
                  mock.patch.object(jm, "gemini_json", side_effect=fake_gemini):
                 jm.build_email(make_job(company=company, status="ready"))
             self.assertIn(expected, captured)
+
+
+class TestInboundReminder(unittest.TestCase):
+    """The outbound side writes to employers. This is the other direction:
+    places a recruiter finds Harry. Registering is a one-off he does himself,
+    but CV databases rank by how recently a CV was touched, so the ranking
+    decays every week whether he does anything or not."""
+
+    def sunday(self, hour=22):
+        return datetime(2026, 8, 9, hour, tzinfo=timezone.utc)   # a Sunday
+
+    def test_it_arrives_on_a_sunday(self):
+        text, html = jm.inbound_reminder(self.sunday())
+        self.assertTrue(text)
+        self.assertIn("RightJob", "\n".join(text))
+
+    def test_it_does_not_arrive_on_any_other_day(self):
+        for offset in range(1, 7):
+            when = self.sunday() + timedelta(days=offset)
+            with self.subTest(day=when.strftime("%A")):
+                self.assertEqual(jm.inbound_reminder(when), (None, None))
+
+    def test_the_veterans_charity_is_the_first_thing_listed(self):
+        """Free to him, and they work with thousands of employers who
+        specifically want ex-forces - the strongest inbound channel he has."""
+        self.assertIn("RightJob", jm.INBOUND_TASKS[0][0])
+
+    def test_every_entry_carries_a_link_and_a_reason(self):
+        for name, url, why in jm.INBOUND_TASKS:
+            with self.subTest(name=name):
+                self.assertTrue(url.startswith("https://"))
+                self.assertTrue(len(why) > 10)
+
+    def test_the_digest_carries_it_on_a_sunday(self):
+        state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        data = jm.collect_summary(state, jm.summary_window(state))
+        with mock.patch.object(jm, "uk_now", return_value=self.sunday()):
+            subject, text, html = jm.summary_bodies(data)
+        self.assertIn("RightJob", text)
+        self.assertIn("RightJob", html)
