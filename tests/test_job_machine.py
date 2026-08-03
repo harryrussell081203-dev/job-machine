@@ -1597,3 +1597,53 @@ class TestAnsweringAnInterviewInvite(unittest.TestCase):
         text = jm.autoreply_body({"title": "Workshop Technician",
                                   "description": "Aberdeen workshop"}).lower()
         self.assertNotIn("offshore", text)
+
+
+class TestCourseAdvertsAreNotVacancies(unittest.TestCase):
+    """Five of these turned up at once in the real queue - all from one
+    training provider, all selling a course, all scoring just under the bar
+    because the trade words matched. An email to the seller of a course is a
+    wasted approach."""
+
+    def test_a_course_being_sold_is_recognised(self):
+        for title, body in (
+                ("Trainee Incident Response Engineer - job guarantee",
+                 "Kickstart your career, no experience needed"),
+                ("IT Technician No experience needed!",
+                 "Our training academy will get you qualified"),
+                ("Trainee Certified Ethical Hacker", "funded training, enrol today"),
+                ("Junior IT Helpdesk Technician",
+                 "Once qualified we place you with an employer")):
+            with self.subTest(title=title):
+                self.assertEqual(
+                    jm.not_worth_applying({"title": title, "description": body}),
+                    "a training course being sold, not a vacancy")
+
+    def test_a_real_vacancy_is_untouched(self):
+        for title, body in (
+                ("Instrumentation Technician",
+                 "Calibration of pressure instrumentation offshore, 3/3 rotation"),
+                ("Maintenance Technician",
+                 "Planned preventative maintenance in our Aberdeen workshop"),
+                ("Apprentice-trained Electronics Technician",
+                 "You will have completed an apprenticeship and have experience")):
+            with self.subTest(title=title):
+                self.assertIsNone(jm.not_worth_applying(
+                    {"title": title, "description": body}))
+
+    def test_the_title_filter_still_works_and_is_reported_separately(self):
+        self.assertEqual(
+            jm.not_worth_applying({"title": "Chef de Partie", "description": ""}),
+            "title excluded (chef)")
+
+    def test_a_course_advert_never_reaches_the_scorer(self):
+        state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        listing = {"external_id": "adzuna_1", "source": "adzuna",
+                   "title": "Trainee Security Engineer - job guarantee",
+                   "company": "Newto Training", "location": "United Kingdom",
+                   "description": "No experience needed, we train you.",
+                   "url": "https://x", "posted_at": jm.now()}
+        with mock.patch.object(jm, "adzuna", return_value=[listing]), \
+             mock.patch.object(jm, "reed", return_value=[]):
+            jm.harvest(state)
+        self.assertEqual(state["jobs"]["adzuna_1"]["status"], "skipped")

@@ -149,6 +149,23 @@ TITLE_EXCLUSIONS = [
     "waiter", "waitress", "bartender", "cleaner", "warehouse operative",
 ]
 
+# Course adverts dressed up as vacancies. They turned up five at a time in the
+# real queue - "Trainee Incident Response Engineer - job guarantee", "IT
+# Technician No experience needed!" - all from a training provider selling a
+# course, all scoring just under the bar because the trade words match. They
+# are not jobs, and an email to the seller of one is a wasted approach.
+NOT_A_VACANCY = re.compile(
+    r"job guarantee|guaranteed job|no experience needed|"
+    r"course fee|tuition|payment plan|enrol|bootcamp|"
+    r"training (provider|programme|program|academy|course)|"
+    r"funded training|traineeship|study (with|at) us|"
+    r"once qualified we|after completing the course", re.I)
+
+
+def is_course_advert(job):
+    blob = f"{job.get('title') or ''} {(job.get('description') or '')[:1500]}"
+    return bool(NOT_A_VACANCY.search(blob))
+
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
 - Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
@@ -719,6 +736,16 @@ def title_excluded(title):
     return next((x for x in TITLE_EXCLUSIONS if x in low), None)
 
 
+def not_worth_applying(job):
+    """A reason to bin this listing before it costs a Gemini call or a send."""
+    excluded = title_excluded(job.get("title"))
+    if excluded:
+        return f"title excluded ({excluded})"
+    if is_course_advert(job):
+        return "a training course being sold, not a vacancy"
+    return None
+
+
 def harvest(state):
     seen = {dedupe_key(j) for j in state["jobs"].values()}
     new = dropped = 0
@@ -731,14 +758,14 @@ def harvest(state):
             continue
         seen.add(key)
         job.update({"status": "new", "score": None, "found_at": now()})
-        excluded = title_excluded(job["title"])
-        if excluded:
-            job.update({"status": "skipped", "skip_reason": f"title excluded ({excluded})"})
+        reason = not_worth_applying(job)
+        if reason:
+            job.update({"status": "skipped", "skip_reason": reason})
             dropped += 1
         else:
             new += 1
         state["jobs"][eid] = job
-    print(f"[harvest] {new} new listings ({dropped} dropped on title) "
+    print(f"[harvest] {new} new listings ({dropped} dropped as unsuitable) "
           f"across {len(SEARCH_LOCATIONS)} locations")
 
 
