@@ -22688,5 +22688,27 @@
   "subsea7": "no domain or MX",
   "technipfmc": "no real address",
   "wood": "sent"
+ },
+ "support_asked": {
+  "legion scotland": {
+   "at": "2026-08-03T21:14:03",
+   "email": "events@legionscotland.org.uk",
+   "name": "Legion Scotland"
+  },
+  "poppyscotland": {
+   "at": "2026-08-03T21:11:57",
+   "email": "f.bedwell@poppyscotland.org.uk",
+   "name": "Poppyscotland"
+  },
+  "ssafa armed forces charity": {
+   "at": "2026-08-03T21:12:57",
+   "email": "corporate@ssafa.org.uk",
+   "name": "SSAFA the Armed Forces Charity"
+  },
+  "veterans scotland": {
+   "at": "2026-08-03T21:15:03",
+   "email": "info@veteransscotland.org.uk",
+   "name": "Veterans Scotland"
+  }
  }
 }
