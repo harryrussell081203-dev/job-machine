@@ -646,7 +646,7 @@ class TestAgainstALocalPortal(unittest.TestCase):
                                return_value={"answer": "Same work as my day job.",
                                              "fact_used": "Sonardyne"}), \
              mock.patch.object(jm, "cv_for", return_value=FIXTURE), \
-             mock.patch.object(pa, "has_captcha", return_value=True), \
+             mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
              mock.patch.object(pa, "shot", return_value=None), \
              mock.patch.object(pa, "click_submit") as submit:
             pa.apply_to_job(self.page, job, pa.load_answers(), submit=True)
@@ -918,3 +918,71 @@ class TestWallClockBudgets(unittest.TestCase):
             added = pa.harvest_boards(state)
         self.assertEqual(added, 1)
         self.assertEqual(len(state["jobs"]), 1)
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestTellingBotChecksApart(unittest.TestCase):
+    """An invisible reCAPTCHA and a puzzle both put 'recaptcha' in the HTML.
+    Every one of the 46 vacancies found on employers' own Workable boards
+    reported a bot check under the old text scan; if they are really invisible
+    checks, none of them needed a human at all."""
+
+    def page_showing(self, html):
+        page = self.browser.new_page()
+        page.set_content(html)
+        self.addCleanup(page.close)
+        return page
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def test_an_invisible_score_check_is_not_a_blocker(self):
+        page = self.page_showing(
+            '<script src="https://www.google.com/recaptcha/api.js?render=abc123">'
+            '</script><div class="grecaptcha-badge" style="width:70px;height:60px">'
+            '</div><form><input name="email"></form>')
+        self.assertEqual(pa.captcha_kind(page), "scored")
+        self.assertFalse(pa.has_captcha(page))
+
+    def test_a_visible_tickbox_challenge_needs_a_human(self):
+        page = self.page_showing(
+            '<div class="g-recaptcha" data-sitekey="abc" '
+            'style="width:304px;height:78px"></div>')
+        self.assertEqual(pa.captcha_kind(page), "challenge")
+        self.assertTrue(pa.has_captcha(page))
+
+    def test_an_invisible_widget_declares_itself(self):
+        page = self.page_showing(
+            '<div class="g-recaptcha" data-sitekey="abc" data-size="invisible" '
+            'style="width:304px;height:78px"></div>')
+        self.assertNotEqual(pa.captcha_kind(page), "challenge")
+
+    def test_an_ordinary_form_has_no_bot_check_at_all(self):
+        page = self.page_showing('<form><input name="email"></form>')
+        self.assertIsNone(pa.captcha_kind(page))
+        self.assertFalse(pa.has_captcha(page))
+
+    def test_bot_protection_we_do_not_recognise_is_treated_as_a_blocker(self):
+        """The conservative half of the rule: unknown means human, never waved
+        past. Nothing here is ever an attempt to defeat bot protection."""
+        page = self.page_showing('<div>arkoselabs funcaptcha widget</div>')
+        self.assertEqual(pa.captcha_kind(page), "challenge")
+
+    def test_a_hidden_challenge_frame_does_not_count(self):
+        page = self.page_showing(
+            '<iframe src="https://www.google.com/recaptcha/api2/anchor?k=x" '
+            'style="display:none;width:300px;height:80px"></iframe>'
+            '<div class="grecaptcha-badge" style="width:70px;height:60px"></div>')
+        self.assertEqual(pa.captcha_kind(page), "scored")
