@@ -250,6 +250,45 @@ applies, to one job only.
 | `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
 | `PORTAL_DAILY_CAP` | `25` | Applications per day |
 
+## What the research says works, and where it lives in the code
+
+The methods here are not guesses. Cold outreach to a named human replies at
+15-25% against 2-5% for a blind online application; applying within 24-48
+hours produces two to three times the interviews; three touches capture about
+93% of the replies a sequence will ever earn.
+
+| Finding | Where it is implemented |
+| --- | --- |
+| A named human beats an application form, 15-25% vs 2-5% | the whole email path - real addresses only, ranked named person > hiring inbox > generic |
+| 50-125 word emails reply ~50% better than long ones | the 60-90 word rule enforced in `check_copy` |
+| Apply within 24-48 hours: 2-3x the interviews | harvest every run; freshest first in the queue; `brand_new()` sends today's listings immediately |
+| Tue-Thu 9-11am gets the best open and reply rates | `in_peak_window()`, and two crons that land inside it in BST and GMT |
+| Three touches capture ~93% of replies; a fourth to the same person reads as pressure | day 4 and day 9 nudges, then stop |
+| A *different* person at the same company is the exception | `next_stakeholder()` - day 16, new conversation, CV attached |
+| Referrals are ~7x more likely to be hired | no honest way to automate this one; see below |
+| **A guaranteed interview scheme beats all of it** | `data/veteran_employers.json` - Armed Forces Covenant signatories, written to first |
+
+**The Covenant route is the only one that produces an interview by right**
+rather than by persuasion. Many signatories guarantee an interview to a
+veteran who meets the minimum criteria for the role, and Harry served two
+years in the Royal Navy. Expanding `data/veteran_employers.json` is the
+highest-value thing anyone can do to this repository - each name added is an
+employer where being ex-forces moves him from the pile to the shortlist.
+
+The email never claims an employer holds an award or runs a scheme. It asks.
+His service is a fact about him; whether they run a scheme is theirs to state.
+
+**Agencies are not employers.** An employer has the one job they advertised
+and a second unsolicited email reads as pestering, so they get one, ever. A
+recruitment agency is paid to place people and holds dozens of live roles, so
+it gets up to four approaches, one per vacancy, six days apart - with its own
+template, because a consultant is matching a person against a list and needs
+the facts that let them do it.
+
+**Referrals** are the one well-evidenced channel left unautomated. Doing it
+properly needs to know who Harry actually knows, and inventing a connection
+would be worse than not claiming one.
+
 ## Converting applications into interviews
 
 Five levers run automatically on top of the basic apply loop:
