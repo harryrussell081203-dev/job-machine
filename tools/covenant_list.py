@@ -165,13 +165,48 @@ def merge(found, path=None):
     return data, added
 
 
+def inspect(url=None):
+    """Print what an index page actually contains.
+
+    The register is not reachable from every network - including the one this
+    was written on - so its structure has to be discovered from a runner
+    rather than assumed. The first version assumed each A-Z page listed the
+    businesses inline and came back with 51 names out of thousands."""
+    url = url or INDEX.format(letter="a")
+    print(f"[inspect] {url}")
+    html = fetch(url)
+    print(f"[inspect] {len(html)} characters")
+    if not html:
+        print("[inspect] nothing came back at all")
+        return 1
+    business = BUSINESS_LINK.findall(html)
+    print(f"[inspect] {len(business)} /armed-forces-covenant-businesses/ links")
+    for path, name in business[:5]:
+        print(f"    {path}  {jm.strip_html(name).strip()[:60]}")
+    # where else might the list live: attachments, CSVs, print views
+    others = re.findall(r'href="([^"]+)"', html)
+    interesting = [u for u in others if re.search(
+        r"assets\.publishing|\.csv|\.html|attachment|print|preview", u, re.I)]
+    print(f"[inspect] {len(interesting)} attachment-ish link(s):")
+    for u in list(dict.fromkeys(interesting))[:15]:
+        print(f"    {u[:110]}")
+    heads = re.findall(r"<h[12][^>]*>(.*?)</h[12]>", html, re.I | re.S)
+    print("[inspect] headings:",
+          " | ".join(jm.strip_html(h).strip()[:40] for h in heads[:6]))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--inspect", nargs="?", const=True, metavar="URL",
+                    help="print what an index page really contains and stop")
     ap.add_argument("--write", action="store_true", help="update the data file")
     ap.add_argument("--check", action="store_true",
                     help="report what would change, write nothing")
     ap.add_argument("--limit", type=int, help="only read this many pledge pages")
     args = ap.parse_args(argv)
+    if args.inspect:
+        return inspect(None if args.inspect is True else args.inspect)
 
     found = build(limit=args.limit)
     if not found:
