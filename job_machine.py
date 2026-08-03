@@ -1915,6 +1915,57 @@ def esc(text):
             .replace("<", "&lt;").replace(">", "&gt;"))
 
 
+# The outbound side of this project writes to employers. This is the other
+# direction: places where a recruiter finds Harry. Registering is a one-off he
+# does himself, but CV databases rank by how recently a CV was touched, so the
+# ranking decays every week whether he does anything or not - which is the one
+# part worth a standing reminder.
+INBOUND_TASKS = [
+    ("RightJob - Forces Employment Charity",
+     "https://www.rfea.org.uk/jobseekers/",
+     "free to veterans, and they work with around 8,000 employers who "
+     "specifically want to hire ex-forces. If you do one thing on this list, "
+     "this is it. Set its alerts to this inbox and the machine reads them."),
+    ("CV-Library", "https://www.cv-library.co.uk/",
+     "refresh the CV so you rank top of recruiter searches"),
+    ("Totaljobs / Jobsite", "https://www.totaljobs.com/",
+     "same - recruiters search by last updated"),
+    ("Oil and Gas Job Search", "https://www.oilandgasjobsearch.com/",
+     "the Aberdeen energy market searches here"),
+    ("Energy Jobline", "https://www.energyjobline.com/",
+     "offshore and renewables recruiters"),
+    ("Reed", "https://www.reed.co.uk/",
+     "keep the profile live even though we use their API"),
+    ("LinkedIn - Open to Work",
+     "https://www.linkedin.com/",
+     "set it to recruiters only; they filter on it"),
+]
+
+
+def inbound_reminder(when=None):
+    """A short weekly list of the places recruiters go looking, or None.
+
+    Sunday evening, because it is a ten minute job and Monday is when
+    recruiters start searching."""
+    now_uk = when or uk_now()
+    if now_uk.weekday() != 6:
+        return None, None
+    text = ["Recruiters search CV databases by how recently a CV was touched,",
+            "so ten minutes here puts you at the top of next week's searches.",
+            ""]
+    items = []
+    for name, url, why in INBOUND_TASKS:
+        text.append(f"  {name} - {why}")
+        text.append(f"      {url}")
+        items.append(f"<li><b>{esc(name)}</b> - {esc(why)}<br>"
+                     f'<a href="{esc(url)}">{esc(url)}</a></li>')
+    html = ("<h2>Inbound - 10 minutes, once a week</h2>"
+            "<p class=m>Recruiters search CV databases by how recently a CV was "
+            "touched, so ten minutes here puts you at the top of next week's "
+            "searches.</p><ul>" + "".join(items) + "</ul>")
+    return text, html
+
+
 def summary_bodies(data):
     """(subject, plain text, html) for the digest."""
     apps = data["applications"]
@@ -1955,6 +2006,10 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    inbound_text, inbound_html = inbound_reminder()
+    if inbound_text:
+        lines += ["", "INBOUND - 10 MINUTES, ONCE A WEEK", "-" * 33] + inbound_text
 
     portal_html = ""
     if data.get("portal_submitted") or data.get("portal_review") or \
@@ -2022,6 +2077,7 @@ ul{{font-size:14px;padding-left:18px}}
 <p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
 {table}
 {portal_html}
+{inbound_html or ''}
 <ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
 </body></html>"""
     return subject, "\n".join(lines), html
