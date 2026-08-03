@@ -59,7 +59,7 @@ class TestBankingACaptchaBlockedApplication(unittest.TestCase):
                    "placeholder": "", "aria_label": "", "group_label": "",
                    "maxlength": None, "tag": "input", "value": ""}] * 4
         with mock.patch.object(pa, "collect_fields", return_value=fields), \
-             mock.patch.object(pa, "has_captcha", return_value=True), \
+             mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
              mock.patch.object(pa, "plan_answers",
                                return_value=([planned("First name", "Harry")], [])), \
              mock.patch.object(pa, "apply_plan", return_value=([], [])), \
@@ -75,7 +75,7 @@ class TestBankingACaptchaBlockedApplication(unittest.TestCase):
         job = {"external_id": "a", "title": "T", "company": "C",
                "apply_url": "https://x/1"}
         with mock.patch.object(pa, "collect_fields", return_value=[]), \
-             mock.patch.object(pa, "has_captcha", return_value=True), \
+             mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
              mock.patch.object(pa, "shot", return_value=None):
             pa.apply_to_job(mock.MagicMock(), job, {}, submit=True)
         self.assertEqual(job["status"], "portal_manual")

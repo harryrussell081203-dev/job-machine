@@ -447,6 +447,47 @@ class TestSending(unittest.TestCase):
             jm.run_sends(self.state)
         self.assertEqual(send.call_count, 2)
 
+    def test_the_per_run_cap_is_never_exceeded_by_fresh_listings(self):
+        """The throttle a fresh listing skips is the off-peak one, not the cap
+        that keeps twenty emails out of a single Gmail session."""
+        fresh = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        for i in range(9):
+            self.add(external_id=f"f{i}", company=f"Firm {i}", posted_at=fresh,
+                     contact_email=f"jane@f{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=False), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 4), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 1), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 4)
+
+    def test_off_peak_holds_the_stale_queue_back_for_the_window(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        for i in range(6):
+            self.add(external_id=f"s{i}", company=f"Old Firm {i}", posted_at=old,
+                     contact_email=f"jane@s{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=False), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 7), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 2), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 2)
+
+    def test_in_the_window_the_whole_run_budget_is_used(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        for i in range(6):
+            self.add(external_id=f"w{i}", company=f"Firm {i}", posted_at=old,
+                     contact_email=f"jane@w{i}.com", email_tier=3)
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "in_peak_window", return_value=True), \
+             mock.patch.object(jm, "PER_RUN_SEND_CAP", 5), \
+             mock.patch.object(jm, "OFF_PEAK_SEND_CAP", 2), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(self.state)
+        self.assertEqual(send.call_count, 5)
+
     def test_daily_cap(self):
         self.state["send_counts"][jm.today()] = 20
         self.add()
@@ -1096,3 +1137,575 @@ class TestState(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestRecruitmentAgencies(unittest.TestCase):
+    """An agency is not an employer and must not be rationed like one.
+
+    An employer has the one job they advertised. An agency is paid to place
+    people, holds dozens of roles, and expects to hear from candidates - six of
+    the fourteen firms in the last portal run were agencies, and the
+    one-email-per-company-ever rule made each of them worth a single approach
+    for the rest of time.
+    """
+    def state(self):
+        return {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+
+    def test_agencies_are_recognised_by_name(self):
+        for name in ("Matchtech", "Orion Electrotech", "Morson Edge",
+                     "Future Engineering Recruitment Ltd", "Cammach Bryant",
+                     "NES Fircroft", "Thorpe Molloy Recruitment"):
+            with self.subTest(name=name):
+                self.assertTrue(jm.is_agency({"company": name}), name)
+
+    def test_agencies_are_recognised_by_the_wording_they_must_use(self):
+        for body in ("Our client is a leading subsea contractor",
+                     "acting as an employment agency in relation to this vacancy",
+                     "We are recruiting for a well established Aberdeen firm"):
+            with self.subTest(body=body[:30]):
+                self.assertTrue(jm.is_agency({"company": "ABC Ltd",
+                                              "description": body}))
+
+    def test_a_real_employer_is_not_mistaken_for_one(self):
+        for name in ("Hydrasun", "Baker Hughes", "Dron & Dickson", "EnerMech",
+                     "ScottishPower"):
+            with self.subTest(name=name):
+                self.assertFalse(jm.is_agency({"company": name,
+                                               "description": "Join our team"}))
+
+    def test_an_employer_still_gets_one_email_ever(self):
+        state = self.state()
+        job = {"company": "Hydrasun", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, job)
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Hydrasun", "external_id": "b", "description": ""}))
+
+    def test_an_agency_can_be_approached_again_about_a_different_role(self):
+        state = self.state()
+        first = {"company": "Matchtech", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, first)
+        entry = state["companies_contacted"][jm.company_key("Matchtech")]
+        entry["at"] = "2026-01-01T09:00:00+00:00"          # long enough ago
+        self.assertFalse(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "b", "description": ""}))
+
+    def test_never_twice_about_the_same_vacancy(self):
+        state = self.state()
+        job = {"company": "Matchtech", "external_id": "a", "description": ""}
+        jm.mark_contacted(state, job)
+        state["companies_contacted"][jm.company_key("Matchtech")]["at"] = \
+            "2026-01-01T09:00:00+00:00"
+        self.assertTrue(jm.already_contacted(state, job))
+
+    def test_an_agency_is_not_emailed_twice_in_the_same_week(self):
+        state = self.state()
+        jm.mark_contacted(state, {"company": "Matchtech", "external_id": "a",
+                                  "description": ""})
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "b", "description": ""}))
+
+    def test_an_agency_is_not_pestered_for_ever(self):
+        state = self.state()
+        for n in range(jm.AGENCY_MAX_APPROACHES):
+            job = {"company": "Matchtech", "external_id": f"job{n}",
+                   "description": ""}
+            jm.mark_contacted(state, job)
+            state["companies_contacted"][jm.company_key("Matchtech")]["at"] = \
+                "2026-01-01T09:00:00+00:00"
+        self.assertTrue(jm.already_contacted(
+            state, {"company": "Matchtech", "external_id": "last",
+                    "description": ""}))
+
+    def test_an_agency_advert_gets_the_consultants_email_whatever_the_trade(self):
+        self.assertEqual(
+            jm.pick_family("Instrumentation Technician",
+                           "Our client is a subsea contractor", "Matchtech"),
+            "agency")
+        self.assertNotEqual(
+            jm.pick_family("Instrumentation Technician",
+                           "Join our Aberdeen team", "Hydrasun"),
+            "agency")
+
+
+class TestWhenItSends(unittest.TestCase):
+    """Tuesday to Thursday, 9-11am gets the best open and reply rates; applying
+    within 24-48 hours produces two to three times the interviews. Speed is
+    measured in days and timing in hours, so both can be had."""
+    def at(self, day, hour):
+        # 3 Aug 2026 is a Monday
+        return datetime(2026, 8, 3 + day, hour, tzinfo=timezone.utc)
+
+    def test_the_window_is_tuesday_to_thursday_mid_morning(self):
+        self.assertTrue(jm.in_peak_window(self.at(1, 10)))    # Tue 10am
+        self.assertTrue(jm.in_peak_window(self.at(3, 9)))     # Thu 9am
+
+    def test_monday_and_friday_are_not_the_window(self):
+        self.assertFalse(jm.in_peak_window(self.at(0, 10)))
+        self.assertFalse(jm.in_peak_window(self.at(4, 10)))
+
+    def test_early_morning_and_afternoon_are_not_the_window(self):
+        self.assertFalse(jm.in_peak_window(self.at(1, 7)))
+        self.assertFalse(jm.in_peak_window(self.at(1, 15)))
+
+    def test_a_listing_posted_hours_ago_does_not_wait_for_the_window(self):
+        fresh = {"posted_at": (datetime.now(timezone.utc)
+                               - timedelta(hours=2)).isoformat()}
+        self.assertTrue(jm.brand_new(fresh))
+
+    def test_a_listing_from_two_days_ago_can_wait(self):
+        stale = {"posted_at": (datetime.now(timezone.utc)
+                               - timedelta(hours=48)).isoformat()}
+        self.assertFalse(jm.brand_new(stale))
+
+    def test_a_listing_with_no_date_is_not_treated_as_fresh(self):
+        self.assertFalse(jm.brand_new({}))
+
+
+class TestReachingASecondPerson(unittest.TestCase):
+    """Three touches to one inbox capture about 93% of the replies a sequence
+    will ever earn. A fourth to the same person is pestering; a first to a
+    different person at the same company is a new conversation, and it is the
+    one documented reason to go past three."""
+
+    def job(self, **over):
+        base = {"external_id": "j1", "status": "sent", "title": "Test Technician",
+                "company": "Acme Subsea", "contact_email": "jane@acme.com",
+                "contact_name": "Jane", "message_id": "<m1>",
+                "sent_subject": "Ex-Navy tech for your Test Technician",
+                "sent_at": (datetime.now(timezone.utc)
+                            - timedelta(days=20)).isoformat(),
+                "followup_sent_at": "2026-07-20T09:00:00+00:00",
+                "followup2_sent_at": "2026-07-25T09:00:00+00:00",
+                "other_contacts": [{"email": "ops@acme.com", "name": None,
+                                    "tier": 2}]}
+        base.update(over)
+        return base
+
+    def run_one(self, job):
+        state = {"jobs": {job["external_id"]: job}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "has_reply_from", return_value=False), \
+             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_followups(state)
+        return send
+
+    def test_discovery_keeps_the_addresses_it_did_not_use(self):
+        self.assertEqual(
+            [c["email"] for c in jm.ranked_emails(
+                ["info@acme.com", "jane.smith@acme.com", "careers@acme.com"])],
+            ["jane.smith@acme.com", "careers@acme.com", "info@acme.com"])
+
+    def test_a_fourth_touch_goes_to_a_different_person(self):
+        job = self.job()
+        send = self.run_one(job)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0], "ops@acme.com")
+        self.assertEqual(job["stakeholder_email"], "ops@acme.com")
+
+    def test_it_is_a_new_conversation_not_a_reply(self):
+        """No Re:, no threading headers, and the CV goes with it - this reader
+        has never seen any of it."""
+        job = self.job()
+        send = self.run_one(job)
+        subject = send.call_args.args[1]
+        self.assertFalse(subject.lower().startswith("re:"))
+        self.assertTrue(send.call_args.kwargs["attach_cv"])
+        self.assertEqual(send.call_args.kwargs["headers"], {})
+
+    def test_nobody_is_written_to_twice(self):
+        job = self.job(stakeholder_sent_at="2026-08-01T09:00:00+00:00")
+        self.run_one(job).assert_not_called()
+
+    def test_with_no_second_address_the_sequence_simply_ends(self):
+        job = self.job(other_contacts=[])
+        self.run_one(job).assert_not_called()
+
+    def test_the_first_contact_is_never_the_second_contact(self):
+        job = self.job(other_contacts=[{"email": "JANE@acme.com", "name": "Jane",
+                                        "tier": 3}])
+        self.run_one(job).assert_not_called()
+
+    def test_it_waits_a_fortnight_before_trying_anyone_else(self):
+        job = self.job(sent_at=(datetime.now(timezone.utc)
+                                - timedelta(days=11)).isoformat())
+        self.run_one(job).assert_not_called()
+
+    def test_a_reply_stops_the_whole_sequence(self):
+        job = self.job()
+        state = {"jobs": {"j1": job}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "has_reply_from", return_value=True), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+        send.assert_not_called()
+        self.assertEqual(job["status"], "replied")
+
+
+class TestVeteranEmployers(unittest.TestCase):
+    """The Armed Forces Covenant carries a guaranteed interview scheme at many
+    signatories: a veteran meeting the minimum criteria gets interviewed. That
+    converts an application into an interview by policy rather than by
+    persuasion, which is worth more than any number of extra cold emails."""
+
+    def test_the_shipped_list_is_usable(self):
+        for company in ("Thales", "Leonardo", "Babcock International",
+                        "NHS Grampian", "Police Scotland"):
+            with self.subTest(company=company):
+                self.assertTrue(jm.veteran_friendly({"company": company}))
+
+    def test_a_longer_legal_name_still_matches(self):
+        self.assertTrue(jm.veteran_friendly({"company": "Thales UK Ltd"}))
+        self.assertTrue(jm.veteran_friendly({"company": "Babcock International Group"}))
+
+    def test_an_unlisted_employer_is_not_assumed_to_run_a_scheme(self):
+        for company in ("Hydrasun", "Dron & Dickson", "Some Local Firm", ""):
+            with self.subTest(company=company):
+                self.assertFalse(jm.veteran_friendly({"company": company}))
+
+    def test_they_are_written_to_first(self):
+        """Ahead of a better contact and a higher score at an ordinary firm."""
+        jobs = {
+            "ordinary": dict(make_job(external_id="ordinary", status="ready",
+                                      company="Some Firm", score=99,
+                                      email_tier=3, contact_email="jane@f.com")),
+            "veteran": dict(make_job(external_id="veteran", status="ready",
+                                     company="Leonardo", score=72,
+                                     email_tier=1, contact_email="info@l.com")),
+        }
+        state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "in_peak_window", return_value=True), \
+             mock.patch.object(jm, "build_email",
+                               return_value={"subject": "s", "body": "b",
+                                             "family": "general"}), \
+             mock.patch.object(jm, "cv_for", return_value=None), \
+             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(state)
+        self.assertEqual(send.call_args_list[0].args[0], "info@l.com")
+
+    def test_the_email_asks_about_the_scheme_and_never_claims_one(self):
+        """A wrong entry in the list must be incapable of putting a false
+        statement in his name, so the instruction asks rather than asserts."""
+        text = jm.VETERAN_INSTRUCTION.lower()
+        self.assertIn("ask", text)
+        self.assertIn("never state or assume", text)
+        self.assertIn("never mention awards", text)
+
+    def test_the_instruction_is_only_added_for_listed_employers(self):
+        captured = {}
+
+        def fake_gemini(prompt, **kw):
+            captured[prompt.count("ARMED FORCES COVENANT")] = True
+            return {"subject": "Ex-Navy tech for your role",
+                    "body": "Hi,\n\n1. x\n2. y\n\nWorth a chat?\n\nHarry\n"
+                            + jm.SIGNOFF}
+
+        for company, expected in (("Leonardo", 1), ("Hydrasun", 0)):
+            captured.clear()
+            with self.subTest(company=company), \
+                 mock.patch.object(jm, "gemini_json", side_effect=fake_gemini):
+                jm.build_email(make_job(company=company, status="ready"))
+            self.assertIn(expected, captured)
+
+
+class TestInboundReminder(unittest.TestCase):
+    """The outbound side writes to employers. This is the other direction:
+    places a recruiter finds Harry. Registering is a one-off he does himself,
+    but CV databases rank by how recently a CV was touched, so the ranking
+    decays every week whether he does anything or not."""
+
+    def sunday(self, hour=22):
+        return datetime(2026, 8, 9, hour, tzinfo=timezone.utc)   # a Sunday
+
+    def test_it_arrives_on_a_sunday(self):
+        text, html = jm.inbound_reminder(self.sunday())
+        self.assertTrue(text)
+        self.assertIn("RightJob", "\n".join(text))
+
+    def test_it_does_not_arrive_on_any_other_day(self):
+        for offset in range(1, 7):
+            when = self.sunday() + timedelta(days=offset)
+            with self.subTest(day=when.strftime("%A")):
+                self.assertEqual(jm.inbound_reminder(when), (None, None))
+
+    def test_the_veterans_charity_is_the_first_thing_listed(self):
+        """Free to him, and they work with thousands of employers who
+        specifically want ex-forces - the strongest inbound channel he has."""
+        self.assertIn("RightJob", jm.INBOUND_TASKS[0][0])
+
+    def test_every_entry_carries_a_link_and_a_reason(self):
+        for name, url, why in jm.INBOUND_TASKS:
+            with self.subTest(name=name):
+                self.assertTrue(url.startswith("https://"))
+                self.assertTrue(len(why) > 10)
+
+    def test_the_digest_carries_it_on_a_sunday(self):
+        state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        data = jm.collect_summary(state, jm.summary_window(state))
+        with mock.patch.object(jm, "uk_now", return_value=self.sunday()):
+            subject, text, html = jm.summary_bodies(data)
+        self.assertIn("RightJob", text)
+        self.assertIn("RightJob", html)
+
+
+class TestRescoringAfterTheProfileChanges(unittest.TestCase):
+    """A score is a judgement against CANDIDATE_PROFILE at the moment it was
+    made, so changing the profile silently invalidates every score in the file.
+
+    When the profile said 'Aberdeen strongly preferred', fifty-two listings
+    that matched Harry's trade exactly were marked down to 65 and binned for
+    being in Dundee, Inverness or Perth - one of them an Electro-Technical
+    Officer post, about as close to his Navy trade as an advert gets.
+    """
+    def state(self, *jobs):
+        return {"jobs": {j["external_id"]: j for j in jobs}}
+
+    def skipped(self, eid, score, reason=None):
+        return make_job(external_id=eid, status="skipped", score=score,
+                        skip_reason=reason or f"score {score}",
+                        score_reason="but it is not in Aberdeen")
+
+    def test_a_near_miss_goes_back_in_the_queue(self):
+        state = self.state(self.skipped("near", 65))
+        jm.rescore(state)
+        job = state["jobs"]["near"]
+        self.assertEqual(job["status"], "new")
+        self.assertNotIn("score", job)
+        self.assertNotIn("score_reason", job)
+
+    def test_a_genuinely_poor_match_stays_binned(self):
+        state = self.state(self.skipped("poor", 20))
+        jm.rescore(state)
+        self.assertEqual(state["jobs"]["poor"]["status"], "skipped")
+
+    def test_the_floor_can_be_moved(self):
+        state = self.state(self.skipped("mid", 45))
+        jm.rescore(state, floor=40)
+        self.assertEqual(state["jobs"]["mid"]["status"], "new")
+
+    def test_listings_the_scorer_never_judged_are_left_alone(self):
+        """The title filter and the pre-filter were not judgement calls, so a
+        change to the profile says nothing about them."""
+        for reason in ("off target (pre-filter)", "title excluded (chef)",
+                       "company already contacted", "no real address found"):
+            with self.subTest(reason=reason):
+                state = self.state(make_job(external_id="x", status="skipped",
+                                            score=65, skip_reason=reason))
+                jm.rescore(state)
+                self.assertEqual(state["jobs"]["x"]["status"], "skipped")
+
+    def test_work_already_sent_is_never_disturbed(self):
+        state = self.state(make_job(external_id="sent", status="sent", score=91))
+        jm.rescore(state)
+        self.assertEqual(state["jobs"]["sent"]["status"], "sent")
+
+
+class TestWhereHarryCanWork(unittest.TestCase):
+    def test_the_profile_no_longer_treats_aberdeen_as_a_requirement(self):
+        """He can take work anywhere that comes with the arrangements to live
+        it, and the scorer was quietly costing him every rotational role."""
+        profile = jm.CANDIDATE_PROFILE.lower()
+        self.assertNotIn("aberdeen strongly preferred", profile)
+        for expected in ("rotational", "fly-in", "accommodation", "not a requirement"):
+            self.assertIn(expected, profile)
+
+    def test_it_still_records_that_he_does_not_drive(self):
+        """A rotational posting is fine; a remote site with no transport is
+        not, and the difference matters."""
+        self.assertIn("does not drive", jm.CANDIDATE_PROFILE.lower())
+
+
+class TestFindingTheRotationalMarket(unittest.TestCase):
+    """An offshore posting is advertised against a base, a vessel or a whole
+    country, so a twenty-five mile radius around Aberdeen has never once seen
+    one - and that is the market Harry's trade actually sits in."""
+
+    def test_the_local_sweep_is_unchanged(self):
+        first = list(jm.adzuna_searches())[0]
+        self.assertEqual(first[0], jm.SEARCH_LOCATIONS[0])
+        self.assertEqual(first[1], jm.SEARCH_RADIUS_MILES)
+
+    def test_a_second_sweep_covers_the_whole_country(self):
+        wide = [s for s in jm.adzuna_searches() if s[1] == jm.ROTATIONAL_RADIUS]
+        self.assertTrue(wide)
+        self.assertTrue(all(s[0] == jm.ROTATIONAL_WHERE for s in wide))
+
+    def test_it_looks_for_the_roles_his_trade_actually_holds(self):
+        terms = " ".join(s[2] for s in jm.adzuna_searches()).lower()
+        for expected in ("offshore technician", "rov technician",
+                         "electro technical officer", "subsea technician"):
+            self.assertIn(expected, terms)
+
+    def test_the_wide_sweep_uses_narrow_phrases(self):
+        """A whole-country search on 'technician' would drag in everything;
+        these have to be specific enough to be worth the width."""
+        for where, radius, kw in jm.adzuna_searches():
+            if radius == jm.ROTATIONAL_RADIUS:
+                with self.subTest(kw=kw):
+                    self.assertGreaterEqual(len(kw.split()), 2)
+
+    def test_every_search_carries_its_own_radius(self):
+        for where, radius, kw in jm.adzuna_searches():
+            self.assertIn(radius, (jm.SEARCH_RADIUS_MILES, jm.ROTATIONAL_RADIUS))
+
+
+class TestAnsweringAnInterviewInvite(unittest.TestCase):
+    """The reply that books the interview. Mobility is the first thing an
+    offshore operator screens for, so leaving them to ask it is a wasted
+    exchange when the answer is an unqualified yes."""
+
+    def test_an_offshore_advert_is_recognised(self):
+        for job in ({"title": "ROV Technician", "description": "3/3 rotation"},
+                    {"title": "Technician", "description": "offshore, vessel based"},
+                    {"title": "Electrician", "description": "back-to-back rota"},
+                    {"title": "Tech", "description": "FIFO to the platform"}):
+            with self.subTest(job=job["description"]):
+                self.assertTrue(jm.rotational(job))
+
+    def test_an_ordinary_workshop_job_is_not(self):
+        self.assertFalse(jm.rotational(
+            {"title": "Workshop Technician",
+             "description": "Dayshift in our Aberdeen workshop, Monday to Friday."}))
+
+    def test_the_offshore_reply_answers_the_mobility_question_unasked(self):
+        body = jm.autoreply_body({"title": "ROV Technician",
+                                  "description": "offshore 3/3 rotation"})
+        text = body.format(greeting="Hi,", title="ROV Technician").lower()
+        self.assertIn("rotation", text)
+        self.assertIn("overseas", text)
+        self.assertIn("available immediately", text)
+
+    def test_it_still_offers_a_time_and_a_phone_number(self):
+        """Whatever else it says, the job of this email is to book a meeting."""
+        for job in ({"title": "X", "description": "offshore rota"},
+                    {"title": "X", "description": "workshop dayshift"}):
+            text = jm.autoreply_body(job).format(greeting="Hi,", title="X")
+            with self.subTest(job=job["description"]):
+                self.assertIn("07398 530978", text)
+                self.assertIn("Which day works best", text)
+
+    def test_an_onshore_reply_does_not_volunteer_irrelevant_detail(self):
+        text = jm.autoreply_body({"title": "Workshop Technician",
+                                  "description": "Aberdeen workshop"}).lower()
+        self.assertNotIn("offshore", text)
+
+
+class TestCourseAdvertsAreNotVacancies(unittest.TestCase):
+    """Five of these turned up at once in the real queue - all from one
+    training provider, all selling a course, all scoring just under the bar
+    because the trade words matched. An email to the seller of a course is a
+    wasted approach."""
+
+    def test_a_course_being_sold_is_recognised(self):
+        for title, body in (
+                ("Trainee Incident Response Engineer - job guarantee",
+                 "Kickstart your career, no experience needed"),
+                ("IT Technician No experience needed!",
+                 "Our training academy will get you qualified"),
+                ("Trainee Certified Ethical Hacker", "funded training, enrol today"),
+                ("Junior IT Helpdesk Technician",
+                 "Once qualified we place you with an employer")):
+            with self.subTest(title=title):
+                self.assertEqual(
+                    jm.not_worth_applying({"title": title, "description": body}),
+                    "a training course being sold, not a vacancy")
+
+    def test_a_real_vacancy_is_untouched(self):
+        for title, body in (
+                ("Instrumentation Technician",
+                 "Calibration of pressure instrumentation offshore, 3/3 rotation"),
+                ("Maintenance Technician",
+                 "Planned preventative maintenance in our Aberdeen workshop"),
+                ("Apprentice-trained Electronics Technician",
+                 "You will have completed an apprenticeship and have experience")):
+            with self.subTest(title=title):
+                self.assertIsNone(jm.not_worth_applying(
+                    {"title": title, "description": body}))
+
+    def test_the_title_filter_still_works_and_is_reported_separately(self):
+        self.assertEqual(
+            jm.not_worth_applying({"title": "Chef de Partie", "description": ""}),
+            "title excluded (chef)")
+
+    def test_a_course_advert_never_reaches_the_scorer(self):
+        state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        listing = {"external_id": "adzuna_1", "source": "adzuna",
+                   "title": "Trainee Security Engineer - job guarantee",
+                   "company": "Newto Training", "location": "United Kingdom",
+                   "description": "No experience needed, we train you.",
+                   "url": "https://x", "posted_at": jm.now()}
+        with mock.patch.object(jm, "adzuna", return_value=[listing]), \
+             mock.patch.object(jm, "reed", return_value=[]):
+            jm.harvest(state)
+        self.assertEqual(state["jobs"]["adzuna_1"]["status"], "skipped")
+
+
+class TestScoringDoesNotEatTheWholeRun(unittest.TestCase):
+    """Sending is the point of a run; scoring is only preparation for it.
+
+    Gemini's free tier answers 429 with a retry delay of up to a minute, so a
+    dozen batches can swallow the workflow's whole allowance and produce a run
+    that judges a hundred listings and emails nobody. A live run demonstrated
+    exactly that.
+    """
+    def queue(self, n):
+        jobs = {}
+        for i in range(n):
+            j = make_job(external_id=f"n{i}", status="new",
+                         title="Instrumentation Technician",
+                         description="Calibration of subsea instrumentation.")
+            j.pop("score", None)
+            jobs[j["external_id"]] = j
+        return {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+
+    def test_scoring_stops_at_its_budget(self):
+        state = self.queue(60)
+        # the first reading sets the deadline, the second is the loop's check
+        clock = iter([0, 0] + [1e9] * 50)   # one batch fits, then time is up
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}) as sb:
+            jm.score_jobs(state)
+        self.assertEqual(sb.call_count, 1)
+
+    def test_what_it_did_score_is_kept(self):
+        """Stopping early must not throw away the work already done."""
+        state = self.queue(30)
+        clock = iter([0, 0] + [1e9] * 50)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}):
+            jm.score_jobs(state)
+        scored = [j for j in state["jobs"].values() if j.get("status") == "scored"]
+        self.assertEqual(len(scored), 10)
+
+    def test_the_rest_stay_queued_for_the_next_run(self):
+        state = self.queue(30)
+        clock = iter([0, 0] + [1e9] * 50)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", side_effect=lambda: next(clock)), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}):
+            jm.score_jobs(state)
+        still_new = [j for j in state["jobs"].values() if j.get("status") == "new"]
+        self.assertEqual(len(still_new), 20)
+
+    def test_an_unhurried_run_scores_everything(self):
+        state = self.queue(30)
+        with mock.patch.object(jm, "SCORE_BATCH", 10), \
+             mock.patch.object(jm.time, "monotonic", return_value=0), \
+             mock.patch.object(jm, "score_batch",
+                               return_value={i: (95, "good") for i in range(10)}) as sb:
+            jm.score_jobs(state)
+        self.assertEqual(sb.call_count, 3)

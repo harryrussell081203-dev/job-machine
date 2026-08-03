@@ -11,6 +11,9 @@ on:
       - "fire-portal/**"           # fill forms in, stop before submitting
       - "fire-submit/**"           # fill in AND submit, one application only
       - "fire-diagnose/**"         # just look at the pages, fill nothing
+      - "fire-probe/**"            # ask the board APIs only - seconds, no browser
+      - "fire-inspect/**"          # open employer-board apply pages, fill nothing
+      - "fire-covenant/**"         # rebuild the Armed Forces Covenant list
   workflow_dispatch:
     inputs:
       submit:
@@ -47,6 +50,12 @@ jobs:
 
       - name: Harvest a month and work the queue
         env:
+          # Python block-buffers stdout when it is a pipe, which is
+          # what Actions gives it. Every log in this repo was flushed
+          # in one lump at exit, so a run that was killed printed
+          # nothing at all - forty-five minutes of silence that read
+          # like a hang and was really an empty buffer.
+          PYTHONUNBUFFERED: "1"
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
@@ -61,6 +70,33 @@ jobs:
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
         run: |
+          if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
+            # The MoD register of Covenant signatories. Every name on it is an
+            # employer where being ex-forces moves Harry from the pile to the
+            # shortlist, so this is the most valuable data in the project.
+            echo "fire-covenant branch: rebuilding the Covenant list"
+            # Report what the register really looks like before trusting a
+            # scrape of it - the first attempt found 51 names out of thousands
+            # because it assumed the wrong page structure.
+            python tools/covenant_list.py --inspect || true
+            python tools/covenant_list.py --write
+            exit 0
+          fi
+          if [[ "${GITHUB_REF_NAME}" == fire-probe/* ]]; then
+            # ground truth: what do the board APIs really answer for the
+            # companies in the queue? No browser, no scoring, ~30 seconds.
+            echo "fire-probe branch: querying the board APIs only"
+            python ats_finder.py --check-queue 14
+            exit 0
+          fi
+          if [[ "${GITHUB_REF_NAME}" == fire-inspect/* ]]; then
+            # the roles found on employers' own boards arrive unscored, so they
+            # sit outside the ordinary queue for days. Look at their apply
+            # pages now: they are the ones that should simply work.
+            echo "fire-inspect branch: opening employer application pages"
+            python portal_agent.py --inspect 8
+            exit 0
+          fi
           if [[ "${GITHUB_REF_NAME}" == fire-diagnose/* ]]; then
             # reconnaissance only: open the pages, fill nothing, submit nothing
             echo "fire-diagnose branch: inspecting pages only"

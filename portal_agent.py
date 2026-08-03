@@ -25,6 +25,7 @@ this agent does not try to defeat bot protection.
     python portal_agent.py --run --submit   # actually press submit
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -464,12 +465,76 @@ def collect_fields(page):
     return unique
 
 
-def has_captcha(page):
+# Does the page show a puzzle a person has to solve, or merely score the
+# session in the background? Both put the word 'recaptcha' in the HTML, and
+# telling them apart is the difference between an application Harry has to
+# finish by hand and one the agent can send on its own.
+CAPTCHA_KIND_JS = r"""
+() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 20 && r.height > 20 &&
+           s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+  };
+  // A challenge a human must complete renders an interactive frame.
+  const frames = document.querySelectorAll(
+    'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"],' +
+    'iframe[src*="hcaptcha.com/captcha"], iframe[src*="challenges.cloudflare.com"],' +
+    'iframe[title*="captcha" i]');
+  for (const f of frames) if (visible(f)) return 'challenge';
+  let widget = false;
+  const boxes = document.querySelectorAll(
+    '.g-recaptcha, .h-captcha, .cf-turnstile, [data-sitekey]');
+  for (const b of boxes) {
+    widget = true;
+    const size = (b.getAttribute('data-size') || '').toLowerCase();
+    if (size !== 'invisible' && visible(b)) return 'challenge';
+  }
+  // A score-based check leaves only a badge and a render= script.
+  if (document.querySelector('.grecaptcha-badge')) return 'scored';
+  // A widget that declares itself invisible, or is not rendered at all, asks
+  // the user nothing. Answering 'scored' here matters: falling through would
+  // reach the text scan below, which sees the word 'recaptcha' in the class
+  // name and calls every one of them a challenge.
+  if (widget) return 'scored';
+  const scripts = Array.from(document.querySelectorAll('script[src]'))
+                       .map(s => s.src);
+  if (scripts.some(s => /recaptcha\/(api|enterprise)\.js\?.*render=/.test(s)))
+    return 'scored';
+  return null;
+}
+"""
+
+
+def captcha_kind(page):
+    """'challenge' if a person must solve something, 'scored' for an invisible
+    check, None for neither.
+
+    Every application form found on an employer's Workable board reported a bot
+    check under the old test, which only looked for the word 'recaptcha' in the
+    HTML. That word is present either way. An invisible v3 check is not a
+    blocker - the form submits normally and the score is judged server-side -
+    so treating it as one would have banked 46 applications that nobody needed
+    to touch."""
+    try:
+        kind = page.evaluate(CAPTCHA_KIND_JS)
+    except Exception:
+        kind = None
+    if kind:
+        return kind
+    # Fall back to the old text scan, but only to say 'something is here':
+    # unrecognised bot protection is treated as a challenge, never waved past.
     try:
         html = page.content().lower()
     except Exception:
-        return False
-    return any(marker in html for marker in CAPTCHA_MARKERS)
+        return None
+    return "challenge" if any(m in html for m in CAPTCHA_MARKERS) else None
+
+
+def has_captcha(page):
+    """True only when a human is genuinely needed."""
+    return captcha_kind(page) == "challenge"
 
 
 def apply_plan(page, plan):
@@ -561,6 +626,23 @@ def bank_for_captcha(page, job, plan, flags):
           f"{len(job['captcha_answers'])} answers saved, needs a human CAPTCHA")
 
 
+def is_application_form(fields):
+    """Does this look like somewhere to apply for a job, or just a form?
+
+    Only asked of pages outside the known ATS platforms. An employer's own
+    careers page might carry a contact form, a site search or a newsletter
+    signup, and posting a CV into one of those is worse than doing nothing."""
+    text = " ".join(field_text(f) for f in fields).lower()
+    has_upload = any(f.get("type") == "file" for f in fields)
+    if has_upload and CV_PATTERNS.search(text + " " + " ".join(
+            f.get("name") or "" for f in fields)):
+        return True
+    keys = {match_key(f) for f in fields}
+    named = {"first_name", "last_name", "full_name"} & keys
+    return bool(has_upload and named) or bool(
+        named and "email" in keys and "phone" in keys and len(fields) >= 5)
+
+
 def apply_to_job(page, job, answers, submit):
     """One application, start to finish. Mutates job with the outcome."""
     page.goto(job["apply_url"], wait_until="domcontentloaded",
@@ -582,6 +664,16 @@ def apply_to_job(page, job, answers, submit):
                     "portal_screenshot": shot(page, job, "noform")})
         return False
 
+    # On a recognised ATS every form is an application form. On an employer's
+    # own site it might be a contact form, a search box or a newsletter signup,
+    # and filling one of those in with a CV would be worse than doing nothing.
+    if not classify_url(job["apply_url"])[1] and not is_application_form(fields):
+        job.update({"status": "portal_manual",
+                    "portal_reason": "a form, but not an application form - "
+                                     "no CV upload and no name-and-email pair",
+                    "portal_screenshot": shot(page, job, "notanapplication")})
+        return False
+
     plan, flags = plan_answers(fields, job, answers)
     filled, failed = apply_plan(page, plan)
     flags += failed
@@ -591,9 +683,15 @@ def apply_to_job(page, job, answers, submit):
 
     # Fill first, then check for a bot check: a filled form is worth banking
     # even when a CAPTCHA stops us submitting it.
-    if has_captcha(page):
+    kind = captcha_kind(page)
+    if kind == "challenge":
         bank_for_captcha(page, job, plan, flags)
         return False
+    if kind == "scored":
+        # An invisible check judges the session server-side rather than asking
+        # anything. Recorded, because if submissions ever start bouncing this
+        # is the first place to look.
+        job["portal_bot_check"] = "invisible, submitted anyway"
 
     if flags:
         job.update({"status": "portal_review",
@@ -730,6 +828,53 @@ def resolve_apply_url(job):
         return url, ats
 
 
+def ats_url_in_listing(job):
+    """The employer's own application link, pasted into the advert text.
+
+    Free, offline, and the first thing to try: every listing already carries up
+    to 4000 characters of description, and agencies and employers routinely put
+    'apply at https://boards.greenhouse.io/...' straight into it. No board to
+    follow, no slug to guess."""
+    text = " ".join(str(job.get(k) or "") for k in ("description", "apply_hint"))
+    match = ATS_LINK_RE.search(text)
+    if not match:
+        return None, None
+    found = match.group(0).rstrip(").,'\"")
+    ats = classify_url(found)[0]
+    print(f"[portal] the advert itself links to {ats}: {found[:80]}")
+    return found, ats
+
+
+def best_apply_url(page, job):
+    """Where this job's application form actually lives, best route first.
+
+    Kept in one place because run() and diagnose() have to agree: three of the
+    five diagnose runs measured a route the real run did not take."""
+    # 0. the listing already points at a portal - nothing to resolve
+    url = job.get("url")
+    if url and classify_url(url)[1]:
+        return url, classify_url(url)[0]
+
+    # 1. the advert text names the portal
+    found, ats = ats_url_in_listing(job)
+    if found and classify_url(found)[1]:
+        return found, ats
+
+    # 2. the employer's board API, then their own careers page
+    import ats_finder
+    board_url, board_ats = ats_finder.find_application_url(page, job)
+    if board_url:
+        return board_url, board_ats
+    if board_ats:
+        # We know where they recruit; this advert just is not on their board.
+        # Following the job board from here only ends on Adzuna's blank
+        # interstitial, so say so plainly instead of burning a browser hop.
+        return None, board_ats
+
+    # 3. last resort: follow the job board's own interstitial
+    return resolve_in_browser(page, job)
+
+
 def portal_candidates(state):
     """Scored, in-criteria jobs from the last month that we have not tried yet."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=PORTAL_MAX_AGE_DAYS)
@@ -789,29 +934,40 @@ def run(state, submit=False, limit=None, headless=True):
             accept_downloads=False,
         )
         page = context.new_page()
+        deadline = time.monotonic() + PORTAL_RUN_BUDGET
         for job in todo:
             if attempted >= budget:
                 print(f"[portal] budget of {budget} application(s) used")
                 break
+            if time.monotonic() > deadline:
+                print(f"[portal] {PORTAL_RUN_BUDGET}s spent, stopping so this "
+                      f"run's work is saved rather than killed mid-application")
+                break
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
                 break
-            # Go at the employer directly. The board route ends on a blank
-            # interstitial - proven over three diagnose runs - so it is only a
-            # fallback for listings that already point off-board.
-            import ats_finder
-            apply_url, ats = ats_finder.find_application_url(page, job)
-            if not apply_url:
-                apply_url, ats = resolve_in_browser(page, job)
+            apply_url, ats = best_apply_url(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
                         "portal_attempted_at": jm.now()})
-            if not apply_url or not classify_url(apply_url)[1]:
-                job.update({"status": "portal_manual",
-                            "portal_reason": f"{ats or 'unknown'} portal - needs an "
-                                             f"account or runs a bot check, do this one "
-                                             f"by hand"})
-                print(f"[portal] MANUAL {job['company']} ({ats or 'unknown'}) "
-                      f"- not counted, moving on")
+            known_ats, automatable = classify_url(apply_url or "")
+            # An unrecognised host is not a reason to give up. A probe across
+            # fourteen Aberdeen employers found exactly one hosted ATS, and it
+            # needed an account - most of them take applications on a form of
+            # their own. apply_to_job() already refuses anything that turns out
+            # not to be a real form, so let it look.
+            if not apply_url or (known_ats and not automatable):
+                if not apply_url and ats:
+                    reason = (f"{ats} is where {job['company']} recruit, but this "
+                              f"advert is not on their board - it is probably an "
+                              f"agency listing")
+                elif not apply_url:
+                    reason = "no application page found for this advert"
+                else:
+                    reason = (f"{known_ats} portal - needs an account or runs "
+                              f"a bot check, do this one by hand")
+                job.update({"status": "portal_manual", "portal_reason": reason})
+                print(f"[portal] MANUAL {job['company']} "
+                      f"({known_ats or ats or 'unknown'}) - not counted, moving on")
                 continue
             attempted += 1
             try:
@@ -871,20 +1027,35 @@ def diagnose(state, limit=12, headless=True):
         context = browser.new_context(user_agent=jm.UA["User-Agent"],
                                       viewport={"width": 1366, "height": 900})
         page = context.new_page()
-        import ats_finder
+        deadline = time.monotonic() + PORTAL_RUN_BUDGET
         for job in todo:
+            if time.monotonic() > deadline:
+                # Without this a slow run is killed by the workflow timeout and
+                # prints no table at all, which is how five runs in a row
+                # produced no evidence.
+                print(f"[diagnose] {PORTAL_RUN_BUDGET}s spent, reporting on the "
+                      f"{len(rows)} page(s) looked at so far")
+                break
             print(f"  {job.get('company')}: {job.get('title')}")
-            url, ats = ats_finder.find_application_url(page, job)
-            if not url:
-                url, ats = resolve_in_browser(page, job, verbose=True)
+            url, ats = best_apply_url(page, job)
             host = re.sub(r"^https?://", "", url or "").split("/")[0].lower()
             row = {"company": (job.get("company") or "?")[:28],
                    "title": (job.get("title") or "?")[:34],
                    "ats": ats or "unknown", "host": host[:38],
                    "fields": 0, "required": 0, "captcha": False,
                    "verdict": "", "url": url}
+            if not url:
+                row["verdict"] = (f"not on {ats}'s board - agency listing"
+                                  if ats else "no application page found")
+                rows.append(row)
+                continue
             try:
-                row["captcha"] = has_captcha(page)   # already on the page
+                # The API route never opens a browser, so the page we are about
+                # to measure has to be loaded here rather than assumed.
+                page.goto(url, wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(2500)
+                row["captcha"] = has_captcha(page)
                 fields = collect_fields(page)
                 row["fields"] = len(fields)
                 row["required"] = sum(1 for f in fields if f.get("required"))
@@ -898,14 +1069,20 @@ def diagnose(state, limit=12, headless=True):
                 rows.append(row)
                 continue
 
+            # Evidence first, brand second. The previous order asked whether
+            # the host was a known ATS and answered "SUPPORTED - can apply now"
+            # for nine pages that had no form on them at all.
+            known = classify_url(url)[1]
             if row["captcha"]:
                 row["verdict"] = "bot check - human only"
-            elif classify_url(url)[1]:
-                row["verdict"] = "SUPPORTED - can apply now"
             elif row["fields"] >= 5 and row.get("has_cv"):
-                row["verdict"] = "usable form, brand unrecognised"
+                row["verdict"] = ("SUPPORTED - can apply now" if known
+                                  else "usable form, brand unrecognised")
             elif row["fields"] >= 5:
                 row["verdict"] = f"{row['fields']} fields, no CV upload"
+            elif known:
+                row["verdict"] = (f"{row['ats']} page, only {row['fields']} "
+                                  f"field(s) - form is behind a button or a login")
             else:
                 row["verdict"] = "no form - advert or login wall"
             rows.append(row)
@@ -926,6 +1103,196 @@ def diagnose(state, limit=12, headless=True):
             print(f"  -> {r['company']}: {r['url']}")
 
 
+def in_reach(location):
+    """Is this posting somewhere Harry could actually take the job?
+
+    Employers' boards are worldwide. Without this, a Greenhouse board would
+    happily offer him a technician role in Houston."""
+    low = (location or "").lower()
+    if not low:
+        return False
+    return any(place.lower() in low for place in jm.SEARCH_LOCATIONS + NEARBY)
+
+
+NEARBY = ["scotland", "aberdeenshire", "grampian", "highland", "fife",
+          "perth", "stirling", "montrose", "peterhead", "fraserburgh",
+          "westhill", "portlethen", "altens", "dyce", "bridge of don"]
+
+BOARD_COMPANY_CAP = jm.env_int("BOARD_COMPANY_CAP", 40)
+# How long a company's ATS identity is trusted before we go looking again.
+# Whether a firm uses Greenhouse changes about once every never; which roles
+# are open on it changes daily, so only the identity is cached.
+BOARD_CACHE_DAYS = jm.env_int("BOARD_CACHE_DAYS", 21)
+BOARD_MISS_DAYS = jm.env_int("BOARD_MISS_DAYS", 10)
+# Wall-clock budgets. A run that overruns the workflow's sixty minutes is
+# killed mid-flight and loses everything it found, which is worse than
+# covering fewer companies and picking the rest up next time.
+BOARD_DISCOVERY_BUDGET = jm.env_int("BOARD_DISCOVERY_BUDGET", 600)
+PORTAL_RUN_BUDGET = jm.env_int("PORTAL_RUN_BUDGET", 1800)
+
+
+def cached_board(state, company):
+    """This company's board, re-listed live but discovered only once.
+
+    Finding a board costs up to eighteen requests across six platforms;
+    listing a known one costs a single request. Over forty companies and three
+    runs a day that is the difference between minutes and hours."""
+    import ats_finder
+    cache = state.setdefault("ats_boards", {})
+    key = jm.company_key(company)
+    entry = cache.get(key)
+    checked = jm.parse_ts(entry.get("checked_at")) if entry else None
+    if entry and checked:
+        age = (datetime.now(timezone.utc) - checked).total_seconds() / 3600
+        ttl = (BOARD_CACHE_DAYS if entry.get("ats") else BOARD_MISS_DAYS) * 24
+        if age < ttl:
+            if not entry.get("ats"):
+                return None                      # known not to have one
+            board = ats_finder.api_board(entry["ats"], entry["slug"], company,
+                                         requests.get)
+            if board:
+                board["whole_name"] = True
+                return board
+            # they had a board and now they do not, or it has no open roles
+            cache[key] = {"ats": None, "slug": None, "checked_at": jm.now()}
+            return None
+
+    board = ats_finder.find_board(company)
+    cache[key] = {"ats": board["ats"] if board else None,
+                  "slug": board["slug"] if board else None,
+                  "checked_at": jm.now()}
+    return board
+
+
+def harvest_boards(state):
+    """Vacancies straight off employers' own boards.
+
+    The job boards only show what an employer chose to advertise there, and
+    Adzuna's Aberdeen feed yields about four in-trade listings a day. An
+    employer's own ATS board carries every open role they have - including the
+    ones that never reach a job board at all - and once their board is known,
+    listing it costs one HTTP request.
+
+    Everything harvested here already has its application URL, so it skips the
+    whole resolve-the-job-board problem."""
+    import ats_finder
+    companies, seen_company = [], set()
+    for target in jm.load_targets():
+        name = (target.get("company") or "").strip()
+        if name and jm.company_key(name) not in seen_company:
+            seen_company.add(jm.company_key(name))
+            companies.append(name)
+    # employers already met on a job board are worth asking too - the advert
+    # that reached us is rarely the only role they have open
+    for job in state["jobs"].values():
+        name = (job.get("company") or "").strip()
+        key = jm.company_key(name)
+        if name and key not in seen_company and (job.get("score") or 0) >= 60:
+            seen_company.add(key)
+            companies.append(name)
+
+    known = {dedupe for dedupe in (jm.dedupe_key(j)
+                                   for j in state["jobs"].values())}
+    added = boards = 0
+    deadline = time.monotonic() + BOARD_DISCOVERY_BUDGET
+    for company in companies[:BOARD_COMPANY_CAP]:
+        if time.monotonic() > deadline:
+            # The workflow gets sixty minutes. Overrunning loses the whole
+            # harvest, and the companies not reached this time are simply
+            # first in the queue next time.
+            print(f"[boards] {BOARD_DISCOVERY_BUDGET}s spent on discovery, "
+                  f"leaving the rest for the next run")
+            break
+        board = cached_board(state, company)
+        if not board:
+            continue
+        boards += 1
+        for posting in board["jobs"]:
+            job = {
+                # a stable id: Python's hash() is salted per process, so using
+                # it here would re-add every vacancy on every run
+                "external_id": "board-{}-{}".format(
+                    board["ats"],
+                    hashlib.sha1(posting["url"].encode()).hexdigest()[:12]),
+                "title": posting["title"],
+                "company": company,
+                "location": posting["location"],
+                "description": posting["description"],
+                "url": posting["url"],
+                "apply_url": posting["url"],
+                "ats": board["ats"],
+                "source": f"board:{board['ats']}",
+                "found_at": jm.now(),
+                "posted_at": None,
+                "status": "new",
+            }
+            if job["external_id"] in state["jobs"]:
+                continue
+            if not in_reach(posting["location"]):
+                continue
+            if jm.title_excluded(job["title"]) or not jm.worth_scoring(job):
+                continue
+            key = jm.dedupe_key(job)
+            if key in known:
+                continue                # already have it from a job board
+            known.add(key)
+            state["jobs"][job["external_id"]] = job
+            added += 1
+    print(f"[boards] {boards} employer board(s) found, "
+          f"{added} vacancy(s) a job board never showed us")
+    return added
+
+
+def inspect_boards(state, limit=6, headless=True):
+    """Open the apply pages of roles found on employers' own boards.
+
+    These arrive with a real application URL rather than a job-board link, so
+    they are the first candidates in this project that should simply work.
+    They are also unscored when they arrive, which keeps them out of the
+    ordinary queue until Gemini catches up - and that would mean waiting days
+    to find out whether the pages are fillable. This looks now. It fills
+    nothing and submits nothing."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[inspect] playwright not installed")
+        return
+    todo = [j for j in state["jobs"].values()
+            if str(j.get("source", "")).startswith("board:")][:limit]
+    if not todo:
+        print("[inspect] no board-sourced roles in the queue yet")
+        return
+    print(f"[inspect] opening {len(todo)} employer application page(s)\n")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(user_agent=jm.UA["User-Agent"],
+                                      viewport={"width": 1366, "height": 900})
+        page = context.new_page()
+        for job in todo:
+            try:
+                page.goto(job["apply_url"], wait_until="domcontentloaded",
+                          timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(3000)
+                fields = collect_fields(page)
+                required = sum(1 for f in fields if f.get("required"))
+                kind = captcha_kind(page)
+                upload = any(f["type"] == "file" for f in fields)
+                real = is_application_form(fields)
+                shot(page, job, "inspect")
+                bot = {"challenge": "NEEDS A HUMAN", "scored": "invisible",
+                       None: "clear"}[kind]
+                print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
+                      f"{len(fields):>3} fields {required:>3} required  "
+                      f"{'CV upload' if upload else 'no upload':10} "
+                      f"{bot:14} "
+                      f"{'APPLICABLE' if real and kind != 'challenge' else '-'}")
+            except Exception as e:
+                print(f"  {job['company'][:18]:20}{job['title'][:34]:36}"
+                      f"error: {type(e).__name__}")
+        context.close()
+        browser.close()
+
+
 def harvest_month(state):
     """Same boards, same criteria, but a month wide instead of 48 hours.
     Scoring is capped per run, so a big backlog gets worked through over days
@@ -935,6 +1302,7 @@ def harvest_month(state):
     print(f"[portal] harvesting the last {PORTAL_MAX_AGE_DAYS} days "
           f"({jm.HARVEST_PAGES} pages per search)")
     jm.harvest(state)
+    harvest_boards(state)
     jm.save(state)
     jm.score_jobs(state)
 
@@ -952,14 +1320,22 @@ def main(argv=None):
     parser.add_argument("--diagnose", type=int, metavar="N", nargs="?", const=12,
                         help="open the top N application pages and report what "
                              "is there, filling and submitting nothing")
+    parser.add_argument("--inspect", type=int, metavar="N", nargs="?", const=6,
+                        help="open N application pages found on employers' own "
+                             "boards, before they have been scored")
     args = parser.parse_args(argv)
 
     state = jm.load()
     if args.harvest:
         harvest_month(state)
         jm.save(state)
-        if not args.run and args.diagnose is None:
+        if not args.run and args.diagnose is None and args.inspect is None:
             return 0
+
+    if args.inspect is not None:
+        inspect_boards(state, limit=args.inspect, headless=not args.headed)
+        jm.save(state)
+        return 0
 
     if args.diagnose is not None:
         diagnose(state, limit=args.diagnose, headless=not args.headed)

@@ -1,0 +1,161 @@
+{
+  "_README": [
+    "Organisations that may be able to help Harry with money, training or",
+    "placement. Three groups, all of which he plausibly qualifies for:",
+    "",
+    "  VETERAN     He served in the Royal Navy 2021-2023. Two years is under",
+    "              the four-year mark, which makes him an EARLY SERVICE LEAVER -",
+    "              a specific category with its own provision, not a lesser one.",
+    "  YOUNG       He is 22. Most youth funds run to 25 or 30.",
+    "  LOCAL       Aberdeen and Scotland have their own employability money.",
+    "",
+    "WHAT HE ACTUALLY NEEDS, IN ORDER",
+    "  1. OPITO BOSIET + MIST offshore survival tickets. Around GBP 1,000-1,300,",
+    "     and effectively mandatory for offshore work - which is the market his",
+    "     trade sits in and the one the job machine now searches. This single",
+    "     item is the difference between being able to apply offshore and not.",
+    "  2. A driving licence. The scorer flags 'does not drive' as his one real",
+    "     constraint on where he can work.",
+    "  3. Anything toward finishing the BEng he paused, or short electrical /",
+    "     instrumentation tickets (CompEx, 17th/18th Edition, PAT, IPAF).",
+    "",
+    "HONESTY RULES - THESE ARE CHARITIES",
+    "  - The email ASKS whether he is eligible. It never asserts that he is,",
+    "    never claims hardship he has not described, and never implies an",
+    "    entitlement. If an entry in this file is wrong, the worst that happens",
+    "    is somebody replies 'not us, sorry'.",
+    "  - No address is ever guessed. The name and website here are the input;",
+    "    the pipeline's ordinary discovery finds a real, MX-checked address or",
+    "    sends nothing at all.",
+    "  - One approach per organisation, ever.",
+    "",
+    "VERIFY BEFORE TRUSTING",
+    "  This list was written from knowledge, not from a live check of each",
+    "  organisation's current criteria - web research was unavailable when it",
+    "  was built. Names and domains are the parts most likely to be stale.",
+    "  Anything marked \"confidence\": \"check\" is one I am less sure of."
+  ],
+  "organisations": [
+    {
+      "name": "Forces Employment Charity",
+      "domain": "forcesemployment.org.uk",
+      "group": "veteran",
+      "ask": "already registered - RightJob",
+      "skip": true,
+      "note": "Harry has signed up. Left here so nothing writes to them again.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Career Transition Partnership Future Horizons",
+      "domain": "ctp.org.uk",
+      "group": "veteran",
+      "ask": "Future Horizons is the CTP programme specifically for Early Service Leavers - under four years' service, which is him. Ask what it can fund and whether he is still in scope three years on.",
+      "confidence": "check"
+    },
+    {
+      "name": "Royal Navy and Royal Marines Charity",
+      "domain": "rnrmc.org.uk",
+      "group": "veteran",
+      "ask": "Grants to RN veterans. Ask specifically about funding OPITO offshore survival tickets and a driving licence.",
+      "confidence": "check"
+    },
+    {
+      "name": "Poppyscotland",
+      "domain": "poppyscotland.org.uk",
+      "group": "veteran",
+      "ask": "Scotland's veteran charity, employment and training support. Ask about training grants for a Scottish veteran going into the energy sector.",
+      "confidence": "check"
+    },
+    {
+      "name": "SSAFA the Armed Forces Charity",
+      "domain": "ssafa.org.uk",
+      "group": "veteran",
+      "ask": "Casework and welfare grants. Ask what their Aberdeen branch can help a young veteran with toward employment costs.",
+      "confidence": "check"
+    },
+    {
+      "name": "Royal British Legion",
+      "domain": "britishlegion.org.uk",
+      "group": "veteran",
+      "ask": "Grants including toward training and equipment for work.",
+      "confidence": "check"
+    },
+    {
+      "name": "Legion Scotland",
+      "domain": "legionscotland.org.uk",
+      "group": "veteran",
+      "ask": "Scottish veterans' support and local branches in the north east.",
+      "confidence": "check"
+    },
+    {
+      "name": "Veterans Scotland",
+      "domain": "veteransscotland.org.uk",
+      "group": "veteran",
+      "ask": "Umbrella body - ask which of their member organisations funds training for a young veteran in Aberdeen.",
+      "confidence": "check"
+    },
+    {
+      "name": "The Seafarers Charity",
+      "domain": "theseafarerscharity.org",
+      "group": "veteran",
+      "ask": "Maritime-specific. His Royal Navy service and his subsea work both sit in their world.",
+      "confidence": "check"
+    },
+    {
+      "name": "Help for Heroes",
+      "domain": "helpforheroes.org.uk",
+      "group": "veteran",
+      "ask": "Career recovery support. Ask whether their programmes are open to a veteran without a service injury.",
+      "confidence": "check"
+    },
+    {
+      "name": "The King's Trust",
+      "domain": "kingstrust.org.uk",
+      "group": "young",
+      "ask": "Development Awards fund tools, course fees, licences and travel for 16-30s. This is the most likely single source of the OPITO tickets or a driving licence.",
+      "confidence": "check"
+    },
+    {
+      "name": "Skills Development Scotland",
+      "domain": "skillsdevelopmentscotland.co.uk",
+      "group": "local",
+      "ask": "Individual Training Accounts and other funded training for someone out of work in Scotland.",
+      "confidence": "check"
+    },
+    {
+      "name": "Aberdeen City Council employability",
+      "domain": "aberdeencity.gov.uk",
+      "group": "local",
+      "ask": "No One Left Behind employability funding, and what the council offers a young Aberdeen resident going into the energy sector.",
+      "confidence": "check"
+    },
+    {
+      "name": "North East Scotland College",
+      "domain": "nescol.ac.uk",
+      "group": "local",
+      "ask": "Part-time and funded engineering courses, and whether his paused BEng year counts toward anything.",
+      "confidence": "check"
+    },
+    {
+      "name": "ECITB",
+      "domain": "ecitb.org.uk",
+      "group": "industry",
+      "ask": "The engineering construction industry's training board - scholarships and funded training routes into the sector.",
+      "confidence": "check"
+    },
+    {
+      "name": "OPITO",
+      "domain": "opito.com",
+      "group": "industry",
+      "ask": "They set the offshore survival standard. Ask whether any funded or subsidised route to BOSIET and MIST exists for a veteran entering the industry.",
+      "confidence": "check"
+    },
+    {
+      "name": "Energy Transition Zone",
+      "domain": "etzltd.com",
+      "group": "industry",
+      "ask": "Aberdeen's energy transition skills body - training and placement programmes.",
+      "confidence": "check"
+    }
+  ]
+}
