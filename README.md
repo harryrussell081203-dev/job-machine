@@ -23,7 +23,7 @@ marked as contacted, and follow-ups are off.
 | Stage | What happens |
 | --- | --- |
 | 0. Schedule | `run.yml` five times a weekday, two of them landing inside the Tue-Thu 9-11am UK window that replies best; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
-| 1. Harvest | Adzuna + Reed, listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
+| 1. Harvest | Adzuna + Reed + **job-alert email in Harry's own inbox** (`alert_harvest.py`, which is where most boards come from), listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
 | 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
 | 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
 | 4. Compose | Role-family template (communications / electronics_technician / instrumentation_maintenance / events_production / general) picked from the title. Gemini fills a fixed skeleton; code enforces the rules and rejects-and-retries up to 3 times. |
@@ -250,6 +250,56 @@ applies, to one job only.
 | `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
 | `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
 | `PORTAL_DAILY_CAP` | `25` | Applications per day |
+
+## The inbox is the widest source of jobs (`alert_harvest.py`)
+
+Adzuna and Reed have APIs and between them yield a median of **four** in-trade
+Aberdeen listings a day. CV-Library, Totaljobs, s1jobs, Oil and Gas Job Search,
+Rigzone and Energy Jobline carry most of the rest of this market and have **no
+free API at all**.
+
+Every one of them will email you a daily alert. So the machine reads your own
+inbox.
+
+**No account is ever automated.** Indeed and LinkedIn ban accounts for
+automated access, their detection is good, and a banned account is a real loss
+to a real job search - while every auto-apply tool that logs in reports the
+2-5% response rate that is the worst channel there is. Reading your own email
+is a different thing entirely: the alert was addressed to you because you
+asked for it.
+
+### Setting it up - one evening, then never again
+
+On each site below: sign in as yourself, search for the roles and area you
+want, and **save the search as a daily email alert** to the Gmail address the
+machine uses. That is the whole integration.
+
+| Site | Worth it because |
+| --- | --- |
+| CV-Library | biggest UK trade board with no API |
+| Totaljobs / Jobsite | large technician volume |
+| s1jobs | Scotland only, agencies post here first |
+| Oil and Gas Job Search | Aberdeen energy market |
+| Energy Jobline | offshore and renewables |
+| Rigzone | offshore operators |
+| Indeed | set the alert, never the login |
+| LinkedIn | set the alert, never the login |
+| Google Alerts | free, for phrases like `"instrumentation technician" Aberdeen` |
+| Employers' own career pages | many have "register for alerts" - the best source of all, since these never reach a board |
+
+While you are on those sites, **upload your CV to each one's database**.
+Recruiters search those databases, and most rank by how recently a CV was
+touched - so refreshing it weekly puts you at the top of their search results.
+That is inbound: they come to you.
+
+Once the alerts are arriving:
+
+```bash
+python alert_harvest.py --dry-run     # see what it would pull out, change nothing
+python alert_harvest.py --days 7      # read the last week
+```
+
+The main pipeline runs it automatically at every harvest.
 
 ## What the research says works, and where it lives in the code
 
