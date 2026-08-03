@@ -19,6 +19,7 @@ on:
     branches:
       - "fire-run/**"           # force an ordinary run
       - "fire-rescore/**"       # re-judge listings scored under an old profile
+      - "fire-support/**"       # write to the charities and training bodies
   workflow_dispatch:
     inputs:
       test_mode:
@@ -75,6 +76,13 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
         run: |
+          # The charities and training bodies that may fund the offshore
+          # tickets and the driving licence. One approach each, ever.
+          if [[ "${GITHUB_REF_NAME}" == fire-support/* ]]; then
+            echo "fire-support branch: writing to the support organisations"
+            python support_outreach.py --send
+            exit 0
+          fi
           # A change to CANDIDATE_PROFILE invalidates every score already in
           # the file, so this re-opens the listings the scorer rejected and
           # judges them again before the run does anything else.
