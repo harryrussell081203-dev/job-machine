@@ -161,6 +161,60 @@ class TestEnriching(unittest.TestCase):
         get.assert_not_called()
 
 
+class TestReadingAdvertsCannotEatTheRun(unittest.TestCase):
+    """One run read 88 adverts one at a time, spent forty-four minutes on it,
+    and was killed by the workflow timeout with nothing discovered and nothing
+    sent. The stage whose output nothing was waiting for consumed the entire
+    run, and every stage that actually produces an application sat behind it.
+    """
+    def state(self, count):
+        jobs = {}
+        for i in range(count):
+            jobs[f"alert-{i}"] = {"external_id": f"alert-{i}",
+                                  "url": f"https://x.com/job/{i}",
+                                  "source": "alert:x.com", "status": "new",
+                                  "title": "", "company": "", "description": ""}
+        return {"jobs": jobs}
+
+    def test_it_stops_at_the_budget_instead_of_running_to_the_timeout(self):
+        state = self.state(50)
+        slow = mock.Mock(ok=True, text="<title>Tech - Aberdeen | Acme</title>")
+        with mock.patch.object(jm.requests, "get", return_value=slow), \
+             mock.patch.object(ah, "ENRICH_BUDGET_SECONDS", -1):
+            ah.enrich(state)
+        # nothing read, because the budget was already spent on arrival
+        self.assertTrue(all(j["status"] == "new" for j in state["jobs"].values()))
+
+    def test_what_it_does_not_reach_is_left_for_the_next_run(self):
+        """An advert not read must keep its 'new' status. Marking it skipped
+        would mean a slow board silently costs the listing outright."""
+        state = self.state(3)
+        with mock.patch.object(jm.requests, "get",
+                               return_value=mock.Mock(ok=True, text="")), \
+             mock.patch.object(ah, "ENRICH_BUDGET_SECONDS", -1):
+            ah.enrich(state)
+        self.assertEqual({j["status"] for j in state["jobs"].values()}, {"new"})
+
+    def test_adverts_are_fetched_in_parallel(self):
+        state = self.state(8)
+        with mock.patch.object(ah, "ThreadPoolExecutor") as pool, \
+             mock.patch.object(jm.requests, "get",
+                               return_value=mock.Mock(ok=True, text="")):
+            pool.return_value.__enter__.return_value.map.return_value = [""] * 8
+            ah.enrich(state)
+        pool.assert_called_once()
+        self.assertEqual(pool.call_args.kwargs["max_workers"], ah.ENRICH_WORKERS)
+
+    def test_an_advert_that_reads_fine_is_still_filled_in(self):
+        state = self.state(1)
+        html = ('<title>Instrumentation Technician - Aberdeen | Acme Subsea</title>'
+                '<meta property="og:description" content="Calibration.">')
+        with mock.patch.object(jm.requests, "get",
+                               return_value=mock.Mock(ok=True, text=html)):
+            self.assertEqual(ah.enrich(state), 1)
+        self.assertEqual(state["jobs"]["alert-0"]["company"], "Acme Subsea")
+
+
 class TestHarvesting(unittest.TestCase):
     def test_adverts_from_alerts_join_the_ordinary_queue(self):
         alerts = [("alerts@cv-library.co.uk", "Your jobs",

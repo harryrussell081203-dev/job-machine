@@ -33,10 +33,24 @@ integration. Every alert that arrives from then on is harvested automatically.
 import email as email_mod
 import imaplib
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import job_machine as jm
+
+# Reading adverts is the slowest thing in the pipeline and it sits in front of
+# everything that matters. One run fetched 88 of them one at a time, took
+# forty-four minutes over it, and was killed by the workflow timeout before it
+# discovered a single address or sent a single application - the whole run
+# spent on the one stage whose output nothing was waiting for.
+#
+# So: a wall clock, and several at once. Whatever is not read this run is
+# still 'new' and is read by the next one.
+ENRICH_BUDGET_SECONDS = jm.env_int("ENRICH_BUDGET_SECONDS", 240)
+ENRICH_WORKERS = jm.env_int("ENRICH_WORKERS", 8)
+ENRICH_TIMEOUT = jm.env_int("ENRICH_TIMEOUT", 12)
 
 # Senders whose mail is a job alert worth reading. Matched against the From
 # header, so a personal email from someone at one of these firms is not
@@ -285,12 +299,41 @@ def split_title(raw, board_host=""):
     return title[:140], company[:120]
 
 
-def enrich(state, limit=None):
-    """Open the adverts found in alerts and read their title and company.
+def enrich_one(job, html):
+    """Read one advert. Returns True if it named both the role and the firm.
 
     Anything that cannot be read is dropped rather than guessed at: a listing
     with no company name cannot be emailed to anyone, and inventing one is how
     an application reaches the wrong firm."""
+    if not html:
+        job.update({"status": "skipped", "skip_reason": "advert unreadable"})
+        return False
+    facts = page_facts(html)
+    title, company = split_title(facts["title"], board_of(job["url"]))
+    company = company or (facts["company"]
+                          if not BOARD_NAMES.search(facts["company"] or "")
+                          else "")
+    if not title or not company:
+        job.update({"status": "skipped",
+                    "skip_reason": "advert did not name the role and employer"})
+        return False
+    job.update({
+        "title": title,
+        "company": company,
+        "description": (facts["description"] + "\n" + jm.strip_html(html))[:4000],
+        "location": job.get("location") or "",
+    })
+    return True
+
+
+def enrich(state, limit=None):
+    """Open the adverts found in alerts and read their title and company.
+
+    Fetched several at a time and under a wall clock. One run read 88 of them
+    one at a time, spent forty-four minutes doing it, and was killed by the
+    workflow timeout before it discovered a single address or sent a single
+    application. Whatever is not read this run keeps its 'new' status and is
+    read by the next one - a slow job board costs a delay, never the run."""
     todo = [j for j in state["jobs"].values()
             if str(j.get("source", "")).startswith("alert:")
             and j.get("status") == "new" and not j.get("title")]
@@ -299,35 +342,28 @@ def enrich(state, limit=None):
     if not todo:
         return 0
     print(f"[alerts] reading {len(todo)} advert(s) for their title and company")
-    filled = dropped = 0
-    for job in todo:
+    started = time.monotonic()
+    filled = dropped = skipped = 0
+
+    def read(job):
         try:
-            r = jm.requests.get(job["url"], headers=jm.UA, timeout=20,
+            r = jm.requests.get(job["url"], headers=jm.UA, timeout=ENRICH_TIMEOUT,
                                 allow_redirects=True)
-            html = r.text if r.ok else ""
+            return r.text if r.ok else ""
         except Exception:
-            html = ""
-        if not html:
-            job.update({"status": "skipped", "skip_reason": "advert unreadable"})
-            dropped += 1
-            continue
-        facts = page_facts(html)
-        title, company = split_title(facts["title"], board_of(job["url"]))
-        company = company or (facts["company"]
-                              if not BOARD_NAMES.search(facts["company"] or "")
-                              else "")
-        if not title or not company:
-            job.update({"status": "skipped",
-                        "skip_reason": "advert did not name the role and employer"})
-            dropped += 1
-            continue
-        job.update({
-            "title": title,
-            "company": company,
-            "description": (facts["description"] + "\n"
-                            + jm.strip_html(html))[:4000],
-            "location": job.get("location") or "",
-        })
-        filled += 1
+            return ""
+
+    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
+        pages = pool.map(read, todo)
+        for job, html in zip(todo, pages):
+            if time.monotonic() - started > ENRICH_BUDGET_SECONDS:
+                skipped = len(todo) - filled - dropped
+                print(f"[alerts] {ENRICH_BUDGET_SECONDS}s budget reached, "
+                      f"leaving {skipped} for the next run")
+                break
+            if enrich_one(job, html):
+                filled += 1
+            else:
+                dropped += 1
     print(f"[alerts] {filled} advert(s) read, {dropped} unreadable and dropped")
     return filled

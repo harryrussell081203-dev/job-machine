@@ -2569,6 +2569,13 @@ def main(argv=None):
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
         save(state)
+    # Before anything that touches the network. This stage needs nothing but
+    # the state file, and it is what puts the best-matched listings in the file
+    # back in the queue - so it must not sit behind a stage that can hang. It
+    # did, once, and a run died in advert-reading with eighty-six of them still
+    # parked.
+    stage("fallback", portal_fallback, state)
+    save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)
         # Job-alert email from Harry's own inbox. The boards that carry most of
@@ -2577,11 +2584,6 @@ def main(argv=None):
         stage("alerts", harvest_from_inbox, state)
         save(state)
     stage("score", score_jobs, state)
-    save(state)
-    # Anything the portal agent could not apply through is worth an email
-    # instead. It runs before discover so those listings are in the same queue
-    # as everything else, ordered on merit rather than on how they got here.
-    stage("fallback", portal_fallback, state)
     save(state)
     stage("discover", discover, state)
     save(state)
