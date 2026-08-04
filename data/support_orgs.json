@@ -156,6 +156,47 @@
       "group": "industry",
       "ask": "Aberdeen's energy transition skills body - training and placement programmes.",
       "confidence": "check"
+    },
+    {
+      "name": "Lowland Reserve Forces and Cadets Association",
+      "domain": "lowlandrfca.org.uk",
+      "group": "veteran",
+      "ask": "employer introductions",
+      "note": "Runs the Defence Employer Recognition Scheme across the Scottish Lowlands and announces the award winners. They hold the list of employers who have committed to supporting the armed forces community, and brokering between those employers and service leavers is what the organisation is for.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Highland Reserve Forces and Cadets Association",
+      "domain": "hrfca.co.uk",
+      "group": "veteran",
+      "ask": "employer introductions",
+      "note": "The same for the Highlands and the north east, which is Harry's own area. Covers Aberdeen, Aberdeenshire and Moray.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Defence Relationship Management",
+      "domain": "gov.uk",
+      "group": "veteran",
+      "ask": "employer introductions",
+      "skip": true,
+      "note": "The MoD team that runs the Covenant and the Employer Recognition Scheme nationally. Left here as a record: a central government mailbox is the wrong door for one person's job search, and the RFCAs above are the same route with a regional desk that answers.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Veterans Employment Transition Support",
+      "domain": "vets.org.uk",
+      "group": "veteran",
+      "ask": "employer introductions",
+      "note": "Matches service leavers to employers who have committed to hiring them, which is the guaranteed-interview end of the market rather than the training-funding end.",
+      "confidence": "unverified - check the domain resolves before writing"
+    },
+    {
+      "name": "Buildforce",
+      "domain": "buildforce.org.uk",
+      "group": "veteran",
+      "ask": "employer introductions",
+      "note": "Routes service leavers into construction and infrastructure employers, several of which run guaranteed interview schemes.",
+      "confidence": "unverified - check the domain resolves before writing"
     }
   ]
 }

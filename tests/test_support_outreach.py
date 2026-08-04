@@ -124,3 +124,44 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAskingForEmployersRatherThanMoney(unittest.TestCase):
+    """Some of these organisations have no money to give and are the wrong
+    people to ask for any. What the RFCAs have is the list: which employers in
+    a given area have committed to the Covenant, and which of those run a
+    guaranteed interview scheme. Asking them for training funding would be
+    asking exactly the right people exactly the wrong question."""
+
+    def letter(self):
+        return so.compose({"name": "Highland RFCA", "group": "veteran",
+                           "ask": "employer introductions"})
+
+    def test_it_asks_about_the_guaranteed_interview_scheme(self):
+        _, body = self.letter()
+        self.assertIn("guaranteed interview", body.lower())
+
+    def test_it_asks_who_to_approach(self):
+        _, body = self.letter()
+        self.assertIn("north east of scotland", body.lower())
+
+    def test_it_does_not_ask_them_for_money(self):
+        """The funding letter's asks must not leak into this one."""
+        _, body = self.letter()
+        for money in ("thousand pounds", "funding", "driving licence",
+                      "BEng", "OPITO BOSIET"):
+            with self.subTest(money=money):
+                self.assertNotIn(money.lower(), body.lower())
+
+    def test_it_still_says_he_is_applying_on_his_own(self):
+        _, body = self.letter()
+        self.assertIn("on my own", body.lower())
+
+    def test_the_funding_letter_is_unchanged_for_everyone_else(self):
+        _, body = so.compose({"name": "Poppyscotland", "group": "veteran"})
+        self.assertIn("OPITO", body)
+        self.assertNotIn("guaranteed interview", body.lower())
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
