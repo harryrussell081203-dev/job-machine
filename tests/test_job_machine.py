@@ -622,14 +622,23 @@ class TestSending(unittest.TestCase):
             jm.run_sends(self.state)
         send.assert_not_called()
 
-    def test_compose_failure_is_recorded_not_sent(self):
+    def test_the_model_being_down_falls_back_to_the_plain_letter(self):
+        """This test used to assert the opposite - that a compose failure
+        meant no send - and that was wrong. Gemini's free tier has a daily
+        ceiling this project is expected to hit, and when it did, matched jobs
+        with real verified addresses were marked compose_failed and dropped. A
+        rate limit on a free API must not be a hard dependency for applying
+        for a job."""
         job = self.add()
         with mock.patch.object(jm, "TEST_MODE", False), \
              mock.patch.object(jm, "build_email", return_value=None), \
              mock.patch.object(jm, "send_email") as send:
             jm.run_sends(self.state)
-        send.assert_not_called()
-        self.assertEqual(job["status"], "compose_failed")
+        send.assert_called_once()
+        self.assertEqual(job["status"], "sent")
+        body = send.call_args[0][2]
+        self.assertIn("Sonardyne", body)
+        self.assertIn("DV cleared", body)
 
     def test_smtp_failure_leaves_company_free_for_another_go(self):
         job = self.add()
@@ -1926,3 +1935,61 @@ class TestScoringDoesNotEatTheWholeRun(unittest.TestCase):
                                return_value={i: (95, "good") for i in range(10)}) as sb:
             jm.score_jobs(state)
         self.assertEqual(sb.call_count, 3)
+
+
+class TestSendingWhenTheModelIsUnavailable(unittest.TestCase):
+    """Gemini's free tier has a daily ceiling, and this project is meant to
+    cost nothing to run - so hitting that ceiling is a normal Tuesday, not an
+    exception.
+
+    When it happened the whole send stage stopped: the composer returned
+    nothing, the listing was marked compose_failed, and a matched job with a
+    real verified address went nowhere. A rate limit on a free API had been
+    allowed to become a hard dependency for applying to a job."""
+
+    def job(self, **over):
+        j = {"title": "Workshop Technician", "company": "Oceaneering",
+             "location": "Aberdeen", "description": "", "source": "adzuna"}
+        j.update(over)
+        return j
+
+    def test_the_plain_letter_still_says_who_he_is_and_what_he_wants(self):
+        body = jm.plain_email(self.job())["body"]
+        self.assertIn("Sonardyne", body)
+        self.assertIn("Royal Navy", body)
+        self.assertIn("DV cleared", body)
+        self.assertIn("Workshop Technician", body)
+        self.assertIn("Oceaneering", body)
+
+    def test_it_greets_a_named_person_and_copes_without_one(self):
+        self.assertTrue(
+            jm.plain_email(self.job(contact_name="Jane"))["body"].startswith("Hi Jane,"))
+        self.assertTrue(jm.plain_email(self.job())["body"].startswith("Hi,"))
+
+    def test_a_covenant_employer_still_gets_the_guaranteed_interview_question(self):
+        """The single highest-value sentence in the whole system must not be
+        the thing that gets dropped when the model is down."""
+        with mock.patch.object(jm, "veteran_friendly", return_value=True):
+            body = jm.plain_email(self.job(company="Babcock International"))["body"]
+        self.assertIn("guaranteed interview", body.lower())
+
+    def test_an_ordinary_employer_is_not_asked_about_veteran_schemes(self):
+        with mock.patch.object(jm, "veteran_friendly", return_value=False):
+            body = jm.plain_email(self.job())["body"]
+        self.assertNotIn("guaranteed interview", body.lower())
+
+    def test_it_never_invents_anything_about_him(self):
+        body = jm.plain_email(self.job())["body"].lower()
+        for invented in ("passionate", "excited", "dream", "perfect fit",
+                         "hardship", "struggling", "desperate"):
+            with self.subTest(invented=invented):
+                self.assertNotIn(invented, body)
+
+    def test_a_missing_company_does_not_produce_a_ragged_subject(self):
+        content = jm.plain_email(self.job(company=""))
+        self.assertNotIn(" at  ", content["subject"])
+        self.assertNotIn(" at .", content["body"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -1527,6 +1527,44 @@ def email_problems(subject, core, job):
     return problems
 
 
+def plain_email(job):
+    """A hand-written application, with no model in the loop.
+
+    Gemini's free tier has a daily ceiling and this project is meant to cost
+    nothing to run, so hitting that ceiling is a normal Tuesday rather than an
+    exception. When it happened, every send stopped: the composer returned
+    nothing, the listing was marked compose_failed, and a matched job with a
+    real verified address went nowhere - because a rate limit on a free API
+    had been allowed to become a hard dependency for applying to a job.
+
+    This is deliberately plainer than the composed version. It is not trying
+    to beat it; it is trying to beat not sending. The applied-note already
+    works this way for the same reason."""
+    greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
+    title = (job.get("title") or "technician").strip()
+    company = (job.get("company") or "").strip()
+    where = f" at {company}" if company else ""
+    ask = ("Do you run a guaranteed interview scheme for veterans who meet the "
+           "criteria? If so I would like to be considered under it."
+           if veteran_friendly(job) else
+           "Would it be worth a short call?")
+    body = (
+        f"{greeting}\n\n"
+        f"I am applying for the {title} role{where}.\n\n"
+        f"1. Three years at Sonardyne building, testing and fault-finding "
+        f"subsea acoustic electronics to IPC-A-610 Class 3.\n"
+        f"2. Two years Royal Navy Communications and Information Specialist "
+        f"on a Type 23 frigate. DV cleared.\n"
+        f"3. SCQF Level 7 engineering apprenticeship, available immediately, "
+        f"and happy with rotational or offshore work.\n\n"
+        f"{ask}\n\n"
+        f"Harry\n{SIGNOFF}"
+    )
+    subject = f"{title} - application" if not company else \
+        f"{title} at {company} - application"
+    return {"subject": subject[:120], "body": body, "family": "plain"}
+
+
 def build_email(job, attempts=3):
     family = ("speculative" if job.get("source") == "speculative"
               else pick_family(job["title"], job.get("description", ""),
@@ -1691,6 +1729,13 @@ def run_sends(state, dry_run=False, already_sent=0):
             continue
 
         content = build_email(job)
+        if not content:
+            # A rate limit on a free API is not a reason not to apply for a
+            # job. Fall back to the hand-written letter rather than dropping a
+            # matched listing that already has a real, verified address.
+            content = plain_email(job)
+            print(f"[compose] model unavailable, sending the plain letter for "
+                  f"{job['title']} @ {job['company']}")
         if not content:
             job["status"] = "compose_failed"
             print(f"[compose] gave up on {job['title']} @ {job['company']}")
