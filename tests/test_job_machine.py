@@ -1557,6 +1557,35 @@ class TestRescoringAfterTheProfileChanges(unittest.TestCase):
         self.assertEqual(state["jobs"]["sent"]["status"], "sent")
 
 
+class TestTheSendStageRunningTwice(unittest.TestCase):
+    """Sending runs before the slow stages as well as after.
+
+    A run released ninety-nine parked listings, found real addresses for six,
+    and was killed by the workflow timeout in address discovery before it sent
+    one of them - they sat in 'ready' with nothing to show for the run. The
+    cheapest stage was queued behind the most expensive one."""
+
+    def test_the_cap_is_per_run_not_per_call(self):
+        """Two calls must not mean two caps. Carrying the count is the whole
+        reason the second call takes an argument."""
+        state = {"jobs": {}, "send_counts": {}, "companies_contacted": {}}
+        with mock.patch.object(jm, "cv_path", return_value="cv.pdf"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"):
+            already = jm.PER_RUN_SEND_CAP
+            self.assertEqual(jm.run_sends(state, already_sent=already), already)
+
+    def test_a_refusal_still_reports_the_running_total(self):
+        """No CV means no send, but the count must survive so the second call
+        does not start again from zero."""
+        with mock.patch.object(jm, "cv_path", return_value=None):
+            self.assertEqual(jm.run_sends({"jobs": {}}, already_sent=3), 3)
+
+    def test_a_stage_that_fails_does_not_destroy_the_count(self):
+        self.assertIsNone(jm.stage("boom", lambda: 1 / 0))
+        self.assertEqual(jm.stage("fine", lambda: 5), 5)
+
+
 class TestPortalFallback(unittest.TestCase):
     """A form we cannot drive is not a job we cannot apply for.
 
