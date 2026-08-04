@@ -1228,9 +1228,20 @@ def find_domain(company):
             hit_key = company_key(hit.get("name", ""))
             if hit_key == wanted:
                 return domain
+            # A one-word company name is not enough to identify anybody. The
+            # subset rule below is satisfied by ANY firm containing that word,
+            # which matched the housing association 'Sanctuary' to Sanctuary
+            # Clothing in California - and to a named individual there, so an
+            # application was one run away from landing in a stranger's inbox
+            # at an unrelated company on another continent. Same family of
+            # mistake as Wood and Woodforest National Bank, through a
+            # different door. For a single-token name, nothing but an exact
+            # match will do.
+            if len(wanted_tokens) < 2:
+                continue
             # every word Harry's listing gave us must be a whole word in the
             # match - 'wood' must not match 'woodforest'
-            if wanted_tokens and wanted_tokens <= name_tokens(hit.get("name", "")):
+            if wanted_tokens <= name_tokens(hit.get("name", "")):
                 return domain
         print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
