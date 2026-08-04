@@ -20,6 +20,8 @@ on:
       - "fire-run/**"           # force an ordinary run
       - "fire-rescore/**"       # re-judge listings scored under an old profile
       - "fire-support/**"       # write to the charities and training bodies
+      - "fire-signup/**"        # ask the veterans' services to register him
+      - "fire-agencies/**"      # get on the recruitment agencies' databases
   workflow_dispatch:
     inputs:
       test_mode:
@@ -105,12 +107,34 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
           SUPPORT_PER_RUN: ${{ vars.SUPPORT_PER_RUN }}
+          AGENCY_REGISTER_GAP_DAYS: ${{ vars.AGENCY_REGISTER_GAP_DAYS }}
+          AGENCY_REGISTER_MAX: ${{ vars.AGENCY_REGISTER_MAX }}
+          AGENCY_REGISTER_PER_RUN: ${{ vars.AGENCY_REGISTER_PER_RUN }}
+          AGENCY_PIPELINE_PER_RUN: ${{ vars.AGENCY_PIPELINE_PER_RUN }}
         run: |
           # The charities and training bodies that may fund the offshore
           # tickets and the driving licence. One approach each, ever.
           if [[ "${GITHUB_REF_NAME}" == fire-support/* ]]; then
             echo "fire-support branch: writing to the support organisations"
             python support_outreach.py --send
+            exit 0
+          fi
+          # Just the two organisations that run the veterans' employment
+          # services themselves, asking them to sign him up. Kept separate from
+          # fire-support because that one empties the whole charity list, and
+          # this errand is not a reason to post ten other letters.
+          if [[ "${GITHUB_REF_NAME}" == fire-signup/* ]]; then
+            echo "fire-signup branch: asking to be registered"
+            python support_outreach.py --send --only registration
+            exit 0
+          fi
+          # The recruitment agencies' own databases. Unlike everything else
+          # here this one is meant to be fired again every few weeks: a
+          # consultant's search results are ranked by how recently a candidate
+          # was in touch, and the module's own cooldown decides who is due.
+          if [[ "${GITHUB_REF_NAME}" == fire-agencies/* ]]; then
+            echo "fire-agencies branch: registering with the agencies"
+            python agency_outreach.py --send
             exit 0
           fi
           # A change to CANDIDATE_PROFILE invalidates every score already in

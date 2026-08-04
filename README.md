@@ -74,6 +74,10 @@ and nothing is sent.
 | `SEARCH_LOCATIONS` | `Aberdeen,Dundee,Edinburgh,Glasgow,Inverness` | comma separated |
 | `SEARCH_RADIUS_MILES` | `25` | per location |
 | `SCORE_THRESHOLD` | `70` | |
+| `AGENCY_REGISTER_GAP_DAYS` | `30` | Days before an agency may be written to again |
+| `AGENCY_REGISTER_MAX` | `6` | Approaches per agency, ever |
+| `AGENCY_REGISTER_PER_RUN` | `12` | Cap for a manual `fire-agencies` run |
+| `AGENCY_PIPELINE_PER_RUN` | `2` | Cap for the stage inside an ordinary run |
 
 ### CV
 
@@ -101,6 +105,17 @@ by hand from the Actions tab (**Run workflow**), which takes two inputs:
 - `test_mode` - override `TEST_MODE` for that one run
 - `dry_run` - compose everything and send nothing; drafts land in `state.json`
   as `draft_subject` / `draft_body`
+
+Pushing a branch fires one job on its own, which is how the side routes are run
+when the Actions UI is not to hand:
+
+| Branch | What it does |
+| --- | --- |
+| `fire-run/...` | an ordinary run |
+| `fire-rescore/...` | re-judge listings scored under an older profile |
+| `fire-support/...` | write to the charities and training bodies - empties whatever is left on that list |
+| `fire-signup/...` | just the organisations that run the veterans' employment services, asking them to register him (`--only registration`) |
+| `fire-agencies/...` | register with, or refresh at, the recruitment agencies |
 
 Locally:
 
@@ -284,6 +299,7 @@ machine uses. That is the whole integration.
 | Rigzone | offshore operators |
 | Indeed | set the alert, never the login |
 | LinkedIn | set the alert, never the login |
+| CTP RightJob / Forces Employment Charity | ex-military vacancies from employers who asked for service leavers - the warmest adverts in this market. See the note on eligibility above |
 | Google Alerts | free, for phrases like `"instrumentation technician" Aberdeen` |
 | Employers' own career pages | many have "register for alerts" - the best source of all, since these never reach a board |
 
@@ -300,6 +316,45 @@ python alert_harvest.py --days 7      # read the last week
 ```
 
 The main pipeline runs it automatically at every harvest.
+
+## The agency register (`agency_outreach.py`)
+
+Twenty-one recruitment agencies in `data/agencies.json` - the Aberdeen energy
+desks (Cammach, TMM, TEXO, Orion), the international rotational staffers
+(NES Fircroft, Airswift, Petroplan, Brunel, Atlas Professionals), the Scottish
+technical desks, and the ex-forces specialists - written to with the CV and
+asked to put Harry on the database.
+
+```bash
+python agency_outreach.py            # who is due, and the letters they'd get
+python agency_outreach.py --send     # send them
+python agency_outreach.py --list     # the register: who, when, which approach
+```
+
+It also runs as a stage of every ordinary pipeline run, capped at
+`AGENCY_PIPELINE_PER_RUN` (default 2), and can be fired on its own by pushing a
+branch named `fire-agencies/...`.
+
+**This is the one route allowed to write to the same firm twice**, and the rest
+of the design is about earning that:
+
+| Rail | Why |
+| --- | --- |
+| 30-day cooldown per agency (`AGENCY_REGISTER_GAP_DAYS`) | Long enough to be a refresh rather than a chase. It is also roughly how often a CV needs touching to stay near the top of a consultant's search results, which is the entire point. |
+| 6 approaches, then stop (`AGENCY_REGISTER_MAX`) | Half a year of monthly contact. After that, silence from a desk is an answer. |
+| The second letter is a *different* letter | It says "I last wrote in June, here is my current CV" and asks what is live. The same pitch sent twice is a mail merge and reads like one. |
+| An agency the pipeline pitched about a vacancy in the last 6 days is skipped | Both routes land in the same inbox, and the live vacancy is the more useful of the two. |
+| Addresses scraped and MX-checked, never guessed | Same rule as everywhere. The MX check is on the address found, not on the site scraped, because agencies routinely run the careers site on one domain and their mail on another. |
+
+The letter gives a consultant what they actually match on - trade, location,
+availability, money - **including the awkward parts**: he does not drive, and
+he does not hold BOSIET or MIST yet. A consultant who finds that out at the
+point of submission has wasted a placement and Harry's shot at it.
+
+No account is created and no portal is filled in. Several of these firms want a
+profile on their own site, and the run prints which ones found nothing postable
+so they can be done by hand - Orion is the known case, since orionjobs.com
+carries no MX record at all.
 
 ## What the research says works, and where it lives in the code
 
@@ -329,12 +384,30 @@ employer where being ex-forces moves him from the pile to the shortlist.
 The email never claims an employer holds an award or runs a scheme. It asks.
 His service is a fact about him; whether they run a scheme is theirs to state.
 
+**On CTP and what replaces it.** CTP resettlement - myPlan, the workshops and
+the CTP RightJob board - runs from two years before discharge to two years
+after. Harry left the Royal Navy in 2023, so that window has closed behind him,
+and `data/support_orgs.json` used to record him as "already registered -
+RightJob" and skip the charity entirely on the strength of it. Registered and
+still entitled are not the same thing. **Op ASCEND** is the door that opens at
+exactly that point: government funded, delivered by the same Forces Employment
+Charity, for veterans who left *more* than two years ago, and it lasts for life.
+Both it and CTP are now written to with an `ask` of `registration` - a letter
+that asks to be signed up and asks what is still open to him, rather than
+assuming either way. Their alert emails are in `ALERT_SENDERS`, so once he is
+on a veterans' board its vacancies feed the machine like any other board's.
+
 **Agencies are not employers.** An employer has the one job they advertised
 and a second unsolicited email reads as pestering, so they get one, ever. A
 recruitment agency is paid to place people and holds dozens of live roles, so
 it gets up to four approaches, one per vacancy, six days apart - with its own
 template, because a consultant is matching a person against a list and needs
 the facts that let them do it.
+
+**And the agency's database is a channel of its own** - see
+`agency_outreach.py` below. Answering an agency's advert only ever reaches the
+agencies that advertised something this week. Being *on the database* is
+searched by the consultant, against roles that never got advertised at all.
 
 **Referrals** are the one well-evidenced channel left unautomated. Doing it
 properly needs to know who Harry actually knows, and inventing a connection

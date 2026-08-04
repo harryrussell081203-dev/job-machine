@@ -98,6 +98,38 @@ def compose(org):
     }.get(group, "I am a 22 year old electronics technician in Aberdeen and a "
                  "Royal Navy veteran.")
 
+    # The Forces Employment Charity is not being asked for money or for
+    # introductions. It runs the thing itself - Op ASCEND, the government
+    # funded employment service for veterans who left more than two years ago,
+    # which is Harry as of 2025. CTP resettlement and CTP RightJob run from two
+    # years before discharge to two years after, so the resettlement door has
+    # closed behind him and this is the one that has not. The letter asks to be
+    # signed up and asks what is still open to him; it does not assert that
+    # anything is.
+    if org.get("ask") == "registration":
+        body = (
+            f"Hello,\n\n"
+            f"{who}\n\n"
+            f"I am looking for technician work - electronics, instrumentation "
+            f"and communications - and I am applying steadily on my own. I "
+            f"understand CTP resettlement support runs to two years after "
+            f"discharge, which I am now past, so I am writing about what comes "
+            f"after it.\n\n"
+            f"Two things, please:\n\n"
+            f"1. Can you register me for Op ASCEND, or send me the link to "
+            f"register myself and the details of the adviser covering "
+            f"Aberdeen?\n"
+            f"2. Is CTP RightJob still open to me at this point, and if not, "
+            f"is there an equivalent vacancy service through you?\n\n"
+            f"Three years at Sonardyne building and fault-finding subsea "
+            f"electronics, two years Royal Navy communications, SCQF Level 7 "
+            f"apprenticeship, DV cleared, available immediately and happy with "
+            f"rotational or offshore work anywhere. My CV is attached.\n\n"
+            f"Thank you.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return "Op ASCEND registration - Royal Navy veteran, Aberdeen", body
+
     # Some of these organisations have no money to give and are not the right
     # people to ask for any. What the RFCAs and the veteran employment
     # charities have is the list - which employers in a given area have
@@ -180,8 +212,18 @@ def find_address(org):
     return address, name
 
 
-def run(state, send=False, limit=None):
+def run(state, send=False, limit=None, only=None):
+    """`only` restricts the run to one kind of ask.
+
+    The list is written to once per organisation, ever, so an ordinary fire
+    empties whatever is left on it. That is right when the point is to work
+    through the list, and wrong when the point is one specific errand - asking
+    the Forces Employment Charity to sign him up for Op ASCEND should not also
+    post ten charity letters that happened to be queued behind it."""
     orgs = [o for o in load_orgs() if not already_asked(state, o)]
+    if only:
+        orgs = [o for o in orgs if o.get("ask") == only]
+        print(f"[support] restricted to ask={only}")
     if not orgs:
         print("[support] every organisation on the list has been asked")
         return 0
@@ -223,9 +265,13 @@ def main(argv=None):
                     help="actually send (otherwise the letters are printed)")
     ap.add_argument("--dry-run", action="store_true", help="the default")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--only", metavar="ASK",
+                    help="only organisations whose 'ask' is this, e.g. "
+                         "registration")
     args = ap.parse_args(argv)
     state = jm.load()
-    run(state, send=args.send and not args.dry_run, limit=args.limit)
+    run(state, send=args.send and not args.dry_run, limit=args.limit,
+        only=args.only)
     jm.save(state)
     return 0
 
