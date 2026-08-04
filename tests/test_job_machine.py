@@ -163,6 +163,30 @@ class TestWrongCompanyRegression(unittest.TestCase):
         with self.clearbit([{"name": "EnerMech", "domain": "enermech.com"}]):
             self.assertEqual(jm.find_domain("EnerMech"), "enermech.com")
 
+    def test_a_one_word_company_name_needs_an_exact_match(self):
+        """'Sanctuary' the housing association was matched to Sanctuary
+        Clothing in California, and to a named individual there - an
+        application was one run away from landing in a stranger's inbox at an
+        unrelated company on another continent.
+
+        A single word does not identify a company. The whole-word subset rule
+        that catches Wood/Woodforest is satisfied by ANY firm containing that
+        word, so for a one-token name nothing but an exact match will do."""
+        for wanted, hit, domain in (
+                ("Sanctuary", "Sanctuary Clothing", "sanctuaryclothing.com"),
+                ("Encore", "Encore Capital Group", "encorecapital.com"),
+                ("Future", "Future Publishing Ltd", "futureplc.com")):
+            with self.subTest(wanted=wanted):
+                with self.clearbit([{"name": hit, "domain": domain}]):
+                    self.assertIsNone(jm.find_domain(wanted))
+
+    def test_a_one_word_name_still_matches_itself_exactly(self):
+        with self.clearbit([{"name": "Sanctuary", "domain": "sanctuary.co.uk"}]):
+            self.assertEqual(jm.find_domain("Sanctuary"), "sanctuary.co.uk")
+        # and the suffix-stripping that company_key already does still applies
+        with self.clearbit([{"name": "Hydrasun Ltd", "domain": "hydrasun.com"}]):
+            self.assertEqual(jm.find_domain("Hydrasun"), "hydrasun.com")
+
     def test_a_foreign_lookalike_domain_is_rejected(self):
         with self.clearbit([{"name": "HMH", "domain": "hmh.com.vn"}]):
             self.assertIsNone(jm.find_domain("HMH"))
