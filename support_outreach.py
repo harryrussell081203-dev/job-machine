@@ -98,6 +98,37 @@ def compose(org):
     }.get(group, "I am a 22 year old electronics technician in Aberdeen and a "
                  "Royal Navy veteran.")
 
+    # Some of these organisations have no money to give and are not the right
+    # people to ask for any. What the RFCAs and the veteran employment
+    # charities have is the list - which employers in a given area have
+    # committed to the Armed Forces Covenant, and which of those run a
+    # guaranteed interview scheme. That is worth more than the funding ask,
+    # because a guaranteed interview is an interview by policy rather than by
+    # persuasion. Asking them for training money instead would be asking the
+    # right people the wrong question.
+    if org.get("ask") == "employer introductions":
+        body = (
+            f"Hello,\n\n"
+            f"{who}\n\n"
+            f"I am looking for technician work - electronics, instrumentation "
+            f"and communications - and I am applying steadily on my own. I am "
+            f"writing because you work with the employers in this area who "
+            f"have committed to supporting the armed forces community.\n\n"
+            f"Two questions, if you have a moment:\n\n"
+            f"1. Are there employers in the north east of Scotland you would "
+            f"point a service leaver in my trade toward?\n"
+            f"2. Do any of them run a guaranteed interview scheme for "
+            f"veterans who meet the criteria for a role?\n\n"
+            f"Three years at Sonardyne building and fault-finding subsea "
+            f"electronics, two years Royal Navy communications, SCQF Level 7 "
+            f"apprenticeship, DV cleared, available immediately and happy with "
+            f"rotational or offshore work anywhere. My CV is attached.\n\n"
+            f"Thank you for reading this.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return ("Royal Navy veteran, 22, Aberdeen - employers worth "
+                "approaching?"), body
+
     body = (
         f"Hello,\n\n"
         f"{who}\n\n"
