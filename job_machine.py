@@ -1235,10 +1235,18 @@ def domain_matches_company(company, domain):
     root = re.split(r"[.]", domain.lower().strip())[0]
     if root == token:
         return True
-    # the company's own name plus an ordinary corporate word
-    if root.startswith(token):
-        return root[len(token):].strip("-_") in DOMAIN_SUFFIXES
-    return False
+    if not root.startswith(token):
+        return False
+    rest = root[len(token):].strip("-_")
+    if rest in DOMAIN_SUFFIXES:
+        return True
+    # Or a word from the company's own name. company_key strips 'recruitment',
+    # 'group', 'solutions' and the like, so 'Canmore Recruitment' reduces to
+    # the single token 'canmore' - and canmorerecruitment.com is obviously
+    # theirs. Checking the remainder against the words actually in the name
+    # keeps that, while still refusing 'clothing' for Sanctuary.
+    own_words = set(re.sub(r"[^a-z0-9 ]", " ", (company or "").lower()).split())
+    return rest in own_words
 
 
 def find_domain(company):
