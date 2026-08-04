@@ -1603,6 +1603,19 @@ class TestPortalFallback(unittest.TestCase):
                 jm.portal_fallback(state)
                 self.assertEqual(state["jobs"]["p1"]["status"], status)
 
+    def test_a_job_that_has_already_waited_is_not_held_again(self):
+        """The off-peak hold trades a few hours for a better open rate. That is
+        a good trade once, for a listing that will still be there this
+        afternoon - not twice, for one that was parked days ago. Without this,
+        eighty-six of the best-matched roles in the file go out at three a
+        run."""
+        state = self.state()
+        jm.portal_fallback(state)
+        self.assertTrue(jm.already_waited(state["jobs"]["p1"]))
+
+    def test_an_ordinary_listing_still_waits_for_the_window(self):
+        self.assertFalse(jm.already_waited(make_job(external_id="ordinary")))
+
     def test_the_score_is_kept_because_it_was_never_in_doubt(self):
         """Unlike a rescore, nothing here says the judgement was wrong - only
         that the way in was blocked. Dropping the score would send it back
