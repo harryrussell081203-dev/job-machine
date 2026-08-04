@@ -29,9 +29,12 @@ permissions:
   contents: write
 
 concurrency:
-  # shared with run.yml: both stages score listings, and two of them running at
-  # once is what produced a wall of Gemini 429s. They queue instead.
-  group: job-machine-gemini
+  # Its own group, no longer shared with run.yml. A concurrency group holds one
+  # pending run and cancels any earlier pending one, so sharing meant portal
+  # runs were deleting queued send runs outright - see the note in run.yml.
+  # Two scorers overlapping costs some 429s, which the back-off already
+  # handles. A cancelled send run costs the send.
+  group: job-machine-portal
   cancel-in-progress: false
 
 jobs:
