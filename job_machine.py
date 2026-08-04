@@ -1560,13 +1560,20 @@ def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=Non
     return msg["Message-ID"]
 
 
-def run_sends(state, dry_run=False):
+def run_sends(state, dry_run=False, already_sent=0):
+    """Send the queued applications. Returns how many have gone out this run.
+
+    'already_sent' carries the count across calls, because this stage runs
+    more than once per run - once before the slow stages so a queued
+    application cannot be stranded by the workflow timeout, once after so
+    anything discovery has just found an address for still goes today. A cap
+    that reset between the two would quietly be a cap of fourteen."""
     if not cv_path():
         print("[send] no CV PDF in cv/ or repo root - refusing to send")
-        return
+        return already_sent
     if not dry_run and not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
         print("[send] no Gmail credentials - refusing to send")
-        return
+        return already_sent
 
     # freshest first within equal tier+score - being an early applicant on a new
     # listing is worth more than being late on a stale one
@@ -1583,7 +1590,7 @@ def run_sends(state, dry_run=False):
     if not in_peak_window():
         print(f"[send] outside the Tuesday-Thursday 9-11am window, holding all "
               f"but {budget} back for it (fresh listings still go now)")
-    sent = 0
+    sent = already_sent
     for job in ready:
         # The per-run cap is absolute: it is what keeps a burst of new listings
         # from putting twenty emails through one Gmail session.
@@ -1650,6 +1657,7 @@ def run_sends(state, dry_run=False):
         if sent < PER_RUN_SEND_CAP:
             time.sleep(SEND_INTERVAL_SECONDS)
     print(f"[send] {sent} message(s) this run, {sends_today(state)} today")
+    return sent
 
 
 def run_applied_notes(state):
@@ -2525,10 +2533,15 @@ def rescore(state, floor=55):
 
 
 def stage(name, fn, *args):
+    """Run a stage, swallowing its failure so the rest of the run continues.
+
+    Returns whatever the stage returned, or None if it blew up - the send
+    stage uses that to carry its running total into its second call."""
     try:
-        fn(*args)
+        return fn(*args)
     except Exception as e:
         print(f"[{name}] STAGE FAILED: {type(e).__name__}: {e}")
+        return None
 
 
 def main(argv=None):
@@ -2583,11 +2596,21 @@ def main(argv=None):
         # have no free API, but every one of them will email him alerts.
         stage("alerts", harvest_from_inbox, state)
         save(state)
+    # Anything already holding a real address goes now, before the two slow
+    # stages get a chance to spend the run. Sending a queued application takes
+    # seconds; scoring and address discovery are the parts that hit the
+    # forty-five minute ceiling, and they did - a run released ninety-nine
+    # parked listings, found real addresses for six of them, and was killed
+    # before it sent one, leaving them 'ready' with nothing to show.
+    sent = stage("send", run_sends, state, args.dry_run) or 0
+    save(state)
     stage("score", score_jobs, state)
     save(state)
     stage("discover", discover, state)
     save(state)
-    stage("send", run_sends, state, args.dry_run)
+    # And again for whatever discovery just found an address for, carrying the
+    # count so the per-run cap stays a per-run cap.
+    stage("send", run_sends, state, args.dry_run, sent)
     save(state)
     if not args.dry_run:
         stage("notes", run_applied_notes, state)
