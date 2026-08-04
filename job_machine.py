@@ -505,7 +505,14 @@ AGENCY_NAME = re.compile(
     # sender as not knowing who he is writing to.
     r"\bselection\b|\bappointments\b|outsource|\breed\b|morgan hunt|"
     r"anson mccade|appcast|engineering employment|\bsearch\b|"
-    r"\bsolutions group\b|first military|\bplacements?\b|headhunt",
+    r"\bsolutions group\b|first military|\bplacements?\b|headhunt|"
+    # Three more with no give-away word in the name at all, caught by the
+    # agency register in data/agencies.json being checked against this
+    # function. Every one of them is a recruiter the pipeline would otherwise
+    # have filed as an employer - one email ever, and a speculative 'nothing
+    # advertised that I can see' note to a firm whose business is advertising
+    # things.
+    r"atlas professionals|spencer ogden|rullion",
     re.I)
 AGENCY_BODY = re.compile(
     r"our client|on behalf of (our|a) client|we are recruiting for|"
@@ -1879,6 +1886,23 @@ AUTOREPLY_ROTATIONAL = (
     "Which day works best for you?\n\n"
     "Harry\nHarry Russell / 07398 530978")
 
+# How many agency registration letters an ordinary pipeline run may send.
+# Small on purpose: the module's own cooldown is a month per agency, so this
+# is only the pacing for the handful that come due on the same day.
+AGENCY_PIPELINE_PER_RUN = env_int("AGENCY_PIPELINE_PER_RUN", 2)
+
+
+def agency_refresh(state):
+    """Keep Harry current on the recruitment agencies' own databases.
+
+    Imported here rather than at the top because agency_outreach imports this
+    module. Almost every run finds nobody due and costs one lookup in the
+    state file; see agency_outreach.py for why this is the one route allowed
+    to write to the same firm more than once."""
+    import agency_outreach
+    return agency_outreach.run(state, send=True, limit=AGENCY_PIPELINE_PER_RUN)
+
+
 ROTATIONAL_ADVERT = re.compile(
     r"offshore|rotation|rota\b|\d\s*[/:]\s*\d\s*(week|rotation)?|back[- ]to[- ]back|"
     r"fly[- ]in|fifo|vessel|rig\b|platform\b|swing|trip[- ]based|"
@@ -2653,6 +2677,11 @@ def main(argv=None):
         # evidence, rather than my guess about who operates in Aberdeen.
         stage("targets", grow_targets, state)
         stage("speculative", speculative, state)
+        save(state)
+        # The agencies' own databases, which are searched by consultants
+        # against roles that were never advertised. Nearly always a no-op:
+        # each agency has a month-long cooldown of its own.
+        stage("agencies", agency_refresh, state)
         save(state)
         stage("followup", run_followups, state)
         save(state)

@@ -66,10 +66,23 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
         for expected in ("veteran", "young", "local", "industry"):
             self.assertIn(expected, groups)
 
-    def test_an_organisation_already_dealt_with_is_left_alone(self):
-        """He has signed up with the Forces Employment Charity himself."""
-        self.assertNotIn("forcesemployment.org.uk",
-                         [o.get("domain") for o in so.load_orgs()])
+    def test_the_forces_employment_charity_is_written_to_after_all(self):
+        """This entry used to be skipped as 'already registered - RightJob'.
+
+        Registered and still entitled are not the same thing. RightJob is the
+        CTP job board, CTP support runs from two years before discharge to two
+        years after, and Harry left in 2023 - so the resettlement door has
+        closed behind him. Op ASCEND, which the same charity delivers, is the
+        one that opens at exactly that point and lasts for life. The letter
+        asks them to sign him up rather than assuming either way."""
+        orgs = {o.get("domain"): o for o in so.load_orgs()}
+        self.assertIn("forcesemployment.org.uk", orgs)
+        self.assertEqual(orgs["forcesemployment.org.uk"]["ask"], "registration")
+
+    def test_the_organisation_that_holds_the_covenant_list_is_still_skipped(self):
+        """A central government mailbox is the wrong door for one job search."""
+        self.assertNotIn("Defence Relationship Management",
+                         [o.get("name") for o in so.load_orgs()])
 
     def test_nobody_is_asked_twice(self):
         state = {"jobs": {}, "support_asked": {}}
@@ -161,6 +174,69 @@ class TestAskingForEmployersRatherThanMoney(unittest.TestCase):
         _, body = so.compose({"name": "Poppyscotland", "group": "veteran"})
         self.assertIn("OPITO", body)
         self.assertNotIn("guaranteed interview", body.lower())
+
+
+class TestAskingToBeSignedUp(unittest.TestCase):
+    """The Forces Employment Charity and CTP are not being asked for money or
+    for introductions. They run the scheme itself, so the question is whether
+    they will put him on it."""
+
+    def letter(self):
+        return so.compose({"name": "Forces Employment Charity",
+                           "group": "veteran", "ask": "registration"})
+
+    def test_it_asks_to_be_registered(self):
+        _, body = self.letter()
+        self.assertIn("register me for Op ASCEND", body)
+
+    def test_it_asks_about_rightjob_rather_than_assuming(self):
+        _, body = self.letter()
+        low = body.lower()
+        self.assertIn("rightjob still open to me", low)
+        for claim in ("i am entitled to", "i still have access",
+                      "my account is", "for life"):
+            with self.subTest(claim=claim):
+                self.assertNotIn(claim, low)
+
+    def test_it_states_the_two_year_rule_as_the_reason_for_writing(self):
+        """Getting this wrong in either direction wastes their time: claiming
+        entitlement he does not have, or not writing at all because a previous
+        note in the data file said he was already signed up."""
+        _, body = self.letter()
+        self.assertIn("two years after", body)
+        self.assertIn("past", body)
+
+    def test_it_does_not_ask_them_for_money(self):
+        _, body = self.letter()
+        for money in ("thousand pounds", "OPITO BOSIET", "driving licence"):
+            with self.subTest(money=money):
+                self.assertNotIn(money.lower(), body.lower())
+
+    def test_the_subject_says_what_it_wants(self):
+        subject, _ = self.letter()
+        self.assertIn("Op ASCEND", subject)
+        self.assertLessEqual(len(subject), 60)
+
+    def test_both_doors_are_asked(self):
+        asks = {o["name"]: o.get("ask") for o in so.load_orgs()}
+        self.assertEqual(asks.get("Forces Employment Charity"), "registration")
+        self.assertEqual(asks.get("Career Transition Partnership"),
+                         "registration")
+
+    def test_this_errand_does_not_post_the_whole_charity_list(self):
+        """One specific errand, not a reason to empty the queue behind it."""
+        state = {"jobs": {}, "support_asked": {}}
+        written = []
+        with mock.patch.object(so, "find_address",
+                               return_value=("info@example.org", None)), \
+             mock.patch.object(so, "SUPPORT_INTERVAL_SECONDS", 0), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "send_email",
+                               side_effect=lambda *a, **k: written.append(a)):
+            so.run(state, send=True, only="registration")
+        self.assertEqual(len(written), 2)
+        for subject in (call[1] for call in written):
+            self.assertIn("Op ASCEND", subject)
 
 
 if __name__ == "__main__":

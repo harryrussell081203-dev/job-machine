@@ -62,6 +62,12 @@ ALERT_SENDERS = (
     "technojobs.co.uk", "myjobscotland", "energyjobline.com", "google.com",
     "workable.com", "greenhouse.io", "lever.co", "smartrecruiters.com",
     "ashbyhq.com", "teamtailor.com",
+    # The ex-military boards. CTP RightJob and the Forces Employment Charity
+    # carry vacancies from employers who asked for service leavers, which is
+    # the closest thing in this market to a warm advert - several of them run
+    # a guaranteed interview for a veteran who meets the criteria. Their alerts
+    # are read exactly like any other board's.
+    "ctp.org.uk", "rightjob", "forcesemployment.org.uk",
 )
 
 # A link that goes to a specific advert rather than to a login page, an
