@@ -1595,7 +1595,7 @@ def run_sends(state, dry_run=False):
         # Thursday, 9-11am send gets the best open and reply rates. Speed is
         # measured in days and timing in hours, so speed wins for anything
         # genuinely fresh and timing decides the rest of the queue.
-        if sent >= budget and not brand_new(job):
+        if sent >= budget and not (brand_new(job) or already_waited(job)):
             print(f"[send] {sent} sent, holding the rest for the window")
             break
         if sends_today(state) >= DAILY_SEND_CAP:
@@ -2027,6 +2027,19 @@ def in_peak_window(when=None):
     a backlog and Friday's reader has checked out."""
     now_uk = when or uk_now()
     return now_uk.weekday() in (1, 2, 3) and 9 <= now_uk.hour < 12
+
+
+def already_waited(job):
+    """Has this job been held back once already?
+
+    The off-peak hold trades a few hours for a better open rate, and that is a
+    good trade for a listing that will still be there this afternoon. It is not
+    a good trade twice. A job that reached the queue through the portal
+    fallback has been sitting for days - it was found, judged, matched, and
+    then parked because its application form could not be driven. Holding it
+    again for a timing window is how eighty-six of the best-matched roles in
+    the file would go out at three a run."""
+    return bool(job.get("portal_fallback_at"))
 
 
 def brand_new(job, hours=None):
