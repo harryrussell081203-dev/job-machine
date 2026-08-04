@@ -106,6 +106,58 @@ def compose(org):
     # because a guaranteed interview is an interview by policy rather than by
     # persuasion. Asking them for training money instead would be asking the
     # right people the wrong question.
+    # A recruiter is not being asked for help. They are being told what is
+    # available, because a technician they can place is the thing their
+    # business runs on. Harry has already sent his CV to several of these
+    # himself; a second approach from a candidate who is clearly still looking
+    # costs a recruiter nothing to read and is normal in this market.
+    if org.get("ask") == "representation":
+        body = (
+            f"Hello,\n\n"
+            f"I am an electronics and instrumentation technician in Aberdeen, "
+            f"looking for work and available immediately. I would like to be "
+            f"on your books for technician and engineering roles.\n\n"
+            f"Briefly:\n\n"
+            f"1. Three years at Sonardyne building, testing and fault-finding "
+            f"subsea acoustic electronics to IPC-A-610 Class 3.\n"
+            f"2. Two years Royal Navy Communications and Information "
+            f"Specialist on a Type 23 frigate. DV cleared.\n"
+            f"3. SCQF Level 7 engineering apprenticeship completed, part way "
+            f"through a BEng in Instrumentation, Measurement and Control.\n\n"
+            f"I am 22, I do not drive yet, and I am open to rotational, "
+            f"offshore and fly-in fly-out work anywhere that comes with "
+            f"transport and accommodation - so location is far less of a "
+            f"constraint for me than it is for most people.\n\n"
+            f"CV attached. Happy to come in or take a call whenever suits.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return "Electronics / instrumentation technician, Aberdeen - available now", body
+
+    # CTP is a service he is entitled to rather than a favour he is asking
+    # for, and the account has to be opened by him because it verifies his
+    # service record. So this asks how, and does not pretend to be able to
+    # do it for him.
+    if org.get("ask") == "ctp access":
+        body = (
+            f"Hello,\n\n"
+            f"I left the Royal Navy in 2023 after two years as a "
+            f"Communications and Information Specialist. I understand service "
+            f"leavers keep access to CTP and RightJob for life rather than "
+            f"only during resettlement.\n\n"
+            f"Could you tell me how to get my RightJob access set up or "
+            f"reactivated? I am job hunting now - electronics and "
+            f"instrumentation technician work - and I would rather be seeing "
+            f"the vacancies that are meant for service leavers than only the "
+            f"open market.\n\n"
+            f"I am 22, based in Aberdeen, three years at Sonardyne on subsea "
+            f"electronics since leaving, SCQF Level 7 apprenticeship, DV "
+            f"cleared, available immediately and happy with rotational or "
+            f"offshore work. CV attached.\n\n"
+            f"Thank you.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return "Service leaver - how do I get RightJob access set up?", body
+
     if org.get("ask") == "employer introductions":
         body = (
             f"Hello,\n\n"
