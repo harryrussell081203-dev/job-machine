@@ -101,6 +101,51 @@ class TestReopenedListings(unittest.TestCase):
         self.assertEqual(out["jobs"]["a"]["status"], "sent")
 
 
+class TestTheParkedJobsBeingReleased(unittest.TestCase):
+    """The portal fallback moves a listing from 'portal_manual' (rank 7) back
+    to 'scored' (rank 1) on purpose, because its application form could not be
+    driven and an email is the way in instead.
+
+    The ordinary more-advanced-wins rule read that as a step backwards and
+    reverted it. Eighty-six listings were released three runs in a row and
+    silently re-parked by this file each time - the stage worked perfectly and
+    left no trace, which is the hardest kind of bug to see from the outside."""
+
+    def test_a_released_job_is_not_re_parked_by_the_merge(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "portal_manual", "score": 90}}},
+            {"jobs": {"a": {"status": "scored", "score": 90,
+                            "portal_fallback_at": "2026-08-04T15:30:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_it_works_whichever_side_the_release_is_on(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "scored",
+                            "portal_fallback_at": "2026-08-04T15:30:00"}}},
+            {"jobs": {"a": {"status": "portal_manual", "score": 90}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_a_rescore_and_a_release_do_not_cancel_each_other(self):
+        """Both are deliberate re-openings; the newer one is the current
+        intent."""
+        out = ms.merge(
+            {"jobs": {"a": {"status": "new", "rescored_at": "2026-08-04T14:00:00"}}},
+            {"jobs": {"a": {"status": "scored",
+                            "portal_fallback_at": "2026-08-04T15:30:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_an_application_actually_sent_still_wins(self):
+        """A release is a step back into the queue. Something already sent has
+        left the queue, and must never be dragged back into it."""
+        out = ms.merge(
+            {"jobs": {"a": {"status": "sent", "to": "x@y.com",
+                            "sent_at": "2026-08-04T16:00:00",
+                            "portal_fallback_at": "2026-08-04T15:30:00"}}},
+            {"jobs": {"a": {"status": "scored",
+                            "portal_fallback_at": "2026-08-04T15:30:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "sent")
+
+
 class TestTheSupportRegister(unittest.TestCase):
     """Which charities and training bodies have been written to. One approach
     each, ever - so an entry lost here is a second letter to somebody who has
