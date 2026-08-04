@@ -31521,6 +31521,11 @@
   "wood": "sent"
  },
  "support_asked": {
+  "airswift": {
+   "at": "2026-08-04T19:08:10.656185+00:00",
+   "email": "info@airswift.com",
+   "name": "Airswift"
+  },
   "buildforce": {
    "at": "2026-08-04T17:53:01.321528+00:00",
    "email": "info@buildforce.org.uk",
@@ -31556,6 +31561,11 @@
    "email": "americas@opito.com",
    "name": "OPITO"
   },
+  "petroplan": {
+   "at": "2026-08-04T19:07:09.983552+00:00",
+   "email": "zach.blaylock@petroplan.com",
+   "name": "Petroplan"
+  },
   "poppyscotland": {
    "at": "2026-08-03T21:11:57",
    "email": "f.bedwell@poppyscotland.org.uk",
@@ -31565,6 +31575,11 @@
    "at": "2026-08-03T21:12:57",
    "email": "corporate@ssafa.org.uk",
    "name": "SSAFA the Armed Forces Charity"
+  },
+  "tmm": {
+   "at": "2026-08-04T19:05:25.074170+00:00",
+   "email": "abarry@tmmrecruitment.com",
+   "name": "TMM Recruitment"
   },
   "veterans scotland": {
    "at": "2026-08-03T21:15:03",
