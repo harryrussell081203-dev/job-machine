@@ -1,0 +1,189 @@
+{
+  "_README": [
+    "Recruitment agencies to be REGISTERED with, which is a different thing from",
+    "the agencies the pipeline already answers.",
+    "",
+    "THE DIFFERENCE",
+    "  The main pipeline is reactive: an agency advertises a vacancy, the machine",
+    "  writes to them about that vacancy. Good, but it only ever reaches the",
+    "  agencies that happened to advertise something in the last 48 hours.",
+    "  This file is the other half. A consultant's database is searched by the",
+    "  consultant, on their own time, against roles that were never advertised -",
+    "  so being IN the database is inbound, and most desks rank their search",
+    "  results by how recently a candidate was in touch.",
+    "",
+    "WHY THIS ONE IS ALLOWED TO REPEAT",
+    "  Everywhere else in this repository the rule is one approach per company,",
+    "  ever, because a second unsolicited email to an employer reads as",
+    "  pestering. An agency is the exception the codebase already recognises:",
+    "  they are PAID to place people, they hold dozens of live roles at once,",
+    "  and a candidate who checks in every few weeks is a candidate they can",
+    "  actually place. So the cap here is a long cooldown, not a single shot,",
+    "  and the second letter is a different letter - a refresh, not the same",
+    "  pitch sent twice.",
+    "",
+    "'desk' IS THE ONLY THING THE LETTER MAY SAY ABOUT THEM",
+    "  Same discipline as data/targets.json. One true line about what they",
+    "  actually recruit for, used as the reason for writing to them rather than",
+    "  to anyone else. If it is wrong, fix it here; nothing invents its own.",
+    "",
+    "'site' IS SCRAPED, NOT GUESSED",
+    "  The address is found by the pipeline's ordinary discovery against this",
+    "  domain and MX-checked before anything is sent. No address in this file,",
+    "  no pattern-generated ones, and an agency whose site publishes nothing",
+    "  real is reported and skipped rather than guessed at.",
+    "",
+    "  Orion Group is the known case: orionjobs.com carries no MX record, so if",
+    "  discovery only turns up an @orionjobs.com address there is nothing that",
+    "  can legitimately be posted to. Their own upload form is the route there."
+  ],
+  "agencies": [
+    {
+      "name": "Cammach",
+      "site": "wearecammach.com",
+      "group": "energy",
+      "desk": "you recruit engineering, trades and industrial staff across the Aberdeen energy market",
+      "confidence": "confirmed - rebranded from Cammach Bryant"
+    },
+    {
+      "name": "TMM Recruitment",
+      "site": "tmmrecruitment.com",
+      "group": "technical",
+      "desk": "your technical and industrial desk covers energy, chemical and manufacturing employers in the north east",
+      "confidence": "confirmed - formerly Thorpe Molloy"
+    },
+    {
+      "name": "TEXO Recruitment",
+      "site": "texorecruitment.co.uk",
+      "group": "energy",
+      "desk": "you recruit for the energy and industrial services work run out of Westhill and the wider north east",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Orion Group",
+      "site": "orionjobs.com",
+      "group": "energy",
+      "desk": "your Aberdeen office has recruited into the North Sea energy market for decades",
+      "confidence": "site has no MX record - expect discovery to find nothing postable"
+    },
+    {
+      "name": "NES Fircroft",
+      "site": "nesfircroft.com",
+      "group": "energy",
+      "desk": "you staff engineering and technician roles across oil, gas and renewables worldwide",
+      "confidence": "check"
+    },
+    {
+      "name": "Airswift",
+      "site": "airswift.com",
+      "group": "energy",
+      "desk": "you place technicians on rotational and international energy contracts",
+      "confidence": "check"
+    },
+    {
+      "name": "Petroplan",
+      "site": "petroplan.com",
+      "group": "energy",
+      "desk": "you recruit into oil, gas and energy projects including offshore rotational work",
+      "confidence": "check"
+    },
+    {
+      "name": "Brunel",
+      "site": "brunel.net",
+      "group": "energy",
+      "desk": "you place engineering and technical contractors across energy and marine projects",
+      "confidence": "check"
+    },
+    {
+      "name": "Atlas Professionals",
+      "site": "atlasprofessionals.com",
+      "group": "energy",
+      "desk": "you specialise in offshore and marine crewing, which is the market my subsea background sits in",
+      "confidence": "check"
+    },
+    {
+      "name": "Spencer Ogden",
+      "site": "spencer-ogden.com",
+      "group": "energy",
+      "desk": "you recruit into energy and renewables projects from an Aberdeen base",
+      "confidence": "check"
+    },
+    {
+      "name": "Morson Group",
+      "site": "morson.com",
+      "group": "defence",
+      "desk": "you recruit engineering and technical staff for defence, aerospace and energy employers",
+      "confidence": "check"
+    },
+    {
+      "name": "Matchtech",
+      "site": "matchtech.com",
+      "group": "defence",
+      "desk": "you are an engineering specialist recruiter working with defence and infrastructure employers",
+      "confidence": "check"
+    },
+    {
+      "name": "Rullion",
+      "site": "rullion.co.uk",
+      "group": "defence",
+      "desk": "you recruit technicians into energy, nuclear and defence contracts",
+      "confidence": "check"
+    },
+    {
+      "name": "Escape Recruitment Services",
+      "site": "escaperecruitment.com",
+      "group": "technical",
+      "desk": "your engineering and manufacturing desk covers technician roles across central and eastern Scotland",
+      "confidence": "check"
+    },
+    {
+      "name": "Contract Scotland",
+      "site": "contractscotland.co.uk",
+      "group": "technical",
+      "desk": "you recruit technical and engineering staff across Scotland",
+      "confidence": "check"
+    },
+    {
+      "name": "Murray Recruitment",
+      "site": "murrayrecruitment.co.uk",
+      "group": "technical",
+      "desk": "you cover industrial and engineering hiring across Scotland",
+      "confidence": "check"
+    },
+    {
+      "name": "First Achieve",
+      "site": "firstachieve.co.uk",
+      "group": "technical",
+      "desk": "your engineering and technical desk works with Scottish manufacturers and engineering firms",
+      "confidence": "check"
+    },
+    {
+      "name": "Search Consultancy",
+      "site": "searchconsultancy.co.uk",
+      "group": "technical",
+      "desk": "you have an Aberdeen office recruiting technical and industrial staff",
+      "confidence": "check"
+    },
+    {
+      "name": "First Military Recruitment",
+      "site": "firstmilitary.co.uk",
+      "group": "veteran",
+      "desk": "you exist to place service leavers with employers who want them",
+      "confidence": "check"
+    },
+    {
+      "name": "Forces Recruitment Solutions",
+      "site": "forcesrecruitment.co.uk",
+      "group": "veteran",
+      "desk": "you place ex-forces candidates with employers who already understand military experience",
+      "confidence": "check"
+    },
+    {
+      "name": "Ex-Mil Recruitment",
+      "site": "ex-mil.co.uk",
+      "group": "veteran",
+      "desk": "you work exclusively with ex-military candidates and the employers who hire them",
+      "confidence": "check"
+    }
+  ]
+}
