@@ -50,7 +50,21 @@ concurrency:
   #
   # The 429s it was meant to prevent are already handled: the scorer backs off
   # on the retryDelay Gemini sends. Losing a send window is not recoverable.
-  group: job-machine-run
+  #
+  # Per branch, and that is the whole point. Splitting run.yml away from
+  # portal.yml was not enough: runs sit PENDING for twenty minutes or more
+  # waiting for a hosted runner, and a group only ever holds one pending run,
+  # so the next push into the same group deletes the one already waiting.
+  #
+  # fire-run/5 was cancelled at 17:31:05 by a fire-support branch pushed at
+  # 17:31:03. It had been queued since 17:11 and had not executed a single
+  # line. Every fire-* branch pushed today died exactly that way, including
+  # several I killed myself by firing the next one.
+  #
+  # Keying on the ref means a fire-* branch can never cancel another branch's
+  # run, and main's scheduled runs still serialise against each other, which
+  # is the only place serialising was ever wanted.
+  group: job-machine-run-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
