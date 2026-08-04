@@ -1,4 +1,126 @@
 {
+ "agency_registered": {
+  "airswift": {
+   "at": "2026-08-04T19:06:03.308468+00:00",
+   "count": 1,
+   "email": "info@airswift.com",
+   "emails": [
+    "info@airswift.com"
+   ],
+   "first_at": "2026-08-04T19:06:03.308480+00:00",
+   "name": "Airswift"
+  },
+  "brunel": {
+   "at": "2026-08-04T19:08:00.942307+00:00",
+   "count": 1,
+   "email": "a.derosario@brunel.net",
+   "emails": [
+    "a.derosario@brunel.net"
+   ],
+   "first_at": "2026-08-04T19:08:00.942325+00:00",
+   "name": "Brunel"
+  },
+  "cammach": {
+   "at": "2026-08-04T19:02:02.297931+00:00",
+   "count": 1,
+   "email": "recruitment@wearecammach.com",
+   "emails": [
+    "recruitment@wearecammach.com"
+   ],
+   "first_at": "2026-08-04T19:02:02.297946+00:00",
+   "name": "Cammach"
+  },
+  "ex mil": {
+   "at": "2026-08-04T19:21:02.936341+00:00",
+   "count": 1,
+   "email": "info@ex-mil.co.uk",
+   "emails": [
+    "info@ex-mil.co.uk"
+   ],
+   "first_at": "2026-08-04T19:21:02.936358+00:00",
+   "name": "Ex-Mil Recruitment"
+  },
+  "forces": {
+   "at": "2026-08-04T19:20:02.117298+00:00",
+   "count": 1,
+   "email": "info@forcesrecruitment.co.uk",
+   "emails": [
+    "info@forcesrecruitment.co.uk"
+   ],
+   "first_at": "2026-08-04T19:20:02.117314+00:00",
+   "name": "Forces Recruitment Solutions"
+  },
+  "morson": {
+   "at": "2026-08-04T19:10:43.205335+00:00",
+   "count": 1,
+   "email": "webenquiry@morson.com",
+   "emails": [
+    "webenquiry@morson.com"
+   ],
+   "first_at": "2026-08-04T19:10:43.205352+00:00",
+   "name": "Morson Group"
+  },
+  "murray": {
+   "at": "2026-08-04T19:14:02.824303+00:00",
+   "count": 1,
+   "email": "info@murrayrecruitment.co.uk",
+   "emails": [
+    "info@murrayrecruitment.co.uk"
+   ],
+   "first_at": "2026-08-04T19:14:02.824320+00:00",
+   "name": "Murray Recruitment"
+  },
+  "nes fircroft": {
+   "at": "2026-08-04T19:05:00.801286+00:00",
+   "count": 1,
+   "email": "bonnyville@nesfircroft.com",
+   "emails": [
+    "bonnyville@nesfircroft.com"
+   ],
+   "first_at": "2026-08-04T19:05:00.801302+00:00",
+   "name": "NES Fircroft"
+  },
+  "petroplan": {
+   "at": "2026-08-04T19:06:58.557951+00:00",
+   "count": 1,
+   "email": "zach.blaylock@petroplan.com",
+   "emails": [
+    "zach.blaylock@petroplan.com"
+   ],
+   "first_at": "2026-08-04T19:06:58.557968+00:00",
+   "name": "Petroplan"
+  },
+  "rullion": {
+   "at": "2026-08-04T19:11:55.609511+00:00",
+   "count": 1,
+   "email": "alistair.haigh@rullion.co.uk",
+   "emails": [
+    "alistair.haigh@rullion.co.uk"
+   ],
+   "first_at": "2026-08-04T19:11:55.609534+00:00",
+   "name": "Rullion"
+  },
+  "spencer ogden": {
+   "at": "2026-08-04T19:09:27.177295+00:00",
+   "count": 1,
+   "email": "amber.clark@spencer-ogden.com",
+   "emails": [
+    "amber.clark@spencer-ogden.com"
+   ],
+   "first_at": "2026-08-04T19:09:27.177311+00:00",
+   "name": "Spencer Ogden"
+  },
+  "tmm": {
+   "at": "2026-08-04T19:03:08.134711+00:00",
+   "count": 1,
+   "email": "abarry@tmmrecruitment.com",
+   "emails": [
+    "abarry@tmmrecruitment.com"
+   ],
+   "first_at": "2026-08-04T19:03:08.134724+00:00",
+   "name": "TMM Recruitment"
+  }
+ },
  "ats_boards": {
   "abertay university": {
    "ats": null,
@@ -31496,7 +31618,7 @@
  "send_counts": {
   "2026-08-02": 6,
   "2026-08-03": 4,
-  "2026-08-04": 1
+  "2026-08-04": 12
  },
  "spec_counts": {
   "2026-08-02": 2,
