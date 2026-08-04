@@ -35,7 +35,22 @@ permissions:
   contents: write
 
 concurrency:
-  group: job-machine-gemini
+  # This used to be shared with portal.yml, to keep two scoring stages from
+  # hitting Gemini at once. It cost far more than it saved.
+  #
+  # A GitHub concurrency group holds exactly ONE pending run. When a second
+  # run queues behind an in-progress one, the first pending run is CANCELLED,
+  # not queued after it - 'cancel-in-progress: false' only protects the run
+  # that is already going. So every time portal.yml started while a run.yml
+  # run was waiting, that run.yml run was silently dropped.
+  #
+  # On one day the scheduled 10:28, 11:14 and 13:13 sends were all cancelled
+  # this way, along with every fire-rescore ever pushed. The pipeline looked
+  # like it was running five times a day and was really sending on two.
+  #
+  # The 429s it was meant to prevent are already handled: the scorer backs off
+  # on the retryDelay Gemini sends. Losing a send window is not recoverable.
+  group: job-machine-run
   cancel-in-progress: false
 
 jobs:
