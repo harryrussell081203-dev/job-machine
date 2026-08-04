@@ -28,33 +28,125 @@
     "in the code repeats it to an employer."
   ],
   "employers": [
-    {"company": "Babcock International", "award": "gold",
-     "note": "defence engineering, major Scottish presence"},
-    {"company": "BAE Systems", "award": "gold",
-     "note": "defence, runs its own veterans programme"},
-    {"company": "Leonardo", "award": "gold",
-     "note": "Edinburgh site, electronics and sensors - close to his trade"},
-    {"company": "Thales", "award": "gold",
-     "note": "Glasgow, underwater systems - directly relevant to Sonardyne work"},
-    {"company": "QinetiQ", "award": "gold", "note": "defence test and evaluation"},
-    {"company": "Serco", "award": "gold", "note": "defence support contracts"},
-    {"company": "SSE", "award": "gold", "note": "Scottish energy networks"},
-    {"company": "ScottishPower", "award": "silver",
-     "note": "transmission technician roles in Scotland"},
-    {"company": "Scottish Water", "award": "silver",
-     "note": "instrumentation and control across Scotland"},
-    {"company": "Network Rail", "award": "gold", "note": "signalling and telecoms"},
-    {"company": "BT", "award": "gold",
-     "note": "Openreach network engineering, comms trade match"},
-    {"company": "Balfour Beatty", "award": "gold", "note": "infrastructure"},
-    {"company": "Amey", "award": "gold", "note": "infrastructure maintenance"},
-    {"company": "Mitie", "award": "gold", "note": "technical facilities services"},
-    {"company": "NHS Grampian", "award": "signatory",
-     "note": "Aberdeen medical engineering and estates"},
-    {"company": "Aberdeen City Council", "award": "signatory",
-     "note": "local authority technical roles"},
-    {"company": "Police Scotland", "award": "gold", "note": "technical support roles"},
-    {"company": "Scottish Fire and Rescue Service", "award": "signatory",
-     "note": "equipment and workshop technicians"}
+    {
+      "company": "(TMFL) Titan Facilities Management (NW) Ltd",
+      "award": "signatory",
+      "note": "Covenant signatory",
+      "source": "https://www.gov.uk/armed-forces-covenant-businesses/tmfl-titan-facilities-management-nw-ltd"
+    },
+    {
+      "company": "1St Line Defence",
+      "award": "signatory",
+      "note": "Covenant signatory",
+      "source": "https://www.gov.uk/armed-forces-covenant-businesses/1st-line-defence"
+    },
+    {
+      "company": "2CL Communications Ltd",
+      "award": "signatory",
+      "note": "Covenant signatory",
+      "source": "https://www.gov.uk/armed-forces-covenant-businesses/2cl-communications-ltd"
+    },
+    {
+      "company": "3 Counties Defence and Security Limited",
+      "award": "signatory",
+      "note": "Covenant signatory",
+      "source": "https://www.gov.uk/armed-forces-covenant-businesses/3-counties-defence-and-security-limited"
+    },
+    {
+      "company": "3 Counties Defence and Security Trading",
+      "award": "signatory",
+      "note": "Covenant signatory",
+      "source": "https://www.gov.uk/armed-forces-covenant-businesses/3-counties-defence-and-security-trading"
+    },
+    {
+      "company": "Aberdeen City Council",
+      "award": "signatory",
+      "note": "local authority technical roles"
+    },
+    {
+      "company": "Amey",
+      "award": "gold",
+      "note": "infrastructure maintenance"
+    },
+    {
+      "company": "Babcock International",
+      "award": "gold",
+      "note": "defence engineering, major Scottish presence"
+    },
+    {
+      "company": "BAE Systems",
+      "award": "gold",
+      "note": "defence, runs its own veterans programme"
+    },
+    {
+      "company": "Balfour Beatty",
+      "award": "gold",
+      "note": "infrastructure"
+    },
+    {
+      "company": "BT",
+      "award": "gold",
+      "note": "Openreach network engineering, comms trade match"
+    },
+    {
+      "company": "Leonardo",
+      "award": "gold",
+      "note": "Edinburgh site, electronics and sensors - close to his trade"
+    },
+    {
+      "company": "Mitie",
+      "award": "gold",
+      "note": "technical facilities services"
+    },
+    {
+      "company": "Network Rail",
+      "award": "gold",
+      "note": "signalling and telecoms"
+    },
+    {
+      "company": "NHS Grampian",
+      "award": "signatory",
+      "note": "Aberdeen medical engineering and estates"
+    },
+    {
+      "company": "Police Scotland",
+      "award": "gold",
+      "note": "technical support roles"
+    },
+    {
+      "company": "QinetiQ",
+      "award": "gold",
+      "note": "defence test and evaluation"
+    },
+    {
+      "company": "Scottish Fire and Rescue Service",
+      "award": "signatory",
+      "note": "equipment and workshop technicians"
+    },
+    {
+      "company": "Scottish Water",
+      "award": "silver",
+      "note": "instrumentation and control across Scotland"
+    },
+    {
+      "company": "ScottishPower",
+      "award": "silver",
+      "note": "transmission technician roles in Scotland"
+    },
+    {
+      "company": "Serco",
+      "award": "gold",
+      "note": "defence support contracts"
+    },
+    {
+      "company": "SSE",
+      "award": "gold",
+      "note": "Scottish energy networks"
+    },
+    {
+      "company": "Thales",
+      "award": "gold",
+      "note": "Glasgow, underwater systems - directly relevant to Sonardyne work"
+    }
   ]
 }
