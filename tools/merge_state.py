@@ -33,16 +33,35 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else 0
 
 
+REOPENING_FIELDS = ("rescored_at", "portal_fallback_at")
+
+
 def reopened(job):
-    """Was this record deliberately put back in the queue to be judged again?"""
-    return str(job.get("rescored_at") or "")
+    """When was this record deliberately put back in the queue?
+
+    Two stages do it, for different reasons, and both move a listing BACKWARDS
+    through PROGRESS on purpose:
+
+      rescored_at        a profile change invalidated the score, so the
+                         listing goes back to 'new' to be judged again
+      portal_fallback_at the application portal could not be driven, so the
+                         listing goes back to 'scored' to be emailed instead
+
+    Only the first was handled here. The second ranks 'scored' (1) below
+    'portal_manual' (7), so every one of the eighty-six listings the fallback
+    released was reverted by this function on the way back to main - the stage
+    ran correctly, three runs in a row, and its work was thrown away each time.
+
+    The newest deliberate re-opening wins, whichever stage did it."""
+    return max(str(job.get(field) or "") for field in REOPENING_FIELDS)
 
 
 def pick(a, b):
     """The more advanced record, breaking ties on how much we know.
 
     Except when one side was deliberately re-opened. A rescore sets a listing
-    back to 'new' on purpose, and 'new' ranks below 'skipped', so the ordinary
+    back to 'new' on purpose and the portal fallback sets one back to 'scored',
+    and both of those rank below the status they came from, so the ordinary
     rule quietly undid the whole thing - a re-judging run reported 'no state
     changes' because every listing it re-opened was reverted by this function.
     A deliberate step backwards has to beat an accidental step forwards."""
