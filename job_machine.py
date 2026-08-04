@@ -497,7 +497,15 @@ AGENCY_NAME = re.compile(
     r"(and|&) selection|employment agency|\bagency\b|consultancy|"
     r"\bhays\b|matchtech|morson|randstad|adecco|manpower|reed specialist|"
     r"orion (group|electrotech)|nes fircroft|petroplan|airswift|brunel|"
-    r"cammach|thorpe molloy|activate group|first achieve|contract scotland",
+    r"cammach|thorpe molloy|activate group|first achieve|contract scotland|"
+    # Found by building the speculative target list out of employers the
+    # machine had already seen: these all came through as 'employers' and are
+    # every one of them a recruiter. Writing 'you don't seem to be advertising
+    # anything' to a firm whose whole business is advertising things marks the
+    # sender as not knowing who he is writing to.
+    r"\bselection\b|\bappointments\b|outsource|\breed\b|morgan hunt|"
+    r"anson mccade|appcast|engineering employment|\bsearch\b|"
+    r"\bsolutions group\b|first military|\bplacements?\b|headhunt",
     re.I)
 AGENCY_BODY = re.compile(
     r"our client|on behalf of (our|a) client|we are recruiting for|"
@@ -1751,6 +1759,30 @@ def load_targets():
         return []
 
 
+def grow_targets(state):
+    """Add employers the machine has seen advertising this trade to the
+    speculative list. Imported here so job_machine stays importable by the
+    tool itself without a circular import at module load."""
+    import spec_targets
+    try:
+        with open(TARGETS_PATH) as f:
+            data = json.load(f)
+    except OSError:
+        return 0
+    existing = data.get("targets", [])
+    found = spec_targets.candidates(state, existing)
+    if not found:
+        print("[targets] no new employers with evidence this run")
+        return 0
+    data["targets"] = existing + found
+    with open(TARGETS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    print(f"[targets] {len(found)} employer(s) added, "
+          f"{len(data['targets'])} on the speculative list")
+    return len(found)
+
+
 def spec_sends_today(state):
     return state.setdefault("spec_counts", {}).get(today(), 0)
 
@@ -2615,6 +2647,11 @@ def main(argv=None):
     if not args.dry_run:
         stage("notes", run_applied_notes, state)
         save(state)
+        # Grow the target list from employers this run has just seen, before
+        # writing to any of them. Every company that advertised a role the
+        # scorer rated in-trade is an employer of that trade in this market -
+        # evidence, rather than my guess about who operates in Aberdeen.
+        stage("targets", grow_targets, state)
         stage("speculative", speculative, state)
         save(state)
         stage("followup", run_followups, state)
