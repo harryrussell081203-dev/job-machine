@@ -1203,6 +1203,44 @@ def name_tokens(name):
     return {t for t in company_key(name).split() if t}
 
 
+# Words a company can legitimately bolt onto its own name in a domain.
+# 'sanctuary' -> 'sanctuarygroup.co.uk' is the same company; 'sanctuary' ->
+# 'sanctuaryclothing.com' is a clothing brand in California.
+DOMAIN_SUFFIXES = ("group", "uk", "ltd", "limited", "plc", "co", "com",
+                   "global", "int", "international", "energy", "services",
+                   "eng", "engineering", "tech", "technologies", "online")
+
+
+def domain_matches_company(company, domain):
+    """Could this domain plausibly belong to this company?
+
+    A last check before anything is sent, because the state file is merged
+    across runs and a record written before a matching bug was fixed comes
+    back with the bad domain still on it. Clearing those by hand did not hold:
+    the merge saw main's 'ready' as further along than my corrected
+    'no_email' and restored it. A guard at the point of sending does not care
+    what the file says.
+
+    Only single-word company names are policed, because that is where the
+    ambiguity is - 'Sanctuary' matched Sanctuary Clothing, 'Wood' matched
+    Woodforest, 'Stork' matched stork24.eu. A multi-word name is specific
+    enough to trust, and gating it would throw away real matches like
+    Northern Lighthouse Board at nlb.org.uk."""
+    if not company or not domain:
+        return True
+    tokens = name_tokens(company)
+    if len(tokens) != 1:
+        return True
+    token = next(iter(tokens))
+    root = re.split(r"[.]", domain.lower().strip())[0]
+    if root == token:
+        return True
+    # the company's own name plus an ordinary corporate word
+    if root.startswith(token):
+        return root[len(token):].strip("-_") in DOMAIN_SUFFIXES
+    return False
+
+
 def find_domain(company):
     """Clearbit autocomplete: free, no key.
 
@@ -1228,9 +1266,20 @@ def find_domain(company):
             hit_key = company_key(hit.get("name", ""))
             if hit_key == wanted:
                 return domain
+            # A one-word company name is not enough to identify anybody. The
+            # subset rule below is satisfied by ANY firm containing that word,
+            # which matched the housing association 'Sanctuary' to Sanctuary
+            # Clothing in California - and to a named individual there, so an
+            # application was one run away from landing in a stranger's inbox
+            # at an unrelated company on another continent. Same family of
+            # mistake as Wood and Woodforest National Bank, through a
+            # different door. For a single-token name, nothing but an exact
+            # match will do.
+            if len(wanted_tokens) < 2:
+                continue
             # every word Harry's listing gave us must be a whole word in the
             # match - 'wood' must not match 'woodforest'
-            if wanted_tokens and wanted_tokens <= name_tokens(hit.get("name", "")):
+            if wanted_tokens <= name_tokens(hit.get("name", "")):
                 return domain
         print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
@@ -1618,6 +1667,19 @@ def run_sends(state, dry_run=False, already_sent=0):
             break
         if not TEST_MODE and already_contacted(state, job):
             job.update({"status": "skipped", "skip_reason": "company already contacted"})
+            continue
+        # Last line of defence against a misdirected application. Records are
+        # merged across runs, so one written before a matching bug was fixed
+        # comes back carrying the bad domain - two applications for Sanctuary
+        # the housing association were queued to a named person at Sanctuary
+        # Clothing in California.
+        if not domain_matches_company(job.get("company"),
+                                      job.get("company_domain")):
+            job.update({"status": "no_email", "contact_email": None,
+                        "contact_name": None, "company_domain": None,
+                        "skip_reason": "domain does not belong to this company"})
+            print(f"[send] REFUSED {job.get('company')} -> "
+                  f"{job.get('company_domain')}: not the same company")
             continue
 
         content = build_email(job)
