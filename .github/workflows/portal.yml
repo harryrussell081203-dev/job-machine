@@ -34,7 +34,10 @@ concurrency:
   # runs were deleting queued send runs outright - see the note in run.yml.
   # Two scorers overlapping costs some 429s, which the back-off already
   # handles. A cancelled send run costs the send.
-  group: job-machine-portal
+  # Per branch, for the reason set out in run.yml: a group holds one pending
+  # run, runs queue for a long time before a runner picks them up, and the
+  # next push into the same group deletes the one already waiting.
+  group: job-machine-portal-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
