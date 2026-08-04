@@ -165,3 +165,58 @@ class TestAskingForEmployersRatherThanMoney(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheRecruiterLetter(unittest.TestCase):
+    """A recruiter is not being asked for help. A placeable technician is the
+    thing their business runs on, so the letter tells them what is available
+    rather than asking them for anything."""
+
+    def letter(self):
+        return so.compose({"name": "Orion Group", "group": "recruiter",
+                           "ask": "representation"})
+
+    def test_it_says_he_is_available_now(self):
+        subject, body = self.letter()
+        self.assertIn("available", (subject + body).lower())
+
+    def test_it_leads_with_the_trade_not_with_the_navy(self):
+        """A recruiter is placing a technician. The service record is
+        evidence, not the headline."""
+        _, body = self.letter()
+        first = body.split("\n\n")[1].lower()
+        self.assertIn("technician", first)
+
+    def test_it_turns_the_no_licence_problem_into_the_rotational_pitch(self):
+        _, body = self.letter()
+        self.assertIn("do not drive", body.lower())
+        self.assertIn("rotational", body.lower())
+
+    def test_it_does_not_ask_a_recruiter_for_charity(self):
+        _, body = self.letter()
+        for wrong in ("funding", "OPITO BOSIET", "grant", "help with"):
+            with self.subTest(wrong=wrong):
+                self.assertNotIn(wrong.lower(), body.lower())
+
+
+class TestTheCtpLetter(unittest.TestCase):
+    """CTP is a service he is entitled to for life, not a favour. The account
+    verifies his service record, so it has to be opened by him - the letter
+    asks how and never pretends otherwise."""
+
+    def letter(self):
+        return so.compose({"name": "Career Transition Partnership",
+                           "group": "veteran", "ask": "ctp access"})
+
+    def test_it_asks_how_to_get_access(self):
+        _, body = self.letter()
+        self.assertIn("rightjob", body.lower())
+
+    def test_it_states_the_entitlement_without_demanding_it(self):
+        _, body = self.letter()
+        self.assertIn("for life", body.lower())
+        self.assertIn("could you tell me", body.lower())
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
