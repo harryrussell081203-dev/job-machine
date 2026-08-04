@@ -217,6 +217,17 @@ class TestWrongCompanyRegression(unittest.TestCase):
             with self.subTest(company=company):
                 self.assertTrue(jm.domain_matches_company(company, domain))
 
+    def test_a_word_from_the_companys_own_name_is_allowed_in_its_domain(self):
+        """company_key strips 'recruitment', 'group' and the like, so 'Canmore
+        Recruitment' reduces to the single token 'canmore' - and the first
+        version of this guard refused canmorerecruitment.com, which is
+        obviously theirs and had already been written to successfully."""
+        for company, domain in (("Canmore Recruitment", "canmorerecruitment.com"),
+                                ("TMM Recruitment", "tmmrecruitment.com"),
+                                ("Future Group", "future-group.uk")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
     def test_a_missing_domain_does_not_block_a_send(self):
         """Listings carrying an address found in the advert itself have no
         company_domain at all, and those are the best addresses we get."""
