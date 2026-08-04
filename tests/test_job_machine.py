@@ -187,6 +187,42 @@ class TestWrongCompanyRegression(unittest.TestCase):
         with self.clearbit([{"name": "Hydrasun Ltd", "domain": "hydrasun.com"}]):
             self.assertEqual(jm.find_domain("Hydrasun"), "hydrasun.com")
 
+    def test_the_domain_is_rechecked_at_the_moment_of_sending(self):
+        """State is merged across runs, so a record written before a matching
+        bug was fixed comes back carrying the bad domain. Clearing the two
+        Sanctuary rows by hand did not hold - the merge saw main's 'ready' as
+        further along than the corrected 'no_email' and restored it. A guard
+        at the point of sending does not care what the file says."""
+        for company, domain in (("Sanctuary", "sanctuaryclothing.com"),
+                                ("Wood", "woodforest.com"),
+                                ("Stork", "stork24.eu"),
+                                ("Encore", "encorecapital.com")):
+            with self.subTest(company=company):
+                self.assertFalse(jm.domain_matches_company(company, domain))
+
+    def test_a_company_at_its_own_domain_is_allowed(self):
+        for company, domain in (("Sanctuary", "sanctuary.co.uk"),
+                                ("Sanctuary", "sanctuarygroup.co.uk"),
+                                ("Hydrasun", "hydrasun.com"),
+                                ("EnerMech", "enermech.com")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
+    def test_multi_word_names_are_not_policed(self):
+        """They are specific enough to trust, and gating them would throw away
+        real matches - Northern Lighthouse Board really is at nlb.org.uk."""
+        for company, domain in (("Northern Lighthouse Board", "nlb.org.uk"),
+                                ("Baker Hughes", "bakerhughes.com"),
+                                ("Dron & Dickson", "dronanddickson.co.uk")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
+    def test_a_missing_domain_does_not_block_a_send(self):
+        """Listings carrying an address found in the advert itself have no
+        company_domain at all, and those are the best addresses we get."""
+        self.assertTrue(jm.domain_matches_company("Sanctuary", None))
+        self.assertTrue(jm.domain_matches_company("", "anything.com"))
+
     def test_a_foreign_lookalike_domain_is_rejected(self):
         with self.clearbit([{"name": "HMH", "domain": "hmh.com.vn"}]):
             self.assertIsNone(jm.find_domain("HMH"))
