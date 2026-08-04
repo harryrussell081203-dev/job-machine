@@ -2604,8 +2604,11 @@ def main(argv=None):
     # before it sent one, leaving them 'ready' with nothing to show.
     sent = stage("send", run_sends, state, args.dry_run) or 0
     save(state)
+<<<<<<< HEAD
     stage("score", score_jobs, state)
     save(state)
+=======
+>>>>>>> origin/main
     stage("discover", discover, state)
     save(state)
     # And again for whatever discovery just found an address for, carrying the
