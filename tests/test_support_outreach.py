@@ -118,6 +118,37 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
             address, _ = so.find_address({"domain": "acme.org"})
         self.assertEqual(address, "grants@acme.org")
 
+    def test_a_verified_published_address_is_used_when_the_site_is_unreadable(self):
+        """The big charities sit behind a bot check, which is not a reason to
+        drop the letter - but it is only allowed if the file says where the
+        address was read from."""
+        org = {"name": "X", "domain": "acme.org",
+               "email": "info@acme.org",
+               "email_source": "their own contact page"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site", return_value=[]):
+            self.assertEqual(so.find_address(org), ("info@acme.org", None))
+
+    def test_an_address_with_no_stated_source_is_refused(self):
+        org = {"name": "X", "domain": "acme.org", "email": "info@acme.org"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site", return_value=[]):
+            self.assertEqual(so.find_address(org), (None, None))
+
+    def test_the_scraped_address_still_wins(self):
+        org = {"name": "X", "domain": "acme.org", "email": "info@acme.org",
+               "email_source": "their own contact page"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=["grants@acme.org"]):
+            self.assertEqual(so.find_address(org)[0], "grants@acme.org")
+
+    def test_every_shipped_address_says_where_it_came_from(self):
+        for org in so.load_orgs():
+            if org.get("email"):
+                with self.subTest(org=org["name"]):
+                    self.assertTrue(org.get("email_source"))
+
     def test_a_run_without_send_writes_to_nobody(self):
         state = {"jobs": {}, "support_asked": {}}
         with mock.patch.object(so, "find_address",

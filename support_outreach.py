@@ -205,11 +205,35 @@ def find_address(org):
     if not domain or not jm.has_mx(domain):
         return None, None
     address, name, tier = jm.best_email(jm.scrape_site(domain))
-    if not address or tier < 1:
+    if address and tier >= 1 and jm.has_mx(address.split("@")[1]):
+        return address, name
+    return published_address(org)
+
+
+def published_address(org):
+    """A verified published address, used only when the site cannot be read.
+
+    The big charities sit behind a bot check. The Forces Employment Charity
+    and CTP both do, and both returned 'no real address found' on a run - not
+    because they publish none, but because the scraper is served a challenge
+    page instead of the contact page. Working around that check is off the
+    table, and the letter asking to be signed up for Op ASCEND is too useful
+    to drop over it.
+
+    This is not a hole in the no-guessing rule. An address only counts here if
+    the file also records WHERE IT WAS READ in 'email_source', so what is
+    shipped is a transcription of something published rather than a pattern
+    applied to a domain, and the domain is MX-checked like any other."""
+    address = (org.get("email") or "").strip()
+    if not address or "@" not in address:
+        return None, None
+    if not org.get("email_source"):
+        print(f"[support] {org['name']}: address in the file has no "
+              f"email_source, refusing to use it")
         return None, None
     if not jm.has_mx(address.split("@")[1]):
         return None, None
-    return address, name
+    return address, None
 
 
 def run(state, send=False, limit=None, only=None):
