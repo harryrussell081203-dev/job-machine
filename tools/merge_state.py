@@ -119,7 +119,8 @@ def union_latest(theirs, ours):
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
-         "agency_registered", "last_summary_at"}
+         "agency_registered", "sms_sent", "contact_numbers",
+         "last_summary_at"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -170,6 +171,33 @@ def merge(theirs, ours):
                               ours.get("agency_registered", {}))
     if registered:
         out["agency_registered"] = registered
+
+    # One text per person, ever. Losing a record here means texting somebody
+    # a second time, so the earliest wins for the same reason it does for the
+    # charities: the question is 'has this ever been done'.
+    texted = union_earliest(theirs.get("sms_sent", {}),
+                            ours.get("sms_sent", {}))
+    if texted:
+        out["sms_sent"] = texted
+
+    # The phone book. Two runs can each have read a different signature for
+    # the same firm, so the numbers are unioned rather than one side winning.
+    book = dict(theirs.get("contact_numbers", {}))
+    for key, entry in ours.get("contact_numbers", {}).items():
+        existing = book.get(key)
+        if not existing:
+            book[key] = entry
+            continue
+        merged = dict(existing)
+        numbers = list(existing.get("numbers", []))
+        for number in entry.get("numbers", []):
+            if number not in numbers:
+                numbers.append(number)
+        merged["numbers"] = numbers
+        merged["name"] = existing.get("name") or entry.get("name")
+        book[key] = merged
+    if book:
+        out["contact_numbers"] = book
 
     for counter in ("send_counts", "portal_counts", "spec_counts"):
         merged = dict(theirs.get(counter, {}))
