@@ -122,6 +122,7 @@ when the Actions UI is not to hand:
 | `fire-agencies/...` | register with, or refresh at, the recruitment agencies |
 | `fire-sms/...` | one test text to Harry's own phone, to prove the httpSMS bridge |
 | `fire-nudge/...` | send today's captcha nudge now - the email with the page, and the text with the link |
+| `fire-morning/...` | send this morning's actions text now |
 
 Locally:
 
@@ -551,6 +552,34 @@ Five levers run automatically on top of the basic apply loop:
 
 Freshly posted listings are also applied to first within a tier - being an early
 applicant is itself a conversion lever.
+
+## The morning text (`morning.py`)
+
+07:45 UK, every day: the two or three things most worth doing today. Anyone can
+send a daily motivational text; this one is only allowed to say things that are
+**true of today**, and it takes them from two places.
+
+**The state file** - who asked to be phoned, which interview needs a real reply
+rather than the machine's availability note, what is filled in and stopped by a
+CAPTCHA, what needs an answer only Harry can give. This is live work and it
+always outranks anything standing. Nothing he could start today beats finishing
+something somebody else has already begun.
+
+**`data/goals.json`** - what he is actually trying to do, written down, with
+the source of every line recorded. Without that file the machine would be
+guessing at his life, and a guessed "most productive action" is worse than no
+text at all. Edit the file and the text changes; if a line in it is wrong, that
+is the bug.
+
+One standing goal a day, rotated, never the list. A text that reads as five
+things you are failing at gets swiped away.
+
+It **never reads the inbox** and never summarises personal correspondence - it
+works from the job-search state file and the goals file, so it cannot put
+something private into a text message. And it stops mentioning anything more
+than `MORNING_CHASE_DAYS` (7) old, because the machine cannot see Harry answer
+an email from his own inbox, and a daily text that nags about something already
+done is a daily text you stop reading.
 
 ## The nightly digest
 

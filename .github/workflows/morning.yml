@@ -1,0 +1,56 @@
+name: job-machine morning
+
+# The two or three things most worth doing today, texted at 07:45 UK.
+#
+# GitHub cron is UTC and does not shift with British Summer Time, so this
+# fires at both 06:45 and 07:45 UTC and morning.py sends on whichever one is
+# really 07:45 in Aberdeen - the same trick the nightly digest uses.
+on:
+  schedule:
+    - cron: "45 6 * * *"
+    - cron: "45 7 * * *"
+  push:
+    branches:
+      - "fire-morning/**"      # send today's now, whatever the clock says
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine-morning-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests dnspython
+
+      - name: Text this morning's actions
+        env:
+          PYTHONUNBUFFERED: "1"
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
+          SMS_FROM: ${{ vars.SMS_FROM }}
+          MORNING_HOUR_UK: ${{ vars.MORNING_HOUR_UK }}
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == fire-morning/* ]]; then
+            python morning.py --send --force
+          else
+            python morning.py --send
+          fi
+
+      - name: Commit state
+        if: always()
+        env:
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "morning"
