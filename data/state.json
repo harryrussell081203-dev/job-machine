@@ -41752,6 +41752,8 @@
    "url": ""
   }
  },
+ "morning_goal_rotation": 1,
+ "morning_sent_on": "2026-08-05",
  "send_counts": {
   "2026-08-02": 6,
   "2026-08-03": 4,

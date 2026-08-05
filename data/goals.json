@@ -1,0 +1,84 @@
+{
+  "_README": [
+    "The standing goals behind the morning text.",
+    "",
+    "WHY THIS FILE EXISTS",
+    "  The machine can rank what is in front of it - who replied, what is",
+    "  half-applied-for, who asked for a call. It cannot know what Harry is",
+    "  trying to do with his life unless somebody writes it down. Left to",
+    "  guess, a daily 'most productive action' text becomes generic hustle",
+    "  advice, which is worse than no text at all.",
+    "",
+    "  So every line here came from something Harry actually said, or from",
+    "  his CV, and 'source' records which. If a line is wrong, edit it - the",
+    "  morning text is only ever as good as this file.",
+    "",
+    "HOW IT IS USED",
+    "  Live work always outranks a standing goal: somebody waiting on a reply",
+    "  beats any of this. What is here fills the rest of the text, one at a",
+    "  time on a rotation, so it reads as one thing to do today rather than a",
+    "  list to feel bad about.",
+    "",
+    "  'blocked_by' is the point of the ranking. The offshore tickets are not",
+    "  one goal among five - they are the thing standing between him and the",
+    "  market this entire machine searches, so they come first until they are",
+    "  done or somebody says no."
+  ],
+  "goals": [
+    {
+      "id": "offshore_tickets",
+      "goal": "Get OPITO BOSIET and MIST paid for",
+      "why": "About GBP 1,000, effectively mandatory offshore, and the single thing keeping him out of the market this machine searches",
+      "next_action": "Ask on every call: Annie at Forces Employment, Cammy at TMM, and Cammach when they answer",
+      "source": "Told to Claude 2026-08-05; the same ask is already in every charity letter",
+      "priority": 1,
+      "active": true
+    },
+    {
+      "id": "driving_licence",
+      "goal": "Start the driving licence - provisional, then theory",
+      "why": "The scorer flags 'does not drive' as his one real constraint on where he can work, and every agency letter has to say it up front",
+      "next_action": "Apply for the provisional online, then book a theory test date",
+      "source": "CANDIDATE_PROFILE in job_machine.py, and the constraints paragraph in every agency letter",
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "call_the_desks",
+      "goal": "Ring one recruiter you have already emailed",
+      "why": "A consultant's direct line is the most valuable thing this machine finds and the one channel nobody should automate. Numbers are in the nightly digest",
+      "next_action": "Pick the top name off the call list and ring it before 10am",
+      "source": "Harvested from real reply signatures - Cammy Keith 01224 327030 among them",
+      "priority": 3,
+      "active": true
+    },
+    {
+      "id": "leads2profit",
+      "goal": "Move Leads2Profit forward by one concrete step",
+      "why": "Marketing automation for nightlife and events venues. It is on the CV and it is the thing that is his rather than somebody else's",
+      "next_action": "One outreach to a venue, or one improvement to the product - one, not a plan",
+      "source": "CANDIDATE_PROFILE: founder of Leads2Profit, marketing-automation for nightlife/events venues",
+      "priority": 4,
+      "active": true
+    },
+    {
+      "id": "beng",
+      "goal": "Find out what it would take to restart the paused BEng",
+      "why": "Year 1 of Instrumentation, Measurement and Control at RGU is done and paused. Part-time or day-release changes what he can apply for in three years",
+      "next_action": "Email RGU admissions and ask what the paused year counts toward part-time",
+      "source": "CANDIDATE_PROFILE: Year 1 BEng Instrumentation, Measurement & Control at RGU (paused)",
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "cv_freshness",
+      "goal": "Touch the CV on the job boards you are registered with",
+      "why": "Most board databases rank search results by how recently a CV was updated, so a weekly touch puts him near the top of what recruiters see",
+      "next_action": "Re-upload or re-save the CV on CV-Library and Totaljobs",
+      "source": "README, the inbound section - it is why the alert accounts exist",
+      "priority": 6,
+      "weekday": 0,
+      "active": true
+    }
+  ]
+}
