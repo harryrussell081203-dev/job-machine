@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  A two-page application, which is what a real one looks like. Page one takes
+  the details and has a Continue button; page two asks the questions and has
+  Submit; pressing it lands on a confirmation page.
+
+  Deliberately here to catch a lazy loop:
+    - page one ALSO has a "Submit enquiry" button for an unrelated contact
+      form. Pressing that instead of Continue files nothing and loses the
+      application, so Next must be tried first and Submit-shaped labels must
+      be refused when looking for Next.
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply - step 1 of 2</title></head>
+<body>
+<h1>Application - step 1 of 2</h1>
+<form id="page1" action="wizard_page2.html" method="get">
+  <label for="fname">First name *</label>
+  <input id="fname" name="first_name" type="text" required>
+
+  <label for="lname">Surname *</label>
+  <input id="lname" name="last_name" type="text" required>
+
+  <label>Email address *
+    <input name="email" type="email" required>
+  </label>
+
+  <label>Mobile number
+    <input name="phone" type="tel">
+  </label>
+
+  <input name="town" type="text" aria-label="Town or city">
+
+  <button type="submit">Save and continue</button>
+</form>
+
+<hr>
+<form id="unrelated" action="/nowhere.html">
+  <label>Question for our recruitment team
+    <input name="enquiry" type="text">
+  </label>
+  <button type="submit">Submit enquiry</button>
+</form>
+</body>
+</html>

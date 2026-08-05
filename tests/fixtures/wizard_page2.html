@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Apply - step 2 of 2</title></head>
+<body>
+<h1>Application - step 2 of 2</h1>
+<form id="page2" action="wizard_done.html" method="get">
+  <label for="clearance">Do you hold a security clearance?</label>
+  <select id="clearance" name="clearance">
+    <option value="">Please select</option>
+    <option>None</option>
+    <option>DV (Developed Vetting)</option>
+  </select>
+
+  <fieldset>
+    <legend>Do you have the right to work in the UK?</legend>
+    <label><input type="radio" name="rtw" value="y"> Yes</label>
+    <label><input type="radio" name="rtw" value="n"> No</label>
+  </fieldset>
+
+  <label for="notice">Notice period</label>
+  <input id="notice" name="notice" type="text">
+
+  <label for="cv">Upload your CV</label>
+  <input id="cv" name="cv" type="file">
+
+  <button type="submit">Submit application</button>
+</form>
+</body>
+</html>
