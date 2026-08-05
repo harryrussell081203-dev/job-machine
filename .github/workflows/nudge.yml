@@ -1,0 +1,62 @@
+name: job-machine captcha nudge
+
+# One text a day about the applications that are filled in and waiting on a
+# bot check.
+#
+# These are the most valuable records in the state file - the work is already
+# done, they are one puzzle away from being sent - and the easiest to forget,
+# because they live in a build artifact nobody opens. Hence a text.
+#
+# 17:15 UTC is 18:15 BST and 17:15 GMT, which is the point in the day he is
+# most likely to be at home with the phone in his hand and ten minutes spare.
+# Not the morning: a captcha needs a browser and a sit-down, and a nudge that
+# arrives when it cannot be acted on is a nudge that gets swiped away.
+on:
+  schedule:
+    - cron: "15 17 * * *"
+  push:
+    branches:
+      - "fire-nudge/**"        # send today's nudge now, whatever the clock says
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine-nudge-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests dnspython
+
+      - name: Text the applications waiting on a captcha
+        env:
+          PYTHONUNBUFFERED: "1"
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
+          SMS_FROM: ${{ vars.SMS_FROM }}
+        run: |
+          # A fire-nudge branch is a person asking for it now, so it overrides
+          # the once-a-day guard. The schedule never does.
+          if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
+            python sms.py --captcha-nudge --force
+          else
+            python sms.py --captcha-nudge
+          fi
+
+      - name: Commit state
+        if: always()
+        env:
+          TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+        run: bash .github/workflows/commit-state.sh "$TARGET" "nudge"
