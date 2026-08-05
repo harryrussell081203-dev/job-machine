@@ -62,6 +62,7 @@ and nothing is sent.
 | `GEMINI_API_KEY` | aistudio.google.com (free tier) |
 | `GMAIL_ADDRESS` | the Gmail account that sends |
 | `GMAIL_APP_PASSWORD` | Google account > Security > App passwords (needs 2FA on) |
+| `HTTPSMS_API_KEY` | the httpSMS app on the phone, Settings > API key (optional - no key, no texting) |
 
 ### Variables (all optional)
 `Settings > Secrets and variables > Actions > Variables`
@@ -78,6 +79,9 @@ and nothing is sent.
 | `AGENCY_REGISTER_MAX` | `6` | Approaches per agency, ever |
 | `AGENCY_REGISTER_PER_RUN` | `12` | Cap for a manual `fire-agencies` run |
 | `AGENCY_PIPELINE_PER_RUN` | `2` | Cap for the stage inside an ordinary run |
+| `SMS_FROM` | `+447398530978` | The handset httpSMS is installed on, E.164 |
+| `SMS_OUTBOUND` | `1` | `0` keeps interview alerts, stops texts to anyone else |
+| `DAILY_SMS_CAP` | `3` | Texts to other people per day |
 
 ### CV
 
@@ -116,6 +120,7 @@ when the Actions UI is not to hand:
 | `fire-support/...` | write to the charities and training bodies - empties whatever is left on that list |
 | `fire-signup/...` | just the organisations that run the veterans' employment services, asking them to register him (`--only registration`) |
 | `fire-agencies/...` | register with, or refresh at, the recruitment agencies |
+| `fire-sms/...` | one test text to Harry's own phone, to prove the httpSMS bridge |
 
 Locally:
 
@@ -355,6 +360,55 @@ No account is created and no portal is filled in. Several of these firms want a
 profile on their own site, and the run prints which ones found nothing postable
 so they can be done by hand - Orion is the known case, since orionjobs.com
 carries no MX record at all.
+
+## Texting, from Harry's own number (`sms.py`)
+
+[httpSMS](https://httpsms.com) is an app on his Android handset. The machine
+POSTs a message, the app sends it as an ordinary SMS **from his own number, out
+of his own allowance**. Nothing to pay, it arrives from the number on his CV,
+and replies land in his messages rather than in an API nobody reads.
+
+```bash
+python sms.py --test        # one text to his own phone, to prove the bridge
+python sms.py --call-list   # everyone worth ringing, with the number
+```
+
+Or push a branch named `fire-sms/...`, which does the `--test` and nothing else.
+
+**The key is the repo secret `HTTPSMS_API_KEY` and lives nowhere else — this
+repository is public.** With no key set, every texting path is skipped and the
+rest of the pipeline is unchanged. A test asserts nothing key-shaped has been
+committed to the code, the README or the workflows.
+
+Two halves, and only one of them writes to anybody else:
+
+**Inbound.** An interview invitation is worth knowing about in the minute it
+lands, not at 22:00 in the digest. Those go to his own phone. No etiquette
+question — he is texting himself.
+
+**Outbound.** A cold text to a hiring manager's mobile reads as intrusive and
+costs the application. A text to a consultant who has *already written back*
+reads as normal: they work off their phones, and the number came out of their
+own signature. So that is the only set this writes to, and even then:
+
+| Rail | Why |
+| --- | --- |
+| Mobiles only | Most consultant direct lines are landlines and cannot receive an SMS at all. Those go on the call list instead of into a void. |
+| They must have replied first | The whole difference between a follow-up and a cold text. |
+| One per person, ever | There is no second text that helps. |
+| Weekdays 09:00-18:00 UK | Get this wrong and it is a phone buzzing on somebody's bedside table. |
+| Three a day | `DAILY_SMS_CAP`. |
+| Always after the email | Never instead of it. |
+
+`SMS_OUTBOUND=0` keeps the interview alerts and turns the outbound half off.
+
+**Numbers are harvested from replies, not from adverts.** A consultant's direct
+line only ever appears in one place: the signature of a reply they wrote
+themselves. The reply watcher now keeps it, taking care to read only their own
+words and not the quoted trail underneath — which carries Harry's number and, on
+a forwarded thread, everyone else's. The nightly digest prints the result as a
+call list, landlines first, because ringing a consultant beats everything else
+in that email and is the one thing here nobody should ever automate.
 
 ## What the research says works, and where it lives in the code
 

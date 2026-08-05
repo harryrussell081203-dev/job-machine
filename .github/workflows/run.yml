@@ -22,6 +22,7 @@ on:
       - "fire-support/**"       # write to the charities and training bodies
       - "fire-signup/**"        # ask the veterans' services to register him
       - "fire-agencies/**"      # get on the recruitment agencies' databases
+      - "fire-sms/**"           # prove the phone bridge works, text nobody else
   workflow_dispatch:
     inputs:
       test_mode:
@@ -97,6 +98,13 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # httpSMS: the app on Harry's own phone. The key is a repo secret
+          # and lives nowhere else - this repository is public. Without it
+          # every texting path is simply skipped.
+          HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
+          SMS_FROM: ${{ vars.SMS_FROM }}
+          SMS_OUTBOUND: ${{ vars.SMS_OUTBOUND }}
+          DAILY_SMS_CAP: ${{ vars.DAILY_SMS_CAP }}
           # repo variables (Settings > Secrets and variables > Actions > Variables).
           # TEST_MODE is unset by default, which means LIVE. Set it to 1 to send
           # everything to your own inbox instead.
@@ -126,6 +134,13 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == fire-signup/* ]]; then
             echo "fire-signup branch: asking to be registered"
             python support_outreach.py --send --only registration
+            exit 0
+          fi
+          # One text to Harry's own phone, to prove the httpSMS key and the
+          # handset are actually wired together. Sends to nobody else.
+          if [[ "${GITHUB_REF_NAME}" == fire-sms/* ]]; then
+            echo "fire-sms branch: testing the phone bridge"
+            python sms.py --test
             exit 0
           fi
           # The recruitment agencies' own databases. Unlike everything else
