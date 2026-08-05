@@ -9,6 +9,7 @@ on:
     tags: ["fire-portal-*"]        # push a tag to force a run when the UI is not handy
     branches:
       - "fire-portal/**"           # fill forms in, stop before submitting
+      - "fire-burn/**"             # re-open what the old bugs parked, then work the lot
       - "fire-submit/**"           # fill in AND submit, one application only
       - "fire-diagnose/**"         # just look at the pages, fill nothing
       - "fire-probe/**"            # ask the board APIs only - seconds, no browser
@@ -107,6 +108,13 @@ jobs:
             # reconnaissance only: open the pages, fill nothing, submit nothing
             echo "fire-diagnose branch: inspecting pages only"
             python portal_agent.py --harvest --diagnose 14
+            exit 0
+          fi
+          # Burn the backlog: put back everything the pre-fix agent parked on
+          # the email route by mistake, then work the whole queue.
+          if [[ "${GITHUB_REF_NAME}" == fire-burn/* ]]; then
+            echo "fire-burn branch: re-opening the misdiagnosed jobs first"
+            python portal_agent.py --reopen-fallbacks --run --submit
             exit 0
           fi
           ARGS="--harvest --run"
