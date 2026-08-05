@@ -9,22 +9,33 @@ portals put a sign-in wall in front of the form, and the agent has been
 recording every one of them as 'do this one by hand'. That is 35 or so jobs
 sitting untouched because of a five-field signup form.
 
-THE PASSWORD PROBLEM, AND HOW IT IS SOLVED
-------------------------------------------
+THE PASSWORD, AND WHY IT IS NEVER WRITTEN DOWN
+----------------------------------------------
 data/state.json is committed to a PUBLIC repository on every run. Anything
 written there is published. So no password is ever stored - not encrypted,
-not encoded, not at all.
+not encoded, not at all. There are two ways to have one anyway:
 
-Instead every password is DERIVED, freshly, each time it is needed:
+  PORTAL_PASSWORD       one password everywhere, Harry's own choice, held in
+                        a repo secret. This is what he asked for, and the
+                        reason is good: a derived password is unguessable and
+                        also unknowable, so he could never sign in himself to
+                        check an application or withdraw one. Whatever he
+                        picks is padded to something every portal accepts -
+                        'password123' becomes 'Password123!', which is the
+                        same password to the person typing it and the
+                        difference between an account existing and a signup
+                        rejected on a rules message.
 
-    password = HMAC-SHA256(PORTAL_PASSWORD_SALT, domain)
+  PORTAL_PASSWORD_SALT  the fallback when no shared password is set. The
+                        password is derived per site,
+                        HMAC-SHA256(salt, domain), so a breach at one
+                        employer says nothing about any other.
 
-The salt is a repo secret and exists only on the runner. The same domain
-always yields the same password, so the agent can sign back in months later;
-a different domain yields a completely different one, so a leak at one
-employer tells an attacker nothing about any other; and there is nothing in
-the repository to leak in the first place. The state file records only which
-domains have an account and when it was verified.
+The trade is real and it is his to make: one password across every portal
+means one breach exposes the lot. These are job portals holding a CV he
+sends to strangers anyway, and he would rather be able to log in. Either
+way, the login is EMAILED to him the moment an account is made, so his own
+inbox becomes the record of where accounts exist.
 
 WHAT IT WILL NOT DO
 -------------------
@@ -45,6 +56,16 @@ import job_machine as jm
 
 ACCOUNTS = "portal_accounts"
 SALT = jm.env_str("PORTAL_PASSWORD_SALT")
+# One password everywhere, if Harry sets one. He asked for this: a derived
+# password is unguessable and also unknowable, and he could never sign in to
+# one of these portals himself without asking the machine.
+#
+# It lives in the repo secret PORTAL_PASSWORD and nowhere else - putting it in
+# the code would publish it, since this repository is public. Whatever he
+# chooses is padded to something every portal will accept, because the most
+# common reason a signup fails is a password rule, and an account that will
+# not be created is worth nothing however memorable the password was.
+SHARED = jm.env_str("PORTAL_PASSWORD")
 
 # The wall. Any of these, and there is no form to fill until there is a login.
 LOGIN_WALL = re.compile(
@@ -61,18 +82,45 @@ CONFIRM_FIELD = re.compile(r"confirm|repeat|re-?enter|again|verify", re.I)
 
 
 def configured():
-    return bool(SALT)
+    return bool(SALT or SHARED)
+
+
+def acceptable(password):
+    """The same password, in a shape every portal will take.
+
+    Portals reject far more signups over password rules than anything else:
+    twelve characters, an upper, a lower, a digit and a symbol is the union
+    of what the big ones demand. 'password123' fails three of those, so it is
+    padded rather than refused - the point is an account that exists, and
+    'Password123!' is the same password to the person typing it."""
+    padded = password
+    if not re.search(r"[a-z]", padded):
+        padded += "a"
+    if not re.search(r"[A-Z]", padded):
+        padded = padded[:1].upper() + padded[1:]
+        if not re.search(r"[A-Z]", padded):
+            padded += "A"
+    if not re.search(r"\d", padded):
+        padded += "1"
+    if not re.search(r"[^\w]", padded):
+        padded += "!"
+    while len(padded) < 12:
+        padded += "!"
+    return padded
 
 
 def password_for(domain):
-    """The password for this employer's portal. Derived, never stored.
+    """The password for this employer's portal.
 
-    Deliberately not random: a random password would have to be written down,
-    and the only place this project can write things down is a public git
-    repository. Derived from a secret that lives on the runner, the same
-    password comes back every time without ever existing at rest."""
+    Shared if Harry has set one, so he can sign in himself without asking the
+    machine. Otherwise derived per site, which is stronger but unknowable to
+    him. Either way it is never written down: this repository is public and
+    data/state.json is committed on every run."""
+    if SHARED:
+        return acceptable(SHARED)
     if not SALT:
-        raise RuntimeError("PORTAL_PASSWORD_SALT is not set")
+        raise RuntimeError(
+            "neither PORTAL_PASSWORD nor PORTAL_PASSWORD_SALT is set")
     digest = hmac.new(SALT.encode(), (domain or "").lower().encode(),
                       hashlib.sha256).digest()
     # Portals demand upper, lower, digit and symbol, and reject anything long.
@@ -128,6 +176,40 @@ def needs_an_account(page, fields):
     labels = " ".join((f.get("label") or f.get("name") or "") for f in fields)
     return (len(fields) <= 3 and "password" in kinds
             and not re.search(r"cv|resume|cover", labels, re.I))
+
+
+def tell_harry(domain, job=None):
+    """Email him the login, because an account he cannot get into is no use.
+
+    This is the gap either way. A derived password is unguessable and also
+    unknowable - he could never sign in to check an application, reply to a
+    message in the portal, or withdraw one. A shared password he already
+    knows still leaves him with no record of WHERE accounts exist. So the
+    machine sends the details to his own inbox the moment one is made, and
+    that inbox becomes the list."""
+    try:
+        password = password_for(domain)
+    except RuntimeError:
+        return False
+    where = f" while applying to {job.get('company')}" if job else ""
+    body = (
+        f"An account was created for you at {domain}{where}.\n\n"
+        f"  site:     https://{domain}\n"
+        f"  username: {jm.GMAIL_ADDRESS}\n"
+        f"  password: {password}\n\n"
+        f"You can sign in yourself any time - to check an application, reply "
+        f"to a message in their portal, or withdraw one.\n\n"
+        f"This email is the record of which portals you have accounts on. "
+        f"Nothing is written into the repository, which is public.\n")
+    try:
+        jm.send_email(jm.GMAIL_ADDRESS,
+                      f"[job-machine] account created at {domain}",
+                      body, attach_cv=False)
+        print(f"[account] login for {domain} emailed to Harry")
+        return True
+    except Exception as e:
+        print(f"[account] could not email the login: {e}")
+        return False
 
 
 # ======================================================================
@@ -328,6 +410,7 @@ def sign_up(page, state, job, answers):
     page.wait_for_timeout(4000)
     remember_account(state, domain)
     print(f"[account] created at {domain} with {len(filled)} field(s)")
+    tell_harry(domain, job)
 
     # Most portals will not let the account in until the address is confirmed.
     link = verification_link(domain, started)

@@ -63,7 +63,8 @@ and nothing is sent.
 | `GMAIL_ADDRESS` | the Gmail account that sends |
 | `GMAIL_APP_PASSWORD` | Google account > Security > App passwords (needs 2FA on) |
 | `HTTPSMS_API_KEY` | the httpSMS app on the phone, Settings > API key (optional - no key, no texting) |
-| `PORTAL_PASSWORD_SALT` | any long random string you invent once. Portal account passwords are derived from it; without it the agent creates no accounts |
+| `PORTAL_PASSWORD` | the one password to use on every portal. Whatever you pick is padded to something universally accepted - `password123` becomes `Password123!` |
+| `PORTAL_PASSWORD_SALT` | only needed if you do NOT set `PORTAL_PASSWORD`: a long random string, from which a different password is derived per site |
 
 ### Variables (all optional)
 `Settings > Secrets and variables > Actions > Variables`
@@ -243,18 +244,22 @@ form, fills it, submits it, then **reads the activation email out of Harry's
 inbox over IMAP**, opens the link, and goes back to the application.
 
 **No password is ever stored.** `data/state.json` is committed to this public
-repository on every run, so anything written there is published. Instead each
-password is derived, freshly, when it is needed:
+repository on every run, so anything written there is published. Two ways to
+have a password anyway, both held in repo secrets and neither in the code:
 
-```
-password = HMAC-SHA256(PORTAL_PASSWORD_SALT, domain)
-```
+- **`PORTAL_PASSWORD`** - one password everywhere, your own choice. Padded to
+  something every portal accepts: `password123` becomes `Password123!`, which
+  is the same password to the person typing it and the difference between an
+  account existing and a signup rejected on a rules message. One password
+  across every portal does mean one breach exposes the lot - a real trade, and
+  yours to make.
+- **`PORTAL_PASSWORD_SALT`** - the fallback if no shared password is set. The
+  password is derived per site as `HMAC-SHA256(salt, domain)`, so a breach at
+  one employer says nothing about any other. Stronger, but unknowable to you.
 
-The salt is a repo secret that exists only on the runner. The same site always
-yields the same password so he can sign back in months later; a different site
-yields an unrelated one, so a breach at one employer says nothing about any
-other; and there is nothing in the repository to leak. The state file records
-only that an account exists and when it was verified.
+Either way **the login is emailed to Harry the moment an account is created**,
+so his own inbox becomes the record of which portals he has accounts on. The
+state file records only that an account exists and when it was verified.
 
 Two things it will not do. It does not touch a signup page carrying a CAPTCHA -
 that is handed over like any other. And it ticks "I agree to the terms",
