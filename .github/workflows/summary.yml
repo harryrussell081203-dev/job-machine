@@ -43,6 +43,9 @@ jobs:
           PYTHONUNBUFFERED: "1"
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
+          SMS_FROM: ${{ secrets.SMS_FROM }}
+          SMS_TO: ${{ secrets.SMS_TO }}
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             python job_machine.py --summary --force

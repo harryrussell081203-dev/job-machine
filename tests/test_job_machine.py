@@ -1993,3 +1993,82 @@ class TestSendingWhenTheModelIsUnavailable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheClearedMarket(unittest.TestCase):
+    """Plenty of people can fault-find electronics. Very few of them hold DV,
+    and it costs an employer the better part of a year and a lot of money to
+    obtain for somebody who does not - so on a cleared vacancy the field is
+    the handful who already hold it. Nothing in this project looked for that
+    work."""
+
+    def test_the_sweep_covers_cleared_and_defence_wording(self):
+        blob = " ".join(jm.CLEARED_KEYWORDS).lower()
+        for term in ("dv cleared", "sc cleared", "security cleared",
+                     "defence communications", "secure communications"):
+            with self.subTest(term=term):
+                self.assertIn(term, blob)
+
+    def test_it_searches_the_whole_country_not_a_radius_round_aberdeen(self):
+        """Cleared work clusters around sites - Faslane, Rosyth, Portsmouth,
+        Corsham - not around Aberdeen, and he can take a posting anywhere that
+        comes with somewhere to live."""
+        cleared = [s for s in jm.adzuna_searches() if s[2] in jm.CLEARED_KEYWORDS]
+        self.assertTrue(cleared)
+        for where, radius, _ in cleared:
+            self.assertGreaterEqual(radius, 100)
+
+    def test_the_profile_tells_the_scorer_the_clearance_is_an_asset(self):
+        """It was one bullet among nine, so a defence role could be marked
+        down for not using subsea wording - scoring his rarest asset as
+        neutral."""
+        profile = jm.CANDIDATE_PROFILE.lower()
+        self.assertIn("rarest asset", profile)
+        self.assertIn("stronger match", profile)
+
+
+class TestTextingAboutAnInterview(unittest.TestCase):
+    """Email is right for a daily digest and wrong for an invitation. An
+    employer asking 'can you speak tomorrow' has put a clock on it."""
+
+    def creds(self):
+        return [mock.patch.object(jm, "SMS_API_KEY", "k"),
+                mock.patch.object(jm, "SMS_FROM", "+441234"),
+                mock.patch.object(jm, "SMS_TO", "+445678")]
+
+    def test_without_a_gateway_it_does_nothing_rather_than_crashing(self):
+        with mock.patch.object(jm, "SMS_API_KEY", ""):
+            self.assertFalse(jm.text_harry("hello"))
+
+    def test_an_interview_invite_is_texted(self):
+        job = {"company": "Oceaneering", "title": "Workshop Technician",
+               "contact_email": "jane@oceaneering.com"}
+        with mock.patch.object(jm, "send_email"), \
+             mock.patch.object(jm, "text_harry") as sms:
+            jm.alert_harry(job, {"text": "Can you come in Thursday?"},
+                           "interview_invite")
+        sms.assert_called_once()
+        self.assertIn("Oceaneering", sms.call_args[0][0])
+
+    def test_a_rejection_is_not_texted(self):
+        """Texting about rejections and auto-acknowledgements would train him
+        to ignore the phone, which costs the one thing this protects."""
+        for category in ("rejection", "auto_acknowledgement", "other"):
+            with self.subTest(category=category):
+                with mock.patch.object(jm, "send_email"), \
+                     mock.patch.object(jm, "text_harry") as sms:
+                    jm.alert_harry({"company": "X", "title": "Y"},
+                                   {"text": "no thanks"}, category)
+                sms.assert_not_called()
+
+    def test_a_gateway_failure_never_stops_the_email(self):
+        with mock.patch.object(jm, "send_email") as email, \
+             mock.patch.object(jm, "text_harry", side_effect=None,
+                               return_value=False):
+            jm.alert_harry({"company": "X", "title": "Y"},
+                           {"text": "hi"}, "interview_invite")
+        email.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

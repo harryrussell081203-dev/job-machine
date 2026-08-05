@@ -101,11 +101,28 @@ FOLLOWUP2_AFTER_DAYS = 9          # one last nudge to that person
 # conversation - the one documented reason to go past three.
 STAKEHOLDER_AFTER_DAYS = env_int("STAKEHOLDER_AFTER_DAYS", 16)
 REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
-SPEC_PER_DAY = env_int("SPEC_PER_DAY", 2)
+# Two a day was set when the target list was thirty companies I had typed out
+# by hand and did not want to burn through. The list now builds itself from
+# employers the machine has actually seen advertising this trade, so it is
+# sixty-five and growing every run - and at two a day that is a month to work
+# through a list whose whole point is that it has no ceiling. The daily send
+# cap still governs the total, so this raises the speculative share of it
+# rather than the amount of mail leaving the account.
+SPEC_PER_DAY = env_int("SPEC_PER_DAY", 6)
 TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "data", "targets.json")
 VETERAN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "data", "veteran_employers.json")
+# An HTTP SMS gateway, so an interview invitation reaches him in minutes
+# rather than at the next time he opens his email. Defaults are httpSMS,
+# which relays through his own Android handset and so costs nothing to run.
+# Everything here is optional: with no key, text_harry is a no-op and the
+# email alert is unchanged.
+SMS_ENDPOINT = env_str("SMS_ENDPOINT", "https://api.httpsms.com/v1/messages/send")
+SMS_API_KEY = env_str("SMS_API_KEY", "")
+SMS_FROM = env_str("SMS_FROM", "")
+SMS_TO = env_str("SMS_TO", "")
+
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
@@ -149,6 +166,30 @@ ROTATIONAL_KEYWORDS = [
 ROTATIONAL_WHERE = env_str("ROTATIONAL_WHERE", "United Kingdom")
 ROTATIONAL_RADIUS = env_int("ROTATIONAL_RADIUS", 500)
 
+# The scarcest thing about Harry is not his trade, it is his clearance.
+#
+# Plenty of people can fault-find electronics. Very few of them hold DV, and
+# DV takes an employer the better part of a year and a great deal of money to
+# obtain for someone who does not. On a cleared vacancy the field is not
+# hundreds of applicants, it is the handful who already hold it - and the
+# employer is usually waiting on the clearance rather than on the skills.
+#
+# Nothing in this project looked for that work. These sweep the whole country
+# because cleared roles cluster around sites (Faslane, Rosyth, Portsmouth,
+# Corsham, Filton) rather than around Aberdeen, and he can take a posting
+# anywhere that comes with somewhere to live.
+CLEARED_KEYWORDS = [
+    "dv cleared technician", "sc cleared technician", "security cleared technician",
+    "dv cleared engineer", "sc cleared engineer", "security cleared engineer",
+    "cleared communications technician", "defence communications technician",
+    "military communications engineer", "secure communications engineer",
+    "cleared electronics technician", "developed vetting engineer",
+    "radio systems technician", "satellite communications technician",
+    "electronic warfare technician", "cryptographic technician",
+]
+CLEARED_WHERE = env_str("CLEARED_WHERE", "United Kingdom")
+CLEARED_RADIUS = env_int("CLEARED_RADIUS", 500)
+
 # Titles that are never worth a Gemini call.
 TITLE_EXCLUSIONS = [
     "chartered", "principal engineer", "head of", "director", "graduate scheme",
@@ -177,7 +218,13 @@ def is_course_advert(job):
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
 - Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
-- DV security clearance.
+- DV security clearance. THIS IS HIS RAREST ASSET AND MUST BE SCORED AS ONE.
+  Plenty of people can fault-find electronics; very few of them hold DV, and it
+  costs an employer the better part of a year and a great deal of money to
+  obtain for somebody who does not. So a role asking for SC or DV clearance is
+  a STRONGER match for him than the same role without it, never a weaker one,
+  and a defence or secure-communications posting should score at least as high
+  as an equivalent commercial one even when the trade wording differs.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
@@ -633,6 +680,12 @@ def adzuna_searches():
             yield location, SEARCH_RADIUS_MILES, kw
     for kw in ROTATIONAL_KEYWORDS:
         yield ROTATIONAL_WHERE, ROTATIONAL_RADIUS, kw
+    # And the cleared sweep. Same reasoning as the rotational one - the work
+    # is advertised against a site rather than a town - but a different and
+    # much shorter queue at the other end, because the vacancy is gated on a
+    # clearance he already holds.
+    for kw in CLEARED_KEYWORDS:
+        yield CLEARED_WHERE, CLEARED_RADIUS, kw
 
 
 def adzuna():
@@ -2060,10 +2113,44 @@ def classify_reply(job, reply):
     return result["category"], str(result.get("summary", ""))[:200]
 
 
+def text_harry(message):
+    """Send Harry a text. Silent no-op unless the gateway is configured.
+
+    Email is the right channel for the daily digest and the wrong one for an
+    interview invitation. An employer who asks 'can you speak tomorrow' has
+    put a clock on it, and a reply that arrives the following evening because
+    nobody happened to open an inbox is an interview lost to latency rather
+    than to merit.
+
+    Only two things ever come through here - an invitation, and a question a
+    human is waiting on an answer to. Texting anybody about a rejection or an
+    automated acknowledgement would train him to ignore the phone, which
+    costs exactly the thing this exists to protect."""
+    if not (SMS_API_KEY and SMS_FROM and SMS_TO):
+        return False
+    try:
+        r = requests.post(
+            SMS_ENDPOINT,
+            headers={"x-api-key": SMS_API_KEY, "Content-Type": "application/json"},
+            json={"content": message[:320], "from": SMS_FROM, "to": SMS_TO},
+            timeout=15)
+        if r.status_code < 300:
+            print("[sms] sent")
+            return True
+        print(f"[sms] gateway said {r.status_code}: {r.text[:120]}")
+    except Exception as e:
+        print(f"[sms] failed: {type(e).__name__}: {e}")
+    return False
+
+
 def alert_harry(job, reply, category, extra=""):
     """A loud, labelled email to Harry's own inbox the moment a human replies."""
     label = {"interview_invite": "INTERVIEW", "question": "NEEDS YOUR ANSWER",
              "rejection": "rejection", None: "REPLY"}.get(category, "REPLY")
+    if category in ("interview_invite", "question"):
+        text_harry(
+            f"job-machine: {label}\n{job.get('company')} - {job.get('title')}\n"
+            f"from {job.get('contact_email')}\nCheck your email.")
     body = (f"{job.get('company')} replied about the {job.get('title')} role.\n"
             f"From: {job.get('contact_email')}\n"
             f"Category: {category or 'unclassified'}\n\n"
