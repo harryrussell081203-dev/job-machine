@@ -2097,6 +2097,15 @@ def alert_harry(job, reply, category, extra=""):
                body, attach_cv=False)
 
 
+def text_back(state):
+    """Text the people who asked to speak to him, in working hours.
+
+    Imported here rather than at the top because sms imports this module.
+    Does nothing at all without an httpSMS key."""
+    import sms
+    return sms.run_followups(state)
+
+
 def harvest_contact_number(state, job, reply, category):
     """Keep the phone number out of a human reply, and text the good news.
 
@@ -2125,8 +2134,25 @@ def harvest_contact_number(state, job, reply, category):
         kind = "mobile" if sms.is_mobile(numbers[0]) else "direct line"
         print(f"[sms] {job.get('company')}: {kind} {numbers[0]} "
               f"({len(entry['numbers'])} known)")
+        mobile = next((n for n in entry["numbers"] if sms.is_mobile(n)), None)
+        if mobile:
+            job["contact_mobile"] = mobile
+
+    # Somebody asking to be phoned is the strongest signal in this inbox and
+    # the easiest one to miss, because it arrives looking like every other
+    # email. It is also the only thing that makes an outbound text obviously
+    # welcome rather than merely tolerable, so it is recorded either way and
+    # the texting stage decides what to do about it in working hours.
+    if sms.wants_a_word(reply.get("text", "")):
+        job["wants_a_word"] = True
+        print(f"[sms] {job.get('company')} asked to speak - "
+              f"{numbers[0] if numbers else job.get('contact_email')}")
+        if numbers and sms.configured():
+            sms.alert_harry(sms.call_back_alert(
+                job.get("contact_name"), numbers[0], job.get("company")))
+
     if category == "interview_invite" and sms.configured():
-        sms.alert_harry(sms.interview_alert(job))
+        sms.alert_harry(sms.interview_alert(job), urgent=True)
 
 
 def check_replies(state):
@@ -2863,6 +2889,12 @@ def main(argv=None):
         stage("followup", run_followups, state)
         save(state)
         stage("replies", check_replies, state)
+        # After the replies, because that is where a request to speak is
+        # found, and as its own stage because a reply that lands at nine at
+        # night should be answered in the morning rather than at nine at
+        # night. sms.may_text holds it until working hours; this runs often
+        # enough to pick it up when they arrive.
+        stage("sms", text_back, state)
     prune(state)
     save(state)
 

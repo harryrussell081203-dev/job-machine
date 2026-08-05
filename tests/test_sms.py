@@ -96,7 +96,7 @@ class TestNotHarvestingTheQuotedTrail(unittest.TestCase):
 class TestWhoMayBeTexted(unittest.TestCase):
     def contact(self, **kw):
         base = {"number": "+447891169509", "name": "Annie Thompson",
-                "replied": True}
+                "replied": True, "wants_a_word": True}
         base.update(kw)
         return base
 
@@ -174,7 +174,8 @@ class TestSendingOne(unittest.TestCase):
 
     def contact(self):
         return {"number": "+447891169509", "name": "Annie Thompson",
-                "replied": True, "company": "Forces Employment Charity"}
+                "replied": True, "wants_a_word": True,
+                "company": "Forces Employment Charity"}
 
     def test_it_goes_and_is_recorded(self):
         with mock.patch.object(sms, "send") as send:
@@ -183,7 +184,7 @@ class TestSendingOne(unittest.TestCase):
         self.assertIn("+447891169509", self.state["sms_sent"])
 
     def test_the_message_says_who_it_is_and_why(self):
-        body = sms.follow_up_text(self.contact())
+        body = sms.follow_up_text(dict(self.contact(), wants_a_word=False))
         self.assertTrue(body.startswith("Hi Annie,"))
         self.assertIn("Harry Russell", body)
         self.assertIn("07398 530978", body)
@@ -314,3 +315,157 @@ class TestTheReplyWatcherWiring(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestSpottingSomebodyWhoWantsToTalk(unittest.TestCase):
+    """The strongest signal in this inbox, and the easiest to miss - it
+    arrives looking like every other email. Every phrase below came off a real
+    reply Harry received."""
+
+    def test_the_real_ones(self):
+        for text in [
+                "I have tried to reach you by telephone today, but I was "
+                "unsuccessful and I have left you a voicemail.",
+                "can you please give me a call when you are able to please",
+                "Let me know when you are free for a quick chat",
+                "What is the best time to call you?",
+                "Happy to have a chat this week",
+                "Give me a ring when you get this",
+                "I missed you earlier, try me back"]:
+            with self.subTest(text=text[:40]):
+                self.assertTrue(sms.wants_a_word(text))
+
+    def test_an_ordinary_reply_is_not_mistaken_for_one(self):
+        for text in [
+                "Thanks for your email, I have passed it to my colleague.",
+                "Unfortunately this position requires an 18th edition.",
+                "We have received your application and will be in touch.",
+                "Please apply through our recruitment portal.",
+                "Thank you for your interest in working with us."]:
+            with self.subTest(text=text[:40]):
+                self.assertFalse(sms.wants_a_word(text))
+
+    def test_it_does_not_read_harrys_own_words_in_the_trail(self):
+        """His own emails say 'free to call any time'. Matching on that would
+        have him texting people who never asked for anything."""
+        text = ("Thanks, noted.\n"
+                "On Wed, 5 Aug 2026, Harry Russell wrote:\n"
+                "> give me a call any time, I am free all day\n")
+        self.assertFalse(sms.wants_a_word(text))
+
+
+class TestTheOutboundTriggerIsNarrow(unittest.TestCase):
+    def setUp(self):
+        self.state = {"sms_sent": {}, "contact_numbers": {}}
+        for p in [mock.patch.object(sms, "API_KEY", "test-key"),
+                  mock.patch.object(sms, "OUTBOUND", True),
+                  mock.patch.object(sms, "in_texting_hours", return_value=True)]:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def contact(self, **kw):
+        base = {"number": "+447891169509", "name": "Annie Thompson",
+                "replied": True, "wants_a_word": True}
+        base.update(kw)
+        return base
+
+    def test_somebody_who_asked_to_speak_gets_a_text(self):
+        self.assertTrue(sms.may_text(self.state, self.contact())[0])
+
+    def test_somebody_who_merely_replied_does_not(self):
+        """A reply is not an invitation. Answering a request to talk is."""
+        allowed, reason = sms.may_text(self.state,
+                                       self.contact(wants_a_word=False))
+        self.assertFalse(allowed)
+        self.assertIn("uninvited", reason)
+
+    def test_that_rule_can_be_relaxed_deliberately(self):
+        with mock.patch.object(sms, "REPLY_TO_A_REQUEST_ONLY", False):
+            self.assertTrue(sms.may_text(
+                self.state, self.contact(wants_a_word=False))[0])
+
+    def test_the_text_answers_the_request_it_is_replying_to(self):
+        body = sms.follow_up_text(self.contact())
+        self.assertIn("you asked for a call", body)
+        self.assertIn("Sorry if you have tried me", body)
+        self.assertIn(jm.PHONE, body)
+
+    def test_only_the_people_who_asked_are_queued(self):
+        state = {"jobs": {
+            "a": {"company": "TMM", "wants_a_word": True,
+                  "contact_mobile": "+447700900001"},
+            "b": {"company": "Other", "contact_mobile": "+447700900002"},
+            "c": {"company": "Done", "wants_a_word": True,
+                  "contact_mobile": "+447700900003",
+                  "sms_sent_at": "2026-08-05T10:00:00+00:00"},
+            "d": {"company": "Landline only", "wants_a_word": True}}}
+        pending = sms.pending_conversations(state)
+        self.assertEqual([c["company"] for c in pending], ["TMM"])
+
+    def test_a_run_texts_them_once_and_marks_the_job(self):
+        job = {"company": "TMM", "wants_a_word": True,
+               "contact_mobile": "+447700900001", "contact_name": "Cammy"}
+        state = {"jobs": {"a": job}, "sms_sent": {}}
+        with mock.patch.object(sms, "send") as send, \
+             mock.patch.object(jm, "save"):
+            self.assertEqual(sms.run_followups(state), 1)
+        send.assert_called_once()
+        self.assertIn("sms_sent_at", job)
+        with mock.patch.object(sms, "send") as send, \
+             mock.patch.object(jm, "save"):
+            self.assertEqual(sms.run_followups(state), 0)
+        send.assert_not_called()
+
+    def test_an_out_of_hours_reply_waits_rather_than_being_lost(self):
+        """It stays queued, so the next run in working hours picks it up."""
+        job = {"company": "TMM", "wants_a_word": True,
+               "contact_mobile": "+447700900001"}
+        state = {"jobs": {"a": job}, "sms_sent": {}}
+        with mock.patch.object(sms, "in_texting_hours", return_value=False), \
+             mock.patch.object(sms, "send") as send, \
+             mock.patch.object(jm, "save"):
+            self.assertEqual(sms.run_followups(state), 0)
+        send.assert_not_called()
+        self.assertNotIn("sms_sent_at", job)
+        self.assertEqual(len(sms.pending_conversations(state)), 1)
+
+
+class TestAlertingHimAtSensibleHours(unittest.TestCase):
+    def test_an_interview_goes_whenever_it_lands(self):
+        """A small firm sends these on a Sunday evening, and he would rather
+        know than be protected from knowing."""
+        with mock.patch.object(sms, "API_KEY", "test-key"), \
+             mock.patch.object(sms, "waking_hours", return_value=False), \
+             mock.patch.object(sms, "send") as send:
+            self.assertTrue(sms.alert_harry("INTERVIEW: x", urgent=True))
+        send.assert_called_once()
+
+    def test_everything_else_waits_for_the_morning(self):
+        with mock.patch.object(sms, "API_KEY", "test-key"), \
+             mock.patch.object(sms, "waking_hours", return_value=False), \
+             mock.patch.object(sms, "send") as send:
+            self.assertFalse(sms.alert_harry("someone wants a call"))
+        send.assert_not_called()
+
+    def test_the_call_back_alert_says_who_and_what_number(self):
+        body = sms.call_back_alert("Annie Thompson", "+447891169509",
+                                   "Forces Employment Charity")
+        self.assertIn("Annie Thompson", body)
+        self.assertIn("+447891169509", body)
+        self.assertIn("ring them", body)
+
+    def test_a_request_to_speak_is_recorded_and_he_is_told(self):
+        state = {"jobs": {}}
+        job = {"company": "Forces Employment Charity", "title": "n/a",
+               "contact_email": "annie.thompson@forcesemployment.org.uk",
+               "contact_name": "Annie"}
+        reply = {"text": "I have tried to reach you by telephone today.\n"
+                         "Annie Thompson\nT: 07891169509"}
+        with mock.patch.object(sms, "API_KEY", "test-key"), \
+             mock.patch.object(sms, "waking_hours", return_value=True), \
+             mock.patch.object(sms, "send") as send:
+            jm.harvest_contact_number(state, job, reply, "question")
+        self.assertTrue(job["wants_a_word"])
+        self.assertEqual(job["contact_mobile"], "+447891169509")
+        send.assert_called_once()
+        self.assertIn("wants a call", send.call_args.args[1])

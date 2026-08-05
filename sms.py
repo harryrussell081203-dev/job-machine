@@ -53,6 +53,12 @@ API_KEY = jm.env_str("HTTPSMS_API_KEY")
 SMS_FROM = jm.env_str("SMS_FROM", "+447398530978")
 OUTBOUND = jm.env_flag("SMS_OUTBOUND", True)
 DAILY_SMS_CAP = jm.env_int("DAILY_SMS_CAP", 3)
+# The rule that decides whether outbound texting is a good idea or a bad one.
+# ON: he only texts people who have asked to speak to him. That is not a cold
+# text at all, it is answering a phone call by other means, and it is the only
+# version of this that is unambiguously welcome. Set SMS_REPLY_ONLY=0 to let
+# him also text any consultant who has written back, whatever they said.
+REPLY_TO_A_REQUEST_ONLY = jm.env_flag("SMS_REPLY_ONLY", True)
 
 SENT = "sms_sent"
 NUMBERS = "contact_numbers"
@@ -183,10 +189,23 @@ def send(to_number, body):
     return (answer.get("data") or {}).get("id", "sent")
 
 
-def alert_harry(body):
-    """A text to his own phone. No rules beyond the key being set, because
-    the only person being interrupted is him."""
+def waking_hours(when=None):
+    """07:00-22:00, any day. His own phone, but not at four in the morning."""
+    now = when or jm.uk_now()
+    return 7 <= now.hour < 22
+
+
+def alert_harry(body, urgent=False):
+    """A text to his own phone.
+
+    An interview invitation is urgent and goes whenever it lands - a Sunday
+    evening is exactly when a small firm gets round to sending one, and he
+    would rather know. Everything else waits for waking hours; the email
+    alert and the digest have it either way."""
     if not configured():
+        return False
+    if not urgent and not waking_hours():
+        print("[sms] holding a non-urgent alert until the morning")
         return False
     try:
         send(SMS_FROM, body[:300])
@@ -195,6 +214,34 @@ def alert_harry(body):
     except Exception as e:
         print(f"[sms] could not alert Harry: {e}")
         return False
+
+
+# What somebody writes when they would rather talk than type. Every one of
+# these came off a real reply in Harry's inbox: 'I have tried to reach you by
+# telephone today', 'can you please give me a call when you are able'.
+WANTS_A_WORD = re.compile(
+    r"give (me|us) a (call|ring|bell)|call me|ring me|phone me|"
+    r"give me a call|when are you free|when you are free|"
+    r"best time to (call|reach|get)|tried to (call|reach|phone)|"
+    r"tried to reach you|left you a voicemail|missed you|missed your call|"
+    r"arrange a (call|chat|time)|set up a (call|chat)|hop on a call|"
+    r"have a chat|speak on the phone|available for a (quick )?(call|chat)|"
+    r"call when you|get you on the phone", re.I)
+
+
+def wants_a_word(text):
+    """Did they ask to speak to him rather than to be emailed back?
+
+    This is the one thing that makes an outbound text obviously welcome
+    instead of merely tolerable: they are already trying to get him on the
+    phone, and a text is the fastest way to say 'here I am'."""
+    return bool(WANTS_A_WORD.search(own_words(text or "")))
+
+
+def call_back_alert(name, number, company):
+    who = name or company or "someone"
+    return (f"{who} at {company} wants a call: {number}. "
+            f"They asked to speak to you, so ring them - it beats email.")
 
 
 def interview_alert(job):
@@ -218,6 +265,8 @@ def may_text(state, contact):
         return False, f"{number} is a landline, that is a call not a text"
     if not contact.get("replied"):
         return False, "they have not written back, so a text is cold"
+    if REPLY_TO_A_REQUEST_ONLY and not contact.get("wants_a_word"):
+        return False, "they have not asked to speak, so a text is uninvited"
     if texted_already(state, number):
         return False, "already texted, and once is the limit"
     if sent_today(state) >= DAILY_SMS_CAP:
@@ -228,12 +277,21 @@ def may_text(state, contact):
 
 
 def follow_up_text(contact):
-    """Short, signed, and it says why they are hearing from him."""
+    """Short, signed, and it says why they are hearing from him.
+
+    Two versions, because the two situations are not the same. If they asked
+    to speak to him, this is him answering - and it says so. If not, it is a
+    softer note that still gives them the easy option of ringing."""
     first = (contact.get("name") or "").split()[0] if contact.get("name") else ""
     greeting = f"Hi {first}, " if first else "Hi, "
+    if contact.get("wants_a_word"):
+        return (f"{greeting}Harry Russell here - you asked for a call about "
+                f"technician work. Sorry if you have tried me. I am free any "
+                f"time today and tomorrow, so ring whenever suits: "
+                f"{jm.PHONE}")
     return (f"{greeting}Harry Russell here - you replied to my email about "
             f"technician work in Aberdeen. Free to talk any time today if "
-            f"that is easier than email. 07398 530978")
+            f"that is easier than email. {jm.PHONE}")
 
 
 def text_contact(state, contact, body=None):
@@ -257,6 +315,41 @@ def text_contact(state, contact, body=None):
         "company": contact.get("company"), "test": jm.TEST_MODE}
     print(f"[sms] {'TEST' if jm.TEST_MODE else 'LIVE'} texted {to_number}")
     return True
+
+
+def pending_conversations(state):
+    """Everyone who asked to speak to Harry and left a mobile to do it on.
+
+    Kept as a stage of its own rather than done inside the reply watcher on
+    purpose. A reply landing at nine at night would otherwise either be texted
+    at nine at night or never; this way it waits for the morning and goes on
+    the next run, which is what a person would do."""
+    out = []
+    for job in state.get("jobs", {}).values():
+        number = job.get("contact_mobile")
+        if not job.get("wants_a_word") or not number:
+            continue
+        if job.get("sms_sent_at") or texted_already(state, number):
+            continue
+        out.append({"number": number, "name": job.get("contact_name"),
+                    "company": job.get("company"), "replied": True,
+                    "wants_a_word": True, "job": job})
+    return out
+
+
+def run_followups(state):
+    """Text back the people who asked to speak to him. Nobody else."""
+    pending = pending_conversations(state)
+    if not pending:
+        return 0
+    print(f"[sms] {len(pending)} person(s) asked to speak to Harry")
+    sent = 0
+    for contact in pending:
+        if text_contact(state, contact):
+            contact["job"]["sms_sent_at"] = jm.now()
+            sent += 1
+            jm.save(state)
+    return sent
 
 
 def call_list(state):
