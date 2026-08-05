@@ -512,7 +512,7 @@ AGENCY_NAME = re.compile(
     # have filed as an employer - one email ever, and a speculative 'nothing
     # advertised that I can see' note to a firm whose business is advertising
     # things.
-    r"atlas professionals|spencer ogden|rullion",
+    r"atlas professionals|spencer ogden|rullion|simpson booth",
     re.I)
 AGENCY_BODY = re.compile(
     r"our client|on behalf of (our|a) client|we are recruiting for|"

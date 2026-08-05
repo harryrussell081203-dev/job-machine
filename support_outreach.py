@@ -239,7 +239,19 @@ def compose(org):
 
 
 def already_asked(state, org):
-    return jm.company_key(org["name"]) in state.setdefault("support_asked", {})
+    """Written to already - by this route, or by the agency one.
+
+    The second half is not hypothetical. Ten recruiters were added to this
+    file with an ask of 'representation' on 2026-08-04, the same hour
+    agency_outreach.py was written against its own list of the same firms, and
+    both fired three minutes apart: TMM, Airswift and Petroplan each got two
+    different letters from Harry inside two minutes. Recruiters belong in
+    data/agencies.json, which has the cooldown and the refresh letter for
+    exactly this; this check is what makes the split hold even when a name
+    gets into the wrong file anyway."""
+    key = jm.company_key(org["name"])
+    return (key in state.setdefault("support_asked", {})
+            or key in state.get("agency_registered", {}))
 
 
 def record(state, org, address):
