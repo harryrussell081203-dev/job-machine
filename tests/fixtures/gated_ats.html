@@ -1,0 +1,65 @@
+<!doctype html>
+<!--
+  The page that broke the portal agent, reproduced.
+
+  Of 121 applications it opened, 61 died on "only 0, 1 or 2 form fields found,
+  the application is probably behind a login". Almost none were behind a login.
+  They looked like this: the advert, a search box, a newsletter signup, and the
+  application form one click away behind an Apply button the agent never
+  pressed.
+
+  Note what is deliberately here to catch a lazy fix:
+    - a "Apply filters" button, which says apply and is not an application
+    - a "How to apply" heading, same
+    - two fields on the advert itself, so the page is not empty, just useless
+-->
+<html>
+<head><meta charset="utf-8"><title>Instrumentation Technician - Careers</title></head>
+<body>
+<h1>Instrumentation Technician</h1>
+
+<form id="jobsearch">
+  <label>Search jobs <input name="q" type="search"></label>
+  <label>Location <input name="loc" type="text"></label>
+  <button type="button">Apply filters</button>
+</form>
+
+<p>Aberdeen. Offshore rotation. Calibration and fault-finding on subsea kit.</p>
+
+<h2>How to apply</h2>
+<p>Press the button below to open the application form.</p>
+
+<button type="button" id="open">Apply for this job</button>
+
+<div id="form-wrap" style="display:none">
+  <form id="application" action="/submitted.html" method="get">
+    <label for="fname">First name *</label>
+    <input id="fname" name="first_name" type="text" required>
+
+    <label for="lname">Surname *</label>
+    <input id="lname" name="last_name" type="text" required>
+
+    <label>Email address *
+      <input name="email" type="email" required>
+    </label>
+
+    <label>Mobile number
+      <input name="phone" type="tel">
+    </label>
+
+    <input name="town" type="text" aria-label="Town or city">
+
+    <label for="cv">Upload your CV *</label>
+    <input id="cv" name="cv" type="file">
+
+    <button type="submit">Submit application</button>
+  </form>
+</div>
+
+<script>
+  document.getElementById('open').addEventListener('click', function () {
+    document.getElementById('form-wrap').style.display = 'block';
+  });
+</script>
+</body>
+</html>

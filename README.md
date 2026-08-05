@@ -206,6 +206,35 @@ wording), and the agent picks it. That is a real answer the form itself offers,
 so those questions stop blocking applications without anything being invented.
 If a monitoring question offers no opt-out, it is flagged like the rest.
 
+### Getting to the form at all
+
+Of the first 121 applications this agent opened, **61 were abandoned with "only
+0, 1 or 2 form fields found, the application is probably behind a login"** - and
+almost none of them were behind a login. Two things were wrong, and both are
+fixed:
+
+- **It never pressed Apply.** Nearly every ATS shows the advert first and puts
+  the form behind a button. The agent loaded the advert, counted the fields on
+  the advert - a search box and a newsletter signup - and gave up on a page that
+  was working perfectly. It now looks for an apply control and presses it, while
+  refusing the things that say apply and are not an application: `Apply filters`,
+  `How to apply`, `Apply via our portal`.
+- **It could not see into an iframe.** An employer's own careers page that embeds
+  its ATS put the entire form somewhere the field collector never looked. It now
+  scans the frames and works in whichever one holds the form.
+
+A third bug fell out of testing the first two. The visibility check asked each
+field about *itself* (`getComputedStyle(el).display`), so a field inside a
+wrapper the page had hidden reported itself as visible and sailed through - the
+agent "found" a form nobody could see and recorded a row of `TimeoutError`s
+filling it in. It now asks `checkVisibility()`, which answers the question that
+was actually being asked. File inputs are the exception and are kept whatever
+their visibility, because styled upload widgets hide the real input on purpose
+and losing one would lose the CV.
+
+`tests/fixtures/gated_ats.html` and `embedded_ats.html` reproduce both pages,
+and the browser tests drive a real Chromium against them.
+
 ### How it finds the form
 
 The job boards are a dead end: Adzuna's outbound page renders blank to a
