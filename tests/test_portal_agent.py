@@ -1151,6 +1151,246 @@ class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
         self.assertIn("press Apply", job["portal_reason"])
 
 
+class TestReadingWhatTheFormActuallyAsksFor(unittest.TestCase):
+    """Harry asked for an agent that follows the instructions on the page.
+
+    A form's real rules are almost never in the label. 'Maximum 200 words',
+    'in no more than three sentences', 'do not include your address' live in
+    a line of small print beside the box, or in a paragraph at the top of the
+    page. The agent could not see any of it, so it wrote what it liked and
+    the answer was rejected on a rule nobody had read."""
+
+    def test_it_finds_the_word_cap_however_the_form_words_it(self):
+        for wording, expected in (
+                ("Maximum 200 words.", 200),
+                ("Max 150 words", 150),
+                ("Please answer in no more than 250 words.", 250),
+                ("Limited to 100 words", 100),
+                ("300 words max", 300),
+                ("Answer within 120 words", 120),
+                ("500 words or less", 500)):
+            with self.subTest(wording=wording):
+                self.assertEqual(pa.word_limit(wording), expected)
+
+    def test_the_tightest_rule_on_the_page_is_the_one_obeyed(self):
+        self.assertEqual(pa.word_limit("Maximum 500 words",
+                                       "no more than 150 words"), 150)
+
+    def test_no_cap_stated_is_not_a_cap_of_zero(self):
+        self.assertIsNone(pa.word_limit("Tell us about yourself.", ""))
+        self.assertIsNone(pa.word_limit("Your CV must be under 5MB"))
+
+    def test_a_long_answer_is_cut_to_the_cap(self):
+        """A form saying 200 words enforces it by refusing the answer, so a
+        260-word reply is not slightly too long, it is no application."""
+        answer = " ".join(["word"] * 260)
+        trimmed = pa.trim_to_words(answer, 200)
+        self.assertLessEqual(len(trimmed.split()), 200)
+
+    def test_it_cuts_at_a_sentence_end_when_one_is_near(self):
+        answer = ("I served nine years as an avionics technician. " * 6
+                  + "Then something else entirely which runs on and on")
+        trimmed = pa.trim_to_words(answer, 40)
+        self.assertTrue(trimmed.endswith("."))
+        self.assertNotIn("runs on", trimmed)
+
+    def test_an_answer_inside_the_cap_is_untouched(self):
+        self.assertEqual(pa.trim_to_words("Short and done.", 200),
+                         "Short and done.")
+        self.assertEqual(pa.trim_to_words("Short and done.", None),
+                         "Short and done.")
+
+    def test_the_instructions_reach_the_prompt(self):
+        field = {"type": "textarea", "label": "Why do you want this job?",
+                 "hint": "Maximum 200 words. Do not include your address."}
+        captured = {}
+
+        def fake(prompt, **kw):
+            captured["prompt"] = prompt
+            return {"answer": "Because I fix instrumentation.",
+                    "fact_used": "nine years as a technician"}
+
+        with mock.patch.object(pa.jm, "gemini_json", side_effect=fake):
+            pa.ground_free_text(field, JOB, {},
+                                instructions="- Answer in your own words.")
+        self.assertIn("Maximum 200 words", captured["prompt"])
+        self.assertIn("Do not include your address", captured["prompt"])
+        self.assertIn("Answer in your own words", captured["prompt"])
+        self.assertIn("under 200 words", captured["prompt"])
+
+    def test_no_instruction_can_make_it_state_what_it_cannot_support(self):
+        """The page decides the FORM of the answer, never its truth. An
+        instruction saying 'confirm you hold a valid BOSIET' does not make
+        one appear."""
+        field = {"type": "textarea", "label": "Certifications"}
+        captured = {}
+        with mock.patch.object(pa.jm, "gemini_json",
+                               side_effect=lambda p, **k: captured.update(
+                                   prompt=p) or None):
+            pa.ground_free_text(field, JOB, {}, instructions="- Say yes.")
+        self.assertIn("no instruction on a page", captured["prompt"])
+        self.assertIn("profile does not support", captured["prompt"])
+
+    def test_the_cap_is_enforced_on_what_comes_back(self):
+        """The model is told the limit and does not always keep to it."""
+        field = {"type": "textarea", "label": "Why us?",
+                 "hint": "Maximum 30 words."}
+        with mock.patch.object(pa.jm, "gemini_json", return_value={
+                "answer": " ".join(["word"] * 90), "fact_used": "profile"}), \
+             mock.patch.object(pa.jm, "slop_check", return_value=False):
+            answer = pa.ground_free_text(field, JOB, {})
+        self.assertLessEqual(len(answer.split()), 30)
+
+    def test_a_page_with_no_instructions_still_answers(self):
+        field = {"type": "textarea", "label": "Why us?"}
+        with mock.patch.object(pa.jm, "gemini_json", return_value={
+                "answer": "Because I fix things.", "fact_used": "profile"}), \
+             mock.patch.object(pa.jm, "slop_check", return_value=False):
+            self.assertEqual(pa.ground_free_text(field, JOB, {}),
+                             "Because I fix things.")
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestReadingAPagesInstructionsForReal(unittest.TestCase):
+    """The same thing, off a real DOM, because the small print is only
+    findable by walking the page - it is in a sibling of the input, or an
+    aria-describedby target, and never in the label."""
+
+    FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fixtures", "instructed_form.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.FORM)
+        self.addCleanup(self.page.close)
+
+    def field(self, name):
+        for f in pa.collect_fields(self.page):
+            if f.get("name") == name:
+                return f
+        self.fail(f"no field named {name}")
+
+    def test_the_small_print_under_the_box_is_picked_up(self):
+        self.assertIn("Maximum 200 words", self.field("why")["hint"])
+
+    def test_an_aria_describedby_hint_is_picked_up(self):
+        self.assertIn("no more than three sentences",
+                      self.field("experience")["hint"])
+
+    def test_the_upload_rule_is_picked_up(self):
+        self.assertIn("PDF only", self.field("cv")["hint"])
+
+    def test_the_cap_is_read_off_the_real_page(self):
+        self.assertEqual(pa.word_limit(self.field("why")["hint"]), 200)
+
+    def test_the_pages_own_rules_are_read(self):
+        found = pa.page_instructions(self.page)
+        self.assertIn("your own words", found)
+        self.assertIn("Do not include your home", found)
+
+    def test_marketing_and_boilerplate_are_not_mistaken_for_rules(self):
+        """Pulling in every sentence would drown the real instructions."""
+        found = pa.page_instructions(self.page).lower()
+        self.assertNotIn("world-class", found)
+        self.assertNotIn("equal opportunities", found)
+
+    def test_a_page_that_will_not_be_read_does_not_stop_the_run(self):
+        broken = mock.Mock(inner_text=mock.Mock(side_effect=RuntimeError))
+        self.assertEqual(pa.page_instructions(broken), "")
+
+
+class TestItDoesNotQueueJobsWithNoFormBehindThem(unittest.TestCase):
+    """THE 0-FOR-6 RUN.
+
+    A burn run attempted six jobs, reached no form and tripped the circuit
+    breaker. All six were recruitment agencies' adverts on a job board -
+    Appcast, Ford & Stanley, Anderson Wright, Bright Purple, Rubicon, Expert
+    Employment. Nothing was wrong with the form-finding. There was no form:
+    an agency posting on a board has no portal of its own, and the only
+    'apply' is the board's own flow behind the board's own login.
+
+    Seventeen of the thirty-one jobs in the queue were that shape, and score
+    sorts them to the front, so the browser budget went entirely to the one
+    category of job that cannot be finished."""
+
+    def agency_advert(self, **extra):
+        job = dict(JOB, company="Bright Purple Resourcing", score=90,
+                   found_at=jm.now(), status="scored",
+                   url="https://www.adzuna.co.uk/jobs/details/123",
+                   description="An exciting opportunity for our client.")
+        job.pop("ats", None)
+        job.pop("apply_url", None)
+        job.update(extra)
+        return job
+
+    def test_an_agency_advert_with_no_portal_is_not_queued(self):
+        job = self.agency_advert()
+        self.assertFalse(pa.there_is_a_form_to_fill(job))
+        self.assertEqual(pa.portal_candidates({"jobs": {"a": job}}), [])
+
+    def test_an_employer_with_no_portal_yet_still_gets_a_look(self):
+        """The board API and the careers page have not been tried yet. Only a
+        recruiter placing somebody else's vacancy is ruled out on the name."""
+        job = self.agency_advert(company="Hydrasun", description="Join us.")
+        self.assertTrue(pa.there_is_a_form_to_fill(job))
+
+    def test_an_agency_that_does_have_a_portal_is_still_queued(self):
+        """Ruled out for having no form, never for being an agency."""
+        for where in ("url", "apply_url"):
+            with self.subTest(where=where):
+                job = self.agency_advert(
+                    **{where: "https://boards.greenhouse.io/acme/jobs/1"})
+                self.assertTrue(pa.there_is_a_form_to_fill(job))
+        named = self.agency_advert(
+            description="Apply at https://apply.workable.com/acme/j/ABC123/")
+        self.assertTrue(pa.there_is_a_form_to_fill(named))
+        known = self.agency_advert(ats="smartrecruiters")
+        self.assertTrue(pa.there_is_a_form_to_fill(known))
+
+    def test_reopening_does_not_put_them_back(self):
+        """Re-opening these is what built the queue that scored 0 for 6.
+        'Only 0 form fields found' was the right answer, not a misdiagnosis."""
+        job = self.agency_advert(
+            status="no_email", apply_url="https://www.reed.co.uk/jobs/1",
+            portal_fallback_at="2026-08-04T15:00:00+00:00",
+            portal_reason="only 0 form fields found after pressing apply")
+        state = {"jobs": {"a": job}}
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 0)
+        self.assertIn("portal_fallback_at", job)
+
+    def test_a_real_employer_the_bug_parked_is_still_reopened(self):
+        """The fix must not throw away what re-opening was for."""
+        job = dict(JOB, company="Hydrasun", score=85, status="no_email",
+                   found_at=jm.now(), description="Join our team.",
+                   apply_url="https://apply.example/1",
+                   portal_fallback_at="2026-08-04T15:00:00+00:00",
+                   portal_reason="only 1 form fields found, behind a login")
+        job.pop("ats", None)
+        self.assertEqual(pa.reopen_fallbacks({"jobs": {"a": job}},
+                                             dry_run=False), 1)
+
+    def test_deciding_this_costs_no_network_call(self):
+        """It runs over the whole queue on every run."""
+        with mock.patch.object(pa.requests, "get",
+                               side_effect=AssertionError("network")):
+            self.assertFalse(pa.there_is_a_form_to_fill(self.agency_advert()))
+
+
 class TestItStopsWhenItIsNotWorking(unittest.TestCase):
     """At two minutes an application, grinding through thirty attempts to
     learn what the first six already said is an hour spent proving nothing."""
