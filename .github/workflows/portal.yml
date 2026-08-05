@@ -76,6 +76,8 @@ jobs:
           PORTAL_MAX_AGE_DAYS: ${{ vars.PORTAL_MAX_AGE_DAYS }}
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
+          PORTAL_CIRCUIT_AFTER: ${{ vars.PORTAL_CIRCUIT_AFTER }}
+          BURN_LIMIT: ${{ vars.BURN_LIMIT }}
         run: |
           if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
             # The MoD register of Covenant signatories. Every name on it is an
@@ -114,7 +116,12 @@ jobs:
           # the email route by mistake, then work the whole queue.
           if [[ "${GITHUB_REF_NAME}" == fire-burn/* ]]; then
             echo "fire-burn branch: re-opening the misdiagnosed jobs first"
-            python portal_agent.py --reopen-fallbacks --run --submit
+            # A measured batch, not the whole queue. The circuit breaker
+            # stops it early if nothing is reaching a form, and the limit
+            # keeps even a working run short enough to read the result and
+            # decide, rather than spending an hour to find out.
+            python portal_agent.py --reopen-fallbacks --run --submit \
+              --limit "${BURN_LIMIT:-8}"
             exit 0
           fi
           ARGS="--harvest --run"
