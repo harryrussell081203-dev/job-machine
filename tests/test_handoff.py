@@ -8,6 +8,7 @@ browser, and the handoff page turns those answers into one paste.
 """
 import json
 import os
+import tempfile
 import sys
 import unittest
 from unittest import mock
@@ -158,3 +159,83 @@ class TestHandoffPage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestEmailingThePage(unittest.TestCase):
+    """The page has always existed. It lived in a build artifact, which means
+    a login, a zip and a desktop before anyone can press a button on it."""
+
+    def state(self, n=2):
+        jobs = {}
+        for i in range(n):
+            jobs[str(i)] = {
+                "status": "portal_awaiting_captcha", "company": f"Firm {i}",
+                "title": "Instrumentation Technician", "score": 90 - i,
+                "apply_url": f"https://apply.example/{i}",
+                "captcha_answers": [{"label": "First name",
+                                     "name": "first_name", "value": "Harry"}]}
+        return {"jobs": jobs}
+
+    def send(self, state, **kw):
+        with mock.patch.object(jm, "send_email") as send, \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com"), \
+             mock.patch.object(handoff, "OUT_DIR", tempfile.mkdtemp()) as d:
+            handoff.OUT_FILE = os.path.join(handoff.OUT_DIR, "index.html")
+            count = handoff.email_page(state, **kw)
+        return count, send
+
+    def test_it_goes_to_his_own_inbox_with_the_page_attached(self):
+        count, send = self.send(self.state(2))
+        self.assertEqual(count, 2)
+        to_addr, subject, body = send.call_args.args[:3]
+        self.assertEqual(to_addr, "harry@example.com")
+        self.assertIn("2 applications need only the CAPTCHA", subject)
+        attachments = send.call_args.kwargs["attachments"]
+        name, maintype, subtype, payload = attachments[0]
+        self.assertEqual((name, maintype, subtype),
+                         ("captcha-handoff.html", "text", "html"))
+        self.assertIn(b"Copy prefill snippet", payload)
+
+    def test_the_cv_is_not_attached_to_this_one(self):
+        """It is a page of links for him, not an application to anybody."""
+        _, send = self.send(self.state(1))
+        self.assertFalse(send.call_args.kwargs["attach_cv"])
+
+    def test_one_reads_as_one(self):
+        _, send = self.send(self.state(1))
+        self.assertIn("1 application needs only the CAPTCHA",
+                      send.call_args.args[1])
+
+    def test_the_body_works_without_opening_the_attachment(self):
+        """Read on a phone, it still has to be actionable."""
+        _, send = self.send(self.state(2))
+        body = send.call_args.args[2]
+        self.assertIn("https://apply.example/0", body)
+        self.assertIn("https://apply.example/1", body)
+        self.assertIn("Instrumentation Technician", body)
+
+    def test_anything_needing_his_answer_is_called_out(self):
+        state = self.state(1)
+        state["jobs"]["0"]["captcha_flags"] = ["'Salary' has no option '35000'"]
+        _, send = self.send(state)
+        self.assertIn("NEEDS YOU:", send.call_args.args[2])
+
+    def test_nothing_waiting_means_no_email(self):
+        count, send = self.send({"jobs": {}})
+        self.assertEqual(count, 0)
+        send.assert_not_called()
+
+    def test_it_goes_once_a_day(self):
+        state = self.state(1)
+        self.send(state)
+        self.assertEqual(state[handoff.EMAILED], jm.today())
+        count, send = self.send(state)
+        self.assertEqual(count, 0)
+        send.assert_not_called()
+
+    def test_asking_for_it_by_hand_overrides_the_daily_guard(self):
+        state = self.state(1)
+        state[handoff.EMAILED] = jm.today()
+        count, send = self.send(state, force=True)
+        self.assertEqual(count, 1)
+        send.assert_called_once()

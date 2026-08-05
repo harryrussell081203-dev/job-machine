@@ -39,7 +39,7 @@ jobs:
 
       - run: pip install requests dnspython
 
-      - name: Text the applications waiting on a captcha
+      - name: Email the filled-in page, and text the link
         env:
           PYTHONUNBUFFERED: "1"
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
@@ -49,9 +49,14 @@ jobs:
         run: |
           # A fire-nudge branch is a person asking for it now, so it overrides
           # the once-a-day guard. The schedule never does.
+          # The email carries the page with the one-click prefill on it, for
+          # the desktop. The text carries one link, for the phone. Both from
+          # the same moment so they arrive together and agree with each other.
           if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
+            python tools/handoff.py --email --force
             python sms.py --captcha-nudge --force
           else
+            python tools/handoff.py --email
             python sms.py --captcha-nudge
           fi
 
