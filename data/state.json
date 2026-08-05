@@ -801,6 +801,40 @@
    ]
   }
  },
+ "contact_numbers": {
+  "ex mil": {
+   "at": "2026-08-05T13:44:13.407885+00:00",
+   "name": "Jean-Claude Hedouin",
+   "numbers": [
+    "+443332026500"
+   ],
+   "source": "signature of jc@ex-mil.co.uk, extension 3937"
+  },
+  "forces": {
+   "at": "2026-08-05T13:44:13.407897+00:00",
+   "name": "Graham Brown",
+   "numbers": [
+    "+441353645004"
+   ],
+   "source": "signature of gbrown@forcesrecruitment.co.uk, chief executive"
+  },
+  "forces employment charity": {
+   "at": "2026-08-05T13:44:13.407870+00:00",
+   "name": "Annie Thompson",
+   "numbers": [
+    "+447891169509"
+   ],
+   "source": "signature of annie.thompson@forcesemployment.org.uk, specialist employment advisor for Scotland and Wales"
+  },
+  "tmm": {
+   "at": "2026-08-05T13:44:13.407798+00:00",
+   "name": "Cammy Keith",
+   "numbers": [
+    "+441224327030"
+   ],
+   "source": "signature of CKeith@tmmrecruitment.com, senior business manager, electrical/electronic/instrumentation desk"
+  }
+ },
  "jobs": {
   "adzuna_5818273600": {
    "company": "Bayne's the Family Bakers",
