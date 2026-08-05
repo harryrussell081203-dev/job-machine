@@ -220,7 +220,25 @@ def find_address(org):
 
     Reuses the pipeline's own discovery, which means the same rule applies
     here as everywhere else in this project: nothing is ever guessed or
-    pattern-generated, and no address means no email."""
+    pattern-generated, and no address means no email.
+
+    One exception, and it is not a loophole. An organisation may carry a
+    recorded address, but only alongside an 'email_source' saying where it was
+    published. Some of these sites sit behind a bot check that serves a
+    challenge page to the scraper, so a charity that prints its address
+    plainly on its own contact page reads as having none - which is how the
+    Forces Employment Charity, who run the government-funded employment
+    service Harry is eligible for, came back as 'no real address found'.
+
+    A published address with a citation is the opposite of a guess. It is
+    still MX-checked like any other, and an entry with no source is ignored
+    however tempting it looks."""
+    recorded = (org.get("email") or "").strip().lower()
+    if recorded and org.get("email_source") and "@" in recorded:
+        if jm.has_mx(recorded.split("@")[1]):
+            return recorded, None
+        print(f"[support] {org['name']}: recorded address does not resolve")
+
     domain = org.get("domain")
     if not domain or not jm.has_mx(domain):
         return None, None

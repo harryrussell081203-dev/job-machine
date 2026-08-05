@@ -6,6 +6,7 @@ Offline. No charity is contacted.
 These letters go to charities, whose time and money belong to people who need
 them, so the rules here are stricter than anywhere else in the project.
 """
+import json
 import os
 import sys
 import unittest
@@ -66,10 +67,45 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
         for expected in ("veteran", "young", "local", "industry"):
             self.assertIn(expected, groups)
 
-    def test_an_organisation_already_dealt_with_is_left_alone(self):
-        """He has signed up with the Forces Employment Charity himself."""
-        self.assertNotIn("forcesemployment.org.uk",
-                         [o.get("domain") for o in so.load_orgs()])
+    def test_an_organisation_marked_skip_is_left_alone(self):
+        """This used to name the Forces Employment Charity, on the grounds
+        that Harry had signed up himself. That reasoning was wrong and the
+        data has since been corrected: RightJob is the CTP board and CTP
+        support lapses two years after discharge, while Op ASCEND - which
+        they deliver - is specifically for veterans past that mark, which is
+        him. So they are written to after all, and the thing this test should
+        actually protect is the skip flag itself."""
+        skipped = [o for o in json.load(open(so.SUPPORT_PATH))["organisations"]
+                   if o.get("skip")]
+        self.assertTrue(skipped, "expected at least one skipped organisation")
+        loadable = {o["name"] for o in so.load_orgs()}
+        for org in skipped:
+            with self.subTest(org=org["name"]):
+                self.assertNotIn(org["name"], loadable)
+
+    def test_a_recorded_address_needs_a_source_to_be_used(self):
+        """Some of these sites serve a bot challenge to the scraper, so a
+        charity that prints its address plainly reads as having none. A
+        published address with a citation is the opposite of a guess - but one
+        with no citation is exactly the guessing this project forbids."""
+        with mock.patch.object(so.jm, "has_mx", return_value=True):
+            addr, _ = so.find_address({
+                "name": "X", "domain": "x.org", "email": "info@x.org",
+                "email_source": "printed on their contact page"})
+            self.assertEqual(addr, "info@x.org")
+
+        with mock.patch.object(so.jm, "has_mx", return_value=True), \
+             mock.patch.object(so.jm, "scrape_site", return_value=[]):
+            addr, _ = so.find_address({
+                "name": "Y", "domain": "y.org", "email": "info@y.org"})
+            self.assertIsNone(addr)
+
+    def test_a_recorded_address_is_still_mx_checked(self):
+        with mock.patch.object(so.jm, "has_mx", return_value=False):
+            addr, _ = so.find_address({
+                "name": "Z", "domain": "z.org", "email": "info@z.org",
+                "email_source": "their contact page"})
+            self.assertIsNone(addr)
 
     def test_nobody_is_asked_twice(self):
         state = {"jobs": {}, "support_asked": {}}
