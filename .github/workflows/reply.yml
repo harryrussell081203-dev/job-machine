@@ -42,6 +42,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
+          SMS_FROM: ${{ secrets.SMS_FROM }}
+          SMS_TO: ${{ secrets.SMS_TO }}
           TEST_MODE: ${{ vars.TEST_MODE }}
           REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
         run: python job_machine.py --replies

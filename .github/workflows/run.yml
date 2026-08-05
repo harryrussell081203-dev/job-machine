@@ -95,6 +95,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
+          SMS_FROM: ${{ secrets.SMS_FROM }}
+          SMS_TO: ${{ secrets.SMS_TO }}
           # repo variables (Settings > Secrets and variables > Actions > Variables).
           # TEST_MODE is unset by default, which means LIVE. Set it to 1 to send
           # everything to your own inbox instead.
