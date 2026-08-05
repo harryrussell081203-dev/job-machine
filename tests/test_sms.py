@@ -469,3 +469,76 @@ class TestAlertingHimAtSensibleHours(unittest.TestCase):
         self.assertEqual(job["contact_mobile"], "+447891169509")
         send.assert_called_once()
         self.assertIn("wants a call", send.call_args.args[1])
+
+
+class TestTheCaptchaNudge(unittest.TestCase):
+    """An application filled in completely and stopped by a bot check is the
+    most valuable record in the state file and the easiest to forget, because
+    it lives in a build artifact nobody opens."""
+
+    def state(self, n=2):
+        jobs = {}
+        for i in range(n):
+            jobs[str(i)] = {"status": "portal_awaiting_captcha",
+                            "company": f"Company {i}", "title": "Technician",
+                            "apply_url": f"https://apply.example/{i}",
+                            "score": 90 - i}
+        return {"jobs": jobs}
+
+    def test_it_finds_them(self):
+        self.assertEqual(len(sms.waiting_on_a_captcha(self.state(3))), 3)
+
+    def test_one_that_is_already_done_is_not_chased(self):
+        state = self.state(1)
+        state["jobs"]["0"]["captcha_done_at"] = jm.now()
+        self.assertEqual(sms.waiting_on_a_captcha(state), [])
+
+    def test_the_text_carries_a_link_he_can_press(self):
+        body = sms.captcha_nudge_text(sms.waiting_on_a_captcha(self.state(2)))
+        self.assertIn("https://apply.example/0", body)
+        self.assertIn("2 applications", body)
+        self.assertIn("captcha", body)
+        self.assertLessEqual(len(body), 320)
+
+    def test_one_waiting_reads_as_one(self):
+        body = sms.captcha_nudge_text(sms.waiting_on_a_captcha(self.state(1)))
+        self.assertIn("1 application is filled in", body)
+        self.assertNotIn("The rest", body)
+
+    def test_the_best_scoring_one_is_the_one_named(self):
+        state = self.state(3)
+        state["jobs"]["2"]["score"] = 99
+        body = sms.captcha_nudge_text(sms.waiting_on_a_captcha(state))
+        self.assertIn("https://apply.example/2", body)
+
+    def test_it_goes_once_a_day_and_not_again(self):
+        state = self.state(2)
+        with mock.patch.object(sms, "API_KEY", "k"), \
+             mock.patch.object(sms, "waking_hours", return_value=True), \
+             mock.patch.object(sms, "send") as send:
+            self.assertEqual(sms.run_captcha_nudge(state), 2)
+            self.assertEqual(sms.run_captcha_nudge(state), 0)
+        send.assert_called_once()
+
+    def test_asking_for_it_by_hand_overrides_the_daily_guard(self):
+        state = self.state(1)
+        state[sms.NUDGED] = jm.today()
+        with mock.patch.object(sms, "API_KEY", "k"), \
+             mock.patch.object(sms, "send") as send:
+            self.assertEqual(sms.run_captcha_nudge(state, force=True), 1)
+        send.assert_called_once()
+
+    def test_nothing_waiting_means_no_text(self):
+        with mock.patch.object(sms, "API_KEY", "k"), \
+             mock.patch.object(sms, "send") as send:
+            self.assertEqual(sms.run_captcha_nudge({"jobs": {}}), 0)
+        send.assert_not_called()
+
+    def test_a_failed_send_does_not_mark_the_day_as_done(self):
+        """Otherwise one bad evening silently costs a day's nudge."""
+        state = self.state(1)
+        with mock.patch.object(sms, "API_KEY", "k"), \
+             mock.patch.object(sms, "waking_hours", return_value=True), \
+             mock.patch.object(sms, "send", side_effect=RuntimeError("502")):
+            sms.run_captcha_nudge(state)
+        self.assertNotIn(sms.NUDGED, state)

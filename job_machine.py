@@ -2342,7 +2342,21 @@ def collect_summary(state, since):
                         if j.get("status") in ("sent", "replied")
                         or j.get("followup_sent_at")),
         "call_list": call_list_rows(state),
+        "awaiting_captcha": awaiting_captcha(state),
     }
+
+
+def awaiting_captcha(state):
+    """Applications filled in completely and stopped by a bot check.
+
+    The most valuable thing in the file and the easiest to lose track of, so
+    it goes in the digest as well as in the daily text - the text carries one
+    link, this carries all of them."""
+    try:
+        from tools import handoff
+        return handoff.pending(state)[:10]
+    except Exception:
+        return []
 
 
 def call_list_rows(state):
@@ -2454,6 +2468,16 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    if data.get("awaiting_captcha"):
+        lines += ["", "FILLED IN, WAITING ON A CAPTCHA", "-" * 30,
+                  "Every answer is worked out and saved. Open the link, do the "
+                  "puzzle, press submit. The handoff artifact on the latest "
+                  "portal run has a one-click prefill for each of these.", ""]
+        for job in data["awaiting_captcha"]:
+            lines.append(f"  {(job.get('title') or '?')[:40]:42} "
+                         f"{(job.get('company') or '?')[:24]}")
+            lines.append(f"      {job.get('apply_url') or ''}")
 
     if data.get("call_list"):
         lines += ["", "PEOPLE TO RING", "-" * 14,

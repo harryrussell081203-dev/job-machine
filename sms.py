@@ -352,6 +352,72 @@ def run_followups(state):
     return sent
 
 
+# ======================================================================
+# THE CAPTCHA NUDGE
+# ======================================================================
+# An application the agent filled in completely and could not submit is the
+# most valuable thing in the state file: minutes of work already done, one
+# puzzle away from being sent. It is also the easiest to forget, because it
+# lives in a build artifact nobody opens. So it gets a text.
+NUDGED = "captcha_nudged_on"
+
+
+def waiting_on_a_captcha(state):
+    """Applications filled in and blocked only by a bot check, best first."""
+    try:
+        from tools import handoff
+        return handoff.pending(state)
+    except Exception as e:
+        print(f"[sms] cannot read the handoff queue: {e}")
+        return []
+
+
+def captcha_nudge_text(jobs):
+    """One text. The count, the best one by name, and where the rest are.
+
+    Deliberately carries a real link rather than 'check the artifact': a link
+    he can press from the sofa is the difference between these being finished
+    tonight and being finished never."""
+    first = jobs[0]
+    company = (first.get("company") or "a company").strip()
+    role = (first.get("title") or "a role").strip()
+    link = first.get("apply_url") or ""
+    if len(jobs) == 1:
+        head = f"1 application is filled in and needs only the captcha:"
+    else:
+        head = (f"{len(jobs)} applications are filled in and need only the "
+                f"captcha. Top one:")
+    tail = ("" if len(jobs) == 1 else
+            " The rest are in tonight's email, with the prefill buttons.")
+    return f"{head} {role} at {company}. {link}{tail}"
+
+
+def nudged_today(state):
+    return state.get(NUDGED) == jm.today()
+
+
+def run_captcha_nudge(state, force=False):
+    """Text the waiting applications, once a day.
+
+    Once a day is the whole design. A nudge that arrives every run is an
+    alarm you learn to ignore, and these are not urgent to the minute - they
+    are urgent to the evening."""
+    jobs = waiting_on_a_captcha(state)
+    if not jobs:
+        print("[sms] nothing waiting on a captcha")
+        return 0
+    if nudged_today(state) and not force:
+        print(f"[sms] already nudged today about {len(jobs)} application(s)")
+        return 0
+    if not configured():
+        print("[sms] no httpSMS key, cannot nudge")
+        return 0
+    if alert_harry(captcha_nudge_text(jobs), urgent=force):
+        state[NUDGED] = jm.today()
+        return len(jobs)
+    return 0
+
+
 def call_list(state):
     """Everyone worth ringing, with the number, mobiles last.
 
@@ -375,6 +441,12 @@ def main(argv=None):
                          "key and the handset are wired up")
     ap.add_argument("--call-list", action="store_true",
                     help="print everyone worth ringing")
+    ap.add_argument("--captcha-nudge", action="store_true",
+                    help="text the applications that need only a captcha, "
+                         "once a day")
+    ap.add_argument("--force", action="store_true",
+                    help="with --captcha-nudge, send it even if today's has "
+                         "already gone")
     args = ap.parse_args(argv)
 
     if args.call_list:
@@ -387,6 +459,13 @@ def main(argv=None):
             kind = "mobile" if row["mobile"] else "direct line"
             print(f"  {row['name'][:34]:36} {row['number']}  ({kind})"
                   f"  {row['source']}")
+        return 0
+
+    if args.captcha_nudge:
+        state = jm.load()
+        count = run_captcha_nudge(state, force=args.force)
+        jm.save(state)
+        print(f"[sms] nudged about {count} application(s)")
         return 0
 
     if args.test:
