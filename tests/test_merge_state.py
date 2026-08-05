@@ -199,3 +199,47 @@ class TestKeysNobodyHasWrittenARuleFor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheAgencyApproachCounter(unittest.TestCase):
+    """Agencies, unlike everyone else, may be approached a few times - they
+    are paid to place people and a second call about a different role is
+    normal. That makes this a counter rather than a flag, and a counter that
+    merges wrong is worse than one that is lost: take either side's count
+    instead of the higher one and two concurrent runs each think an agency has
+    been written to once, and keep writing."""
+
+    def test_the_higher_count_wins(self):
+        out = ms.merge(
+            {"agency_registered": {"orion": {"count": 2, "at": "2026-08-04"}}},
+            {"agency_registered": {"orion": {"count": 1, "at": "2026-08-03"}}})
+        self.assertEqual(out["agency_registered"]["orion"]["count"], 2)
+
+    def test_the_first_approach_and_the_latest_are_both_kept(self):
+        out = ms.merge(
+            {"agency_registered": {"orion": {"first_at": "2026-08-01",
+                                             "at": "2026-08-04"}}},
+            {"agency_registered": {"orion": {"first_at": "2026-07-20",
+                                             "at": "2026-08-02"}}})
+        entry = out["agency_registered"]["orion"]
+        self.assertEqual(entry["first_at"], "2026-07-20")
+        self.assertEqual(entry["at"], "2026-08-04")
+
+    def test_every_address_used_is_remembered(self):
+        out = ms.merge(
+            {"agency_registered": {"orion": {"emails": ["a@orion.com"]}}},
+            {"agency_registered": {"orion": {"emails": ["b@orion.com"]}}})
+        self.assertEqual(sorted(out["agency_registered"]["orion"]["emails"]),
+                         ["a@orion.com", "b@orion.com"])
+
+    def test_both_sides_agencies_survive(self):
+        out = ms.merge({"agency_registered": {"orion": {"count": 1}}},
+                       {"agency_registered": {"cammach": {"count": 1}}})
+        self.assertEqual(set(out["agency_registered"]), {"orion", "cammach"})
+
+    def test_it_no_longer_warns_about_an_unknown_key(self):
+        self.assertIn("agency_registered", ms.KNOWN)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
