@@ -23,7 +23,7 @@ W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 # Summary per family. Same facts as the master CV, led differently.
 SUMMARIES = {
     "communications": (
-        "DV-cleared communications and electronics technician. Two years running "
+        "Communications and electronics technician, ex-Royal Navy. Two years running "
         "secure and non-secure communications, networks and cryptographic material "
         "in the Royal Navy aboard a frontline Type 23 frigate, then three years "
         "building, testing and fault-finding precision subsea electronics at "
@@ -32,7 +32,7 @@ SUMMARIES = {
         "environments where a fault has to be found and fixed with nobody else to "
         "call."),
     "electronics_technician": (
-        "DV-cleared engineering technician with three years building, testing and "
+        "Engineering technician with three years building, testing and "
         "fault-finding precision subsea electronics at Sonardyne to IPC-A-610 "
         "Class 3, including component-level diagnosis, repair and the test records "
         "to match. Before that, two years maintaining safety-critical "
@@ -46,7 +46,7 @@ SUMMARIES = {
         "first-year BEng (Hons) in Instrumentation, Measurement & Control, with "
         "three years of hands-on testing, fault-finding and maintenance of subsea "
         "acoustic positioning systems at Sonardyne to IPC-A-610 Class 3. "
-        "DV-cleared, ex-Royal Navy, and used to shift work, hard deadlines and "
+        "Ex-Royal Navy, and used to shift work, hard deadlines and "
         "safety-critical equipment."),
     "events_production": (
         "Technician with a rare mix for the events industry: military-grade "
