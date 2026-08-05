@@ -52,7 +52,7 @@ class TestTheLetter(unittest.TestCase):
     def test_every_fact_in_it_is_one_we_hold(self):
         for body in self.bodies():
             self.assertIn("07398 530978", body)
-            self.assertIn("DV clearance", body)
+            self.assertIsNone(jm.claims_clearance(body))
 
     def test_the_subject_line_says_who_is_writing(self):
         for group in ("veteran", "young", "local", "industry"):
