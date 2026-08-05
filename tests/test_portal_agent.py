@@ -1090,3 +1090,61 @@ class TestReachingTheFormInARealBrowser(unittest.TestCase):
         page.set_content("<h1>Sign in to continue</h1><p>Members only.</p>")
         _, fields = pa.reach_the_form(page)
         self.assertLess(len(pa.visible_fields(fields)), pa.MIN_FORM_FIELDS)
+
+
+class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
+    """When the agent could not reach a form it released the job to the email
+    route - correct, an emailed application beats none. But the email route
+    then found no address for most of them, so they carry BOTH no_email and
+    portal_fallback_at, and neither route will ever touch them again. 120 jobs
+    sat in that dead end because of a bug that no longer exists."""
+
+    def state(self, **job):
+        base = {"status": "no_email", "apply_url": "https://apply.example/1",
+                "portal_fallback_at": "2026-08-04T15:00:00+00:00",
+                "portal_reason": "only 1 form fields found, the application is "
+                                 "probably behind a login", "score": 85}
+        base.update(job)
+        return {"jobs": {"a": base}}
+
+    def test_a_misdiagnosed_job_goes_back_in_the_queue(self):
+        state = self.state()
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 1)
+        job = state["jobs"]["a"]
+        self.assertNotIn("portal_fallback_at", job)
+        self.assertEqual(job["status"], "scored")
+        self.assertIn(job, pa.portal_candidates(state))
+
+    def test_a_real_login_wall_stays_parked(self):
+        """Nothing about Reed wanting an account has changed."""
+        state = self.state(portal_reason="reed portal - needs an account or "
+                                         "runs a bot check")
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 0)
+        self.assertIn("portal_fallback_at", state["jobs"]["a"])
+
+    def test_a_bot_check_stays_parked(self):
+        state = self.state(portal_reason="bot check before the form loaded")
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 0)
+
+    def test_an_application_the_email_route_rescued_is_left_alone(self):
+        """A sent application is a sent application."""
+        for status in ("sent", "replied", "ready"):
+            with self.subTest(status=status):
+                state = self.state(status=status)
+                self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 0)
+
+    def test_a_job_with_nowhere_to_apply_is_not_reopened(self):
+        state = self.state(apply_url=None)
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=False), 0)
+
+    def test_a_dry_run_counts_and_changes_nothing(self):
+        state = self.state()
+        self.assertEqual(pa.reopen_fallbacks(state, dry_run=True), 1)
+        self.assertIn("portal_fallback_at", state["jobs"]["a"])
+
+    def test_it_records_why_so_the_change_is_auditable(self):
+        state = self.state()
+        pa.reopen_fallbacks(state, dry_run=False)
+        job = state["jobs"]["a"]
+        self.assertTrue(job.get("portal_reopened_at"))
+        self.assertIn("press Apply", job["portal_reason"])

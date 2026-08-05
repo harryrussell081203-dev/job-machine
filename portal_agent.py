@@ -1048,6 +1048,50 @@ def portal_candidates(state):
     return sorted(out, key=lambda j: -(j.get("score") or 0))
 
 
+# The reasons the agent used to give up that were WRONG - it had not pressed
+# Apply, could not see into an iframe, and believed a field about its own
+# visibility. Everything parked with one of these deserves a second look now
+# that those three are fixed; anything parked for a login, an account or a bot
+# check does not, because none of that has changed.
+MISDIAGNOSED = re.compile(
+    r"form fields found|behind a login|not an application form", re.I)
+
+
+def reopen_fallbacks(state, dry_run=True):
+    """Un-park the jobs the old bugs pushed onto the email route.
+
+    When the portal agent could not reach a form it released the job to the
+    email route, which is correct - an application by email beats no
+    application. But it then found no address for most of them, so they are
+    now 'no_email' AND carry portal_fallback_at, which means neither route
+    will ever touch them again. 120 jobs sit in that dead end, and they are
+    there because of a bug that no longer exists.
+
+    Only the misdiagnosed ones are re-opened. A job parked because Reed wants
+    an account is still parked: nothing about that has changed."""
+    reopened = []
+    for job in state["jobs"].values():
+        if not job.get("portal_fallback_at") or not job.get("apply_url"):
+            continue
+        if not MISDIAGNOSED.search(job.get("portal_reason") or ""):
+            continue
+        # Anything the email route actually rescued is left alone. A sent
+        # application is a sent application.
+        if job.get("status") not in ("no_email", "skipped"):
+            continue
+        reopened.append(job)
+        if dry_run:
+            continue
+        job.pop("portal_fallback_at", None)
+        job["portal_reopened_at"] = jm.now()
+        job["status"] = "scored"
+        job["portal_reason"] = ("re-opened: the agent gave up here before it "
+                                "could press Apply or read an iframe")
+    print(f"[portal] {len(reopened)} job(s) parked by the old bugs"
+          f"{' would be' if dry_run else ''} re-opened")
+    return len(reopened)
+
+
 def portal_sends_today(state):
     return state.setdefault("portal_counts", {}).get(jm.today(), 0)
 
@@ -1482,6 +1526,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     state = jm.load()
+    if args.reopen_fallbacks:
+        reopen_fallbacks(state, dry_run=not (args.run or args.submit))
+        jm.save(state)
+        if not args.run:
+            return 0
+
     if args.harvest:
         harvest_month(state)
         jm.save(state)
