@@ -163,6 +163,77 @@ class TestWrongCompanyRegression(unittest.TestCase):
         with self.clearbit([{"name": "EnerMech", "domain": "enermech.com"}]):
             self.assertEqual(jm.find_domain("EnerMech"), "enermech.com")
 
+    def test_a_one_word_company_name_needs_an_exact_match(self):
+        """'Sanctuary' the housing association was matched to Sanctuary
+        Clothing in California, and to a named individual there - an
+        application was one run away from landing in a stranger's inbox at an
+        unrelated company on another continent.
+
+        A single word does not identify a company. The whole-word subset rule
+        that catches Wood/Woodforest is satisfied by ANY firm containing that
+        word, so for a one-token name nothing but an exact match will do."""
+        for wanted, hit, domain in (
+                ("Sanctuary", "Sanctuary Clothing", "sanctuaryclothing.com"),
+                ("Encore", "Encore Capital Group", "encorecapital.com"),
+                ("Future", "Future Publishing Ltd", "futureplc.com")):
+            with self.subTest(wanted=wanted):
+                with self.clearbit([{"name": hit, "domain": domain}]):
+                    self.assertIsNone(jm.find_domain(wanted))
+
+    def test_a_one_word_name_still_matches_itself_exactly(self):
+        with self.clearbit([{"name": "Sanctuary", "domain": "sanctuary.co.uk"}]):
+            self.assertEqual(jm.find_domain("Sanctuary"), "sanctuary.co.uk")
+        # and the suffix-stripping that company_key already does still applies
+        with self.clearbit([{"name": "Hydrasun Ltd", "domain": "hydrasun.com"}]):
+            self.assertEqual(jm.find_domain("Hydrasun"), "hydrasun.com")
+
+    def test_the_domain_is_rechecked_at_the_moment_of_sending(self):
+        """State is merged across runs, so a record written before a matching
+        bug was fixed comes back carrying the bad domain. Clearing the two
+        Sanctuary rows by hand did not hold - the merge saw main's 'ready' as
+        further along than the corrected 'no_email' and restored it. A guard
+        at the point of sending does not care what the file says."""
+        for company, domain in (("Sanctuary", "sanctuaryclothing.com"),
+                                ("Wood", "woodforest.com"),
+                                ("Stork", "stork24.eu"),
+                                ("Encore", "encorecapital.com")):
+            with self.subTest(company=company):
+                self.assertFalse(jm.domain_matches_company(company, domain))
+
+    def test_a_company_at_its_own_domain_is_allowed(self):
+        for company, domain in (("Sanctuary", "sanctuary.co.uk"),
+                                ("Sanctuary", "sanctuarygroup.co.uk"),
+                                ("Hydrasun", "hydrasun.com"),
+                                ("EnerMech", "enermech.com")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
+    def test_multi_word_names_are_not_policed(self):
+        """They are specific enough to trust, and gating them would throw away
+        real matches - Northern Lighthouse Board really is at nlb.org.uk."""
+        for company, domain in (("Northern Lighthouse Board", "nlb.org.uk"),
+                                ("Baker Hughes", "bakerhughes.com"),
+                                ("Dron & Dickson", "dronanddickson.co.uk")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
+    def test_a_word_from_the_companys_own_name_is_allowed_in_its_domain(self):
+        """company_key strips 'recruitment', 'group' and the like, so 'Canmore
+        Recruitment' reduces to the single token 'canmore' - and the first
+        version of this guard refused canmorerecruitment.com, which is
+        obviously theirs and had already been written to successfully."""
+        for company, domain in (("Canmore Recruitment", "canmorerecruitment.com"),
+                                ("TMM Recruitment", "tmmrecruitment.com"),
+                                ("Future Group", "future-group.uk")):
+            with self.subTest(company=company):
+                self.assertTrue(jm.domain_matches_company(company, domain))
+
+    def test_a_missing_domain_does_not_block_a_send(self):
+        """Listings carrying an address found in the advert itself have no
+        company_domain at all, and those are the best addresses we get."""
+        self.assertTrue(jm.domain_matches_company("Sanctuary", None))
+        self.assertTrue(jm.domain_matches_company("", "anything.com"))
+
     def test_a_foreign_lookalike_domain_is_rejected(self):
         with self.clearbit([{"name": "HMH", "domain": "hmh.com.vn"}]):
             self.assertIsNone(jm.find_domain("HMH"))
@@ -551,14 +622,23 @@ class TestSending(unittest.TestCase):
             jm.run_sends(self.state)
         send.assert_not_called()
 
-    def test_compose_failure_is_recorded_not_sent(self):
+    def test_the_model_being_down_falls_back_to_the_plain_letter(self):
+        """This test used to assert the opposite - that a compose failure
+        meant no send - and that was wrong. Gemini's free tier has a daily
+        ceiling this project is expected to hit, and when it did, matched jobs
+        with real verified addresses were marked compose_failed and dropped. A
+        rate limit on a free API must not be a hard dependency for applying
+        for a job."""
         job = self.add()
         with mock.patch.object(jm, "TEST_MODE", False), \
              mock.patch.object(jm, "build_email", return_value=None), \
              mock.patch.object(jm, "send_email") as send:
             jm.run_sends(self.state)
-        send.assert_not_called()
-        self.assertEqual(job["status"], "compose_failed")
+        send.assert_called_once()
+        self.assertEqual(job["status"], "sent")
+        body = send.call_args[0][2]
+        self.assertIn("Sonardyne", body)
+        self.assertIn("DV cleared", body)
 
     def test_smtp_failure_leaves_company_free_for_another_go(self):
         job = self.add()
@@ -1855,3 +1935,61 @@ class TestScoringDoesNotEatTheWholeRun(unittest.TestCase):
                                return_value={i: (95, "good") for i in range(10)}) as sb:
             jm.score_jobs(state)
         self.assertEqual(sb.call_count, 3)
+
+
+class TestSendingWhenTheModelIsUnavailable(unittest.TestCase):
+    """Gemini's free tier has a daily ceiling, and this project is meant to
+    cost nothing to run - so hitting that ceiling is a normal Tuesday, not an
+    exception.
+
+    When it happened the whole send stage stopped: the composer returned
+    nothing, the listing was marked compose_failed, and a matched job with a
+    real verified address went nowhere. A rate limit on a free API had been
+    allowed to become a hard dependency for applying to a job."""
+
+    def job(self, **over):
+        j = {"title": "Workshop Technician", "company": "Oceaneering",
+             "location": "Aberdeen", "description": "", "source": "adzuna"}
+        j.update(over)
+        return j
+
+    def test_the_plain_letter_still_says_who_he_is_and_what_he_wants(self):
+        body = jm.plain_email(self.job())["body"]
+        self.assertIn("Sonardyne", body)
+        self.assertIn("Royal Navy", body)
+        self.assertIn("DV cleared", body)
+        self.assertIn("Workshop Technician", body)
+        self.assertIn("Oceaneering", body)
+
+    def test_it_greets_a_named_person_and_copes_without_one(self):
+        self.assertTrue(
+            jm.plain_email(self.job(contact_name="Jane"))["body"].startswith("Hi Jane,"))
+        self.assertTrue(jm.plain_email(self.job())["body"].startswith("Hi,"))
+
+    def test_a_covenant_employer_still_gets_the_guaranteed_interview_question(self):
+        """The single highest-value sentence in the whole system must not be
+        the thing that gets dropped when the model is down."""
+        with mock.patch.object(jm, "veteran_friendly", return_value=True):
+            body = jm.plain_email(self.job(company="Babcock International"))["body"]
+        self.assertIn("guaranteed interview", body.lower())
+
+    def test_an_ordinary_employer_is_not_asked_about_veteran_schemes(self):
+        with mock.patch.object(jm, "veteran_friendly", return_value=False):
+            body = jm.plain_email(self.job())["body"]
+        self.assertNotIn("guaranteed interview", body.lower())
+
+    def test_it_never_invents_anything_about_him(self):
+        body = jm.plain_email(self.job())["body"].lower()
+        for invented in ("passionate", "excited", "dream", "perfect fit",
+                         "hardship", "struggling", "desperate"):
+            with self.subTest(invented=invented):
+                self.assertNotIn(invented, body)
+
+    def test_a_missing_company_does_not_produce_a_ragged_subject(self):
+        content = jm.plain_email(self.job(company=""))
+        self.assertNotIn(" at  ", content["subject"])
+        self.assertNotIn(" at .", content["body"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -1210,6 +1210,52 @@ def name_tokens(name):
     return {t for t in company_key(name).split() if t}
 
 
+# Words a company can legitimately bolt onto its own name in a domain.
+# 'sanctuary' -> 'sanctuarygroup.co.uk' is the same company; 'sanctuary' ->
+# 'sanctuaryclothing.com' is a clothing brand in California.
+DOMAIN_SUFFIXES = ("group", "uk", "ltd", "limited", "plc", "co", "com",
+                   "global", "int", "international", "energy", "services",
+                   "eng", "engineering", "tech", "technologies", "online")
+
+
+def domain_matches_company(company, domain):
+    """Could this domain plausibly belong to this company?
+
+    A last check before anything is sent, because the state file is merged
+    across runs and a record written before a matching bug was fixed comes
+    back with the bad domain still on it. Clearing those by hand did not hold:
+    the merge saw main's 'ready' as further along than my corrected
+    'no_email' and restored it. A guard at the point of sending does not care
+    what the file says.
+
+    Only single-word company names are policed, because that is where the
+    ambiguity is - 'Sanctuary' matched Sanctuary Clothing, 'Wood' matched
+    Woodforest, 'Stork' matched stork24.eu. A multi-word name is specific
+    enough to trust, and gating it would throw away real matches like
+    Northern Lighthouse Board at nlb.org.uk."""
+    if not company or not domain:
+        return True
+    tokens = name_tokens(company)
+    if len(tokens) != 1:
+        return True
+    token = next(iter(tokens))
+    root = re.split(r"[.]", domain.lower().strip())[0]
+    if root == token:
+        return True
+    if not root.startswith(token):
+        return False
+    rest = root[len(token):].strip("-_")
+    if rest in DOMAIN_SUFFIXES:
+        return True
+    # Or a word from the company's own name. company_key strips 'recruitment',
+    # 'group', 'solutions' and the like, so 'Canmore Recruitment' reduces to
+    # the single token 'canmore' - and canmorerecruitment.com is obviously
+    # theirs. Checking the remainder against the words actually in the name
+    # keeps that, while still refusing 'clothing' for Sanctuary.
+    own_words = set(re.sub(r"[^a-z0-9 ]", " ", (company or "").lower()).split())
+    return rest in own_words
+
+
 def find_domain(company):
     """Clearbit autocomplete: free, no key.
 
@@ -1235,9 +1281,20 @@ def find_domain(company):
             hit_key = company_key(hit.get("name", ""))
             if hit_key == wanted:
                 return domain
+            # A one-word company name is not enough to identify anybody. The
+            # subset rule below is satisfied by ANY firm containing that word,
+            # which matched the housing association 'Sanctuary' to Sanctuary
+            # Clothing in California - and to a named individual there, so an
+            # application was one run away from landing in a stranger's inbox
+            # at an unrelated company on another continent. Same family of
+            # mistake as Wood and Woodforest National Bank, through a
+            # different door. For a single-token name, nothing but an exact
+            # match will do.
+            if len(wanted_tokens) < 2:
+                continue
             # every word Harry's listing gave us must be a whole word in the
             # match - 'wood' must not match 'woodforest'
-            if wanted_tokens and wanted_tokens <= name_tokens(hit.get("name", "")):
+            if wanted_tokens <= name_tokens(hit.get("name", "")):
                 return domain
         print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
@@ -1477,6 +1534,44 @@ def email_problems(subject, core, job):
     return problems
 
 
+def plain_email(job):
+    """A hand-written application, with no model in the loop.
+
+    Gemini's free tier has a daily ceiling and this project is meant to cost
+    nothing to run, so hitting that ceiling is a normal Tuesday rather than an
+    exception. When it happened, every send stopped: the composer returned
+    nothing, the listing was marked compose_failed, and a matched job with a
+    real verified address went nowhere - because a rate limit on a free API
+    had been allowed to become a hard dependency for applying to a job.
+
+    This is deliberately plainer than the composed version. It is not trying
+    to beat it; it is trying to beat not sending. The applied-note already
+    works this way for the same reason."""
+    greeting = f"Hi {job['contact_name']}," if job.get("contact_name") else "Hi,"
+    title = (job.get("title") or "technician").strip()
+    company = (job.get("company") or "").strip()
+    where = f" at {company}" if company else ""
+    ask = ("Do you run a guaranteed interview scheme for veterans who meet the "
+           "criteria? If so I would like to be considered under it."
+           if veteran_friendly(job) else
+           "Would it be worth a short call?")
+    body = (
+        f"{greeting}\n\n"
+        f"I am applying for the {title} role{where}.\n\n"
+        f"1. Three years at Sonardyne building, testing and fault-finding "
+        f"subsea acoustic electronics to IPC-A-610 Class 3.\n"
+        f"2. Two years Royal Navy Communications and Information Specialist "
+        f"on a Type 23 frigate. DV cleared.\n"
+        f"3. SCQF Level 7 engineering apprenticeship, available immediately, "
+        f"and happy with rotational or offshore work.\n\n"
+        f"{ask}\n\n"
+        f"Harry\n{SIGNOFF}"
+    )
+    subject = f"{title} - application" if not company else \
+        f"{title} at {company} - application"
+    return {"subject": subject[:120], "body": body, "family": "plain"}
+
+
 def build_email(job, attempts=3):
     family = ("speculative" if job.get("source") == "speculative"
               else pick_family(job["title"], job.get("description", ""),
@@ -1626,8 +1721,28 @@ def run_sends(state, dry_run=False, already_sent=0):
         if not TEST_MODE and already_contacted(state, job):
             job.update({"status": "skipped", "skip_reason": "company already contacted"})
             continue
+        # Last line of defence against a misdirected application. Records are
+        # merged across runs, so one written before a matching bug was fixed
+        # comes back carrying the bad domain - two applications for Sanctuary
+        # the housing association were queued to a named person at Sanctuary
+        # Clothing in California.
+        if not domain_matches_company(job.get("company"),
+                                      job.get("company_domain")):
+            job.update({"status": "no_email", "contact_email": None,
+                        "contact_name": None, "company_domain": None,
+                        "skip_reason": "domain does not belong to this company"})
+            print(f"[send] REFUSED {job.get('company')} -> "
+                  f"{job.get('company_domain')}: not the same company")
+            continue
 
         content = build_email(job)
+        if not content:
+            # A rate limit on a free API is not a reason not to apply for a
+            # job. Fall back to the hand-written letter rather than dropping a
+            # matched listing that already has a real, verified address.
+            content = plain_email(job)
+            print(f"[compose] model unavailable, sending the plain letter for "
+                  f"{job['title']} @ {job['company']}")
         if not content:
             job["status"] = "compose_failed"
             print(f"[compose] gave up on {job['title']} @ {job['company']}")
