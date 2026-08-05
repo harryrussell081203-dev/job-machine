@@ -23,14 +23,28 @@ import sys
 
 # Later in this list beats earlier when the two sides disagree about a job.
 PROGRESS = ["new", "scored", "skipped", "no_email", "compose_failed",
-            "send_failed", "portal_manual", "portal_review", "portal_ready",
+            "send_failed", "portal_failed", "portal_manual", "portal_review",
+            "portal_awaiting_captcha", "portal_ready",
             "ready", "portal_submitted", "test_sent", "spec_sent", "sent",
             "replied"]
+
+# Anything the code can set that is missing from PROGRESS ranks 0 - below
+# 'new' - and loses every merge, so the work that produced it is thrown away
+# on the way back to main. That is not hypothetical:
+# 'portal_awaiting_captcha' was missing, and it is the status for an
+# application the agent has FILLED IN COMPLETELY and banked every answer for,
+# blocked only by a bot check. Five of them were built and discarded in a
+# single run, and the run before, and the one before that. The state file
+# still shows 121 jobs carrying portal_attempted_at whose status is 'no_email'
+# or 'skipped' - the portal work happened and the merge deleted it.
+#
+# tests/test_merge_state.py greps every status the code can set and fails if
+# one is not listed above, so the next new status cannot repeat this quietly.
 
 
 def rank(job):
     status = job.get("status", "new")
-    return PROGRESS.index(status) if status in PROGRESS else 0
+    return PROGRESS.index(status) if status in PROGRESS else -1
 
 
 REOPENING_FIELDS = ("rescored_at", "portal_fallback_at")
@@ -56,6 +70,10 @@ def reopened(job):
     return max(str(job.get(field) or "") for field in REOPENING_FIELDS)
 
 
+def known(job):
+    return job.get("status", "new") in PROGRESS
+
+
 def pick(a, b):
     """The more advanced record, breaking ties on how much we know.
 
@@ -67,6 +85,16 @@ def pick(a, b):
     A deliberate step backwards has to beat an accidental step forwards."""
     if reopened(a) != reopened(b):
         return a if reopened(a) > reopened(b) else b
+    # A status this file has never heard of is not evidence that the record is
+    # behind - it is evidence that somebody added a stage and did not come
+    # here. Keeping the fuller record is the only choice that cannot silently
+    # bin an application that was actually filled in.
+    if known(a) != known(b):
+        print(f"merge: unknown status "
+              f"{(a if not known(a) else b).get('status')!r}, keeping the "
+              f"fuller record rather than assuming it is behind",
+              file=sys.stderr)
+        return a if len(a) >= len(b) else b
     if rank(a) != rank(b):
         return a if rank(a) > rank(b) else b
     return a if len(a) >= len(b) else b

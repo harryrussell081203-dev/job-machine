@@ -295,7 +295,7 @@ applies, to one job only.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `PORTAL_SUBMIT` | `0` | `0` fills and screenshots but stops short of submitting. Set to `1` to actually apply. |
+| `PORTAL_SUBMIT` | `1` (live) | Applications are submitted. Set to `0` to go back to filling and screenshotting only. It defaulted to `0` for the project's first months, which is why 121 applications were opened and none were ever sent. |
 | `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
 | `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
 | `PORTAL_DAILY_CAP` | `25` | Applications per day |
