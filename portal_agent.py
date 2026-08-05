@@ -58,6 +58,10 @@ PORTAL_SUBMIT = jm.env_flag("PORTAL_SUBMIT", True)
 PORTAL_PER_RUN_CAP = jm.env_int("PORTAL_PER_RUN_CAP", 40)
 PORTAL_DAILY_CAP = jm.env_int("PORTAL_DAILY_CAP", 150)
 PORTAL_SCORE_THRESHOLD = jm.env_int("PORTAL_SCORE_THRESHOLD", jm.SCORE_THRESHOLD)
+# How many attempts may fail to reach a form before the run gives up. At about
+# two minutes an application, grinding through thirty of them to learn what
+# the first six already said is an hour spent proving nothing.
+CIRCUIT_AFTER = jm.env_int("PORTAL_CIRCUIT_AFTER", 6)
 PAGE_TIMEOUT_MS = 45000
 
 ANSWERS_PATH = os.path.join(jm.ROOT, "data", "answers.json")
@@ -1125,7 +1129,18 @@ def run(state, submit=False, limit=None, headless=True):
     print(f"[portal] {len(todo)} candidate(s), budget={budget}, "
           f"submit={'ON' if submit else 'OFF'}")
 
-    done = attempted = 0
+    # STOP EARLY IF IT IS NOT WORKING.
+    #
+    # This run drives a real browser at roughly two minutes an application. If
+    # the first handful all come back unreachable, the next thirty will too -
+    # something has changed on the far side, or a fix did not do what it was
+    # meant to - and grinding through the rest proves nothing that the first
+    # few did not already prove. It costs an hour to learn the same thing.
+    #
+    # So: after CIRCUIT_AFTER attempts, if not one of them produced a filled
+    # form, stop and say so. A run that stops early and reports is worth more
+    # than a run that completes and buries the answer.
+    done = attempted = filled_any = 0
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(
@@ -1145,6 +1160,12 @@ def run(state, submit=False, limit=None, headless=True):
                 break
             if portal_sends_today(state) >= PORTAL_DAILY_CAP:
                 print(f"[portal] daily cap ({PORTAL_DAILY_CAP}) reached")
+                break
+            if attempted >= CIRCUIT_AFTER and not filled_any:
+                print(f"[portal] STOPPING: {attempted} attempts, not one form "
+                      f"filled. Something is wrong on the far side or with a "
+                      f"fix - look at the screenshots before running the rest")
+                job.setdefault("portal_reason", "")
                 break
             apply_url, ats = best_apply_url(page, job)
             job.update({"apply_url": apply_url, "ats": ats,
@@ -1178,6 +1199,11 @@ def run(state, submit=False, limit=None, headless=True):
                 print(f"[portal] FAILED {job['company']}: {e}")
                 jm.save(state)
                 continue
+            # Reaching a form at all is what the circuit breaker measures -
+            # submitted, banked behind a captcha, or held for a question only
+            # Harry can answer are all evidence the agent got there.
+            if job.get("portal_filled") or job.get("captcha_answers"):
+                filled_any += 1
             if submitted:
                 record_portal(state)
                 done += 1
@@ -1188,7 +1214,8 @@ def run(state, submit=False, limit=None, headless=True):
             time.sleep(5)
         context.close()
         browser.close()
-    print(f"[portal] {done} application(s) submitted this run")
+    print(f"[portal] {attempted} attempted, {filled_any} form(s) reached, "
+          f"{done} application(s) submitted this run")
 
 
 STATUS_LABELS = {
@@ -1509,6 +1536,9 @@ def harvest_month(state):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Fill in real application portals")
+    parser.add_argument("--reopen-fallbacks", action="store_true",
+                        help="put back in the queue the jobs the old bugs "
+                             "parked on the email route")
     parser.add_argument("--harvest", action="store_true",
                         help="pull and score a month of listings")
     parser.add_argument("--run", action="store_true", help="work through the queue")

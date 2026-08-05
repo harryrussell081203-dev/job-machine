@@ -1148,3 +1148,25 @@ class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
         job = state["jobs"]["a"]
         self.assertTrue(job.get("portal_reopened_at"))
         self.assertIn("press Apply", job["portal_reason"])
+
+
+class TestItStopsWhenItIsNotWorking(unittest.TestCase):
+    """At two minutes an application, grinding through thirty attempts to
+    learn what the first six already said is an hour spent proving nothing."""
+
+    def test_the_breaker_trips_early_enough_to_matter(self):
+        self.assertLessEqual(pa.CIRCUIT_AFTER, 10)
+        self.assertGreaterEqual(pa.CIRCUIT_AFTER, 3)
+
+    def test_reaching_a_form_counts_however_the_attempt_ended(self):
+        """Submitted, banked behind a captcha, or held for a question only
+        Harry can answer are all evidence it got there."""
+        source = open(os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "portal_agent.py")).read()
+        self.assertIn('job.get("portal_filled") or job.get("captcha_answers")',
+                      source)
+
+    def test_the_run_reports_what_it_reached_not_only_what_it_sent(self):
+        source = open(os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "portal_agent.py")).read()
+        self.assertIn("form(s) reached", source)
