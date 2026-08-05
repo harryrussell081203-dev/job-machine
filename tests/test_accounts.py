@@ -48,8 +48,11 @@ class TestThePasswordIsNeverWrittenDown(unittest.TestCase):
         self.assertTrue(re.search(r"\d", password))
         self.assertTrue(re.search(r"[^\w]", password))
 
-    def test_no_salt_means_no_password_rather_than_a_weak_one(self):
-        with mock.patch.object(accounts, "SALT", ""):
+    def test_with_nothing_at_all_it_refuses_rather_than_inventing_one(self):
+        """A weak password nobody chose is worse than no account."""
+        with mock.patch.object(accounts, "SALT", ""), \
+             mock.patch.object(accounts, "SHARED", ""), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", ""):
             self.assertFalse(accounts.configured())
             with self.assertRaises(RuntimeError):
                 accounts.password_for("example.com")
@@ -107,10 +110,12 @@ class TestTheSharedPassword(unittest.TestCase):
 
     def test_either_one_is_enough_to_be_configured(self):
         with mock.patch.object(accounts, "SALT", ""), \
-             mock.patch.object(accounts, "SHARED", "password123"):
+             mock.patch.object(accounts, "SHARED", "password123"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", ""):
             self.assertTrue(accounts.configured())
         with mock.patch.object(accounts, "SALT", ""), \
-             mock.patch.object(accounts, "SHARED", ""):
+             mock.patch.object(accounts, "SHARED", ""), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", ""):
             self.assertFalse(accounts.configured())
 
     def test_it_is_still_never_committed(self):
@@ -123,6 +128,68 @@ class TestTheSharedPassword(unittest.TestCase):
         code = "\n".join(line for line in source.splitlines()
                          if not line.strip().startswith("#"))
         self.assertIsNone(re.search(r'SHARED\s*=\s*[\'"]', code))
+
+
+class TestItWorksWithNothingConfigured(unittest.TestCase):
+    """Harry asked for one password everywhere and did not want to go and set
+    a secret to get it. The Gmail app password is already on every runner, so
+    a single portal password is derived from it when he has set neither of
+    the two he could set. He never has to touch anything, and the password is
+    still knowable to him because it is emailed on every account made."""
+
+    def setUp(self):
+        for name, value in (("SALT", ""), ("SHARED", "")):
+            patch = mock.patch.object(accounts, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+        patch = mock.patch.object(jm, "GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_it_is_configured_with_no_secret_set_by_hand(self):
+        self.assertTrue(accounts.configured())
+        self.assertTrue(accounts.password_for("anything.com"))
+
+    def test_it_is_one_password_across_every_portal(self):
+        """The whole point of what he asked for."""
+        self.assertEqual(accounts.password_for("myworkdayjobs.com"),
+                         accounts.password_for("taleo.net"))
+
+    def test_it_is_the_same_one_tomorrow(self):
+        """An account he cannot sign back into is not an account."""
+        first = accounts.password_for("x.com")
+        self.assertEqual(first, accounts.password_for("x.com"))
+        self.assertEqual(first, accounts.shared_password())
+
+    def test_it_clears_the_rules_portals_actually_enforce(self):
+        password = accounts.password_for("x.com")
+        self.assertGreaterEqual(len(password), 12)
+        self.assertTrue(re.search(r"[a-z]", password))
+        self.assertTrue(re.search(r"[A-Z]", password))
+        self.assertTrue(re.search(r"\d", password))
+        self.assertTrue(re.search(r"[^\w]", password))
+
+    def test_it_does_not_hand_out_the_gmail_password(self):
+        """It is derived from it, one way, and never echoes it."""
+        password = accounts.password_for("x.com")
+        self.assertNotIn("abcd", password)
+        self.assertNotIn(jm.GMAIL_APP_PASSWORD.replace(" ", ""), password)
+
+    def test_a_secret_he_does_set_still_wins(self):
+        """This is the floor, not the ceiling."""
+        with mock.patch.object(accounts, "SHARED", "password123"):
+            self.assertEqual(accounts.password_for("x.com"), "Password123!")
+        with mock.patch.object(accounts, "SALT", "a-salt"):
+            self.assertNotEqual(accounts.password_for("a.com"),
+                                accounts.password_for("b.com"))
+
+    def test_he_is_still_told_what_it_is(self):
+        """Derived and unwritten is only acceptable because it is emailed."""
+        with mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com"), \
+             mock.patch.object(jm, "send_email") as send:
+            self.assertTrue(accounts.tell_harry("acme.com"))
+        self.assertIn(accounts.password_for("acme.com"),
+                      send.call_args.args[2])
 
 
 class TestHeIsToldHowToGetIn(unittest.TestCase):

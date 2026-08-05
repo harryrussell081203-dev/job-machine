@@ -66,6 +66,18 @@ SALT = jm.env_str("PORTAL_PASSWORD_SALT")
 # common reason a signup fails is a password rule, and an account that will
 # not be created is worth nothing however memorable the password was.
 SHARED = jm.env_str("PORTAL_PASSWORD")
+# And if he sets neither, this still works, with nothing for him to configure.
+#
+# The Gmail app password is already a secret and already on every runner, so
+# one portal password can be derived from it: the same one everywhere, stable
+# across runs, never written into the repository, and knowable to Harry
+# because it is emailed to him. Setting PORTAL_PASSWORD overrides it - this is
+# the floor, not the ceiling.
+#
+# The one wrinkle: rotate the Gmail app password and this changes with it.
+# Every account's login has already been emailed by then, so the old ones are
+# recoverable from his inbox, and new accounts simply use the new one.
+FALLBACK_SEED = "job-machine portal login"
 
 # The wall. Any of these, and there is no form to fill until there is a login.
 LOGIN_WALL = re.compile(
@@ -82,7 +94,20 @@ CONFIRM_FIELD = re.compile(r"confirm|repeat|re-?enter|again|verify", re.I)
 
 
 def configured():
-    return bool(SALT or SHARED)
+    """Something to build a password from. In practice always true on a
+    runner, because the Gmail app password is always there."""
+    return bool(SALT or SHARED or jm.GMAIL_APP_PASSWORD)
+
+
+def shared_password():
+    """The one password used everywhere, however it is arrived at."""
+    if SHARED:
+        return acceptable(SHARED)
+    if jm.GMAIL_APP_PASSWORD:
+        digest = hmac.new(jm.GMAIL_APP_PASSWORD.encode(),
+                          FALLBACK_SEED.encode(), hashlib.sha256).digest()
+        return acceptable(f"Hr{_b58(digest)[:10]}")
+    return None
 
 
 def acceptable(password):
@@ -118,14 +143,15 @@ def password_for(domain):
     data/state.json is committed on every run."""
     if SHARED:
         return acceptable(SHARED)
-    if not SALT:
-        raise RuntimeError(
-            "neither PORTAL_PASSWORD nor PORTAL_PASSWORD_SALT is set")
-    digest = hmac.new(SALT.encode(), (domain or "").lower().encode(),
-                      hashlib.sha256).digest()
-    # Portals demand upper, lower, digit and symbol, and reject anything long.
-    body = _b58(digest)[:14]
-    return f"Hr{body}9!"
+    if SALT:
+        digest = hmac.new(SALT.encode(), (domain or "").lower().encode(),
+                          hashlib.sha256).digest()
+        return f"Hr{_b58(digest)[:14]}9!"
+    fallback = shared_password()
+    if not fallback:
+        raise RuntimeError("no PORTAL_PASSWORD, no PORTAL_PASSWORD_SALT and "
+                           "no GMAIL_APP_PASSWORD - nothing to build one from")
+    return fallback
 
 
 _ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -365,7 +391,7 @@ def sign_up(page, state, job, answers):
     import portal_agent as pa
 
     if not configured():
-        print("[account] PORTAL_PASSWORD_SALT is not set, cannot create one")
+        print("[account] nothing to build a password from, cannot create one")
         return False
     domain = domain_of(page.url)
 
