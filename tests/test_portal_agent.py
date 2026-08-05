@@ -1170,3 +1170,109 @@ class TestItStopsWhenItIsNotWorking(unittest.TestCase):
         source = open(os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "portal_agent.py")).read()
         self.assertIn("form(s) reached", source)
+
+
+class TestKnowingWhereItIsInAnApplication(unittest.TestCase):
+    """No browser needed for the wording rules."""
+
+    def test_it_knows_the_far_side_said_it_is_done(self):
+        for said in ("Thank you for applying",
+                     "Your application has been received",
+                     "Application submitted",
+                     "We have received your application",
+                     "Thanks for applying!"):
+            with self.subTest(said=said):
+                self.assertTrue(pa.FINISHED.search(said))
+
+    def test_it_does_not_mistake_the_advert_for_a_confirmation(self):
+        for said in ("Apply for this job", "How to apply",
+                     "Applications close on Friday",
+                     "We receive many applications"):
+            with self.subTest(said=said):
+                self.assertIsNone(pa.FINISHED.search(said))
+
+    def test_submit_is_not_treated_as_a_next_button(self):
+        for label in ("Submit application", "Submit", "Submit my application"):
+            with self.subTest(label=label):
+                self.assertTrue(pa.SUBMIT_ONLY.search(label))
+
+    def test_a_real_next_button_is_not_refused(self):
+        for label in ("Save and continue", "Continue", "Next step"):
+            with self.subTest(label=label):
+                self.assertIsNone(pa.SUBMIT_ONLY.search(label))
+
+    def test_the_signature_changes_when_the_page_does(self):
+        class FakeSurface:
+            url = "https://x/step1"
+        one = pa.page_signature(FakeSurface(), [{"name": "first_name"}])
+        two = pa.page_signature(FakeSurface(), [{"name": "clearance"},
+                                                {"name": "notice"}])
+        self.assertNotEqual(one, two)
+
+    def test_the_signature_is_stable_for_the_same_page(self):
+        class FakeSurface:
+            url = "https://x/step1"
+        fields = [{"name": "first_name"}, {"name": "email"}]
+        self.assertEqual(pa.page_signature(FakeSurface(), fields),
+                         pa.page_signature(FakeSurface(), list(reversed(fields))))
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestAMultiPageApplicationForReal(unittest.TestCase):
+    """An application is a sequence of forms, not a form. Filling the first
+    page and stopping is not applying - it is opening the envelope."""
+
+    WIZARD = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "fixtures", "wizard_page1.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def apply(self, submit=True):
+        page = self.browser.new_page()
+        self.addCleanup(page.close)
+        job = dict(JOB, apply_url="file://" + self.WIZARD)
+        grounded = {"answer": "Three years at Sonardyne on subsea acoustics.",
+                    "fact_used": "Sonardyne 2023-2026"}
+        with mock.patch.object(jm, "gemini_json", return_value=grounded), \
+             mock.patch.object(jm, "cv_for", return_value=self.WIZARD):
+            result = pa.apply_to_job(page, job, pa.load_answers(), submit)
+        return result, job, page
+
+    def test_it_works_through_both_pages_and_reaches_the_confirmation(self):
+        result, job, page = self.apply()
+        self.assertTrue(result, job.get("portal_reason"))
+        self.assertEqual(job["status"], "portal_submitted")
+        self.assertGreaterEqual(job["portal_pages"], 2)
+        self.assertIn("Thank you for applying", page.inner_text("body"))
+
+    def test_it_did_not_press_the_unrelated_submit_on_page_one(self):
+        """That button files a contact-form enquiry and loses the
+        application. Reaching the confirmation is the proof it was refused."""
+        _, job, page = self.apply()
+        self.assertNotIn("nowhere", page.url)
+        self.assertEqual(job["status"], "portal_submitted")
+
+    def test_it_filled_fields_on_both_pages_not_just_the_first(self):
+        _, job, _ = self.apply()
+        filled = " ".join(str(f.get("field")) for f in job["portal_filled"])
+        self.assertIn("First name", filled)
+        self.assertIn("clearance", filled.lower())
+
+    def test_with_submit_off_it_still_pages_through_and_stops_at_the_end(self):
+        result, job, _ = self.apply(submit=False)
+        self.assertFalse(result)
+        self.assertEqual(job["status"], "portal_ready")
+        self.assertGreaterEqual(job["portal_pages"], 2)

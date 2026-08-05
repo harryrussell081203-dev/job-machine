@@ -617,6 +617,73 @@ def apply_plan(page, plan):
 SUBMIT_TEXTS = ("submit application", "submit", "send application", "apply now",
                 "finish", "send")
 
+# An application is not a form, it is a sequence of them. Greenhouse asks for
+# details then questions then monitoring; Workday runs to six pages. Filling
+# the first one and stopping is not applying for anything - it is opening the
+# envelope. These are what the button between the pages is called.
+NEXT_TEXTS = ("save and continue", "save & continue", "next step", "continue",
+              "next", "proceed", "save and next", "review")
+# What the far side says when it is over. Reaching one of these is the only
+# thing that counts as an application being sent.
+FINISHED = re.compile(
+    r"thank you for (applying|your (application|interest))|"
+    r"application (has been )?(received|submitted|complete)|"
+    r"we have received your application|successfully (applied|submitted)|"
+    r"your application has been (sent|received|submitted)|"
+    r"thanks for applying", re.I)
+MAX_PAGES = jm.env_int("PORTAL_MAX_PAGES", 8)
+
+
+def looks_finished(page):
+    """Did the far side say the application is in?"""
+    try:
+        return bool(FINISHED.search(page.inner_text("body")[:6000]))
+    except Exception:
+        return False
+
+
+def page_signature(surface, fields):
+    """Enough to tell whether pressing Next actually moved anything.
+
+    A form that fails validation re-renders itself and looks exactly like
+    progress from the outside. Without this the agent would press Next at the
+    same page eight times and report that it had filled in eight pages."""
+    try:
+        url = surface.url
+    except Exception:
+        url = ""
+    names = "|".join(sorted((f.get("name") or f.get("label") or "")[:20]
+                            for f in fields))
+    return f"{url}::{len(fields)}::{names[:400]}"
+
+
+def click_next(surface):
+    """Move to the next page of the application, if there is one.
+
+    Tried before submit, always: on a page carrying both, Next is the correct
+    button and Submit is either disabled or a trap that files a half-finished
+    application."""
+    for text in NEXT_TEXTS:
+        for role in ("button", "link"):
+            try:
+                control = surface.get_by_role(role, name=text, exact=False).first
+                if not control.is_visible() or not control.is_enabled():
+                    continue
+                label = (control.inner_text() or "").strip()
+                if SUBMIT_ONLY.search(label):
+                    continue
+                control.click(timeout=PAGE_TIMEOUT_MS)
+                settle(surface)
+                return label or text
+            except Exception:
+                continue
+    return None
+
+
+# 'Submit' is the end of the application, not the next page of it, even when
+# the word appears inside a longer label.
+SUBMIT_ONLY = re.compile(r"submit (application|now|my)|^submit$", re.I)
+
 
 def click_submit(surface):
     """Press submit on whichever surface holds the form.
@@ -807,64 +874,149 @@ def apply_to_job(page, job, answers, submit):
                     "portal_screenshot": shot(page, job, "captcha")})
         return False
 
-    surface, fields = reach_the_form(page)
-    if len(visible_fields(fields)) < MIN_FORM_FIELDS:
-        job.update({"status": "portal_manual",
-                    "portal_reason": f"only {len(fields)} form fields found "
-                                     f"after pressing apply and checking the "
-                                     f"frames, so it needs a login or a person",
-                    "portal_screenshot": shot(page, job, "noform")})
-        return False
-    if surface is not page:
-        job["portal_form_in_iframe"] = True
+    filled_all, flags_all, pages = [], [], 0
+    seen = set()
 
-    # On a recognised ATS every form is an application form. On an employer's
-    # own site it might be a contact form, a search box or a newsletter signup,
-    # and filling one of those in with a CV would be worse than doing nothing.
-    if not classify_url(job["apply_url"])[1] and not is_application_form(fields):
-        job.update({"status": "portal_manual",
-                    "portal_reason": "a form, but not an application form - "
-                                     "no CV upload and no name-and-email pair",
-                    "portal_screenshot": shot(page, job, "notanapplication")})
-        return False
+    while pages < MAX_PAGES:
+        if looks_finished(page):
+            job.update({"status": "portal_submitted",
+                        "portal_submitted_at": jm.now(),
+                        "portal_pages": pages,
+                        "portal_filled": filled_all,
+                        "portal_reason": f"submitted after {pages} page(s)",
+                        "portal_screenshot": shot(page, job, "submitted")})
+            return True
 
-    plan, flags = plan_answers(fields, job, answers)
-    filled, failed = apply_plan(surface, plan)
-    flags += failed
-    job.update({"portal_fields_seen": len(fields), "portal_filled": filled,
-                "portal_flags": flags,
-                "portal_screenshot": shot(page, job, "filled")})
+        surface, fields = reach_the_form(page)
+        showing = visible_fields(fields)
 
-    # Fill first, then check for a bot check: a filled form is worth banking
-    # even when a CAPTCHA stops us submitting it.
-    kind = captcha_kind(page)
-    if kind == "challenge":
-        bank_for_captcha(page, job, plan, flags)
-        return False
-    if kind == "scored":
-        # An invisible check judges the session server-side rather than asking
-        # anything. Recorded, because if submissions ever start bouncing this
-        # is the first place to look.
-        job["portal_bot_check"] = "invisible, submitted anyway"
+        if len(showing) < MIN_FORM_FIELDS:
+            # A review page at the end of a wizard has no inputs at all - just
+            # a summary and a submit. That is not a dead end, it is the last
+            # step, so try to finish before giving up on it.
+            if pages and submit and click_submit(surface):
+                page.wait_for_timeout(3000)
+                pages += 1
+                continue
+            if pages:
+                job.update({"status": "portal_review",
+                            "portal_pages": pages,
+                            "portal_filled": filled_all,
+                            "portal_reason": f"page {pages + 1} has no fields "
+                                             f"and no way on - needs you",
+                            "portal_screenshot": shot(page, job, "stuck")})
+                return False
+            job.update({"status": "portal_manual",
+                        "portal_reason": f"only {len(showing)} form fields found "
+                                         f"after pressing apply and checking the "
+                                         f"frames, so it needs a login or a person",
+                        "portal_screenshot": shot(page, job, "noform")})
+            return False
 
-    if flags:
-        job.update({"status": "portal_review",
-                    "portal_reason": f"{len(flags)} question(s) need Harry"})
-        return False
-    if not submit:
-        job.update({"status": "portal_ready",
-                    "portal_reason": "filled and checked, waiting for PORTAL_SUBMIT"})
-        return False
+        if surface is not page:
+            job["portal_form_in_iframe"] = True
 
-    if not click_submit(surface):
-        job.update({"status": "portal_review",
-                    "portal_reason": "could not find the submit button"})
-        return False
+        # On a recognised ATS every form is an application form. On an
+        # employer's own site the first page might be a contact form, a search
+        # box or a newsletter signup, and filling one of those in with a CV
+        # would be worse than doing nothing. Only the first page is judged:
+        # page three of a wizard is allowed to be a page of radio buttons.
+        if not pages and not classify_url(job["apply_url"])[1] \
+                and not is_application_form(fields):
+            job.update({"status": "portal_manual",
+                        "portal_reason": "a form, but not an application form - "
+                                         "no CV upload and no name-and-email pair",
+                        "portal_screenshot": shot(page, job, "notanapplication")})
+            return False
 
-    page.wait_for_timeout(3000)
-    job.update({"status": "portal_submitted", "portal_submitted_at": jm.now(),
-                "portal_screenshot": shot(page, job, "submitted")})
-    return True
+        signature = page_signature(surface, fields)
+        if signature in seen:
+            # Pressing Next got us the same page back. A validation error, a
+            # required field the agent could not answer, or a button that does
+            # nothing - all three mean a person is needed, and none of them
+            # get better by pressing it again.
+            job.update({"status": "portal_review",
+                        "portal_pages": pages,
+                        "portal_filled": filled_all,
+                        "portal_flags": flags_all,
+                        "portal_reason": f"page {pages + 1} came back unchanged "
+                                         f"- something on it needs you",
+                        "portal_screenshot": shot(page, job, "stuck")})
+            return False
+        seen.add(signature)
+
+        plan, flags = plan_answers(fields, job, answers)
+        filled, failed = apply_plan(surface, plan)
+        filled_all += filled
+        flags_all += flags + failed
+        job.update({"portal_fields_seen": len(fields),
+                    "portal_filled": filled_all, "portal_flags": flags_all,
+                    "portal_pages": pages + 1,
+                    "portal_screenshot": shot(page, job, f"page{pages + 1}")})
+
+        # Fill first, then check for a bot check: a filled form is worth
+        # banking even when a CAPTCHA stops us submitting it.
+        kind = captcha_kind(page)
+        if kind == "challenge":
+            bank_for_captcha(page, job, plan, flags_all)
+            return False
+        if kind == "scored":
+            job["portal_bot_check"] = "invisible, submitted anyway"
+
+        if flags_all:
+            job.update({"status": "portal_review",
+                        "portal_reason": f"{len(flags_all)} question(s) need "
+                                         f"Harry, on page {pages + 1}"})
+            return False
+
+        # Next before submit, always. A page carrying both is a page where
+        # Submit files a half-finished application.
+        moved = click_next(surface)
+        if moved:
+            page.wait_for_timeout(2500)
+            pages += 1
+            print(f"[portal] page {pages} done, pressed '{moved}'")
+            continue
+
+        # No Next means this is the last page.
+        if not submit:
+            job.update({"status": "portal_ready",
+                        "portal_pages": pages + 1,
+                        "portal_reason": "filled and checked, waiting for "
+                                         "PORTAL_SUBMIT"})
+            return False
+        if not click_submit(surface):
+            job.update({"status": "portal_review",
+                        "portal_reason": "could not find the submit button"})
+            return False
+        page.wait_for_timeout(3000)
+        pages += 1
+        if looks_finished(page):
+            job.update({"status": "portal_submitted",
+                        "portal_submitted_at": jm.now(),
+                        "portal_pages": pages,
+                        "portal_reason": f"submitted after {pages} page(s)",
+                        "portal_screenshot": shot(page, job, "submitted")})
+            return True
+        # Submitted, but the far side did not say so in words this recognises.
+        # Recorded as sent with the doubt attached rather than silently
+        # counted either way.
+        job.update({"status": "portal_submitted",
+                    "portal_submitted_at": jm.now(),
+                    "portal_pages": pages,
+                    "portal_confirmation": "not recognised - check the shot",
+                    "portal_reason": "submit pressed, no confirmation wording "
+                                     "found on the page that came back",
+                    "portal_screenshot": shot(page, job, "submitted")})
+        return True
+
+    job.update({"status": "portal_review",
+                "portal_pages": pages,
+                "portal_filled": filled_all,
+                "portal_reason": f"still going after {MAX_PAGES} pages - "
+                                 f"finish this one by hand",
+                "portal_screenshot": shot(page, job, "toolong")})
+    return False
 
 
 # ======================================================================
