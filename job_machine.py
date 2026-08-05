@@ -2097,6 +2097,38 @@ def alert_harry(job, reply, category, extra=""):
                body, attach_cv=False)
 
 
+def harvest_contact_number(state, job, reply, category):
+    """Keep the phone number out of a human reply, and text the good news.
+
+    A consultant's direct line only ever appears in one place: the signature
+    of a reply they wrote themselves. It is worth more than the email address
+    - most of these people would rather take a call - and it is thrown away on
+    every run that does not do this.
+
+    Texting is deliberately one-way here. Harry gets a text the minute an
+    interview invitation lands; nobody else gets one from this function."""
+    try:
+        import sms
+        numbers = sms.numbers_from_signature(reply.get("text", ""))
+    except Exception as e:
+        # This runs inside the reply loop, which is the one stage that must
+        # never fall over: it is what sends the availability reply to an
+        # interview invitation within minutes.
+        print(f"[sms] harvest unavailable: {e}")
+        return
+    if numbers:
+        entry = sms.remember(state, company_key(job.get("company")), numbers[0],
+                             name=job.get("contact_name") or job.get("company"),
+                             source=f"signature of {job.get('contact_email')}")
+        for extra_number in numbers[1:3]:
+            sms.remember(state, company_key(job.get("company")), extra_number)
+        kind = "mobile" if sms.is_mobile(numbers[0]) else "direct line"
+        print(f"[sms] {job.get('company')}: {kind} {numbers[0]} "
+              f"({len(entry['numbers'])} known)")
+    if category == "interview_invite" and sms.configured():
+        sms.alert_harry(sms.interview_alert(job))
+
+
 def check_replies(state):
     """Scan the inbox for replies from anyone we contacted. Interview invites
     get an availability reply within minutes; everything human gets an alert."""
@@ -2165,6 +2197,14 @@ def check_replies(state):
                     alert_harry(job, reply, category, extra)
                 except Exception as e:
                     print(f"[replies] alert failed: {e}")
+            # A human wrote back, so their signature is here and it is the
+            # only place a real direct line ever comes from. File it, and if
+            # this was an interview invitation put it on his phone now rather
+            # than in the digest at 22:00.
+            try:
+                harvest_contact_number(state, job, reply, category)
+            except Exception as e:
+                print(f"[sms] harvest failed: {e}")
             save(state)
     finally:
         try:
@@ -2270,7 +2310,21 @@ def collect_summary(state, since):
         "lifetime": sum(1 for j in jobs
                         if j.get("status") in ("sent", "replied")
                         or j.get("followup_sent_at")),
+        "call_list": call_list_rows(state),
     }
+
+
+def call_list_rows(state):
+    """Everyone who has written back and left a number, for the digest.
+
+    A consultant's direct line is the most useful thing this machine ever
+    finds and it cannot be automated any further than this: nobody should
+    automate a phone call. Putting it in the digest is the whole point."""
+    try:
+        import sms
+        return sms.call_list(state)[:12]
+    except Exception:
+        return []
 
 
 def esc(text):
@@ -2369,6 +2423,14 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    if data.get("call_list"):
+        lines += ["", "PEOPLE TO RING", "-" * 14,
+                  "Numbers out of the signatures of people who wrote back. A "
+                  "call beats everything else in this email.", ""]
+        for row in data["call_list"]:
+            kind = "mobile" if row["mobile"] else "direct line"
+            lines.append(f"  {row['name'][:34]:36} {row['number']}  ({kind})")
 
     inbound_text, inbound_html = inbound_reminder()
     if inbound_text:
