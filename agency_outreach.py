@@ -130,6 +130,20 @@ def due(state, agency):
     return True, count + 1, ""
 
 
+def written_to_by_the_support_route(state, agency):
+    """Has the charity route already written to this firm?
+
+    It should not have - support_orgs.json is charities and this file is
+    recruiters - but on 2026-08-04 ten agencies were added to that file with an
+    ask of 'representation' while this module was being written, and both fired
+    within three minutes of each other. TMM, Airswift and Petroplan each got two
+    different letters from Harry inside two minutes.
+
+    Nothing about the split being tidy now stops it happening again, so the two
+    registers check each other. Whoever wrote first wins; this one stands down."""
+    return jm.company_key(agency["name"]) in state.get("support_asked", {})
+
+
 def recently_pitched(state, agency):
     """Did the main pipeline write to this agency about a vacancy just now?
 
@@ -279,6 +293,10 @@ def run(state, send=False, limit=None):
         ok, approach, reason = due(state, agency)
         if not ok:
             print(f"[agency] {agency['name']}: {reason}")
+            continue
+        if written_to_by_the_support_route(state, agency):
+            print(f"[agency] {agency['name']}: the support route has already "
+                  f"written to them, leaving them alone")
             continue
         waited = recently_pitched(state, agency)
         if waited is not None:

@@ -84,6 +84,27 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
         self.assertNotIn("Defence Relationship Management",
                          [o.get("name") for o in so.load_orgs()])
 
+    def test_an_organisation_the_agency_route_wrote_to_is_left_alone(self):
+        """The two registers check each other, because on 2026-08-04 they did
+        not: recruiters were in both files and both routes fired."""
+        state = {"jobs": {}, "support_asked": {},
+                 "agency_registered": {jm.company_key("TMM Recruitment"): {
+                     "at": "2026-08-04T19:03:00+00:00", "count": 1}}}
+        self.assertTrue(so.already_asked(state, {"name": "TMM Recruitment"}))
+
+    def test_a_charity_is_unaffected_by_the_agency_register(self):
+        state = {"jobs": {}, "support_asked": {},
+                 "agency_registered": {"tmm": {"at": "2026-08-04", "count": 1}}}
+        self.assertFalse(so.already_asked(state, {"name": "Poppyscotland"}))
+
+    def test_no_recruiter_is_shipped_in_the_charity_list(self):
+        """Recruiters belong in data/agencies.json, which has the cooldown and
+        the refresh letter written for them."""
+        for org in so.load_orgs():
+            with self.subTest(org=org["name"]):
+                self.assertFalse(jm.is_agency({"company": org["name"]}),
+                                 f"{org['name']} is a recruiter")
+
     def test_nobody_is_asked_twice(self):
         state = {"jobs": {}, "support_asked": {}}
         org = {"name": "The King's Trust", "domain": "kingstrust.org.uk",

@@ -28,7 +28,7 @@ def ts(days_ago):
 
 def blank_state():
     return {"jobs": {}, "companies_contacted": {}, "agency_registered": {},
-            "send_counts": {}}
+            "support_asked": {}, "send_counts": {}}
 
 
 AGENCY = {"name": "Cammach", "site": "wearecammach.com", "group": "energy",
@@ -93,6 +93,20 @@ class TestItDoesNotTalkOverThePipeline(unittest.TestCase):
         state["companies_contacted"][jm.company_key("Cammach")] = {
             "at": ts(jm.AGENCY_GAP_DAYS + 5), "company": "Cammach"}
         self.assertIsNone(ao.recently_pitched(state, AGENCY))
+
+    def test_an_agency_the_charity_route_already_wrote_to_is_left_alone(self):
+        """Ten recruiters were put in support_orgs.json the same hour this
+        module was written, and both routes fired three minutes apart. Three
+        consultants got two different letters from Harry inside two minutes."""
+        state = blank_state()
+        state["support_asked"][jm.company_key("Cammach")] = {"at": ts(0)}
+        self.assertTrue(ao.written_to_by_the_support_route(state, AGENCY))
+        with mock.patch.object(ao, "load_agencies", return_value=[AGENCY]), \
+             mock.patch.object(ao, "find_address",
+                               return_value=("a@b.example", None)), \
+             mock.patch.object(jm, "send_email") as send:
+            self.assertEqual(ao.run(state, send=True), 0)
+        send.assert_not_called()
 
     def test_a_run_skips_it_rather_than_writing(self):
         state = blank_state()
