@@ -88,10 +88,38 @@ def union_earliest(theirs, ours):
     return out
 
 
+def union_latest(theirs, ours):
+    """Union of two 'how recently have we approached these' registers.
+
+    The newest timestamp wins, and the approach count is the higher of the two
+    - so two runs that both wrote to the same agency cannot leave the register
+    claiming fewer approaches than were actually made."""
+    out = dict(theirs)
+    for key, entry in ours.items():
+        existing = out.get(key)
+        if existing is None:
+            out[key] = entry
+            continue
+        if not (isinstance(entry, dict) and isinstance(existing, dict)):
+            continue
+        winner = entry if str(entry.get("at", "")) > str(
+            existing.get("at", "")) else existing
+        winner = dict(winner)
+        winner["count"] = max(entry.get("count", 0), existing.get("count", 0))
+        first = [str(e.get("first_at") or e.get("at") or "")
+                 for e in (entry, existing)]
+        first = [f for f in first if f]
+        if first:
+            winner["first_at"] = min(first)
+        out[key] = winner
+    return out
+
+
 # Keys with a rule of their own below. Everything else is carried across by
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
+         "agency_registered", "sms_sent", "contact_numbers",
          "last_summary_at"}
 
 
@@ -132,6 +160,44 @@ def merge(theirs, ours):
                            ours.get("support_asked", {}))
     if asked:
         out["support_asked"] = asked
+
+    # The agency register. The opposite rule to the one above, and for the
+    # opposite reason: an agency is written to more than once on purpose, so
+    # what this register answers is not 'has this ever been done' but 'when was
+    # it last done and how many times'. Keeping the earliest would let the
+    # cooldown expire against a letter that went out weeks later, and the run
+    # after that would write to a consultant twice in a fortnight.
+    registered = union_latest(theirs.get("agency_registered", {}),
+                              ours.get("agency_registered", {}))
+    if registered:
+        out["agency_registered"] = registered
+
+    # One text per person, ever. Losing a record here means texting somebody
+    # a second time, so the earliest wins for the same reason it does for the
+    # charities: the question is 'has this ever been done'.
+    texted = union_earliest(theirs.get("sms_sent", {}),
+                            ours.get("sms_sent", {}))
+    if texted:
+        out["sms_sent"] = texted
+
+    # The phone book. Two runs can each have read a different signature for
+    # the same firm, so the numbers are unioned rather than one side winning.
+    book = dict(theirs.get("contact_numbers", {}))
+    for key, entry in ours.get("contact_numbers", {}).items():
+        existing = book.get(key)
+        if not existing:
+            book[key] = entry
+            continue
+        merged = dict(existing)
+        numbers = list(existing.get("numbers", []))
+        for number in entry.get("numbers", []):
+            if number not in numbers:
+                numbers.append(number)
+        merged["numbers"] = numbers
+        merged["name"] = existing.get("name") or entry.get("name")
+        book[key] = merged
+    if book:
+        out["contact_numbers"] = book
 
     for counter in ("send_counts", "portal_counts", "spec_counts"):
         merged = dict(theirs.get(counter, {}))

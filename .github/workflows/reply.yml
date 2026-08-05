@@ -42,6 +42,13 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # httpSMS: the app on Harry's own phone. The key is a repo secret
+          # and lives nowhere else - this repository is public. Without it
+          # every texting path is simply skipped.
+          HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
+          SMS_FROM: ${{ vars.SMS_FROM }}
+          SMS_OUTBOUND: ${{ vars.SMS_OUTBOUND }}
+          DAILY_SMS_CAP: ${{ vars.DAILY_SMS_CAP }}
           TEST_MODE: ${{ vars.TEST_MODE }}
           REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
         run: python job_machine.py --replies

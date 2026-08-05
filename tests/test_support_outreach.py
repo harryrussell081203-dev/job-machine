@@ -66,10 +66,44 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
         for expected in ("veteran", "young", "local", "industry"):
             self.assertIn(expected, groups)
 
-    def test_an_organisation_already_dealt_with_is_left_alone(self):
-        """He has signed up with the Forces Employment Charity himself."""
-        self.assertNotIn("forcesemployment.org.uk",
-                         [o.get("domain") for o in so.load_orgs()])
+    def test_the_forces_employment_charity_is_written_to_after_all(self):
+        """This entry used to be skipped as 'already registered - RightJob'.
+
+        Registered and still entitled are not the same thing. RightJob is the
+        CTP job board, CTP support runs from two years before discharge to two
+        years after, and Harry left in 2023 - so the resettlement door has
+        closed behind him. Op ASCEND, which the same charity delivers, is the
+        one that opens at exactly that point and lasts for life. The letter
+        asks them to sign him up rather than assuming either way."""
+        orgs = {o.get("domain"): o for o in so.load_orgs()}
+        self.assertIn("forcesemployment.org.uk", orgs)
+        self.assertEqual(orgs["forcesemployment.org.uk"]["ask"], "registration")
+
+    def test_the_organisation_that_holds_the_covenant_list_is_still_skipped(self):
+        """A central government mailbox is the wrong door for one job search."""
+        self.assertNotIn("Defence Relationship Management",
+                         [o.get("name") for o in so.load_orgs()])
+
+    def test_an_organisation_the_agency_route_wrote_to_is_left_alone(self):
+        """The two registers check each other, because on 2026-08-04 they did
+        not: recruiters were in both files and both routes fired."""
+        state = {"jobs": {}, "support_asked": {},
+                 "agency_registered": {jm.company_key("TMM Recruitment"): {
+                     "at": "2026-08-04T19:03:00+00:00", "count": 1}}}
+        self.assertTrue(so.already_asked(state, {"name": "TMM Recruitment"}))
+
+    def test_a_charity_is_unaffected_by_the_agency_register(self):
+        state = {"jobs": {}, "support_asked": {},
+                 "agency_registered": {"tmm": {"at": "2026-08-04", "count": 1}}}
+        self.assertFalse(so.already_asked(state, {"name": "Poppyscotland"}))
+
+    def test_no_recruiter_is_shipped_in_the_charity_list(self):
+        """Recruiters belong in data/agencies.json, which has the cooldown and
+        the refresh letter written for them."""
+        for org in so.load_orgs():
+            with self.subTest(org=org["name"]):
+                self.assertFalse(jm.is_agency({"company": org["name"]}),
+                                 f"{org['name']} is a recruiter")
 
     def test_nobody_is_asked_twice(self):
         state = {"jobs": {}, "support_asked": {}}
@@ -104,6 +138,37 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
                                return_value=["grants@acme.org"]):
             address, _ = so.find_address({"domain": "acme.org"})
         self.assertEqual(address, "grants@acme.org")
+
+    def test_a_verified_published_address_is_used_when_the_site_is_unreadable(self):
+        """The big charities sit behind a bot check, which is not a reason to
+        drop the letter - but it is only allowed if the file says where the
+        address was read from."""
+        org = {"name": "X", "domain": "acme.org",
+               "email": "info@acme.org",
+               "email_source": "their own contact page"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site", return_value=[]):
+            self.assertEqual(so.find_address(org), ("info@acme.org", None))
+
+    def test_an_address_with_no_stated_source_is_refused(self):
+        org = {"name": "X", "domain": "acme.org", "email": "info@acme.org"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site", return_value=[]):
+            self.assertEqual(so.find_address(org), (None, None))
+
+    def test_the_scraped_address_still_wins(self):
+        org = {"name": "X", "domain": "acme.org", "email": "info@acme.org",
+               "email_source": "their own contact page"}
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=["grants@acme.org"]):
+            self.assertEqual(so.find_address(org)[0], "grants@acme.org")
+
+    def test_every_shipped_address_says_where_it_came_from(self):
+        for org in so.load_orgs():
+            if org.get("email"):
+                with self.subTest(org=org["name"]):
+                    self.assertTrue(org.get("email_source"))
 
     def test_a_run_without_send_writes_to_nobody(self):
         state = {"jobs": {}, "support_asked": {}}
@@ -161,6 +226,69 @@ class TestAskingForEmployersRatherThanMoney(unittest.TestCase):
         _, body = so.compose({"name": "Poppyscotland", "group": "veteran"})
         self.assertIn("OPITO", body)
         self.assertNotIn("guaranteed interview", body.lower())
+
+
+class TestAskingToBeSignedUp(unittest.TestCase):
+    """The Forces Employment Charity and CTP are not being asked for money or
+    for introductions. They run the scheme itself, so the question is whether
+    they will put him on it."""
+
+    def letter(self):
+        return so.compose({"name": "Forces Employment Charity",
+                           "group": "veteran", "ask": "registration"})
+
+    def test_it_asks_to_be_registered(self):
+        _, body = self.letter()
+        self.assertIn("register me for Op ASCEND", body)
+
+    def test_it_asks_about_rightjob_rather_than_assuming(self):
+        _, body = self.letter()
+        low = body.lower()
+        self.assertIn("rightjob still open to me", low)
+        for claim in ("i am entitled to", "i still have access",
+                      "my account is", "for life"):
+            with self.subTest(claim=claim):
+                self.assertNotIn(claim, low)
+
+    def test_it_states_the_two_year_rule_as_the_reason_for_writing(self):
+        """Getting this wrong in either direction wastes their time: claiming
+        entitlement he does not have, or not writing at all because a previous
+        note in the data file said he was already signed up."""
+        _, body = self.letter()
+        self.assertIn("two years after", body)
+        self.assertIn("past", body)
+
+    def test_it_does_not_ask_them_for_money(self):
+        _, body = self.letter()
+        for money in ("thousand pounds", "OPITO BOSIET", "driving licence"):
+            with self.subTest(money=money):
+                self.assertNotIn(money.lower(), body.lower())
+
+    def test_the_subject_says_what_it_wants(self):
+        subject, _ = self.letter()
+        self.assertIn("Op ASCEND", subject)
+        self.assertLessEqual(len(subject), 60)
+
+    def test_both_doors_are_asked(self):
+        asks = {o["name"]: o.get("ask") for o in so.load_orgs()}
+        self.assertEqual(asks.get("Forces Employment Charity"), "registration")
+        self.assertEqual(asks.get("Career Transition Partnership"),
+                         "registration")
+
+    def test_this_errand_does_not_post_the_whole_charity_list(self):
+        """One specific errand, not a reason to empty the queue behind it."""
+        state = {"jobs": {}, "support_asked": {}}
+        written = []
+        with mock.patch.object(so, "find_address",
+                               return_value=("info@example.org", None)), \
+             mock.patch.object(so, "SUPPORT_INTERVAL_SECONDS", 0), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "send_email",
+                               side_effect=lambda *a, **k: written.append(a)):
+            so.run(state, send=True, only="registration")
+        self.assertEqual(len(written), 2)
+        for subject in (call[1] for call in written):
+            self.assertIn("Op ASCEND", subject)
 
 
 if __name__ == "__main__":

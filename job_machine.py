@@ -505,7 +505,14 @@ AGENCY_NAME = re.compile(
     # sender as not knowing who he is writing to.
     r"\bselection\b|\bappointments\b|outsource|\breed\b|morgan hunt|"
     r"anson mccade|appcast|engineering employment|\bsearch\b|"
-    r"\bsolutions group\b|first military|\bplacements?\b|headhunt",
+    r"\bsolutions group\b|first military|\bplacements?\b|headhunt|"
+    # Three more with no give-away word in the name at all, caught by the
+    # agency register in data/agencies.json being checked against this
+    # function. Every one of them is a recruiter the pipeline would otherwise
+    # have filed as an employer - one email ever, and a speculative 'nothing
+    # advertised that I can see' note to a firm whose business is advertising
+    # things.
+    r"atlas professionals|spencer ogden|rullion|simpson booth",
     re.I)
 AGENCY_BODY = re.compile(
     r"our client|on behalf of (our|a) client|we are recruiting for|"
@@ -1994,6 +2001,23 @@ AUTOREPLY_ROTATIONAL = (
     "Which day works best for you?\n\n"
     "Harry\nHarry Russell / 07398 530978")
 
+# How many agency registration letters an ordinary pipeline run may send.
+# Small on purpose: the module's own cooldown is a month per agency, so this
+# is only the pacing for the handful that come due on the same day.
+AGENCY_PIPELINE_PER_RUN = env_int("AGENCY_PIPELINE_PER_RUN", 2)
+
+
+def agency_refresh(state):
+    """Keep Harry current on the recruitment agencies' own databases.
+
+    Imported here rather than at the top because agency_outreach imports this
+    module. Almost every run finds nobody due and costs one lookup in the
+    state file; see agency_outreach.py for why this is the one route allowed
+    to write to the same firm more than once."""
+    import agency_outreach
+    return agency_outreach.run(state, send=True, limit=AGENCY_PIPELINE_PER_RUN)
+
+
 ROTATIONAL_ADVERT = re.compile(
     r"offshore|rotation|rota\b|\d\s*[/:]\s*\d\s*(week|rotation)?|back[- ]to[- ]back|"
     r"fly[- ]in|fifo|vessel|rig\b|platform\b|swing|trip[- ]based|"
@@ -2073,6 +2097,38 @@ def alert_harry(job, reply, category, extra=""):
                body, attach_cv=False)
 
 
+def harvest_contact_number(state, job, reply, category):
+    """Keep the phone number out of a human reply, and text the good news.
+
+    A consultant's direct line only ever appears in one place: the signature
+    of a reply they wrote themselves. It is worth more than the email address
+    - most of these people would rather take a call - and it is thrown away on
+    every run that does not do this.
+
+    Texting is deliberately one-way here. Harry gets a text the minute an
+    interview invitation lands; nobody else gets one from this function."""
+    try:
+        import sms
+        numbers = sms.numbers_from_signature(reply.get("text", ""))
+    except Exception as e:
+        # This runs inside the reply loop, which is the one stage that must
+        # never fall over: it is what sends the availability reply to an
+        # interview invitation within minutes.
+        print(f"[sms] harvest unavailable: {e}")
+        return
+    if numbers:
+        entry = sms.remember(state, company_key(job.get("company")), numbers[0],
+                             name=job.get("contact_name") or job.get("company"),
+                             source=f"signature of {job.get('contact_email')}")
+        for extra_number in numbers[1:3]:
+            sms.remember(state, company_key(job.get("company")), extra_number)
+        kind = "mobile" if sms.is_mobile(numbers[0]) else "direct line"
+        print(f"[sms] {job.get('company')}: {kind} {numbers[0]} "
+              f"({len(entry['numbers'])} known)")
+    if category == "interview_invite" and sms.configured():
+        sms.alert_harry(sms.interview_alert(job))
+
+
 def check_replies(state):
     """Scan the inbox for replies from anyone we contacted. Interview invites
     get an availability reply within minutes; everything human gets an alert."""
@@ -2141,6 +2197,14 @@ def check_replies(state):
                     alert_harry(job, reply, category, extra)
                 except Exception as e:
                     print(f"[replies] alert failed: {e}")
+            # A human wrote back, so their signature is here and it is the
+            # only place a real direct line ever comes from. File it, and if
+            # this was an interview invitation put it on his phone now rather
+            # than in the digest at 22:00.
+            try:
+                harvest_contact_number(state, job, reply, category)
+            except Exception as e:
+                print(f"[sms] harvest failed: {e}")
             save(state)
     finally:
         try:
@@ -2246,7 +2310,21 @@ def collect_summary(state, since):
         "lifetime": sum(1 for j in jobs
                         if j.get("status") in ("sent", "replied")
                         or j.get("followup_sent_at")),
+        "call_list": call_list_rows(state),
     }
+
+
+def call_list_rows(state):
+    """Everyone who has written back and left a number, for the digest.
+
+    A consultant's direct line is the most useful thing this machine ever
+    finds and it cannot be automated any further than this: nobody should
+    automate a phone call. Putting it in the digest is the whole point."""
+    try:
+        import sms
+        return sms.call_list(state)[:12]
+    except Exception:
+        return []
 
 
 def esc(text):
@@ -2345,6 +2423,14 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    if data.get("call_list"):
+        lines += ["", "PEOPLE TO RING", "-" * 14,
+                  "Numbers out of the signatures of people who wrote back. A "
+                  "call beats everything else in this email.", ""]
+        for row in data["call_list"]:
+            kind = "mobile" if row["mobile"] else "direct line"
+            lines.append(f"  {row['name'][:34]:36} {row['number']}  ({kind})")
 
     inbound_text, inbound_html = inbound_reminder()
     if inbound_text:
@@ -2768,6 +2854,11 @@ def main(argv=None):
         # evidence, rather than my guess about who operates in Aberdeen.
         stage("targets", grow_targets, state)
         stage("speculative", speculative, state)
+        save(state)
+        # The agencies' own databases, which are searched by consultants
+        # against roles that were never advertised. Nearly always a no-op:
+        # each agency has a month-long cooldown of its own.
+        stage("agencies", agency_refresh, state)
         save(state)
         stage("followup", run_followups, state)
         save(state)

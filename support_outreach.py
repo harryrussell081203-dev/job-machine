@@ -98,6 +98,38 @@ def compose(org):
     }.get(group, "I am a 22 year old electronics technician in Aberdeen and a "
                  "Royal Navy veteran.")
 
+    # The Forces Employment Charity is not being asked for money or for
+    # introductions. It runs the thing itself - Op ASCEND, the government
+    # funded employment service for veterans who left more than two years ago,
+    # which is Harry as of 2025. CTP resettlement and CTP RightJob run from two
+    # years before discharge to two years after, so the resettlement door has
+    # closed behind him and this is the one that has not. The letter asks to be
+    # signed up and asks what is still open to him; it does not assert that
+    # anything is.
+    if org.get("ask") == "registration":
+        body = (
+            f"Hello,\n\n"
+            f"{who}\n\n"
+            f"I am looking for technician work - electronics, instrumentation "
+            f"and communications - and I am applying steadily on my own. I "
+            f"understand CTP resettlement support runs to two years after "
+            f"discharge, which I am now past, so I am writing about what comes "
+            f"after it.\n\n"
+            f"Two things, please:\n\n"
+            f"1. Can you register me for Op ASCEND, or send me the link to "
+            f"register myself and the details of the adviser covering "
+            f"Aberdeen?\n"
+            f"2. Is CTP RightJob still open to me at this point, and if not, "
+            f"is there an equivalent vacancy service through you?\n\n"
+            f"Three years at Sonardyne building and fault-finding subsea "
+            f"electronics, two years Royal Navy communications, SCQF Level 7 "
+            f"apprenticeship, DV cleared, available immediately and happy with "
+            f"rotational or offshore work anywhere. My CV is attached.\n\n"
+            f"Thank you.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return "Op ASCEND registration - Royal Navy veteran, Aberdeen", body
+
     # Some of these organisations have no money to give and are not the right
     # people to ask for any. What the RFCAs and the veteran employment
     # charities have is the list - which employers in a given area have
@@ -207,7 +239,19 @@ def compose(org):
 
 
 def already_asked(state, org):
-    return jm.company_key(org["name"]) in state.setdefault("support_asked", {})
+    """Written to already - by this route, or by the agency one.
+
+    The second half is not hypothetical. Ten recruiters were added to this
+    file with an ask of 'representation' on 2026-08-04, the same hour
+    agency_outreach.py was written against its own list of the same firms, and
+    both fired three minutes apart: TMM, Airswift and Petroplan each got two
+    different letters from Harry inside two minutes. Recruiters belong in
+    data/agencies.json, which has the cooldown and the refresh letter for
+    exactly this; this check is what makes the split hold even when a name
+    gets into the wrong file anyway."""
+    key = jm.company_key(org["name"])
+    return (key in state.setdefault("support_asked", {})
+            or key in state.get("agency_registered", {}))
 
 
 def record(state, org, address):
@@ -225,15 +269,49 @@ def find_address(org):
     if not domain or not jm.has_mx(domain):
         return None, None
     address, name, tier = jm.best_email(jm.scrape_site(domain))
-    if not address or tier < 1:
+    if address and tier >= 1 and jm.has_mx(address.split("@")[1]):
+        return address, name
+    return published_address(org)
+
+
+def published_address(org):
+    """A verified published address, used only when the site cannot be read.
+
+    The big charities sit behind a bot check. The Forces Employment Charity
+    and CTP both do, and both returned 'no real address found' on a run - not
+    because they publish none, but because the scraper is served a challenge
+    page instead of the contact page. Working around that check is off the
+    table, and the letter asking to be signed up for Op ASCEND is too useful
+    to drop over it.
+
+    This is not a hole in the no-guessing rule. An address only counts here if
+    the file also records WHERE IT WAS READ in 'email_source', so what is
+    shipped is a transcription of something published rather than a pattern
+    applied to a domain, and the domain is MX-checked like any other."""
+    address = (org.get("email") or "").strip()
+    if not address or "@" not in address:
+        return None, None
+    if not org.get("email_source"):
+        print(f"[support] {org['name']}: address in the file has no "
+              f"email_source, refusing to use it")
         return None, None
     if not jm.has_mx(address.split("@")[1]):
         return None, None
-    return address, name
+    return address, None
 
 
-def run(state, send=False, limit=None):
+def run(state, send=False, limit=None, only=None):
+    """`only` restricts the run to one kind of ask.
+
+    The list is written to once per organisation, ever, so an ordinary fire
+    empties whatever is left on it. That is right when the point is to work
+    through the list, and wrong when the point is one specific errand - asking
+    the Forces Employment Charity to sign him up for Op ASCEND should not also
+    post ten charity letters that happened to be queued behind it."""
     orgs = [o for o in load_orgs() if not already_asked(state, o)]
+    if only:
+        orgs = [o for o in orgs if o.get("ask") == only]
+        print(f"[support] restricted to ask={only}")
     if not orgs:
         print("[support] every organisation on the list has been asked")
         return 0
@@ -275,9 +353,13 @@ def main(argv=None):
                     help="actually send (otherwise the letters are printed)")
     ap.add_argument("--dry-run", action="store_true", help="the default")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--only", metavar="ASK",
+                    help="only organisations whose 'ask' is this, e.g. "
+                         "registration")
     args = ap.parse_args(argv)
     state = jm.load()
-    run(state, send=args.send and not args.dry_run, limit=args.limit)
+    run(state, send=args.send and not args.dry_run, limit=args.limit,
+        only=args.only)
     jm.save(state)
     return 0
 
