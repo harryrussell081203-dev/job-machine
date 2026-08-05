@@ -1256,6 +1256,20 @@ def name_tokens(name):
     return {t for t in company_key(name).split() if t}
 
 
+# Words a company can add to its own name without becoming a different
+# company. Anything outside this list is a business, not a suffix: 'Baker
+# Hughes Company' is Baker Hughes, 'Grace and May Home' is not Grace May.
+# company_key already strips the most common ones, so these are what survives.
+CORPORATE_WORDS = {
+    "company", "co", "corp", "corporation", "incorporated", "llc", "lp",
+    "partners", "partnership", "associates", "consulting", "consultancy",
+    "technologies", "technology", "systems", "engineering", "industries",
+    "industrial", "energy", "marine", "offshore", "subsea", "global",
+    "worldwide", "europe", "emea", "scotland", "north", "sea", "gb",
+    "britain", "british", "group", "holdings", "plc", "ltd", "limited",
+}
+
+
 # Words a company can legitimately bolt onto its own name in a domain.
 # 'sanctuary' -> 'sanctuarygroup.co.uk' is the same company; 'sanctuary' ->
 # 'sanctuaryclothing.com' is a clothing brand in California.
@@ -1338,10 +1352,20 @@ def find_domain(company):
             # match will do.
             if len(wanted_tokens) < 2:
                 continue
-            # every word Harry's listing gave us must be a whole word in the
-            # match - 'wood' must not match 'woodforest'
-            if wanted_tokens <= name_tokens(hit.get("name", "")):
-                return domain
+            # Every word Harry's listing gave us must be a whole word in the
+            # match - 'wood' must not match 'woodforest'. And whatever the
+            # match adds on top has to be an ordinary corporate word.
+            #
+            # Subset alone is not enough: 'Grace May', a recruiter, matched
+            # 'Grace and May Home' and an IT Support application went to a
+            # home furnishings shop. The extra word tells you which it is.
+            # 'Baker Hughes Company' adds 'company' and is the same firm;
+            # 'Grace and May Home' adds 'home' and is a different one.
+            hit_tokens = name_tokens(hit.get("name", ""))
+            if wanted_tokens <= hit_tokens:
+                if (hit_tokens - wanted_tokens) <= CORPORATE_WORDS:
+                    return domain
+                print(f"[discover] '{hit.get('name')}' is not '{company}'")
         print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
         print(f"[discover] clearbit '{company}': {e}")
