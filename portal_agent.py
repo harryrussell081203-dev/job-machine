@@ -406,10 +406,36 @@ COLLECT_JS = r"""
     return '';
   };
 
+  // Is this control actually on the screen?
+  //
+  // The old test was getComputedStyle(el).display === 'none', which asks the
+  // element about itself. A field inside a wrapper the page has hidden -
+  // which is every form sitting behind an Apply button - reports its own
+  // display as 'block' and sails straight through. So the agent 'found' a
+  // form nobody could see, filled nothing, and recorded five TimeoutErrors
+  // against a page that was working exactly as designed.
+  //
+  // checkVisibility answers the question that was actually being asked.
+  const shown = (el) => {
+    // A file input is the exception. Styled upload widgets hide the real
+    // input behind a pretty button on purpose, and set_input_files works on
+    // it anyway - dropping those would throw away the CV upload.
+    if (el.type === 'hidden') return false;
+    if (typeof el.checkVisibility === 'function') {
+      return el.checkVisibility({checkVisibilityCSS: true});
+    }
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 || rect.height > 0;
+  };
+
   const out = [];
   document.querySelectorAll('input,select,textarea').forEach((el, i) => {
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden') return;
+    // A styled uploader hides the real file input on purpose and
+    // set_input_files works on it anyway, so those are kept and marked
+    // instead of dropped - losing one would lose the CV.
+    if (!shown(el) && el.type !== 'file') return;
     if (el.type === 'hidden') return;
     el.setAttribute('data-jm', String(i));
 
@@ -444,7 +470,11 @@ COLLECT_JS = r"""
       maxlength: el.maxLength > 0 ? el.maxLength : null,
       options: options,
       option_map: optionMap,
-      value: el.value || ''
+      value: el.value || '',
+      // False only for a file input hidden behind a styled upload button, or
+      // one inside a form the page has not opened yet. Deciding whether a
+      // page HAS a form counts the visible ones; filling one uses the lot.
+      visible: shown(el)
     });
   });
   return out;
@@ -571,22 +601,36 @@ SUBMIT_TEXTS = ("submit application", "submit", "send application", "apply now",
                 "finish", "send")
 
 
-def click_submit(page):
+def click_submit(surface):
+    """Press submit on whichever surface holds the form.
+
+    Takes a Page or a Frame: when the form is in an iframe, the submit button
+    is in there with it. Both answer get_by_role, locator and
+    wait_for_load_state, so the only thing that has to be careful is not
+    assuming a Page."""
     for text in SUBMIT_TEXTS:
         try:
-            button = page.get_by_role("button", name=text, exact=False).first
+            button = surface.get_by_role("button", name=text, exact=False).first
             if button.is_visible():
                 button.click(timeout=PAGE_TIMEOUT_MS)
-                page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+                settle(surface)
                 return True
         except Exception:
             continue
     try:
-        page.locator('input[type="submit"]').first.click(timeout=PAGE_TIMEOUT_MS)
-        page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+        surface.locator('input[type="submit"]').first.click(timeout=PAGE_TIMEOUT_MS)
+        settle(surface)
         return True
     except Exception:
         return False
+
+
+def settle(surface):
+    """Wait for whatever the click set off, on a Page or a Frame."""
+    try:
+        surface.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT_MS)
+    except Exception:
+        pass
 
 
 def shot(page, job, tag):
@@ -643,6 +687,96 @@ def is_application_form(fields):
         named and "email" in keys and "phone" in keys and len(fields) >= 5)
 
 
+# A posting page is not an application form. Nearly every ATS shows the advert
+# first and puts the form behind a button, or in an iframe, or both.
+APPLY_TEXTS = ("apply now", "apply for this job", "apply for this role",
+               "apply for job", "i'm interested", "im interested",
+               "start application", "start your application",
+               "continue to application", "apply online", "apply")
+# Things that say apply and are not an application: a filter control, a link to
+# instructions, a note that you should apply somewhere else.
+NOT_APPLY = re.compile(
+    r"apply (filter|filters|search|coupon|code|discount|now to save)|"
+    r"how to apply|apply via|apply through|apply on|reapply|"
+    r"applied|application process|apply for a (bursary|grant|loan)", re.I)
+
+
+def open_the_form(page):
+    """Click through to the application form, if it is behind a button.
+
+    HALF OF EVERY APPLICATION THIS AGENT HAS EVER SEEN DIED HERE. Of 121 jobs
+    it opened, 61 were abandoned with 'only 0, 1 or 2 form fields found, the
+    application is probably behind a login'. Almost none of them were behind a
+    login. They were behind an Apply button, which the agent never pressed: it
+    loaded the advert, counted the fields on the advert, found a search box and
+    a newsletter signup, and gave up on a page that was working perfectly.
+
+    Returns True if something was clicked, so the caller knows to look again."""
+    for text in APPLY_TEXTS:
+        for role in ("button", "link"):
+            try:
+                control = page.get_by_role(role, name=text, exact=False).first
+                if not control.is_visible():
+                    continue
+                label = (control.inner_text() or "")[:80]
+                if NOT_APPLY.search(label):
+                    continue
+                control.click(timeout=PAGE_TIMEOUT_MS)
+                page.wait_for_timeout(2500)
+                print(f"[portal] clicked '{label.strip()}' to reach the form")
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def visible_fields(fields):
+    """The fields a person could actually see and fill.
+
+    A file input hidden behind a styled upload button is still collected and
+    still filled, but it must not on its own make an unopened form look like
+    an open one - which is exactly what it did the first time this was
+    written."""
+    return [f for f in fields if f.get("visible", True)]
+
+
+def form_surface(page):
+    """(surface, fields) - where the form actually is, and what is on it.
+
+    The form is often in an iframe: an employer's own careers page that embeds
+    its ATS is the common case, and everything inside that frame is invisible
+    to a script running against the top document. A Playwright Frame answers
+    the same calls a Page does for filling in fields, so the rest of the agent
+    does not care which it got."""
+    best, best_fields = page, collect_fields(page)
+    for frame in page.frames[1:]:
+        try:
+            fields = collect_fields(frame)
+        except Exception:
+            continue
+        if len(visible_fields(fields)) > len(visible_fields(best_fields)):
+            best, best_fields = frame, fields
+    if best is not page:
+        print(f"[portal] the form is in an iframe, {len(best_fields)} fields")
+    return best, best_fields
+
+
+def reach_the_form(page):
+    """(surface, fields), having pressed Apply and looked inside the frames.
+
+    Tried in cost order: what is already on the page, then the frames, then
+    the same again after clicking Apply."""
+    surface, fields = form_surface(page)
+    if len(visible_fields(fields)) >= MIN_FORM_FIELDS:
+        return surface, fields
+    if open_the_form(page):
+        surface, fields = form_surface(page)
+    return surface, fields
+
+
+MIN_FORM_FIELDS = jm.env_int("PORTAL_MIN_FIELDS", 3)
+
+
 def apply_to_job(page, job, answers, submit):
     """One application, start to finish. Mutates job with the outcome."""
     page.goto(job["apply_url"], wait_until="domcontentloaded",
@@ -656,13 +790,16 @@ def apply_to_job(page, job, answers, submit):
                     "portal_screenshot": shot(page, job, "captcha")})
         return False
 
-    fields = collect_fields(page)
-    if len(fields) < 3:
+    surface, fields = reach_the_form(page)
+    if len(visible_fields(fields)) < MIN_FORM_FIELDS:
         job.update({"status": "portal_manual",
-                    "portal_reason": f"only {len(fields)} form fields found, "
-                                     f"the application is probably behind a login",
+                    "portal_reason": f"only {len(fields)} form fields found "
+                                     f"after pressing apply and checking the "
+                                     f"frames, so it needs a login or a person",
                     "portal_screenshot": shot(page, job, "noform")})
         return False
+    if surface is not page:
+        job["portal_form_in_iframe"] = True
 
     # On a recognised ATS every form is an application form. On an employer's
     # own site it might be a contact form, a search box or a newsletter signup,
@@ -675,7 +812,7 @@ def apply_to_job(page, job, answers, submit):
         return False
 
     plan, flags = plan_answers(fields, job, answers)
-    filled, failed = apply_plan(page, plan)
+    filled, failed = apply_plan(surface, plan)
     flags += failed
     job.update({"portal_fields_seen": len(fields), "portal_filled": filled,
                 "portal_flags": flags,
@@ -702,7 +839,7 @@ def apply_to_job(page, job, answers, submit):
                     "portal_reason": "filled and checked, waiting for PORTAL_SUBMIT"})
         return False
 
-    if not click_submit(page):
+    if not click_submit(surface):
         job.update({"status": "portal_review",
                     "portal_reason": "could not find the submit button"})
         return False

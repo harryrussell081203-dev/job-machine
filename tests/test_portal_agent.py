@@ -986,3 +986,107 @@ class TestTellingBotChecksApart(unittest.TestCase):
             'style="display:none;width:300px;height:80px"></iframe>'
             '<div class="grecaptcha-badge" style="width:70px;height:60px"></div>')
         self.assertEqual(pa.captcha_kind(page), "scored")
+
+
+class TestSpottingAnApplyControl(unittest.TestCase):
+    """No browser needed: the thing that must not go wrong is pressing
+    something that says apply and is not an application."""
+
+    def test_the_controls_it_should_press(self):
+        for text in ("Apply now", "Apply for this job", "I'm interested",
+                     "Start your application", "Apply online"):
+            with self.subTest(text=text):
+                self.assertTrue(any(t in text.lower() for t in pa.APPLY_TEXTS))
+
+    def test_the_ones_it_must_not(self):
+        for text in ("Apply filters", "How to apply", "Apply via our portal",
+                     "Applied", "Reapply", "Apply search"):
+            with self.subTest(text=text):
+                self.assertTrue(pa.NOT_APPLY.search(text))
+
+    def test_a_real_apply_button_is_not_caught_by_the_exclusions(self):
+        for text in ("Apply now", "Apply for this job", "I'm interested"):
+            with self.subTest(text=text):
+                self.assertIsNone(pa.NOT_APPLY.search(text))
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestReachingTheFormInARealBrowser(unittest.TestCase):
+    """The fix for the biggest single failure this agent has, driven for real.
+
+    121 applications opened, 0 submitted, and 61 abandoned with 'only 0, 1 or 2
+    form fields found'. These two fixtures are what those pages actually were."""
+
+    GATED = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "fixtures", "gated_ats.html")
+    EMBEDDED = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "fixtures", "embedded_ats.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def open(self, path):
+        page = self.browser.new_page()
+        page.goto("file://" + path)
+        self.addCleanup(page.close)
+        return page
+
+    def test_the_old_behaviour_would_have_given_up(self):
+        """The advert alone carries two fields - a search box and a location -
+        which is exactly the '2 form fields found' in the real data."""
+        page = self.open(self.GATED)
+        seen = pa.visible_fields(pa.collect_fields(page))
+        self.assertLess(len(seen), pa.MIN_FORM_FIELDS)
+
+    def test_it_presses_apply_and_finds_the_form(self):
+        page = self.open(self.GATED)
+        surface, fields = pa.reach_the_form(page)
+        self.assertIs(surface, page)
+        self.assertGreaterEqual(len(pa.visible_fields(fields)),
+                                pa.MIN_FORM_FIELDS)
+        labels = " | ".join(f.get("label") or f.get("aria_label") or f.get("name")
+                            for f in fields).lower()
+        for expected in ("first name", "surname", "email", "cv"):
+            self.assertIn(expected, labels)
+
+    def test_it_does_not_press_apply_filters(self):
+        """If it pressed the wrong control the form would never open, so the
+        form appearing at all is the proof - and the search box must not be
+        what it filled in."""
+        page = self.open(self.GATED)
+        _, fields = pa.reach_the_form(page)
+        names = [f.get("name") for f in fields]
+        self.assertIn("first_name", names)
+
+    def test_it_finds_a_form_inside_an_iframe(self):
+        page = self.open(self.EMBEDDED)
+        surface, fields = pa.reach_the_form(page)
+        self.assertIsNot(surface, page)
+        self.assertGreaterEqual(len(fields), 8)
+
+    def test_it_fills_the_form_through_the_iframe(self):
+        page = self.open(self.EMBEDDED)
+        surface, fields = pa.reach_the_form(page)
+        plan, _ = pa.plan_answers(fields, JOB, pa.load_answers())
+        filled, failed = pa.apply_plan(surface, plan)
+        self.assertTrue(filled)
+        self.assertEqual(surface.locator("#fname").input_value(), "Harry")
+
+    def test_a_page_that_really_has_no_form_is_still_refused(self):
+        page = self.browser.new_page()
+        self.addCleanup(page.close)
+        page.set_content("<h1>Sign in to continue</h1><p>Members only.</p>")
+        _, fields = pa.reach_the_form(page)
+        self.assertLess(len(pa.visible_fields(fields)), pa.MIN_FORM_FIELDS)
