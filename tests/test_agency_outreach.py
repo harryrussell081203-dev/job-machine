@@ -418,3 +418,105 @@ class TestThePipelineStage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheOffshoreTicketsQuestion(unittest.TestCase):
+    """OPITO BOSIET and MIST are about a thousand pounds and effectively
+    mandatory offshore, which is the market this whole pipeline searches. The
+    charities are already being asked whether they will fund them; this is the
+    commercial version of the same question, to a firm that has a reason to
+    front the cost a charity does not."""
+
+    FLAGGED = dict(AGENCY, ask_tickets=True,
+                   tickets_source="Harry was told they have funded tickets")
+
+    def test_only_a_flagged_agency_is_asked(self):
+        ok, reason = ao.tickets_due(blank_state(), AGENCY)
+        self.assertFalse(ok)
+        self.assertIn("not flagged", reason)
+
+    def test_a_flagged_agency_never_written_to_is_due(self):
+        self.assertTrue(ao.tickets_due(blank_state(), self.FLAGGED)[0])
+
+    def test_it_waits_after_a_cold_letter_they_have_not_answered(self):
+        """A second email tomorrow asking them to spend a thousand pounds is
+        how a candidate becomes a nuisance."""
+        state = blank_state()
+        state["agency_registered"]["cammach"] = {"at": ts(1), "count": 1}
+        ok, reason = ao.tickets_due(state, self.FLAGGED)
+        self.assertFalse(ok)
+        self.assertIn("waiting", reason)
+
+    def test_it_goes_once_the_ordinary_agency_gap_has_passed(self):
+        state = blank_state()
+        state["agency_registered"]["cammach"] = {
+            "at": ts(jm.AGENCY_GAP_DAYS + 1), "count": 1}
+        self.assertTrue(ao.tickets_due(state, self.FLAGGED)[0])
+
+    def test_a_live_conversation_does_not_have_to_wait(self):
+        """A question added to a thread already running is not a cold email."""
+        state = blank_state()
+        state["agency_registered"]["cammach"] = {"at": ts(0), "count": 1}
+        self.assertTrue(ao.tickets_due(
+            state, dict(self.FLAGGED, thread_open=True))[0])
+
+    def test_nobody_is_asked_twice(self):
+        state = blank_state()
+        ao.record_tickets_ask(state, self.FLAGGED, "a@b.example")
+        ok, reason = ao.tickets_due(state, self.FLAGGED)
+        self.assertFalse(ok)
+        self.assertIn("already asked", reason)
+
+    def test_it_never_tells_a_firm_what_its_own_policy_is(self):
+        """He was told this by somebody else and nothing published confirms
+        it. The letter has to say told, and ask."""
+        _, body = ao.tickets_letter(self.FLAGGED)
+        self.assertIn("I have been told", body)
+        self.assertIn("Is that something you would ever consider", body)
+        for assertion in ("you fund", "you sponsor", "your policy is",
+                          "as you know", "you have funded mine"):
+            with self.subTest(assertion=assertion):
+                self.assertNotIn(assertion, body.lower())
+
+    def test_an_unflagged_source_asks_without_the_hearsay(self):
+        _, body = ao.tickets_letter(dict(AGENCY, ask_tickets=True))
+        self.assertNotIn("I have been told", body)
+        self.assertIn("in case it is something you do", body)
+
+    def test_it_offers_to_pay_it_back_rather_than_asking_for_charity(self):
+        _, body = ao.tickets_letter(self.FLAGGED)
+        self.assertIn("not asking for a favour", body.lower())
+        self.assertIn("come out of what I earn", body)
+
+    def test_it_gives_them_an_easy_no(self):
+        _, body = ao.tickets_letter(self.FLAGGED)
+        self.assertIn("no problem at all", body)
+
+    def test_the_register_is_its_own_and_does_not_eat_a_refresh_slot(self):
+        state = blank_state()
+        ao.record_tickets_ask(state, self.FLAGGED, "a@b.example")
+        self.assertIn("cammach", state[ao.TICKETS_ASKED])
+        self.assertEqual(state["agency_registered"], {})
+
+    def test_a_run_sends_one_and_records_it(self):
+        state = blank_state()
+        with mock.patch.object(ao, "load_agencies", return_value=[self.FLAGGED]), \
+             mock.patch.object(ao, "find_address",
+                               return_value=("jobs@wearecammach.com", None)), \
+             mock.patch.object(ao, "cv_file", return_value=None), \
+             mock.patch.object(ao, "REGISTER_INTERVAL_SECONDS", 0), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "send_email") as send:
+            self.assertEqual(ao.run_tickets(state, send=True), 1)
+        send.assert_called_once()
+        self.assertIn("cammach", state[ao.TICKETS_ASKED])
+
+    def test_the_shipped_flag_records_where_the_claim_came_from(self):
+        with open(ao.AGENCIES_PATH) as f:
+            data = json.load(f)
+        flagged = [a for a in data["agencies"] if a.get("ask_tickets")]
+        self.assertTrue(flagged)
+        for agency in flagged:
+            with self.subTest(agency=agency["name"]):
+                if "I have been told" in ao.tickets_letter(agency)[1]:
+                    self.assertTrue(agency.get("tickets_source"))

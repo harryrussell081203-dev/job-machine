@@ -23,6 +23,7 @@ on:
       - "fire-signup/**"        # ask the veterans' services to register him
       - "fire-agencies/**"      # get on the recruitment agencies' databases
       - "fire-sms/**"           # prove the phone bridge works, text nobody else
+      - "fire-tickets/**"       # ask the agencies about sponsoring OPITO tickets
   workflow_dispatch:
     inputs:
       test_mode:
@@ -134,6 +135,12 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == fire-signup/* ]]; then
             echo "fire-signup branch: asking to be registered"
             python support_outreach.py --send --only registration
+            exit 0
+          fi
+          # The offshore-tickets question, to the agencies flagged for it.
+          if [[ "${GITHUB_REF_NAME}" == fire-tickets/* ]]; then
+            echo "fire-tickets branch: asking about OPITO sponsorship"
+            python agency_outreach.py --send --tickets
             exit 0
           fi
           # One text to Harry's own phone, to prove the httpSMS key and the

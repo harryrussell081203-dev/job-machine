@@ -261,6 +261,124 @@ def refresh_letter(agency, entry, contact=None):
     return "CV refresh - Aberdeen electronics technician", body
 
 
+TICKETS_ASKED = "agency_tickets_asked"
+
+
+def tickets_due(state, agency):
+    """(is_due, reason_if_not) for the offshore-tickets question.
+
+    Separate register from the registration letters, because it is a separate
+    question and should not eat an agency's refresh slot. One per agency ever:
+    a firm that does not sponsor tickets will not have changed its mind.
+
+    Gated on the ordinary agency gap. Cammach got a cold registration letter
+    yesterday and has not answered it; a second email tomorrow asking them to
+    spend a thousand pounds is how a candidate becomes a nuisance. A question
+    added to a conversation already running is different, which is what
+    'thread_open' means."""
+    if not agency.get("ask_tickets"):
+        return False, "not flagged for the tickets question"
+    if jm.company_key(agency["name"]) in state.get(TICKETS_ASKED, {}):
+        return False, "already asked"
+    if agency.get("thread_open"):
+        return True, ""
+    entry = entry_for(state, agency)
+    waited = days_since((entry or {}).get("at"))
+    if waited is not None and waited < jm.AGENCY_GAP_DAYS:
+        return False, (f"wrote to them {waited}d ago and they have not "
+                       f"answered, waiting for {jm.AGENCY_GAP_DAYS}d")
+    return True, ""
+
+
+def tickets_letter(agency, contact=None):
+    """The offshore-tickets question.
+
+    OPITO BOSIET and MIST are about a thousand pounds and effectively
+    mandatory offshore, which is the market this trade sits in. The charities
+    are already being asked whether they will fund them. This is the
+    commercial version of the same question: an agency that is placing
+    somebody has a reason to front the cost that a charity does not.
+
+    What it must never do is tell a firm what their own policy is. Where the
+    file records that Harry was told they have done it before, the letter says
+    exactly that - told, by someone else, and is it true."""
+    told = bool(agency.get("tickets_source"))
+    if told:
+        opening = (f"I have been told {agency['name']} has funded offshore "
+                   f"survival tickets for candidates before, so I wanted to "
+                   f"ask you directly.")
+    else:
+        opening = ("One question I have not asked yet, in case it is "
+                   "something you do.")
+    body = (
+        f"{greeting(contact)}\n\n"
+        f"Harry Russell - I sent my CV over recently. Aberdeen electronics "
+        f"and instrumentation technician, three years at Sonardyne on subsea "
+        f"acoustic systems, two years Royal Navy communications, DV cleared "
+        f"and available immediately.\n\n"
+        f"{opening}\n\n"
+        f"I do not hold BOSIET or MIST, and that is the one thing keeping me "
+        f"out of offshore work I am otherwise a fit for. I am not asking for "
+        f"a favour: if there is a placement where it makes sense, I will do "
+        f"the course whenever you need me to and I am happy for the cost to "
+        f"come out of what I earn.\n\n"
+        f"Is that something you would ever consider, or is there a cheaper "
+        f"route through you that I should know about? If it is not something "
+        f"you do, no problem at all - I would rather ask than assume.\n\n"
+        f"Harry Russell\n{jm.PHONE}"
+    )
+    return "Offshore tickets - would you ever sponsor them?", body
+
+
+def record_tickets_ask(state, agency, address):
+    state.setdefault(TICKETS_ASKED, {})[jm.company_key(agency["name"])] = {
+        "at": jm.now(), "name": agency["name"], "email": address}
+
+
+def run_tickets(state, send=False, limit=None):
+    """Ask the flagged agencies about funding the offshore tickets."""
+    queue = []
+    for agency in load_agencies():
+        ok, reason = tickets_due(state, agency)
+        if ok:
+            queue.append(agency)
+        elif agency.get("ask_tickets"):
+            print(f"[tickets] {agency['name']}: {reason}")
+    if not queue:
+        return 0
+    print(f"[tickets] {len(queue)} agency(s) to ask about offshore tickets")
+    asked = 0
+    for agency in queue[:(limit or REGISTER_PER_RUN)]:
+        address, contact = find_address(agency)
+        if not address:
+            print(f"[tickets] {agency['name']}: no real address, by hand")
+            continue
+        subject, body = tickets_letter(agency, contact)
+        to_addr = jm.GMAIL_ADDRESS if jm.TEST_MODE else address
+        if jm.TEST_MODE:
+            subject = f"[TEST -> {address}] {subject}"
+        if not send:
+            print(f"\n--- would ask {agency['name']} <{address}>")
+            print(f"    subject: {subject}")
+            print("    " + body.replace("\n", "\n    "))
+            asked += 1
+            continue
+        try:
+            jm.send_email(to_addr, subject, body, attach_cv=True,
+                          cv_file=cv_file())
+            if not jm.TEST_MODE:
+                record_tickets_ask(state, agency, address)
+            jm.record_send(state)
+            asked += 1
+            print(f"[tickets] {'TEST' if jm.TEST_MODE else 'LIVE'} asked "
+                  f"{agency['name']} -> {to_addr}")
+            jm.save(state)
+            time.sleep(REGISTER_INTERVAL_SECONDS)
+        except Exception as e:
+            print(f"[tickets] failed {agency['name']}: {e}")
+    return asked
+
+
 def cv_file():
     """The electronics technician CV. There is no per-vacancy role family to
     tailor to here, and that is the one this profile leads with."""
@@ -370,12 +488,20 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="the default")
     ap.add_argument("--list", action="store_true",
                     help="show who has been written to and when")
+    ap.add_argument("--tickets", action="store_true",
+                    help="ask the flagged agencies whether they would ever "
+                         "sponsor the OPITO offshore tickets")
     ap.add_argument("--limit", type=int)
     args = ap.parse_args(argv)
     state = jm.load()
     if args.list:
         return show(state)
-    run(state, send=args.send and not args.dry_run, limit=args.limit)
+    send = args.send and not args.dry_run
+    if args.tickets:
+        run_tickets(state, send=send, limit=args.limit)
+        jm.save(state)
+        return 0
+    run(state, send=send, limit=args.limit)
     jm.save(state)
     return 0
 

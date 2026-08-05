@@ -2015,7 +2015,12 @@ def agency_refresh(state):
     state file; see agency_outreach.py for why this is the one route allowed
     to write to the same firm more than once."""
     import agency_outreach
-    return agency_outreach.run(state, send=True, limit=AGENCY_PIPELINE_PER_RUN)
+    sent = agency_outreach.run(state, send=True, limit=AGENCY_PIPELINE_PER_RUN)
+    # The offshore tickets are the one thing keeping him out of the market
+    # this whole pipeline searches, so the question rides along with the
+    # registration letters rather than waiting for somebody to fire it.
+    sent += agency_outreach.run_tickets(state, send=True, limit=2)
+    return sent
 
 
 ROTATIONAL_ADVERT = re.compile(
