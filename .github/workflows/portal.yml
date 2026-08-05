@@ -81,6 +81,9 @@ jobs:
           # domain, never stored - data/state.json is committed to a public
           # repository. No salt, no account creation.
           PORTAL_PASSWORD_SALT: ${{ secrets.PORTAL_PASSWORD_SALT }}
+          # One password everywhere, Harry's own choice, so he can sign in to
+          # these portals himself. Padded to whatever the site's rules demand.
+          PORTAL_PASSWORD: ${{ secrets.PORTAL_PASSWORD }}
           BURN_LIMIT: ${{ vars.BURN_LIMIT }}
         run: |
           if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then

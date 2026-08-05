@@ -73,6 +73,81 @@ class TestThePasswordIsNeverWrittenDown(unittest.TestCase):
                 self.assertNotIn(forbidden, source)
 
 
+class TestTheSharedPassword(unittest.TestCase):
+    """Harry asked for one password he knows, rather than a derived one he
+    cannot. His call - and the padding is what makes it work at all."""
+
+    def test_what_he_asked_for_becomes_something_portals_accept(self):
+        with mock.patch.object(accounts, "SHARED", "password123"):
+            self.assertEqual(accounts.password_for("anything.com"),
+                             "Password123!")
+
+    def test_it_is_the_same_everywhere_which_is_the_point(self):
+        with mock.patch.object(accounts, "SHARED", "password123"):
+            self.assertEqual(accounts.password_for("a.com"),
+                             accounts.password_for("b.com"))
+
+    def test_whatever_he_picks_clears_the_usual_rules(self):
+        for raw in ("password123", "harryrussell", "aberdeen", "Pass1!"):
+            with self.subTest(raw=raw):
+                padded = accounts.acceptable(raw)
+                self.assertGreaterEqual(len(padded), 12)
+                self.assertTrue(re.search(r"[a-z]", padded))
+                self.assertTrue(re.search(r"[A-Z]", padded))
+                self.assertTrue(re.search(r"\d", padded))
+                self.assertTrue(re.search(r"[^\w]", padded))
+
+    def test_one_already_strong_enough_is_left_alone(self):
+        self.assertEqual(accounts.acceptable("Password123!"), "Password123!")
+
+    def test_the_shared_one_wins_over_the_derived_one(self):
+        with mock.patch.object(accounts, "SHARED", "password123"), \
+             mock.patch.object(accounts, "SALT", "a-salt"):
+            self.assertEqual(accounts.password_for("x.com"), "Password123!")
+
+    def test_either_one_is_enough_to_be_configured(self):
+        with mock.patch.object(accounts, "SALT", ""), \
+             mock.patch.object(accounts, "SHARED", "password123"):
+            self.assertTrue(accounts.configured())
+        with mock.patch.object(accounts, "SALT", ""), \
+             mock.patch.object(accounts, "SHARED", ""):
+            self.assertFalse(accounts.configured())
+
+    def test_it_is_still_never_committed(self):
+        """A password in the repository is a published password. The module
+        may DISCUSS one in a comment; it may not assign one."""
+        with open(os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "accounts.py")) as f:
+            source = f.read()
+        self.assertIn('SHARED = jm.env_str("PORTAL_PASSWORD")', source)
+        code = "\n".join(line for line in source.splitlines()
+                         if not line.strip().startswith("#"))
+        self.assertIsNone(re.search(r'SHARED\s*=\s*[\'"]', code))
+
+
+class TestHeIsToldHowToGetIn(unittest.TestCase):
+    """An account he cannot sign in to is no use to him."""
+
+    def test_the_login_is_emailed_to_his_own_inbox(self):
+        with mock.patch.object(accounts, "SHARED", "password123"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com"), \
+             mock.patch.object(jm, "send_email") as send:
+            self.assertTrue(accounts.tell_harry("acme.com",
+                                                {"company": "Acme"}))
+        to_addr, subject, body = send.call_args.args[:3]
+        self.assertEqual(to_addr, "harry@example.com")
+        self.assertIn("acme.com", subject)
+        self.assertIn("Password123!", body)
+        self.assertIn("harry@example.com", body)
+        self.assertIn("Acme", body)
+
+    def test_a_dead_mailbox_does_not_lose_the_account(self):
+        with mock.patch.object(accounts, "SHARED", "password123"), \
+             mock.patch.object(jm, "send_email",
+                               side_effect=RuntimeError("smtp")):
+            self.assertFalse(accounts.tell_harry("acme.com"))
+
+
 class TestSpottingTheWall(unittest.TestCase):
     def page(self, text):
         return mock.Mock(inner_text=mock.Mock(return_value=text))
