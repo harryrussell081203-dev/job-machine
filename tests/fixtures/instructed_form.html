@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  A form whose rules are nowhere near its labels - which is what real ones
+  look like. Everything that decides whether an answer is ACCEPTED is in
+  small print beside the box or in a paragraph at the top of the page:
+
+    - 'Maximum 200 words' sits in a <small> under the textarea
+    - 'no more than three sentences' is in an aria-describedby target
+    - the page-level rule is in an intro paragraph, not attached to anything
+    - and there is marketing copy and an equal-opportunities line to be
+      ignored, because pulling in every sentence would drown the real ones
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply - Instrument Technician</title></head>
+<body>
+<h1>Apply for this role</h1>
+
+<p class="intro">
+  Please answer every question in your own words. Do not include your home
+  address or date of birth in any free-text answer.
+</p>
+<p class="blurb">
+  We are a world-class employer of choice with an unrivalled commitment to
+  excellence and a passion for innovation across the energy sector.
+</p>
+<p class="eo">
+  We are an equal opportunities employer and welcome applications from all
+  sections of the community.
+</p>
+
+<form id="apply" action="/done" method="post">
+  <label for="name">Full name</label>
+  <input id="name" name="full_name" type="text" required>
+
+  <div class="field">
+    <label for="why">Why do you want to work for us?</label>
+    <textarea id="why" name="why" required></textarea>
+    <small class="help-text">Maximum 200 words.</small>
+  </div>
+
+  <div class="field">
+    <label for="exp">Describe your relevant experience</label>
+    <textarea id="exp" name="experience" aria-describedby="exp-hint"></textarea>
+    <span id="exp-hint">Please answer in no more than three sentences.</span>
+  </div>
+
+  <div class="field">
+    <label for="cv">Upload your CV</label>
+    <input id="cv" name="cv" type="file">
+    <p class="field-description">PDF only, maximum 5MB.</p>
+  </div>
+
+  <button type="submit">Submit application</button>
+</form>
+</body>
+</html>

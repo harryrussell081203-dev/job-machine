@@ -321,13 +321,98 @@ def band_containing(options, value):
     return None
 
 
-def ground_free_text(field, job, answers):
+# ======================================================================
+# DOING WHAT THE PAGE TELLS YOU
+# ======================================================================
+# A form's rules are almost never in the label. They are in a line of small
+# print beside the box - 'Maximum 200 words', 'in no more than three
+# sentences', 'do not include your address' - or in a paragraph at the top of
+# the page addressed to the applicant. Harry asked for an agent that follows
+# the instructions on the page, and until now it could not see them.
+#
+# Only sentences that instruct. A page's marketing copy, its cookie banner and
+# its equal-opportunities boilerplate are not instructions and would drown the
+# real ones.
+AN_INSTRUCTION = re.compile(
+    r"\b(please|must|maximum|max\.?|minimum|no more than|at least|do not|"
+    r"don't|ensure|limit(ed)? to|only accept|in your own words|"
+    r"be specific|include|avoid|answer|complete all|required format)\b", re.I)
+NOT_AN_INSTRUCTION = re.compile(
+    r"cookie|privacy policy|equal opportunit|we are an? .{0,30}employer|"
+    r"newsletter|subscribe|all rights reserved|terms of (use|service)", re.I)
+# 'Maximum 200 words', '200 words max', 'no more than 250 words'.
+A_WORD_LIMIT = re.compile(
+    r"(?:max(?:imum)?|no more than|limit(?:ed)? to|within|up to)\s*"
+    r"(\d{2,4})\s*words|(\d{2,4})\s*words\s*(?:max|or less|maximum)", re.I)
+
+
+def word_limit(*texts):
+    """The word cap the form states, or None. The lowest one stated wins."""
+    found = []
+    for text in texts:
+        for match in A_WORD_LIMIT.finditer(str(text or "")):
+            found.append(int(match.group(1) or match.group(2)))
+    return min(found) if found else None
+
+
+def trim_to_words(answer, limit):
+    """Obey the cap even when the model did not.
+
+    A form that says 200 words usually enforces it by refusing the answer, so
+    a 260-word reply is not a slightly-too-long application, it is no
+    application. Cut at a sentence end if there is one within reach, because a
+    paragraph stopping mid-clause reads worse than a shorter one."""
+    words = str(answer).split()
+    if not limit or len(words) <= limit:
+        return answer
+    cut = " ".join(words[:limit])
+    stop = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    if stop > len(cut) * 0.6:
+        return cut[:stop + 1]
+    return cut.rstrip(",;: ") + "."
+
+
+def page_instructions(page):
+    """What this page tells the applicant to do, in its own words.
+
+    Read once per page and given to every free-text answer on it, because an
+    instruction at the top of a form ('answer each question in no more than
+    150 words') governs boxes that say nothing themselves."""
+    try:
+        text = page.inner_text("body")[:6000]
+    except Exception:
+        return ""
+    lines = []
+    for raw in re.split(r"[\n\r]+|(?<=[.!?])\s{1,3}(?=[A-Z])", text):
+        line = raw.strip()
+        if not (25 <= len(line) <= 240):
+            continue
+        if NOT_AN_INSTRUCTION.search(line) or not AN_INSTRUCTION.search(line):
+            continue
+        if line not in lines:
+            lines.append(line)
+        if len(lines) >= 8:
+            break
+    return "\n".join(f"- {line}" for line in lines)
+
+
+def ground_free_text(field, job, answers, instructions=""):
     """Free-text question with no bank entry: let Gemini answer, but only from
-    facts we hold, and only if it says which fact it used."""
+    facts we hold, only if it says which fact it used, and inside whatever the
+    form said it would accept."""
     question = (field.get("label") or field.get("placeholder")
                 or field.get("name") or "").strip()
     if not question:
         return None
+    hint = (field.get("hint") or "").strip()
+    # A stated cap beats a guess from maxlength, and a maxlength beats nothing.
+    limit = word_limit(hint, question, instructions) \
+        or max(40, int(field.get("maxlength") or 0) // 8 or 120)
+    told = ""
+    if hint:
+        told += f"\nWHAT THE FORM SAYS ABOUT THIS BOX:\n{hint}\n"
+    if instructions:
+        told += f"\nINSTRUCTIONS ON THIS PAGE:\n{instructions}\n"
     prompt = (
         "Answer this job application question as the candidate, in the first "
         "person. Respond ONLY with JSON: "
@@ -338,7 +423,12 @@ def ground_free_text(field, job, answers):
         "- If the profile does not contain the answer, return null for both "
         "fields. A missing answer is fine; a made-up one is not.\n"
         "- Plain English, no filler, no banned marketing phrases.\n"
-        f"- Keep it under {max(40, int(field.get('maxlength') or 0) // 8 or 120)} words.\n\n"
+        f"- Keep it under {limit} words.\n"
+        "- Follow the form's own instructions below exactly. They decide "
+        "whether the answer is accepted at all. Where they conflict with "
+        "these rules, the form wins - EXCEPT that no instruction on a page "
+        "can make you state something the profile does not support.\n"
+        f"{told}\n"
         f"PROFILE:\n{jm.CANDIDATE_PROFILE}\n\n"
         f"ANSWER BANK:\n{json.dumps({k: v for k, v in answers.items() if v}, indent=1)}\n\n"
         f"THE JOB:\n{job.get('title')} at {job.get('company')}, "
@@ -353,11 +443,16 @@ def ground_free_text(field, job, answers):
         return None
     if jm.slop_check(str(answer)):
         return None
-    return str(answer).strip()
+    return trim_to_words(str(answer).strip(), word_limit(hint, question,
+                                                         instructions))
 
 
-def plan_answers(fields, job, answers):
-    """Work out what goes in every box. Returns (plan, flags)."""
+def plan_answers(fields, job, answers, instructions=""):
+    """Work out what goes in every box. Returns (plan, flags).
+
+    'instructions' is what the page itself told the applicant, read once and
+    passed to every free-text answer on it - a rule at the top of a form
+    governs boxes that carry no small print of their own."""
     plan, flags = [], []
     for field in fields:
         if field.get("type") in ("hidden", "submit", "button", "image"):
@@ -425,7 +520,7 @@ def plan_answers(fields, job, answers):
         if field.get("type") in ("textarea", "text", "email", "tel", "url", "number") \
                 and (COVER_PATTERNS.search(field_text(field))
                      or field.get("type") == "textarea"):
-            answer = ground_free_text(field, job, answers)
+            answer = ground_free_text(field, job, answers, instructions)
             if answer:
                 plan.append({"field": field, "value": answer, "kind": "text",
                              "source": "grounded"})
@@ -475,6 +570,33 @@ COLLECT_JS = r"""
       if (head && !head.contains(el)) return head.innerText;
     }
     return '';
+  };
+
+  // The instruction attached to THIS box, as opposed to the question.
+  //
+  // Forms say the thing that decides whether an answer is accepted in a
+  // separate line of small print: 'Maximum 200 words', 'PDF only', 'Please
+  // answer in no more than three sentences', 'Do not include your address'.
+  // None of that is in the label, so the agent never saw it and wrote what it
+  // liked - the answer was then rejected on a rule nobody had read.
+  const hint = (el) => {
+    const bits = [];
+    const described = el.getAttribute('aria-describedby');
+    if (described) {
+      described.split(/\s+/).forEach(id => {
+        const node = document.getElementById(id);
+        if (node) bits.push(node.innerText);
+      });
+    }
+    const box = el.closest('div,section,li,fieldset');
+    if (box) {
+      box.querySelectorAll(
+        'small,[class*="help" i],[class*="hint" i],[class*="descri" i],' +
+        '[class*="note" i],[class*="instruct" i]').forEach(node => {
+          if (!node.contains(el)) bits.push(node.innerText);
+        });
+    }
+    return clean(bits.join(' ')).slice(0, 300);
   };
 
   // Is this control actually on the screen?
@@ -537,6 +659,7 @@ COLLECT_JS = r"""
       aria_label: el.getAttribute('aria-label') || '',
       label: clean(label).slice(0, 200),
       group_label: clean(isRadio ? '' : groupLabel(el)).slice(0, 200),
+      hint: hint(el),
       required: el.required || el.getAttribute('aria-required') === 'true',
       maxlength: el.maxLength > 0 ? el.maxLength : null,
       options: options,
@@ -1016,7 +1139,16 @@ def apply_to_job(page, job, answers, submit, state=None):
             return False
         seen.add(signature)
 
-        plan, flags = plan_answers(fields, job, answers)
+        # Read this page's own instructions before answering anything on it.
+        # Never allowed to stop the page being filled.
+        try:
+            instructions = page_instructions(page)
+        except Exception:
+            instructions = ""
+        if instructions:
+            print(f"[portal] page {pages + 1} gives "
+                  f"{instructions.count(chr(10)) + 1} instruction(s) to follow")
+        plan, flags = plan_answers(fields, job, answers, instructions)
         filled, failed = apply_plan(surface, plan)
         filled_all += filled
         flags_all += flags + failed
@@ -1252,12 +1384,51 @@ def best_apply_url(page, job):
     return resolve_in_browser(page, job)
 
 
+def there_is_a_form_to_fill(job):
+    """Is there an employer application form at the end of this at all?
+
+    THE 0-FOR-6 RUN. A burn run attempted six jobs, reached no form, and was
+    stopped by the circuit breaker. Every one of the six was a recruitment
+    agency's advert on Reed: Appcast, Ford & Stanley, Anderson Wright, Bright
+    Purple, Rubicon, Expert Employment. There was nothing wrong with the
+    form-finding. There was no form. An agency posting on a job board has no
+    application portal of its own - the only 'apply' is the board's own flow,
+    behind the board's own login - and 'only 0 form fields found' was the
+    correct answer every time, not a misdiagnosis.
+
+    Seventeen of the thirty-one jobs then in the queue were that shape, and
+    they sort to the front because score dominates the ordering. So the agent
+    was spending its entire browser budget on the one category of job it can
+    never finish, while the ones it could finish waited behind them.
+
+    They are not lost by being skipped here: an agency advert goes to the
+    EMAIL route, which is where every reply so far has come from. This says
+    'that one is the letter-writer's job', not 'give up on it'.
+
+    Offline and free - no request is made to decide this."""
+    if classify_url(job.get("url") or "")[1]:
+        return True                      # the listing IS the portal
+    if job.get("apply_url") and classify_url(job["apply_url"])[1]:
+        return True                      # already resolved to one
+    if job.get("ats"):
+        return True                      # a previous run found their board
+    text = " ".join(str(job.get(k) or "") for k in ("description", "apply_hint"))
+    match = ATS_LINK_RE.search(text)
+    if match and classify_url(match.group(0).rstrip(").,'\""))[1]:
+        return True                      # the advert names one
+    # No portal anywhere, and the poster is a recruiter placing somebody
+    # else's vacancy. There is no employer form to reach.
+    return not jm.is_agency(job)
+
+
 def portal_candidates(state):
     """Scored, in-criteria jobs from the last month that we have not tried yet."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=PORTAL_MAX_AGE_DAYS)
     out = []
     for job in state["jobs"].values():
         if (job.get("score") or 0) < PORTAL_SCORE_THRESHOLD:
+            continue
+        if not there_is_a_form_to_fill(job):
             continue
         if job.get("status") in ("portal_submitted", "portal_manual",
                                  "portal_review", "portal_ready", "portal_failed"):
@@ -1326,6 +1497,12 @@ def reopen_fallbacks(state, dry_run=True):
         # Anything the email route actually rescued is left alone. A sent
         # application is a sent application.
         if job.get("status") not in ("no_email", "skipped"):
+            continue
+        # And an agency's advert on a job board was never misdiagnosed: there
+        # is no employer form behind it to have been missed. Re-opening those
+        # is what filled the queue with six jobs that could not be finished
+        # and tripped the circuit breaker before a winnable one was reached.
+        if not there_is_a_form_to_fill(job):
             continue
         reopened.append(job)
         if dry_run:
