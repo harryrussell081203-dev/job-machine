@@ -574,9 +574,19 @@ is the bug.
 One standing goal a day, rotated, never the list. A text that reads as five
 things you are failing at gets swiped away.
 
-It **never reads the inbox** and never summarises personal correspondence - it
-works from the job-search state file and the goals file, so it cannot put
-something private into a text message. And it stops mentioning anything more
+**And the inbox** - anything a real person has asked him for and not had an
+answer to. The first version deliberately left this out, on the grounds that a
+machine summarising personal mail could put something private into a text.
+Harry overruled that, and the objection was thin: the only address this can
+ever text is his own handset, `sms.alert_harry` takes no recipient argument,
+and a test holds that shut. So it reads the last three days, drops everything
+automated before reading a word of it, and asks one question of what is left -
+is somebody waiting on Harry. Gemini does that judging, is told to quote the
+ask rather than invent one, and **may only speak about a sender who really
+wrote in**: an action attributed to anybody else is discarded, not texted.
+Without a Gemini key a regex still catches the obvious ones.
+
+It stops mentioning anything more
 than `MORNING_CHASE_DAYS` (7) old, because the machine cannot see Harry answer
 an email from his own inbox, and a daily text that nags about something already
 done is a daily text you stop reading.

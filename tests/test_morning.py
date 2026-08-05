@@ -189,18 +189,85 @@ class TestWhenItGoes(unittest.TestCase):
         self.assertNotIn(morning.SENT_ON, state)
 
 
-class TestItNeverReadsTheInbox(unittest.TestCase):
-    """It works from the job-search state file and a file of goals Harry can
-    edit, so it cannot put private correspondence into a text message."""
+class TestReadingTheInbox(unittest.TestCase):
+    """It reads Harry's mail now, because he asked for it. What makes that
+    safe is not restraint about what it reads - it is that the only address
+    it can ever text is his own handset."""
 
-    def test_no_imap_anywhere_in_this_module(self):
-        with open(os.path.join(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__))), "morning.py")) as f:
-            source = f.read()
-        for forbidden in ("imaplib", "fetch_latest_reply", "check_replies",
-                          "IMAP"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, source)
+    MESSAGES = [
+        ("Cammy Keith", "ckeith@tmm.com", "Re: your CV",
+         "Hi Harry, can you send me your availability for Thursday?"),
+        ("Newsletter", "no-reply@boards.com", "9 new jobs", "click here"),
+        ("Graham Brown", "g@frs.co.uk", "Re: registering",
+         "Please send a word copy to my colleague Will."),
+    ]
+
+    def test_automated_mail_is_dropped_before_anything_reads_it(self):
+        for sender in ("no-reply@x.com", "notifications@y.com",
+                       "info@jobs.totaljobsmail.com", "mailer-daemon@z.com",
+                       "newsletter@a.com"):
+            with self.subTest(sender=sender):
+                self.assertTrue(morning.NOT_A_PERSON.search(sender))
+
+    def test_a_real_consultant_is_not_dropped(self):
+        for sender in ("Cammy Keith <CKeith@tmmrecruitment.com>",
+                       "annie.thompson@forcesemployment.org.uk"):
+            with self.subTest(sender=sender):
+                self.assertIsNone(morning.NOT_A_PERSON.search(sender))
+
+    def test_it_spots_somebody_waiting_on_him(self):
+        self.assertTrue(morning.asks_something(
+            "Re: your CV", "Can you send your availability for Thursday?"))
+        self.assertTrue(morning.asks_something(
+            "Registering", "Please send a word copy to Will."))
+
+    def test_it_does_not_treat_a_statement_as_an_ask(self):
+        self.assertFalse(morning.asks_something(
+            "Thanks", "Thanks for your email. We have received it."))
+
+    def test_without_a_key_it_still_names_who_is_waiting(self):
+        with mock.patch.object(jm, "GEMINI_API_KEY", ""):
+            actions = morning.inbox_actions(self.MESSAGES)
+        self.assertTrue(actions)
+        self.assertIn("Cammy Keith", actions[0]["text"])
+
+    def test_the_model_may_only_speak_about_somebody_who_really_wrote(self):
+        """Grounding. An action attributed to a sender who is not in the mail
+        is dropped rather than texted."""
+        invented = {"actions": [{"who": "Someone Who Never Wrote",
+                                 "do": "Send them the thing"},
+                                {"who": "Cammy Keith",
+                                 "do": "Send Thursday availability"}]}
+        with mock.patch.object(jm, "GEMINI_API_KEY", "k"), \
+             mock.patch.object(jm, "gemini_json", return_value=invented):
+            actions = morning.inbox_actions(self.MESSAGES)
+        self.assertEqual(len(actions), 1)
+        self.assertIn("Cammy Keith", actions[0]["text"])
+
+    def test_an_empty_answer_produces_nothing(self):
+        with mock.patch.object(jm, "GEMINI_API_KEY", "k"), \
+             mock.patch.object(jm, "gemini_json", return_value={"actions": []}):
+            self.assertEqual(morning.inbox_actions(self.MESSAGES), [])
+
+    def test_a_dead_inbox_does_not_stop_the_text(self):
+        """The state file and the goals are still worth sending on their own."""
+        with mock.patch.object(morning, "inbox_actions",
+                               side_effect=RuntimeError("imap down")):
+            body = morning.compose({"jobs": {}}, morning.load_goals(),
+                                   uk(2026, 8, 5, 7))
+        self.assertTrue(body)
+
+    def test_it_can_still_be_told_not_to_read_the_mail(self):
+        with mock.patch.object(morning, "inbox_actions") as inbox:
+            morning.compose({"jobs": {}}, morning.load_goals(),
+                            uk(2026, 8, 5, 7), inbox=False)
+        inbox.assert_not_called()
+
+    def test_the_only_number_it_can_text_is_his_own(self):
+        """This is what makes reading the mail safe: there is no recipient
+        argument to get wrong."""
+        import inspect
+        self.assertNotIn("to", inspect.signature(sms.alert_harry).parameters)
 
 
 if __name__ == "__main__":
