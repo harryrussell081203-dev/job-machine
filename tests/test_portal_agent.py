@@ -414,7 +414,7 @@ class TestPortalTargeting(unittest.TestCase):
         state = {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
         applied = []
 
-        def fake_apply(page, job, answers, submit):
+        def fake_apply(page, job, answers, submit, state=None):
             applied.append(job["external_id"])
             job["status"] = "portal_submitted"
             return True
@@ -870,7 +870,8 @@ class TestApplyingOffTheKnownPlatforms(unittest.TestCase):
              mock.patch.object(pa, "best_apply_url",
                                return_value=("https://drondickson.com/apply", None)), \
              mock.patch.object(pa, "apply_to_job",
-                               side_effect=lambda p, j, a, s: looked.append(j) or False), \
+                               side_effect=lambda p, j, a, s, st=None:
+                               looked.append(j) or False), \
              mock.patch.object(jm, "save"), mock.patch.object(pa.time, "sleep"):
             pa.run(state, submit=False)
 

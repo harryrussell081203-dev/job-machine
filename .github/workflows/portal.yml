@@ -77,6 +77,10 @@ jobs:
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
           PORTAL_CIRCUIT_AFTER: ${{ vars.PORTAL_CIRCUIT_AFTER }}
+          # Portal account passwords are DERIVED from this and the site's
+          # domain, never stored - data/state.json is committed to a public
+          # repository. No salt, no account creation.
+          PORTAL_PASSWORD_SALT: ${{ secrets.PORTAL_PASSWORD_SALT }}
           BURN_LIMIT: ${{ vars.BURN_LIMIT }}
         run: |
           if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
