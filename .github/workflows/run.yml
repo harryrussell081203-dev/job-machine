@@ -171,6 +171,9 @@ jobs:
             python job_machine.py --dry-run $ARGS
           else
             python job_machine.py $ARGS
+          # Read back what this run just proved, so the next one starts
+          # from it. Never allowed to fail the job.
+          python learn.py --write || true
           fi
 
       - name: Commit state

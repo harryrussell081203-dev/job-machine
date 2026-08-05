@@ -1277,3 +1277,93 @@ class TestAMultiPageApplicationForReal(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(job["status"], "portal_ready")
         self.assertGreaterEqual(job["portal_pages"], 2)
+
+
+class TestReadingSalaryBands(unittest.TestCase):
+    """The single most common thing that has stopped an application. Five of
+    them stalled on one dropdown, recorded in the flags as
+    "'' has no option matching '35000'". The fix is not a better model, it is
+    reading the bands."""
+
+    def test_the_shapes_these_dropdowns_actually_use(self):
+        for options, wanted in [
+                (["Please select", "£20,000 - £30,000", "£30,000 - £40,000"],
+                 "£30,000 - £40,000"),
+                (["20k-30k", "30k-40k", "40k+"], "30k-40k"),
+                (["Under £25,000", "£25,000 - £34,999", "£35,000 - £44,999"],
+                 "£35,000 - £44,999"),
+                (["£30,000 to £40,000", "£40,000 to £50,000"],
+                 "£30,000 to £40,000")]:
+            with self.subTest(options=options):
+                self.assertEqual(pa.band_containing(options, "35000"), wanted)
+
+    def test_an_open_ended_top_band(self):
+        self.assertEqual(
+            pa.band_containing(["£40,000 - £49,999", "£50,000+"], "55000"),
+            "£50,000+")
+
+    def test_an_under_band(self):
+        self.assertEqual(
+            pa.band_containing(["Under £20,000", "£20,000 - £25,000"], "19000"),
+            "Under £20,000")
+
+    def test_a_number_that_fits_nothing_picks_nothing(self):
+        """Putting a salary in the wrong band is worse than leaving it."""
+        self.assertIsNone(pa.band_containing(["£50,000+", "£60,000+"], "20000"))
+        self.assertIsNone(pa.band_containing(["Red", "Green"], "35000"))
+
+    def test_it_is_reached_through_the_ordinary_option_matching(self):
+        field = {"type": "select", "options": ["Please select",
+                                               "£30,000 - £40,000",
+                                               "£40,000 - £50,000"]}
+        self.assertEqual(pa.choose_option(field, "35000"), "£30,000 - £40,000")
+
+    def test_an_exact_option_still_wins_over_a_band(self):
+        field = {"type": "select", "options": ["35000", "£30,000 - £40,000"]}
+        self.assertEqual(pa.choose_option(field, "35000"), "35000")
+
+
+class TestTheQueueLearnsItsOwnOrder(unittest.TestCase):
+    """Working the queue in the order the evidence says finishes means the
+    same hour of browser time produces more submitted applications."""
+
+    def state(self):
+        history = {
+            "won1": {"portal_attempted_at": jm.now(), "ats": "greenhouse",
+                     "status": "portal_submitted", "portal_filled": ["a"]},
+            "won2": {"portal_attempted_at": jm.now(), "ats": "greenhouse",
+                     "status": "portal_submitted", "portal_filled": ["a"]},
+            "won3": {"portal_attempted_at": jm.now(), "ats": "greenhouse",
+                     "status": "portal_submitted", "portal_filled": ["a"]},
+            "lost1": {"portal_attempted_at": jm.now(), "ats": "taleo",
+                      "status": "portal_manual"},
+            "lost2": {"portal_attempted_at": jm.now(), "ats": "taleo",
+                      "status": "portal_manual"},
+            "lost3": {"portal_attempted_at": jm.now(), "ats": "taleo",
+                      "status": "portal_manual"},
+        }
+        queue = {
+            "hopeless": dict(JOB, external_id="hopeless", score=95,
+                             found_at=jm.now(), status="scored", ats="taleo"),
+            "promising": dict(JOB, external_id="promising", score=80,
+                              found_at=jm.now(), status="scored",
+                              ats="greenhouse"),
+        }
+        return {"jobs": {**history, **queue}}
+
+    def test_the_platform_that_finishes_comes_first_despite_a_lower_score(self):
+        order = [j["external_id"] for j in pa.portal_candidates(self.state())]
+        self.assertEqual(order[0], "promising")
+
+    def test_score_still_decides_between_equals(self):
+        state = {"jobs": {
+            "low": dict(JOB, external_id="low", score=71, found_at=jm.now(),
+                        status="scored", ats="greenhouse"),
+            "high": dict(JOB, external_id="high", score=95, found_at=jm.now(),
+                         status="scored", ats="greenhouse")}}
+        order = [j["external_id"] for j in pa.portal_candidates(state)]
+        self.assertEqual(order, ["high", "low"])
+
+    def test_a_broken_learner_never_stops_a_run(self):
+        with mock.patch.dict("sys.modules", {"learn": None}):
+            self.assertIsInstance(pa.learned_weights({"jobs": {}}), dict)

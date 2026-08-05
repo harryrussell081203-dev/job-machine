@@ -2352,7 +2352,20 @@ def collect_summary(state, since):
                         or j.get("followup_sent_at")),
         "call_list": call_list_rows(state),
         "awaiting_captcha": awaiting_captcha(state),
+        "answer_gaps": answer_gaps(state),
     }
+
+
+def answer_gaps(state):
+    """The questions that have stopped an application, worst first.
+
+    Each one is a line in data/answers.json and ten seconds of Harry's time,
+    and each one unblocks an application that is otherwise finished."""
+    try:
+        import learn
+        return learn.unanswered_questions(state)[:5]
+    except Exception:
+        return []
 
 
 def awaiting_captcha(state):
@@ -2477,6 +2490,13 @@ def summary_bodies(data):
 
     if not apps:
         lines.append("No emails went out in the last 24 hours.\n")
+
+    if data.get("answer_gaps"):
+        lines += ["", "QUESTIONS THAT STOPPED AN APPLICATION", "-" * 37,
+                  "Each of these is one line in data/answers.json, and each "
+                  "one unblocks an application that is otherwise finished.", ""]
+        for gap in data["answer_gaps"]:
+            lines.append(f"  {gap['times']}x  {gap['question'][:70]}")
 
     if data.get("awaiting_captcha"):
         lines += ["", "FILLED IN, WAITING ON A CAPTCHA", "-" * 30,

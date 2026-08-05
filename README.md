@@ -585,6 +585,49 @@ Five levers run automatically on top of the basic apply loop:
 Freshly posted listings are also applied to first within a tier - being an early
 applicant is itself a conversion lever.
 
+## What it has learned, and what it has not (`learn.py`)
+
+```bash
+python learn.py              # what the data says, and what it cannot
+python learn.py --questions  # the answer-bank gaps, worst first
+```
+
+Twenty-eight emails and two human replies. **Any model fitted to that would be
+fitting noise**, and a machine confidently acting on noise is worse than one
+that does nothing - it keeps the template that got lucky, bins the one that did
+not, and never finds out it was wrong.
+
+So this measures, and refuses to conclude until the numbers can carry one.
+Reply rate is bucketed by template, contact tier, hour, agency-vs-employer and
+score band, every bucket carries a **Wilson interval**, and a verdict is only
+recorded when two buckets each have 8+ sends and their intervals do not
+overlap. Today that means **no verdicts at all**, and it says so, with how many
+more sends each dimension needs. A learning system that cannot tell you it does
+not know yet is guessing with extra steps.
+
+An autoresponder is not a reply. Counting them would make every large firm look
+responsive - and did: the raw figure was 5 replies, of which 3 were robots.
+
+**Where the real gains are today is the portal, not the copy.** Two feedback
+loops that need no statistics at all:
+
+- **The questions that stop applications.** Every field the agent cannot ground
+  is written into `portal_flags` in the form's own words. Five applications
+  stalled on one salary dropdown. That is not a modelling problem, it is a
+  missing answer - so the digest now lists them, worst first, and each one is
+  ten seconds in `data/answers.json`. The salary case is fixed outright: it now
+  reads bands (`£30,000 - £40,000`, `30k-40k`, `£50,000+`, `Under £25,000`) and
+  picks the one containing the number, or nothing if none fits, because a
+  salary in the wrong band is worse than a blank.
+- **Which platforms finish.** Every attempt is recorded with its ATS, and the
+  queue is now ordered by score *weighted by what actually completes*. The same
+  hour of browser time produces more submitted applications, and the ordering
+  improves on its own every run. An untried platform is unproven rather than
+  condemned, so a new one is never starved of the evidence to be judged.
+
+`learn.py --write` runs at the end of every pipeline and portal run, so
+`data/learned.json` is never stale and the next run starts from it.
+
 ## The morning text (`morning.py`)
 
 07:45 UK, every day: the two or three things most worth doing today. Anyone can
