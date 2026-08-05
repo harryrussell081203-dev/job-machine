@@ -264,6 +264,60 @@ def choose_option(field, value):
             return option
         if negative and low.startswith(NO_WORDS):
             return option
+    return band_containing(options, value)
+
+
+# Salary is asked as a band far more often than as a number, and '35000' is
+# never one of the options. This is the single most common thing that has
+# stopped an application: five of them stalled on one dropdown, recorded in
+# the flags as "'' has no option matching '35000'". The answer is not a better
+# model, it is reading the bands.
+BAND = re.compile(
+    r"(?:£|\$|€)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b)?"
+    r"(?:\s*(?:-|to|–|—|and)\s*(?:£|\$|€)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b)?)?",
+    re.I)
+OPEN_ENDED = re.compile(r"\+|\b(plus|or more|and above|over|upwards)\b", re.I)
+UNDER = re.compile(r"\b(under|below|less than|up to)\b", re.I)
+
+
+def _number(raw, kilo):
+    try:
+        value = float(str(raw).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return value * 1000 if kilo else value
+
+
+def band_containing(options, value):
+    """The option whose range covers this number, or None.
+
+    Handles what these dropdowns actually say: '£30,000 - £40,000',
+    '30k-40k', 'Under £25,000', '£50,000+'. A number that falls in no band
+    picks nothing rather than the nearest, because putting a salary in the
+    wrong band is worse than leaving it for Harry."""
+    try:
+        wanted = float(re.sub(r"[^\d.]", "", str(value)) or 0)
+    except ValueError:
+        return None
+    if not wanted:
+        return None
+    for option in options:
+        match = BAND.search(option)
+        if not match:
+            continue
+        low = _number(match.group(1), match.group(2))
+        high = _number(match.group(3), match.group(4))
+        if low is None:
+            continue
+        if high is not None:
+            if low <= wanted <= high:
+                return option
+        elif OPEN_ENDED.search(option):
+            if wanted >= low:
+                return option
+        elif UNDER.search(option):
+            if wanted <= low:
+                return option
     return None
 
 
@@ -1218,7 +1272,28 @@ def portal_candidates(state):
         if found and found < cutoff:
             continue
         out.append(job)
-    return sorted(out, key=lambda j: -(j.get("score") or 0))
+    # Best score first, but weighted by what actually finishes. Working the
+    # queue in the order the evidence says completes means the same hour of
+    # browser time produces more submitted applications - and the order gets
+    # better on its own every run, because every run adds evidence.
+    weights = learned_weights(state)
+    def value(job):
+        platform = job.get("ats") or "employer's own site"
+        return -((job.get("score") or 0) * (0.5 + weights.get(platform, 0.5)))
+    return sorted(out, key=value)
+
+
+def learned_weights(state):
+    """{ats: weight} from the machine's own record of what it finishes.
+
+    Imported lazily and wrapped: a scoring aid must never be the reason a run
+    does not happen."""
+    try:
+        import learn
+        return learn.platform_order(state)
+    except Exception as e:
+        print(f"[portal] no learned ordering ({e}), going on score alone")
+        return {}
 
 
 # The reasons the agent used to give up that were WRONG - it had not pressed
