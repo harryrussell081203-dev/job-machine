@@ -2072,3 +2072,44 @@ class TestTextingAboutAnInterview(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestExtraWordsMeanADifferentCompany(unittest.TestCase):
+    """'Grace May', a recruiter, was matched to 'Grace and May Home' and an IT
+    Support application went to a home furnishings shop.
+
+    Subset alone was never enough. Every word of the wanted name appearing in
+    the match is necessary but not sufficient - what the match ADDS is what
+    tells you whether it is the same firm. 'Baker Hughes Company' adds
+    'company' and is Baker Hughes; 'Grace and May Home' adds 'home' and is
+    somebody else entirely."""
+
+    def clearbit(self, name, domain):
+        response = mock.Mock()
+        response.raise_for_status = lambda: None
+        response.json = lambda: [{"name": name, "domain": domain}]
+        return mock.patch.object(jm.requests, "get", return_value=response)
+
+    def test_an_extra_business_word_is_refused(self):
+        with self.clearbit("Grace and May Home", "graceandmayhome.co.uk"):
+            self.assertIsNone(jm.find_domain("Grace May"))
+
+    def test_an_extra_corporate_word_is_accepted(self):
+        for wanted, hit, domain in (
+                ("Baker Hughes", "Baker Hughes Company", "bakerhughes.com"),
+                ("Motive Offshore", "Motive Offshore Group", "motive-offshore.com"),
+                ("Ashtead Technology", "Ashtead Technology Ltd",
+                 "ashtead-technology.com")):
+            with self.subTest(wanted=wanted):
+                with self.clearbit(hit, domain):
+                    self.assertEqual(jm.find_domain(wanted), domain)
+
+    def test_the_older_misdirections_are_still_refused(self):
+        with self.clearbit("Woodforest National Bank", "woodforest.com"):
+            self.assertIsNone(jm.find_domain("Wood"))
+        with self.clearbit("Sanctuary Clothing", "sanctuaryclothing.com"):
+            self.assertIsNone(jm.find_domain("Sanctuary"))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
