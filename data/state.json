@@ -833,6 +833,14 @@
     "+441224327030"
    ],
    "source": "signature of CKeith@tmmrecruitment.com, senior business manager, electrical/electronic/instrumentation desk"
+  },
+  "university of west of scotland": {
+   "at": "2026-08-05T16:17:01.376325+00:00",
+   "name": "University of the West of Scotland",
+   "numbers": [
+    "+441418483998"
+   ],
+   "source": "signature of ask@uws.ac.uk"
   }
  },
  "jobs": {
@@ -33264,6 +33272,22 @@
    "status": "new",
    "title": "Senior Mechanical Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5829152896?utm_medium=api&utm_source=afe77721"
+  },
+  "adzuna_5829290500": {
+   "company": "Amazon UK Services Ltd.",
+   "description": "Are you passionate about solving technical challenges and helping people? Do you thrive in a dynamic, high-impact environment? Join Amazon's IT Services team as an ITS Support Engineer and be part of the engine that powers Amazon\u2019s seamless operations. We're seeking customer-focused, innovative problem-solvers who excel in a fast-paced, collaborative environment. As a part of our IT Services team, you'll have the opportunity to make a direct impact on Amazon's corporate global workforce, making\u2026",
+   "external_id": "adzuna_5829290500",
+   "found_at": "2026-08-05T15:50:53.571732+00:00",
+   "location": "Edinburgh, Scotland",
+   "posted_at": "2026-08-05T16:40:41+00:00",
+   "salary_max": 41475.98,
+   "salary_min": 41475.98,
+   "score": null,
+   "search_location": "Edinburgh",
+   "source": "adzuna",
+   "status": "new",
+   "title": "ITS Support Engineer I, IT Services",
+   "url": "https://www.adzuna.co.uk/jobs/details/5829290500?utm_medium=api&utm_source=afe77721"
   },
   "alert-03d01d3c5b96": {
    "alert_subject": "Wind Turbine Technician (Major Components / Large Corrective) at\r\n RES",
