@@ -221,6 +221,7 @@ class TestTellingHarry(unittest.TestCase):
 
     def test_it_goes_to_his_own_phone(self):
         with mock.patch.object(sms, "API_KEY", "test-key"), \
+             mock.patch.object(sms, "waking_hours", return_value=True), \
              mock.patch.object(sms, "send") as send:
             self.assertTrue(sms.alert_harry("test"))
         self.assertEqual(send.call_args.args[0], sms.SMS_FROM)

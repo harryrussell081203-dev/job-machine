@@ -63,6 +63,7 @@ and nothing is sent.
 | `GMAIL_ADDRESS` | the Gmail account that sends |
 | `GMAIL_APP_PASSWORD` | Google account > Security > App passwords (needs 2FA on) |
 | `HTTPSMS_API_KEY` | the httpSMS app on the phone, Settings > API key (optional - no key, no texting) |
+| `PORTAL_PASSWORD_SALT` | any long random string you invent once. Portal account passwords are derived from it; without it the agent creates no accounts |
 
 ### Variables (all optional)
 `Settings > Secrets and variables > Actions > Variables`
@@ -230,6 +231,37 @@ Every day at **18:15 UK** (`nudge.yml`), if any are waiting:
 18:15 rather than the morning: a CAPTCHA needs a browser and a sit-down, and a
 nudge that arrives when it cannot be acted on gets swiped away. Once a day, and
 a failed send does not mark the day as done.
+
+### Getting past the door
+
+About a third of the queue is not an application until there is an account.
+Workday, Taleo, iCIMS and most employers' own portals put a sign-in in front of
+the form, and every one of them used to be recorded as "do this one by hand".
+
+`accounts.py` treats that as a step rather than a wall: it finds the signup
+form, fills it, submits it, then **reads the activation email out of Harry's
+inbox over IMAP**, opens the link, and goes back to the application.
+
+**No password is ever stored.** `data/state.json` is committed to this public
+repository on every run, so anything written there is published. Instead each
+password is derived, freshly, when it is needed:
+
+```
+password = HMAC-SHA256(PORTAL_PASSWORD_SALT, domain)
+```
+
+The salt is a repo secret that exists only on the runner. The same site always
+yields the same password so he can sign back in months later; a different site
+yields an unrelated one, so a breach at one employer says nothing about any
+other; and there is nothing in the repository to leak. The state file records
+only that an account exists and when it was verified.
+
+Two things it will not do. It does not touch a signup page carrying a CAPTCHA -
+that is handed over like any other. And it ticks "I agree to the terms",
+because Harry asked for the account and that is assent he has already given,
+but it refuses "I certify this information is true and complete", because that
+is a statement of fact about him and it is his to make. The two look identical
+on a page and are not remotely the same thing.
 
 ### Getting to the form at all
 

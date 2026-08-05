@@ -861,7 +861,7 @@ def reach_the_form(page):
 MIN_FORM_FIELDS = jm.env_int("PORTAL_MIN_FIELDS", 3)
 
 
-def apply_to_job(page, job, answers, submit):
+def apply_to_job(page, job, answers, submit, state=None):
     """One application, start to finish. Mutates job with the outcome."""
     page.goto(job["apply_url"], wait_until="domcontentloaded",
               timeout=PAGE_TIMEOUT_MS)
@@ -898,6 +898,23 @@ def apply_to_job(page, job, answers, submit):
                 page.wait_for_timeout(3000)
                 pages += 1
                 continue
+            # A wall, not a dead end. About a third of this queue is an
+            # application behind a sign-in, and a signup form is five fields.
+            if not pages and not job.get("account_tried"):
+                job["account_tried"] = True
+                import accounts
+                if accounts.needs_an_account(page, fields):
+                    print(f"[portal] {job['company']} wants an account first")
+                    if accounts.sign_up(page, state if state is not None
+                                        else {}, job, answers):
+                        page.goto(job["apply_url"],
+                                  wait_until="domcontentloaded",
+                                  timeout=PAGE_TIMEOUT_MS)
+                        page.wait_for_timeout(2500)
+                        continue
+                    job.update({"status": "portal_manual",
+                                "portal_screenshot": shot(page, job, "account")})
+                    return False
             if pages:
                 job.update({"status": "portal_review",
                             "portal_pages": pages,
@@ -1344,7 +1361,7 @@ def run(state, submit=False, limit=None, headless=True):
                 continue
             attempted += 1
             try:
-                submitted = apply_to_job(page, job, answers, submit)
+                submitted = apply_to_job(page, job, answers, submit, state)
             except Exception as e:
                 job.update({"status": "portal_failed",
                             "portal_reason": f"{type(e).__name__}: {str(e)[:200]}"})

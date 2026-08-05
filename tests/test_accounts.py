@@ -1,0 +1,193 @@
+"""
+Tests for creating portal accounts.
+
+Offline. No account is created anywhere, no inbox is opened.
+
+The thing that must never break here: data/state.json is committed to a
+PUBLIC repository on every run, so a password reaching it is a password
+published to the internet.
+"""
+import os
+import re
+import sys
+import unittest
+from datetime import datetime, timezone
+from unittest import mock
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import accounts  # noqa: E402
+import job_machine as jm  # noqa: E402
+
+
+class TestThePasswordIsNeverWrittenDown(unittest.TestCase):
+    """This repository is public. Anything in state.json is published."""
+
+    def setUp(self):
+        patch = mock.patch.object(accounts, "SALT", "a-secret-on-the-runner")
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_same_site_always_gives_the_same_password(self):
+        """Otherwise he could never sign back in."""
+        self.assertEqual(accounts.password_for("myworkdayjobs.com"),
+                         accounts.password_for("myworkdayjobs.com"))
+
+    def test_a_different_site_gives_an_unrelated_one(self):
+        """A leak at one employer must tell an attacker nothing about another."""
+        first = accounts.password_for("myworkdayjobs.com")
+        second = accounts.password_for("taleo.net")
+        self.assertNotEqual(first, second)
+        self.assertLess(len(set(first) & set(second)), len(first))
+
+    def test_it_satisfies_what_portals_demand(self):
+        password = accounts.password_for("example.com")
+        self.assertGreaterEqual(len(password), 12)
+        self.assertTrue(re.search(r"[A-Z]", password))
+        self.assertTrue(re.search(r"[a-z]", password))
+        self.assertTrue(re.search(r"\d", password))
+        self.assertTrue(re.search(r"[^\w]", password))
+
+    def test_no_salt_means_no_password_rather_than_a_weak_one(self):
+        with mock.patch.object(accounts, "SALT", ""):
+            self.assertFalse(accounts.configured())
+            with self.assertRaises(RuntimeError):
+                accounts.password_for("example.com")
+
+    def test_what_is_recorded_is_only_that_an_account_exists(self):
+        state = {}
+        accounts.remember_account(state, "example.com", verified=True)
+        entry = state["portal_accounts"]["example.com"]
+        self.assertEqual(set(entry) - {"email", "created_at", "verified_at",
+                                       "seen_at"}, set())
+        blob = str(state)
+        self.assertNotIn(accounts.password_for("example.com"), blob)
+        self.assertNotIn("password", blob.lower())
+
+    def test_the_module_never_stores_a_password_anywhere(self):
+        with open(os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "accounts.py")) as f:
+            source = f.read()
+        for forbidden in ('["password"] =', "'password':", '"password":'):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+
+class TestSpottingTheWall(unittest.TestCase):
+    def page(self, text):
+        return mock.Mock(inner_text=mock.Mock(return_value=text))
+
+    def test_a_sign_in_wall_is_recognised(self):
+        for wording in ("Please sign in to continue",
+                        "You must be logged in to apply",
+                        "Create an account to apply for this role",
+                        "Returning candidate? Sign in"):
+            with self.subTest(wording=wording):
+                self.assertTrue(accounts.needs_an_account(
+                    self.page(wording), []))
+
+    def test_an_email_and_password_pair_is_a_login_whatever_it_says(self):
+        fields = [{"type": "email", "label": "Email"},
+                  {"type": "password", "label": "Password"}]
+        self.assertTrue(accounts.needs_an_account(self.page("Welcome"), fields))
+
+    def test_an_application_form_is_not_a_wall(self):
+        fields = [{"type": "text", "label": "First name"},
+                  {"type": "file", "label": "Upload your CV"},
+                  {"type": "email", "label": "Email"}]
+        self.assertFalse(accounts.needs_an_account(
+            self.page("Apply for this job"), fields))
+
+
+class TestWhatItWillAndWillNotAgreeTo(unittest.TestCase):
+    """A box saying 'I agree to the terms' is assent, and Harry asked for the
+    account. A box saying 'I certify this is true and complete' is a statement
+    of fact about him. They look identical on a page and are not the same."""
+
+    def setUp(self):
+        patch = mock.patch.object(accounts, "SALT", "salt")
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.answers = {"first_name": "Harry", "last_name": "Russell",
+                        "phone": "07398530978"}
+
+    def fields(self, *extra):
+        base = [{"type": "email", "label": "Email address", "required": True},
+                {"type": "password", "label": "Password", "required": True}]
+        return base + list(extra)
+
+    def test_it_agrees_to_terms_because_it_was_asked_to_make_the_account(self):
+        terms = {"type": "checkbox", "label": "I agree to the terms of use",
+                 "required": True}
+        plan, blockers = accounts.plan_signup(self.fields(terms), "x.com",
+                                              self.answers)
+        self.assertEqual(blockers, [])
+        self.assertTrue(any(item["field"] is terms for item in plan))
+
+    def test_it_refuses_to_certify_a_fact_about_him(self):
+        claim = {"type": "checkbox", "required": True,
+                 "label": "I certify the information given is true and complete"}
+        _, blockers = accounts.plan_signup(self.fields(claim), "x.com",
+                                           self.answers)
+        self.assertTrue(blockers)
+        self.assertIn("declaration", blockers[0])
+
+    def test_it_never_opts_him_into_marketing(self):
+        marketing = {"type": "checkbox", "required": False,
+                     "label": "Send me marketing updates from our partners"}
+        plan, _ = accounts.plan_signup(self.fields(marketing), "x.com",
+                                       self.answers)
+        self.assertFalse(any(item["field"] is marketing for item in plan))
+
+    def test_the_password_goes_in_both_boxes(self):
+        confirm = {"type": "password", "label": "Confirm password",
+                   "required": True}
+        plan, _ = accounts.plan_signup(self.fields(confirm), "x.com",
+                                       self.answers)
+        passwords = [i["value"] for i in plan if i["value"].startswith("Hr")]
+        self.assertEqual(len(passwords), 2)
+        self.assertEqual(passwords[0], passwords[1])
+
+    def test_a_required_field_it_cannot_ground_stops_the_signup(self):
+        odd = {"type": "text", "label": "Employee reference number",
+               "required": True}
+        _, blockers = accounts.plan_signup(self.fields(odd), "x.com",
+                                           self.answers)
+        self.assertTrue(blockers)
+
+    def test_a_form_with_no_password_is_not_a_signup_form(self):
+        _, blockers = accounts.plan_signup(
+            [{"type": "text", "label": "Search"}], "x.com", self.answers)
+        self.assertIn("not a signup form", blockers[-1])
+
+
+class TestTheVerificationEmail(unittest.TestCase):
+    def test_it_takes_the_activation_link_and_not_the_unsubscribe(self):
+        found = accounts.VERIFY_LINK.findall(
+            "Welcome. Confirm here: https://portal.example.com/verify?token=abc "
+            "or unsubscribe at https://portal.example.com/unsubscribe/confirm")
+        self.assertTrue(any("verify?token=abc" in link for link in found))
+
+    def test_it_does_not_wait_forever(self):
+        with mock.patch.object(accounts, "_search_for_link", return_value=None), \
+             mock.patch.object(accounts.time, "sleep") as slept, \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@example.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "x"):
+            link = accounts.verification_link(
+                "example.com", datetime.now(timezone.utc), tries=3, wait=1)
+        self.assertIsNone(link)
+        self.assertEqual(slept.call_count, 2)
+
+    def test_it_stops_as_soon_as_the_email_arrives(self):
+        with mock.patch.object(accounts, "_search_for_link",
+                               side_effect=[None, "https://x/verify?t=1"]), \
+             mock.patch.object(accounts.time, "sleep"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@example.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "x"):
+            self.assertEqual(accounts.verification_link(
+                "example.com", datetime.now(timezone.utc)),
+                "https://x/verify?t=1")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
