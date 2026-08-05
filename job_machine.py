@@ -1647,8 +1647,14 @@ def cv_for(job):
     return cv_path()
 
 
-def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=None):
-    """Returns the Message-ID so follow-ups can thread onto the original."""
+def send_email(to_addr, subject, body, attach_cv=True, headers=None,
+               cv_file=None, attachments=None):
+    """Returns the Message-ID so follow-ups can thread onto the original.
+
+    `attachments` is for anything that is not the CV: a list of
+    (filename, maintype, subtype, bytes). The handoff page uses it to put a
+    working, fully filled-in application page in Harry's own inbox, where a
+    desktop can open it - a build artifact cannot do that."""
     msg = EmailMessage()
     msg["From"] = GMAIL_ADDRESS
     msg["To"] = to_addr
@@ -1664,6 +1670,9 @@ def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=Non
         with open(cv, "rb") as f:
             msg.add_attachment(f.read(), maintype="application", subtype="pdf",
                                filename="Harry_Russell_CV.pdf")
+    for name, maintype, subtype, payload in (attachments or []):
+        msg.add_attachment(payload, maintype=maintype, subtype=subtype,
+                           filename=name)
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as s:
         s.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
         s.send_message(msg)

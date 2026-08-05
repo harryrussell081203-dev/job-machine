@@ -13,6 +13,7 @@ that is left is the CAPTCHA and Submit.
 
     python tools/handoff.py           # writes handoff/index.html
     python tools/handoff.py --open    # and prints the path
+    python tools/handoff.py --email   # send it to Harry, once a day
 """
 import argparse
 import html
@@ -162,11 +163,83 @@ function copyFill(i) {{
     return len(jobs)
 
 
+EMAILED = "handoff_emailed_on"
+
+
+def plain_list(jobs):
+    """The same list in text, for reading on a phone without opening anything."""
+    lines = []
+    for job in jobs:
+        lines.append(f"{job.get('title') or '?'} - {job.get('company') or '?'}"
+                     f"  (score {job.get('score') or '-'})")
+        lines.append(f"  {job.get('apply_url') or ''}")
+        answers = job.get("captcha_answers") or []
+        if answers:
+            lines.append(f"  {len(answers)} answer(s) already worked out")
+        for flag in (job.get("captcha_flags") or [])[:3]:
+            lines.append(f"  NEEDS YOU: {flag}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def email_page(state, force=False):
+    """Put the working page in his own inbox.
+
+    The page has always existed; it lived in a GitHub Actions artifact, which
+    means a login, a zip and a desktop before anyone can press a button on it.
+    Emailing it is the difference between 'the answers are saved somewhere'
+    and 'the answers are one click away on the machine you apply from'.
+
+    Sent as an attachment rather than as the body on purpose: Gmail strips
+    the script that makes the prefill buttons work, and a page that looks
+    interactive and is not is worse than a file you open."""
+    jobs = pending(state)
+    if not jobs:
+        print("[handoff] nothing waiting, no email sent")
+        return 0
+    if state.get(EMAILED) == jm.today() and not force:
+        print("[handoff] already emailed today")
+        return 0
+    build(state)
+    with open(OUT_FILE, "rb") as f:
+        page = f.read()
+    count = len(jobs)
+    subject = (f"[job-machine] {count} application needs only the CAPTCHA"
+               if count == 1 else
+               f"[job-machine] {count} applications need only the CAPTCHA")
+    body = (
+        f"{count} application{'' if count == 1 else 's'} the machine filled "
+        f"in completely and could not submit, because the last step is a bot "
+        f"check.\n\n"
+        f"{plain_list(jobs)}"
+        f"On a desktop, open the attached page: each one has a Copy prefill "
+        f"snippet button. Open the form, paste the snippet into the browser "
+        f"console (F12, Console, Enter), and every field fills at once. Then "
+        f"attach the CV, do the puzzle and press submit.\n\n"
+        f"On a phone the links above still work, you just fill them in by "
+        f"hand.\n"
+    )
+    jm.send_email(jm.GMAIL_ADDRESS, subject, body, attach_cv=False,
+                  attachments=[("captcha-handoff.html", "text", "html", page)])
+    state[EMAILED] = jm.today()
+    print(f"[handoff] emailed {count} application(s) to {jm.GMAIL_ADDRESS}")
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build the CAPTCHA handoff page")
     parser.add_argument("--open", action="store_true", help="print the path")
+    parser.add_argument("--email", action="store_true",
+                        help="send the page to Harry, once a day")
+    parser.add_argument("--force", action="store_true",
+                        help="with --email, send it even if today's has gone")
     args = parser.parse_args()
-    count = build(jm.load())
+    state = jm.load()
+    if args.email:
+        email_page(state, force=args.force)
+        jm.save(state)
+        return
+    count = build(state)
     print(f"[handoff] {count} application(s) waiting -> {OUT_FILE}")
     if args.open:
         print(OUT_FILE)

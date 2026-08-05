@@ -121,6 +121,7 @@ when the Actions UI is not to hand:
 | `fire-signup/...` | just the organisations that run the veterans' employment services, asking them to register him (`--only registration`) |
 | `fire-agencies/...` | register with, or refresh at, the recruitment agencies |
 | `fire-sms/...` | one test text to Harry's own phone, to prove the httpSMS bridge |
+| `fire-nudge/...` | send today's captcha nudge now - the email with the page, and the text with the link |
 
 Locally:
 
@@ -205,6 +206,29 @@ and orientation questions nearly always offer "Prefer not to say" (in whatever
 wording), and the agent picks it. That is a real answer the form itself offers,
 so those questions stop blocking applications without anything being invented.
 If a monitoring question offers no opt-out, it is flagged like the rest.
+
+### The ones only a CAPTCHA is stopping
+
+An application the agent filled in completely and could not submit is the most
+valuable record in the state file - the work is done, it is one puzzle away from
+being sent - and it used to be the easiest to lose, sitting in a build artifact
+nobody opens.
+
+Every day at **18:15 UK** (`nudge.yml`), if any are waiting:
+
+- **an email** to Harry's own inbox with `captcha-handoff.html` attached. Open it
+  on a desktop and each application has a **Copy prefill snippet** button: open
+  the form, paste into the browser console, every field the agent worked out
+  fills at once. Then attach the CV, do the puzzle, submit. The email body lists
+  them in plain text with the links, so it is useful on a phone without opening
+  anything. Attached rather than inline because Gmail strips the script that
+  makes the buttons work, and a page that looks interactive and is not is worse
+  than a file you open.
+- **a text** with the count, the best-scoring one by name, and one link.
+
+18:15 rather than the morning: a CAPTCHA needs a browser and a sit-down, and a
+nudge that arrives when it cannot be acted on gets swiped away. Once a day, and
+a failed send does not mark the day as done.
 
 ### Getting to the form at all
 
