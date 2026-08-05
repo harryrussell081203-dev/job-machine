@@ -92,7 +92,7 @@ def union_earliest(theirs, ours):
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
-         "last_summary_at"}
+         "agency_registered", "last_summary_at"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -132,6 +132,32 @@ def merge(theirs, ours):
                            ours.get("support_asked", {}))
     if asked:
         out["support_asked"] = asked
+
+    # Recruitment agencies, which unlike everyone else may be approached a few
+    # times. That makes this a counter rather than a flag, and a counter that
+    # merges wrong is worse than one that is lost: taking either side's count
+    # rather than the higher one would let two concurrent runs each think an
+    # agency had been written to once, and keep writing.
+    agencies = dict(theirs.get("agency_registered", {}))
+    for key, entry in ours.get("agency_registered", {}).items():
+        old = agencies.get(key)
+        if not isinstance(old, dict) or not isinstance(entry, dict):
+            agencies.setdefault(key, entry)
+            continue
+        merged = dict(old)
+        merged.update({k: v for k, v in entry.items() if k not in
+                       ("count", "at", "first_at", "emails")})
+        merged["count"] = max(old.get("count", 0), entry.get("count", 0))
+        merged["at"] = max(str(old.get("at", "")), str(entry.get("at", "")))
+        firsts = [s for s in (old.get("first_at"), entry.get("first_at")) if s]
+        if firsts:
+            merged["first_at"] = min(str(s) for s in firsts)
+        seen = list(old.get("emails") or []) + list(entry.get("emails") or [])
+        if seen:
+            merged["emails"] = list(dict.fromkeys(seen))
+        agencies[key] = merged
+    if agencies:
+        out["agency_registered"] = agencies
 
     for counter in ("send_counts", "portal_counts", "spec_counts"):
         merged = dict(theirs.get(counter, {}))
