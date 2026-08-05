@@ -63,8 +63,8 @@ and nothing is sent.
 | `GMAIL_ADDRESS` | the Gmail account that sends |
 | `GMAIL_APP_PASSWORD` | Google account > Security > App passwords (needs 2FA on) |
 | `HTTPSMS_API_KEY` | the httpSMS app on the phone, Settings > API key (optional - no key, no texting) |
-| `PORTAL_PASSWORD` | the one password to use on every portal. Whatever you pick is padded to something universally accepted - `password123` becomes `Password123!` |
-| `PORTAL_PASSWORD_SALT` | only needed if you do NOT set `PORTAL_PASSWORD`: a long random string, from which a different password is derived per site |
+| `PORTAL_PASSWORD` | **optional.** The one password to use on every portal. Whatever you pick is padded to something universally accepted - `password123` becomes `Password123!`. Set nothing and one is derived from `GMAIL_APP_PASSWORD` instead |
+| `PORTAL_PASSWORD_SALT` | **optional.** A long random string, from which a *different* password is derived per site. Only used if `PORTAL_PASSWORD` is unset |
 
 ### Variables (all optional)
 `Settings > Secrets and variables > Actions > Variables`
@@ -244,8 +244,9 @@ form, fills it, submits it, then **reads the activation email out of Harry's
 inbox over IMAP**, opens the link, and goes back to the application.
 
 **No password is ever stored.** `data/state.json` is committed to this public
-repository on every run, so anything written there is published. Two ways to
-have a password anyway, both held in repo secrets and neither in the code:
+repository on every run, so anything written there is published. Three ways to
+have a password anyway, none of them in the code, **and you need configure
+none of them**:
 
 - **`PORTAL_PASSWORD`** - one password everywhere, your own choice. Padded to
   something every portal accepts: `password123` becomes `Password123!`, which
@@ -253,9 +254,15 @@ have a password anyway, both held in repo secrets and neither in the code:
   account existing and a signup rejected on a rules message. One password
   across every portal does mean one breach exposes the lot - a real trade, and
   yours to make.
-- **`PORTAL_PASSWORD_SALT`** - the fallback if no shared password is set. The
-  password is derived per site as `HMAC-SHA256(salt, domain)`, so a breach at
-  one employer says nothing about any other. Stronger, but unknowable to you.
+- **`PORTAL_PASSWORD_SALT`** - if you would rather have a different password
+  per site, derived as `HMAC-SHA256(salt, domain)`, so a breach at one employer
+  says nothing about any other. Stronger, but unknowable to you.
+- **Neither** - and it still works. One shared password is derived from
+  `GMAIL_APP_PASSWORD`, which is already a secret and already on every runner:
+  the same on every portal, stable across runs, never written into the
+  repository. Rotating the Gmail app password changes it, but every login made
+  before that has already been emailed, so the old ones stay recoverable from
+  the inbox.
 
 Either way **the login is emailed to Harry the moment an account is created**,
 so his own inbox becomes the record of which portals he has accounts on. The
