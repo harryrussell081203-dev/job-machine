@@ -166,29 +166,32 @@ ROTATIONAL_KEYWORDS = [
 ROTATIONAL_WHERE = env_str("ROTATIONAL_WHERE", "United Kingdom")
 ROTATIONAL_RADIUS = env_int("ROTATIONAL_RADIUS", 500)
 
-# The scarcest thing about Harry is not his trade, it is his clearance.
+# The defence sweep.
 #
-# Plenty of people can fault-find electronics. Very few of them hold DV, and
-# DV takes an employer the better part of a year and a great deal of money to
-# obtain for someone who does not. On a cleared vacancy the field is not
-# hundreds of applicants, it is the handful who already hold it - and the
-# employer is usually waiting on the clearance rather than on the skills.
+# This was written as a CLEARED sweep, on the understanding that Harry held DV
+# and that a vacancy gated on a clearance he already had would put him in a
+# field of a handful rather than hundreds. He does not hold it - it lapsed
+# after discharge, as it normally does - so every one of those searches was
+# hunting work he cannot be shortlisted for, and any application arising from
+# one would have rested on a claim that is not true.
 #
-# Nothing in this project looked for that work. These sweep the whole country
-# because cleared roles cluster around sites (Faslane, Rosyth, Portsmouth,
-# Corsham, Filton) rather than around Aberdeen, and he can take a posting
-# anywhere that comes with somewhere to live.
-CLEARED_KEYWORDS = [
-    "dv cleared technician", "sc cleared technician", "security cleared technician",
-    "dv cleared engineer", "sc cleared engineer", "security cleared engineer",
-    "cleared communications technician", "defence communications technician",
-    "military communications engineer", "secure communications engineer",
-    "cleared electronics technician", "developed vetting engineer",
-    "radio systems technician", "satellite communications technician",
-    "electronic warfare technician", "cryptographic technician",
+# What survives is the part that was never about the clearance: his actual
+# trade is military communications and electronics, and defence employers hire
+# uncleared people and sponsor the vetting themselves. So the terms describe
+# the WORK, not a credential. It still sweeps the whole country, because these
+# roles cluster around sites - Faslane, Rosyth, Portsmouth, Corsham, Filton -
+# rather than around Aberdeen, and he can take a posting anywhere that comes
+# with somewhere to live.
+DEFENCE_KEYWORDS = [
+    "defence communications technician", "military communications engineer",
+    "secure communications engineer", "radio systems technician",
+    "satellite communications technician", "electronic warfare technician",
+    "defence electronics technician", "naval systems technician",
+    "communications systems engineer", "radio frequency technician",
+    "avionics technician", "marine electrical technician",
 ]
-CLEARED_WHERE = env_str("CLEARED_WHERE", "United Kingdom")
-CLEARED_RADIUS = env_int("CLEARED_RADIUS", 500)
+DEFENCE_WHERE = env_str("DEFENCE_WHERE", "United Kingdom")
+DEFENCE_RADIUS = env_int("DEFENCE_RADIUS", 500)
 
 # Titles that are never worth a Gemini call.
 TITLE_EXCLUSIONS = [
@@ -218,13 +221,14 @@ def is_course_advert(job):
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
 - Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
-- DV security clearance. THIS IS HIS RAREST ASSET AND MUST BE SCORED AS ONE.
-  Plenty of people can fault-find electronics; very few of them hold DV, and it
-  costs an employer the better part of a year and a great deal of money to
-  obtain for somebody who does not. So a role asking for SC or DV clearance is
-  a STRONGER match for him than the same role without it, never a weaker one,
-  and a defence or secure-communications posting should score at least as high
-  as an equivalent commercial one even when the trade wording differs.
+- SECURITY CLEARANCE: HE HOLDS NONE. He was cleared during his Royal Navy
+  service and it lapsed after discharge, which is the ordinary course of
+  events. NEVER state, imply or hint that he is cleared, and never write
+  'DV cleared', 'SC cleared' or 'security cleared' anywhere. Saying it would
+  be a false claim to an employer and it would be found out at vetting.
+  What is true, and worth saying only where a listing raises the subject: he
+  has been vetted before and is eligible to go through it again, and a defence
+  employer sponsoring clearance starts from a known quantity.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
@@ -309,7 +313,7 @@ Saw your {role} listing - {one specific detail from the listing}.
 
 1. {proof: Royal Navy comms - secure and non-secure comms, networks and crypto material on a Type 23 frigate, 2021-2023}
 2. {proof: 3 years at Sonardyne fault-finding electronic kit, tie it to what this job actually needs}
-3. {optional third proof only if it is relevant: DV clearance, apprenticeship, RGU study}
+3. {optional third proof only if it is relevant: apprenticeship, RGU study}
 
 {one question CTA}
 
@@ -330,7 +334,7 @@ Your {role} listing caught my eye - {one specific detail from the listing}.
 
 1. {proof: 3 years at Sonardyne building, testing and fault-finding subsea acoustic kit to IPC-A-610 Class 3}
 2. {proof: component-level diagnosis and repair plus the test records and documentation to match}
-3. {optional third proof only if relevant: Royal Navy safety-critical equipment, completed SCQF L7 apprenticeship, DV clearance}
+3. {optional third proof only if relevant: Royal Navy safety-critical equipment, completed SCQF L7 apprenticeship}
 
 {one question CTA}
 
@@ -351,7 +355,7 @@ Applying for your {role} - {one specific detail from the listing}.
 
 1. {proof: 3 years testing and maintaining subsea acoustic positioning systems at Sonardyne}
 2. {proof: completed Modern Apprenticeship SCQF L7 in electrical / asset lifecycle and maintenance, plus year 1 BEng Instrumentation, Measurement and Control at RGU}
-3. {optional third proof only if relevant: Royal Navy shift work and pressure, DV clearance}
+3. {optional third proof only if relevant: Royal Navy shift work and pressure}
 
 {one question CTA}
 
@@ -384,14 +388,14 @@ Harry
         "keywords": [],
         "subject_examples": [
             "Ex-Navy subsea tech, Aberdeen - any technician roles?",
-            "DV-cleared technician asking about openings",
+            "Ex-Navy technician asking about openings",
         ],
         "skeleton": """{greeting}
 
 Nothing advertised that I can see, so this is a speculative note. I know {company} {the one concrete detail provided about what they do}.
 
 1. {proof: 3 years at Sonardyne building, testing and fault-finding subsea electronics to IPC-A-610 Class 3}
-2. {proof: 2 years Royal Navy comms on a Type 23 frigate, DV cleared}
+2. {proof: 2 years Royal Navy comms on a Type 23 frigate}
 3. {optional: completed SCQF L7 apprenticeship, available immediately}
 
 Any technician openings coming up this year worth a conversation?
@@ -418,7 +422,7 @@ Saw you are recruiting a {role} - {one specific detail from the listing}.
 1. {proof: what he does - 2 years Royal Navy Communications and Information
    Specialist, 3 years at Sonardyne testing and fault-finding subsea electronics}
 2. {proof: the practical facts a consultant needs - Aberdeen based, available
-   immediately, looking around 35k, DV cleared}
+   immediately, looking around 35k}
 3. {optional: one ticket or qualification that matches THIS vacancy}
 
 {one question CTA - ask whether this one fits or whether they have something closer}
@@ -438,7 +442,7 @@ Saw your {role} listing - {one specific detail from the listing}.
 
 1. {proof: 2 years Royal Navy Communications and Information Specialist}
 2. {proof: 3 years at Sonardyne testing and fault-finding precision electronic equipment}
-3. {optional third proof only if relevant: completed electrical engineering Modern Apprenticeship, DV clearance}
+3. {optional third proof only if relevant: completed electrical engineering Modern Apprenticeship}
 
 {one question CTA}
 
@@ -680,12 +684,12 @@ def adzuna_searches():
             yield location, SEARCH_RADIUS_MILES, kw
     for kw in ROTATIONAL_KEYWORDS:
         yield ROTATIONAL_WHERE, ROTATIONAL_RADIUS, kw
-    # And the cleared sweep. Same reasoning as the rotational one - the work
-    # is advertised against a site rather than a town - but a different and
-    # much shorter queue at the other end, because the vacancy is gated on a
-    # clearance he already holds.
-    for kw in CLEARED_KEYWORDS:
-        yield CLEARED_WHERE, CLEARED_RADIUS, kw
+    # And the defence sweep. Same reasoning as the rotational one: the work is
+    # advertised against a site rather than a town. These describe his trade,
+    # not a credential - defence employers hire uncleared people and sponsor
+    # the vetting themselves.
+    for kw in DEFENCE_KEYWORDS:
+        yield DEFENCE_WHERE, DEFENCE_RADIUS, kw
 
 
 def adzuna():
@@ -1499,6 +1503,33 @@ STOPWORDS = {"the", "and", "for", "with", "role", "jobs", "job", "full", "time",
              "part", "permanent", "contract", "based", "new", "our", "your"}
 
 
+# A claim to hold a security clearance he does not hold. This is not style,
+# it is a false statement to an employer that would be found out at vetting,
+# so it is checked separately and it is checked on the finished text - not
+# left to the prompt, because a prompt is a request and this needs to be a
+# guarantee. It was in the profile, in five templates, in the plain letter, in
+# the follow-up, in the applied-note and in the form answers, and it went out
+# on real applications before he told me the clearance had lapsed.
+CLEARANCE_CLAIM = re.compile(
+    r"\bdv[\s-]*clear|\bsc[\s-]*clear|security[\s-]*clear|"
+    r"developed vetting|\bi (?:hold|have)\b[^.]{0,30}\bclearance|"
+    r"\bclearance\b[^.]{0,20}\b(?:held|current|active)\b", re.I)
+
+
+def claims_clearance(text):
+    """Does this text say he is cleared? Returns the offending phrase, or None.
+
+    Deliberately blunt. It also stops an honest sentence like 'this role
+    requires SC clearance and I would need to be put through it', because no
+    regex can reliably tell an assertion about him from a description of the
+    vacancy, and the two failures are not equal: a blocked send costs one
+    application, an unblocked false claim costs his credibility. Nothing in
+    the project writes that sentence today; if something needs to, it should
+    be phrased around vetting rather than clearance."""
+    match = CLEARANCE_CLAIM.search(text or "")
+    return match.group(0) if match else None
+
+
 def slop_check(text):
     low = text.lower()
     return [b for b, rx in BANNED_RES if rx.search(low)]
@@ -1631,7 +1662,7 @@ def plain_email(job):
         f"1. Three years at Sonardyne building, testing and fault-finding "
         f"subsea acoustic electronics to IPC-A-610 Class 3.\n"
         f"2. Two years Royal Navy Communications and Information Specialist "
-        f"on a Type 23 frigate. DV cleared.\n"
+        f"on a Type 23 frigate.\n"
         f"3. SCQF Level 7 engineering apprenticeship, available immediately, "
         f"and happy with rotational or offshore work.\n\n"
         f"{ask}\n\n"
@@ -1718,7 +1749,20 @@ def cv_for(job):
 
 
 def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=None):
-    """Returns the Message-ID so follow-ups can thread onto the original."""
+    """Returns the Message-ID so follow-ups can thread onto the original.
+
+    Every outgoing message goes through here - applications, speculative
+    notes, follow-ups, charity letters, replies to interview invitations - so
+    this is the one place a false claim about his clearance can be stopped
+    whatever wrote it. Refusing to send is the right failure: an application
+    that never arrives costs one opportunity, and one that arrives claiming a
+    clearance he does not hold costs his credibility with that employer and
+    anyone they talk to."""
+    claim = claims_clearance(f"{subject}\n{body}")
+    if claim:
+        raise ValueError(
+            f"refusing to send: text claims a security clearance ({claim!r}). "
+            f"Harry's lapsed after discharge and must never be asserted.")
     msg = EmailMessage()
     msg["From"] = GMAIL_ADDRESS
     msg["To"] = to_addr
@@ -1878,7 +1922,7 @@ def run_applied_notes(state):
             f"online portal and wanted to reach out directly as well. Quick "
             f"background: 3 years testing and fault-finding subsea electronics at "
             f"Sonardyne to IPC-A-610 Class 3, Royal Navy communications before "
-            f"that, DV cleared and available immediately.\n\n"
+            f"that, and available immediately.\n\n"
             f"If the application is worth a closer look, when suits a quick call?"
             f"\n\nHarry\n{SIGNOFF}")
         real_to = job["contact_email"]
@@ -2066,8 +2110,7 @@ AUTOREPLY_ROTATIONAL = (
     "whenever suits - I am free any day this week, tomorrow included, and "
     "flexible on time. If a call is easier my number is 07398 530978.\n\n"
     "To save you asking: I am fine with rotation and with travelling for it, "
-    "onshore or offshore, UK or overseas. Available immediately, and I hold DV "
-    "clearance.\n\n"
+    "onshore or offshore, UK or overseas. Available immediately.\n\n"
     "Which day works best for you?\n\n"
     "Harry\nHarry Russell / 07398 530978")
 

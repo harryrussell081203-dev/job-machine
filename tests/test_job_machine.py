@@ -638,7 +638,8 @@ class TestSending(unittest.TestCase):
         self.assertEqual(job["status"], "sent")
         body = send.call_args[0][2]
         self.assertIn("Sonardyne", body)
-        self.assertIn("DV cleared", body)
+        self.assertIn("Royal Navy", body)
+        self.assertIsNone(jm.claims_clearance(body))
 
     def test_smtp_failure_leaves_company_free_for_another_go(self):
         job = self.add()
@@ -1957,7 +1958,7 @@ class TestSendingWhenTheModelIsUnavailable(unittest.TestCase):
         body = jm.plain_email(self.job())["body"]
         self.assertIn("Sonardyne", body)
         self.assertIn("Royal Navy", body)
-        self.assertIn("DV cleared", body)
+        self.assertIsNone(jm.claims_clearance(body))
         self.assertIn("Workshop Technician", body)
         self.assertIn("Oceaneering", body)
 
@@ -1995,36 +1996,45 @@ if __name__ == "__main__":
     unittest.main(verbosity=2)
 
 
-class TestTheClearedMarket(unittest.TestCase):
-    """Plenty of people can fault-find electronics. Very few of them hold DV,
-    and it costs an employer the better part of a year and a lot of money to
-    obtain for somebody who does not - so on a cleared vacancy the field is
-    the handful who already hold it. Nothing in this project looked for that
-    work."""
+class TestTheDefenceMarket(unittest.TestCase):
+    """This began as a CLEARED sweep, built on the understanding that Harry
+    held DV. He does not - it lapsed after discharge - so those searches were
+    hunting work he cannot be shortlisted for, and any application arising
+    from one would have rested on a claim that is not true.
 
-    def test_the_sweep_covers_cleared_and_defence_wording(self):
-        blob = " ".join(jm.CLEARED_KEYWORDS).lower()
-        for term in ("dv cleared", "sc cleared", "security cleared",
-                     "defence communications", "secure communications"):
+    What survives is the part that was never about the credential: his trade
+    IS military communications and electronics, and defence employers hire
+    uncleared people and sponsor the vetting themselves."""
+
+    def test_the_sweep_describes_the_work_and_never_a_clearance(self):
+        blob = " ".join(jm.DEFENCE_KEYWORDS).lower()
+        for term in ("defence communications", "secure communications",
+                     "radio systems", "electronic warfare"):
             with self.subTest(term=term):
                 self.assertIn(term, blob)
+        for banned in ("dv cleared", "sc cleared", "security cleared",
+                       "developed vetting"):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, blob)
 
     def test_it_searches_the_whole_country_not_a_radius_round_aberdeen(self):
-        """Cleared work clusters around sites - Faslane, Rosyth, Portsmouth,
+        """Defence work clusters around sites - Faslane, Rosyth, Portsmouth,
         Corsham - not around Aberdeen, and he can take a posting anywhere that
         comes with somewhere to live."""
-        cleared = [s for s in jm.adzuna_searches() if s[2] in jm.CLEARED_KEYWORDS]
-        self.assertTrue(cleared)
-        for where, radius, _ in cleared:
+        defence = [s for s in jm.adzuna_searches() if s[2] in jm.DEFENCE_KEYWORDS]
+        self.assertTrue(defence)
+        for where, radius, _ in defence:
             self.assertGreaterEqual(radius, 100)
 
-    def test_the_profile_tells_the_scorer_the_clearance_is_an_asset(self):
-        """It was one bullet among nine, so a defence role could be marked
-        down for not using subsea wording - scoring his rarest asset as
-        neutral."""
+    def test_the_profile_forbids_claiming_a_clearance(self):
+        """It used to instruct the scorer that DV was his rarest asset. He
+        does not hold one, so the profile now has to say so in terms the
+        composer cannot read as an invitation."""
         profile = jm.CANDIDATE_PROFILE.lower()
-        self.assertIn("rarest asset", profile)
-        self.assertIn("stronger match", profile)
+        self.assertIn("holds none", profile)
+        self.assertIn("never state", profile)
+        self.assertIsNone(jm.claims_clearance(
+            jm.CANDIDATE_PROFILE.split("SECURITY CLEARANCE")[0]))
 
 
 class TestTextingAboutAnInterview(unittest.TestCase):
@@ -2109,6 +2119,77 @@ class TestExtraWordsMeanADifferentCompany(unittest.TestCase):
             self.assertIsNone(jm.find_domain("Wood"))
         with self.clearbit("Sanctuary Clothing", "sanctuaryclothing.com"):
             self.assertIsNone(jm.find_domain("Sanctuary"))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+
+
+class TestNoLetterEverClaimsAClearance(unittest.TestCase):
+    """Harry held a clearance during his Royal Navy service and it lapsed
+    after discharge, which is the ordinary course of events. Saying he holds
+    one is a false statement to an employer that would be found out at
+    vetting.
+
+    It was in the candidate profile, in five template skeletons, in the plain
+    letter, in the follow-up, in the applied-note, in the charity letters and
+    in the answers the portal agent types into forms - and it went out on real
+    applications before he told me. So this is checked on finished text at the
+    one place every outgoing message passes through, rather than trusted to a
+    prompt, because a prompt is a request and this needs to be a guarantee."""
+
+    def test_the_claim_is_caught_however_it_is_written(self):
+        for text in ("I am DV cleared and available.",
+                     "Holds DV security clearance.",
+                     "SC cleared engineer.",
+                     "I hold DV clearance.",
+                     "security cleared technician",
+                     "Developed Vetting completed.",
+                     "DV-cleared, ex-Royal Navy."):
+            with self.subTest(text=text):
+                self.assertIsNotNone(jm.claims_clearance(text))
+
+    def test_the_true_things_he_can_say_are_not_blocked(self):
+        for text in ("Two years Royal Navy Communications and Information Specialist.",
+                     "I was vetted during service and am eligible to go through it again.",
+                     "Three years at Sonardyne to IPC-A-610 Class 3."):
+            with self.subTest(text=text):
+                self.assertIsNone(jm.claims_clearance(text))
+
+    def test_sending_is_refused_outright(self):
+        """Not logged and sent anyway. An application that never arrives costs
+        one opportunity; one that arrives claiming a clearance he does not
+        hold costs his credibility with that employer and everyone they talk
+        to."""
+        with self.assertRaises(ValueError) as caught:
+            jm.send_email("someone@acme.com", "Technician",
+                          "Hi,\n\nI am DV cleared.\n\nHarry")
+        self.assertIn("clearance", str(caught.exception))
+
+    def test_an_honest_letter_still_sends(self):
+        with mock.patch.object(jm.smtplib, "SMTP_SSL"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "cv_path", return_value=None):
+            jm.send_email("someone@acme.com", "Technician",
+                          "Hi,\n\nTwo years Royal Navy comms.\n\nHarry")
+
+    def test_every_letter_the_system_can_write_is_clean(self):
+        """A sweep rather than a spot check - the claim was in six different
+        places and I found the last of them by grepping, not by reasoning."""
+        job = {"title": "Workshop Technician", "company": "Oceaneering",
+               "location": "Aberdeen", "description": "", "source": "adzuna",
+               "contact_name": "Jane"}
+        letters = [jm.plain_email(job)["body"], jm.CANDIDATE_PROFILE]
+        for tpl in jm.TEMPLATES.values():
+            letters.append(str(tpl.get("skeleton", "")))
+            examples = tpl.get("subject_examples", "")
+            letters.append(" | ".join(examples) if isinstance(examples, (list, tuple))
+                           else str(examples))
+        for text in letters:
+            with self.subTest(text=text[:60]):
+                self.assertIsNone(jm.claims_clearance(
+                    text.split("SECURITY CLEARANCE")[0]))
 
 
 if __name__ == "__main__":
