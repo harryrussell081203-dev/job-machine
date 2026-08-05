@@ -109,7 +109,7 @@
     },
     {
       "company": "Thales UK",
-      "note": "sonar and optronics work in Glasgow - his Royal Navy comms trade in the commercial world"
+      "note": "sonar and optronics work in Glasgow, DV clearance is directly useful"
     },
     {
       "company": "BAE Systems Naval Ships",
@@ -125,7 +125,7 @@
     },
     {
       "company": "QinetiQ",
-      "note": "test and evaluation work for defence - his Royal Navy comms trade in the commercial world"
+      "note": "test and evaluation work for defence, DV clearance is directly useful"
     },
     {
       "company": "Boskalis",
@@ -294,6 +294,10 @@
     {
       "company": "Acteon Group Ltd",
       "note": "has advertised in Aberdeen for Trainee Survey Technician"
+    },
+    {
+      "company": "The Sterling Choice Ltd",
+      "note": "has advertised in Aberdeen for Maintenance Engineer"
     }
   ]
 }
