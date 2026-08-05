@@ -41,7 +41,20 @@ import job_machine as jm
 # CONFIG
 # ======================================================================
 PORTAL_MAX_AGE_DAYS = jm.env_int("PORTAL_MAX_AGE_DAYS", 30)
-PORTAL_SUBMIT = jm.env_flag("PORTAL_SUBMIT", False)
+# LIVE. A filled form is now actually submitted.
+#
+# This defaulted to False, which meant every application the agent ever
+# completed stopped one step short with 'filled and checked, waiting for
+# PORTAL_SUBMIT' - 121 opened, 0 sent. Harry gave explicit permission to turn
+# it on. Set the repo variable PORTAL_SUBMIT=0 to put it back to filling only.
+#
+# What this does NOT change: the agent still refuses to answer convictions,
+# health, identity or financial questions, still refuses to tick a declaration
+# that something is true and complete, and still will not touch a CAPTCHA. Any
+# of those and the application is filled to the last safe field and handed
+# over, exactly as before. Turning submission on lets it finish the ones it
+# could already fill honestly - it does not widen what it is willing to say.
+PORTAL_SUBMIT = jm.env_flag("PORTAL_SUBMIT", True)
 PORTAL_PER_RUN_CAP = jm.env_int("PORTAL_PER_RUN_CAP", 40)
 PORTAL_DAILY_CAP = jm.env_int("PORTAL_DAILY_CAP", 150)
 PORTAL_SCORE_THRESHOLD = jm.env_int("PORTAL_SCORE_THRESHOLD", jm.SCORE_THRESHOLD)

@@ -6,6 +6,7 @@ time. A plain git rebase hits a conflict in what is really a set of
 independent records, so they are merged field by field instead.
 """
 import os
+import re
 import sys
 import unittest
 
@@ -246,3 +247,57 @@ class TestMergingTheAgencyRegister(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAStatusNobodyToldTheMergeAbout(unittest.TestCase):
+    """The bug this class exists to prevent has already happened twice.
+
+    A status missing from PROGRESS used to rank 0 - below 'new' - so it lost
+    every merge and the work behind it was deleted on the way back to main.
+    'portal_awaiting_captcha' is the status of an application the agent has
+    FILLED IN COMPLETELY, with every answer banked for the handoff page, held
+    up only by a bot check. Five were built and binned in one run."""
+
+    def test_a_completely_filled_application_is_not_binned_by_a_stale_record(self):
+        theirs = {"status": "no_email", "portal_attempted_at": "2026-08-01"}
+        ours = {"status": "portal_awaiting_captcha",
+                "captcha_answers": [{"name": "first_name"}],
+                "portal_screenshot": "shot.png", "portal_filled": ["a"]}
+        self.assertEqual(ms.pick(theirs, ours)["status"],
+                         "portal_awaiting_captcha")
+
+    def test_it_works_whichever_side_the_filled_one_is_on(self):
+        ours = {"status": "skipped"}
+        theirs = {"status": "portal_awaiting_captcha", "captcha_answers": [1],
+                  "portal_screenshot": "s.png", "portal_filled": ["a"]}
+        self.assertEqual(ms.pick(theirs, ours)["status"],
+                         "portal_awaiting_captcha")
+
+    def test_an_unknown_status_does_not_beat_a_real_send(self):
+        """The fix must not overshoot: a sent application is still the truth."""
+        sent = {"status": "sent", "sent_at": "2026-08-01", "contact_email": "a@b",
+                "sent_subject": "x", "message_id": "1", "score": 80}
+        odd = {"status": "invented_later"}
+        self.assertEqual(ms.pick(sent, odd)["status"], "sent")
+
+    def test_every_status_the_code_can_set_is_ranked(self):
+        """The guard. Add a status anywhere, and this fails until the merge
+        knows where it sits."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pattern = re.compile(r'"status":\s*"([a-z_]+)"|\["status"\]\s*=\s*"([a-z_]+)"')
+        found = set()
+        for name in os.listdir(root):
+            if not name.endswith(".py"):
+                continue
+            with open(os.path.join(root, name)) as f:
+                for a, b in pattern.findall(f.read()):
+                    found.add(a or b)
+        missing = sorted(s for s in found if s not in ms.PROGRESS)
+        self.assertEqual(missing, [], f"statuses the merge would drop: {missing}")
+
+    def test_the_filled_ones_outrank_the_ones_that_never_got_there(self):
+        order = {s: i for i, s in enumerate(ms.PROGRESS)}
+        self.assertLess(order["portal_manual"], order["portal_review"])
+        self.assertLess(order["portal_review"], order["portal_awaiting_captcha"])
+        self.assertLess(order["portal_awaiting_captcha"], order["portal_ready"])
+        self.assertLess(order["portal_ready"], order["portal_submitted"])
