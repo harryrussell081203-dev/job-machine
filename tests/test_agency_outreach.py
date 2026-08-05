@@ -239,6 +239,32 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
         self.assertEqual(address, "aberdeen@oriongroup.co.uk")
         self.assertEqual(calls, ["oriongroup.co.uk"])
 
+    def test_a_verified_published_address_is_used_when_the_site_is_unreadable(self):
+        """Eight of twenty-one published nothing a scraper could read on the
+        first live run. A published address transcribed by hand is not a
+        guessed one - but only if the file says where it was read."""
+        agency = dict(AGENCY, email="info@example.com",
+                      email_source="their own contact page")
+        with mock.patch.object(jm, "scrape_site", return_value=[]), \
+             mock.patch.object(jm, "has_mx", return_value=True):
+            self.assertEqual(ao.find_address(agency),
+                             ("info@example.com", None))
+
+    def test_an_address_with_no_stated_source_is_refused(self):
+        agency = dict(AGENCY, email="info@example.com")
+        with mock.patch.object(jm, "scrape_site", return_value=[]), \
+             mock.patch.object(jm, "has_mx", return_value=True):
+            self.assertEqual(ao.find_address(agency), (None, None))
+
+    def test_the_scraped_address_still_wins(self):
+        agency = dict(AGENCY, email="info@example.com",
+                      email_source="their own contact page")
+        with mock.patch.object(jm, "scrape_site",
+                               return_value=["jobs@wearecammach.com"]), \
+             mock.patch.object(jm, "has_mx", return_value=True):
+            self.assertEqual(ao.find_address(agency)[0],
+                             "jobs@wearecammach.com")
+
     def test_an_agency_with_no_findable_address_is_skipped_not_invented(self):
         state = blank_state()
         with mock.patch.object(ao, "load_agencies", return_value=[AGENCY]), \
@@ -340,10 +366,14 @@ class TestTheShippedList(unittest.TestCase):
         keys = [jm.company_key(a["name"]) for a in self.data["agencies"]]
         self.assertEqual(len(keys), len(set(keys)))
 
-    def test_no_address_is_shipped_in_the_data_file(self):
-        """Addresses are discovered and MX-checked, never typed in."""
-        raw = json.dumps(self.data["agencies"])
-        self.assertNotIn("@", raw)
+    def test_every_shipped_address_says_where_it_came_from(self):
+        """Discovery first; a typed-in address only where the file records the
+        page it was read from, so nothing here can be a guessed pattern."""
+        for agency in self.data["agencies"]:
+            if agency.get("email"):
+                with self.subTest(agency=agency["name"]):
+                    self.assertTrue(agency.get("email_source"))
+                    self.assertIn("@", agency["email"])
 
     def test_the_four_harry_named_are_on_it(self):
         names = " ".join(a["name"] for a in self.data["agencies"]).lower()

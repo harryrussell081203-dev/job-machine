@@ -197,5 +197,52 @@ class TestKeysNobodyHasWrittenARuleFor(unittest.TestCase):
         self.assertIsNone(out["ats_boards"]["acme"]["ats"])
 
 
+class TestMergingTheAgencyRegister(unittest.TestCase):
+    """The opposite rule to the charity register, for the opposite reason.
+
+    A charity is written to once ever, so the earliest record is the true
+    answer. An agency is written to again on a cooldown, so what matters is the
+    LATEST letter - keep the earliest and the cooldown expires against a letter
+    that has not been sent yet."""
+
+    def test_the_most_recent_approach_wins(self):
+        out = ms.merge(
+            {"agency_registered": {"cammach": {"at": "2026-06-01", "count": 1}}},
+            {"agency_registered": {"cammach": {"at": "2026-08-01", "count": 2}}})
+        self.assertEqual(out["agency_registered"]["cammach"]["at"], "2026-08-01")
+
+    def test_it_works_whichever_side_the_newer_letter_is_on(self):
+        out = ms.merge(
+            {"agency_registered": {"cammach": {"at": "2026-08-01", "count": 2}}},
+            {"agency_registered": {"cammach": {"at": "2026-06-01", "count": 1}}})
+        self.assertEqual(out["agency_registered"]["cammach"]["at"], "2026-08-01")
+
+    def test_the_approach_count_can_never_go_down(self):
+        """Two runs both wrote. The register must not claim fewer approaches
+        than were actually made, or the cap stops capping."""
+        out = ms.merge(
+            {"agency_registered": {"cammach": {"at": "2026-08-02", "count": 1}}},
+            {"agency_registered": {"cammach": {"at": "2026-08-01", "count": 4}}})
+        self.assertEqual(out["agency_registered"]["cammach"]["count"], 4)
+
+    def test_the_first_ever_approach_is_remembered(self):
+        out = ms.merge(
+            {"agency_registered": {"cammach": {"at": "2026-06-01", "count": 1}}},
+            {"agency_registered": {"cammach": {"at": "2026-08-01", "count": 2,
+                                               "first_at": "2026-06-01"}}})
+        self.assertEqual(out["agency_registered"]["cammach"]["first_at"],
+                         "2026-06-01")
+
+    def test_both_sides_agencies_survive(self):
+        out = ms.merge({"agency_registered": {"a": {"at": "2026-08-01"}}},
+                       {"agency_registered": {"b": {"at": "2026-08-02"}}})
+        self.assertEqual(set(out["agency_registered"]), {"a", "b"})
+
+    def test_it_has_a_rule_rather_than_falling_through_to_the_catch_all(self):
+        """The catch-all lets the remote side win a clash, which for this
+        register is the stale answer."""
+        self.assertIn("agency_registered", ms.KNOWN)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -158,11 +158,30 @@ def find_address(agency):
     if not site:
         return None, None
     address, name, tier = jm.best_email(jm.scrape_site(site))
-    if not address or tier < 1:
+    if address and tier >= 1 and jm.has_mx(address.split("@")[1]):
+        return address, name
+    return published_address(agency)
+
+
+def published_address(agency):
+    """A verified published address, used only when the site cannot be read.
+
+    Eight of the twenty-one came back with nothing on the first live run - most
+    of them modern recruitment sites that take enquiries through a form, or sit
+    behind a bot check. That is not the same as publishing no address, and the
+    same rule as everywhere else applies: this is a transcription of something
+    published, recorded with WHERE IT WAS READ in 'email_source', not a pattern
+    applied to a domain. No source in the file, no letter."""
+    address = (agency.get("email") or "").strip()
+    if not address or "@" not in address:
+        return None, None
+    if not agency.get("email_source"):
+        print(f"[agency] {agency['name']}: address in the file has no "
+              f"email_source, refusing to use it")
         return None, None
     if not jm.has_mx(address.split("@")[1]):
         return None, None
-    return address, name
+    return address, None
 
 
 def greeting(name):
