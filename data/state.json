@@ -30687,6 +30687,7 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828603776?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828634608": {
+   "account_tried": true,
    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828634608?se=zNDBKMKQ8RG_2t8OCQTK4g&utm_medium=api&utm_source=afe77721&v=CCFCF49832B379390758A12BAA3DA872F0DCCB76",
    "ats": null,
    "company": "Peel Ports Group",
@@ -30695,8 +30696,8 @@
    "found_at": "2026-08-05T11:38:49.478056+00:00",
    "listing_text_len": 501,
    "location": "Whiteinch, Glasgow",
-   "portal_attempted_at": "2026-08-05T16:08:47.473729+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:47:11.142116+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T09:03:18.414995+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/peel-ports-group-adzuna_5828634608-noform.png",
    "posted_at": "2026-08-05T03:20:53+00:00",
@@ -30707,7 +30708,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Engineer - Electrical",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5828634608?se=zNDBKMKQ8RG_2t8OCQTK4g&utm_medium=api&utm_source=afe77721&v=CCFCF49832B379390758A12BAA3DA872F0DCCB76"
   },
@@ -31051,6 +31052,7 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828817725?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828820592": {
+   "account_tried": true,
    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828820592?se=HLQrNriQ8RGRle027vtZ2w&utm_medium=api&utm_source=afe77721&v=28B70A03E79AAB6E18B3C88608CAB4D2ECCEB0AA",
    "ats": null,
    "company": "The Sterling Choice Ltd",
@@ -31059,8 +31061,8 @@
    "found_at": "2026-08-05T10:27:19.972725+00:00",
    "listing_text_len": 501,
    "location": "Glasgow, Scotland",
-   "portal_attempted_at": "2026-08-05T16:09:00.690995+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:47:24.565680+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T09:03:18.415070+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/the-sterling-choice-ltd-adzuna_5828820592-noform.png",
    "posted_at": "2026-08-05T08:27:56+00:00",
@@ -31071,7 +31073,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Maintenance Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5828820592?se=HLQrNriQ8RGRle027vtZ2w&utm_medium=api&utm_source=afe77721&v=28B70A03E79AAB6E18B3C88608CAB4D2ECCEB0AA"
   },
