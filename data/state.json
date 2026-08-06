@@ -883,6 +883,7 @@
    "source": "signature of ask@uws.ac.uk"
   }
  },
+ "handoff_emailed_on": "2026-08-06",
  "jobs": {
   "adzuna_5818273600": {
    "company": "Bayne's the Family Bakers",
@@ -41961,6 +41962,13 @@
  },
  "morning_goal_rotation": 1,
  "morning_sent_on": "2026-08-05",
+ "portal_answer_cache": {
+  "summary optional": {
+   "answer": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Australia. I also do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I am an ex-Royal Navy Communications & Information Specialist and a Workshop Technician with experience in assembly, testing, and fault diagnosis of subsea acoustic positioning systems. I have DV security clearance and an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).",
+   "at": "2026-08-06T00:25:50.827761+00:00",
+   "question": "Summary (Optional)"
+  }
+ },
  "send_counts": {
   "2026-08-02": 6,
   "2026-08-03": 4,
