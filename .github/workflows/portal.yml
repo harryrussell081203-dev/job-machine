@@ -67,6 +67,15 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # This workflow had no Gmail credentials at all, which quietly cost
+          # it three things: it could not email Harry the CAPTCHA list, it
+          # could not read the activation email a portal sends when an account
+          # is created, and the portal password derived from GMAIL_APP_PASSWORD
+          # had nothing to derive from - so account creation raised instead of
+          # working. All three are on the path to a submitted application.
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GEMINI_WAIT_BUDGET: ${{ vars.GEMINI_WAIT_BUDGET }}
           SEARCH_LOCATIONS: ${{ vars.SEARCH_LOCATIONS }}
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
@@ -129,6 +138,10 @@ jobs:
             # decide, rather than spending an hour to find out.
             python portal_agent.py --reopen-fallbacks --run --submit \
               --limit "${BURN_LIMIT:-8}"
+            # What this run just proved, so the next one starts from it. The
+            # burn branch used to skip this and learn nothing from the run
+            # that produces the most evidence of any.
+            python learn.py --write || true
             exit 0
           fi
           ARGS="--harvest --run"
@@ -147,6 +160,19 @@ jobs:
       - name: Build the CAPTCHA handoff page
         if: always()
         run: python tools/handoff.py
+
+      # And send it, the moment there is something on it. A CAPTCHA is the one
+      # thing Harry said he would do himself - so the list reaching him is the
+      # last step of the application, not an afterthought for the evening
+      # nudge. handoff.py sends at most once a day of its own accord, so this
+      # cannot turn into a run's worth of mail.
+      - name: Email him the list
+        if: always()
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TEST_MODE: ${{ vars.TEST_MODE }}
+        run: python tools/handoff.py --email || true
 
       - name: Keep the handoff page
         if: always()

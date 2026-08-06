@@ -222,10 +222,17 @@ def email_page(state, force=False):
     subject = (f"[job-machine] {count} application needs only the CAPTCHA"
                if count == 1 else
                f"[job-machine] {count} applications need only the CAPTCHA")
+    filled = sum(1 for j in jobs if j.get("captcha_answers"))
     body = (
-        f"{count} application{'' if count == 1 else 's'} the machine filled "
-        f"in completely and could not submit, because the last step is a bot "
-        f"check.\n\n"
+        f"{count} application{'' if count == 1 else 's'} stopped by a bot "
+        f"check - the one step the machine will not do for you.\n\n"
+        f"{filled} of them {'is' if filled == 1 else 'are'} filled in "
+        f"completely and waiting on the puzzle alone."
+        + ("" if filled == count else
+           f" The other {count - filled} had the bot check BEFORE the form "
+           f"loaded, so there was nothing to read and nothing to fill - those "
+           f"are from scratch.")
+        + "\n\n"
         f"{plain_list(jobs)}"
         f"On a desktop, open the attached page: each one has a Copy prefill "
         f"snippet button. Open the form, paste the snippet into the browser "
