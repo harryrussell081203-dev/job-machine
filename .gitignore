@@ -3,5 +3,6 @@ __pycache__/
 data/state.json.tmp
 .venv/
 screenshots/
+kept-pages/
 cv/tailored/
 handoff/

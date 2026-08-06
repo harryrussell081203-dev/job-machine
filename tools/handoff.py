@@ -101,6 +101,21 @@ def card(job, index):
     flags = job.get("captcha_flags") or []
     flag_html = ("<p class=warn><b>Needs your answer:</b> "
                  + html.escape("; ".join(flags)) + "</p>") if flags else ""
+    # Some of these are blocked by a bot check that runs BEFORE the form
+    # loads, so there was nothing to read and nothing to fill. Offering a
+    # 'prefill' button that places zero fields would waste his time twice -
+    # once pressing it and once working out why nothing happened.
+    if answers:
+        action = (f'<button onclick="copyFill({index})">Copy prefill snippet'
+                  f'</button>\n'
+                  f'  <details><summary>{len(answers)} answer(s) the bot '
+                  f'worked out</summary>\n    <table>{rows}</table></details>\n'
+                  f'  <textarea id="fill{index}" class=hidden>'
+                  f'{html.escape(snippet)}</textarea>')
+    else:
+        action = ('<p class=m>Nothing pre-filled: the bot check runs before '
+                  'the form loads, so the agent never got to read it. Open '
+                  'it and fill it in as normal.</p>')
     return f"""
 <article>
   <h3>{html.escape(job.get('title') or '?')}
@@ -110,10 +125,7 @@ def card(job, index):
         rel="noopener">Open the application form</a>
      <span class=m>{html.escape(job.get('ats') or '')}</span></p>
   {flag_html}
-  <button onclick="copyFill({index})">Copy prefill snippet</button>
-  <details><summary>{len(answers)} answer(s) the bot worked out</summary>
-    <table>{rows}</table></details>
-  <textarea id="fill{index}" class=hidden>{html.escape(snippet)}</textarea>
+  {action}
 </article>"""
 
 
@@ -137,11 +149,14 @@ td{{border-bottom:1px solid #eee;padding:4px 6px;vertical-align:top}}
 ol{{font-size:14px}}
 </style></head><body>
 <h1>Applications waiting on a CAPTCHA</h1>
-<p><b>{len(jobs)}</b> filled and ready. For each one:</p>
+<p><b>{len(jobs)}</b> waiting, <b>{sum(1 for j in jobs if j.get('captcha_answers'))}</b>
+of them already filled in. For each one:</p>
 <ol>
   <li>Open the form.</li>
   <li>Click <b>Copy prefill snippet</b>, then paste it into the browser console
-      (F12 &rarr; Console) and press Enter. Every field fills instantly.</li>
+      (F12 &rarr; Console) and press Enter. Every field fills instantly.
+      Some have no snippet - the bot check on those runs before the form
+      loads, so there was nothing to read and nothing to fill.</li>
   <li>Attach the CV, solve the CAPTCHA, press Submit.</li>
 </ol>
 <p class=m>The bot cannot hand you a live session - a CAPTCHA is tied to the
