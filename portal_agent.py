@@ -665,18 +665,46 @@ COLLECT_JS = r"""
     return '';
   };
 
+  // A word that is an ANSWER, not a question. A control whose whole label is
+  // one of these has had its option text read as its question, and the real
+  // question is somewhere above it.
+  const BARE_OPTION = /^(yes|no|y|n|true|false|n\/a|prefer not to say|other)$/i;
+
   // The question a group of controls sits under: a fieldset legend, or the
   // nearest heading-ish thing above it.
+  //
+  // This used to look inside el.closest('div') and stop. Forms are not built
+  // that way. The common shape is
+  //
+  //     <div class="question">
+  //       <p>Do you have the right to work in the UK?</p>
+  //       <div class="options"><label><input type=radio> YES</label> ...</div>
+  //     </div>
+  //
+  // where the nearest div is the OPTIONS div and has no heading in it at all.
+  // So the question came back empty, the label fell through to the option
+  // text, and the field was recorded as 'unrecognised required field YES'.
+  // That one flag is the last thing standing between a 13-of-15 filled
+  // application at T-Tech and a submitted one.
+  //
+  // Climbing costs nothing and stops the moment it finds a real question.
   const groupLabel = (el) => {
     const fs = el.closest('fieldset');
     if (fs) {
       const legend = fs.querySelector('legend');
-      if (legend) return legend.innerText;
+      if (legend && clean(legend.innerText)) return legend.innerText;
     }
-    const box = el.closest('div,section,li');
-    if (box) {
-      const head = box.querySelector('legend,h2,h3,h4,p,label');
-      if (head && !head.contains(el)) return head.innerText;
+    let box = el.closest('div,section,li,fieldset');
+    for (let up = 0; box && up < 4; up++, box = box.parentElement) {
+      for (const head of box.querySelectorAll(
+             'legend,h2,h3,h4,h5,p,label,span,div')) {
+        if (head.contains(el)) continue;
+        const text = clean(head.innerText);
+        // A real question, not another option and not a whole paragraph of
+        // terms. Anything with a question mark counts however short it is.
+        if (!text || text.length > 220 || BARE_OPTION.test(text)) continue;
+        if (text.length >= 12 || text.includes('?')) return text;
+      }
     }
     return '';
   };
@@ -739,7 +767,19 @@ COLLECT_JS = r"""
     // instead of dropped - losing one would lose the CV.
     if (!shown(el) && el.type !== 'file') return;
     if (el.type === 'hidden') return;
-    el.setAttribute('data-jm', String(i));
+    // NEVER overwrite a handle already given out.
+    //
+    // The radio-group loop below stamps every button in a group with
+    // `${i}-${n}` and hands those back in option_map, so the agent can check
+    // the exact button it means. Then this loop reached that same button on a
+    // later turn and stamped its OWN index over the top - so option_map's
+    // '5-1' pointed at nothing, and apply_plan timed out.
+    //
+    // Only ever on the buttons after the first, which means it broke exactly
+    // one thing: every answer that was not the first option. Every 'No' to a
+    // yes/no question has been silently failing to land, on every form, from
+    // the beginning - 'Will you require sponsorship?' among them.
+    if (!el.getAttribute('data-jm')) el.setAttribute('data-jm', String(i));
 
     const isRadio = el.type === 'radio';
     let options = [], optionMap = {};
@@ -755,8 +795,12 @@ COLLECT_JS = r"""
         });
     }
 
-    // a radio's question comes from its group, everything else from its own label
-    const label = isRadio ? (groupLabel(el) || ownLabel(el)) : ownLabel(el);
+    // A radio's question comes from its group. So does anything else whose
+    // own label is only an answer word - a checkbox labelled 'YES' tells you
+    // nothing about what is being agreed to.
+    const own = clean(ownLabel(el));
+    const label = (isRadio || !own || BARE_OPTION.test(own))
+                  ? (groupLabel(el) || own) : own;
     out.push({
       index: String(el.getAttribute('data-jm')),
       tag: el.tagName.toLowerCase(),
