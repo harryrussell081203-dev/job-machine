@@ -2218,3 +2218,83 @@ class TestItPressesSubmitEvenWithABotCheckOnThePage(unittest.TestCase):
             pa.apply_to_job(mock.MagicMock(), job, {}, submit=True)
         click.assert_not_called()
         self.assertEqual(job["status"], "portal_awaiting_captcha")
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestTheBoxThatStoppedTwoApplications(unittest.TestCase):
+    """Nine of eleven fields at EnerMech, eleven of twenty-three at DOF, and
+    both stalled on the same control: 'I have read, understand and accept the
+    content of the Privacy Notice'.
+
+    The agent had already decided to tick it. The tick failed - the real
+    checkbox is hidden under a styled label, and Playwright's check() refuses
+    to touch a control it judges unactionable. The failure became a flag, the
+    flag counted as a question only Harry could answer, and the application
+    was abandoned one box from the end."""
+
+    FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fixtures", "styled_consent.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.FORM)
+        self.addCleanup(self.page.close)
+        self.fields = pa.collect_fields(self.page)
+
+    def field(self, name):
+        for f in self.fields:
+            if f.get("name") == name:
+                return f
+        self.fail(f"no field named {name}")
+
+    def test_playwrights_own_check_cannot_touch_it(self):
+        """The failure being fixed, reproduced."""
+        box = self.field("privacy")
+        with self.assertRaises(Exception):
+            self.page.check(f'[data-jm="{box["index"]}"]', timeout=1500)
+
+    def test_it_gets_ticked_anyway(self):
+        box = self.field("privacy")
+        selector = f'[data-jm="{box["index"]}"]'
+        pa.tick(self.page, selector, box)
+        self.assertTrue(self.page.is_checked(selector))
+
+    def test_the_whole_page_now_plans_and_lands_every_field(self):
+        plan, flags = pa.plan_answers(self.fields, JOB, pa.load_answers())
+        filled, failed = pa.apply_plan(self.page, plan)
+        self.assertEqual(failed, [], "something on the page would not fill")
+        self.assertEqual(pa.blockers(flags), [],
+                         "nothing here should need a person")
+        landed = {f["field"] for f in filled}
+        self.assertTrue(any("Address" in str(f) for f in landed))
+        self.assertTrue(any("Privacy Notice" in str(f) for f in landed))
+
+    def test_the_address_comes_out_of_the_answer_bank(self):
+        """'^address$' could never match: field_text concatenates the label
+        with the name and id, so the haystack is never the bare word."""
+        self.assertEqual(pa.match_key(self.field("address")), "address_line_1")
+        plan, _ = pa.plan_answers(self.fields, JOB, pa.load_answers())
+        values = {str(p["value"]) for p in plan}
+        self.assertIn(pa.load_answers()["address_line_1"], values)
+
+    def test_a_box_that_truly_cannot_be_ticked_still_reports_it(self):
+        page = self.browser.new_page()
+        self.addCleanup(page.close)
+        page.set_content('<input id="x" data-jm="0" type="checkbox" disabled>')
+        with self.assertRaises(Exception):
+            pa.tick(page, '[data-jm="0"]', {"id": "x"})

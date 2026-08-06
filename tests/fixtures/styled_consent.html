@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  The box that stopped two finished applications.
+
+  Nine of eleven fields at EnerMech, eleven of twenty-three at DOF, and both
+  stalled on the same control: "I have read, understand and accept the content
+  of the Privacy Notice". The agent had already decided to tick it. The tick
+  failed.
+
+  This is why. The real <input type=checkbox> is hidden - opacity 0, zero size,
+  pushed off its own box - so the designer can draw a prettier one with CSS.
+  The input is real, it is in the form, and it is what gets submitted. It just
+  is not what a person clicks; they click the label.
+
+  Playwright's check() refuses to touch a control it judges unactionable, so
+  it threw, the failure was recorded as a flag, the flag counted as a question
+  only Harry could answer, and the whole application was abandoned one box
+  from the end.
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply</title>
+<style>
+  .tickbox input[type=checkbox] {
+    position: absolute; opacity: 0; width: 0; height: 0;
+  }
+  .tickbox label { cursor: pointer; padding-left: 26px; display: block; }
+</style>
+</head>
+<body>
+<h1>Apply for this role</h1>
+<form id="apply">
+  <label for="nm">Full name</label>
+  <input id="nm" name="full_name" type="text" required>
+
+  <label for="ad">* Address</label>
+  <input id="ad" name="address" type="text" required>
+
+  <div class="tickbox">
+    <input id="privacy" name="privacy" type="checkbox" required>
+    <label for="privacy">I have read, understand and accept the content of the
+      Privacy Notice and consent to the processing of my data as part of this
+      application.</label>
+  </div>
+
+  <button type="submit">Submit application</button>
+</form>
+</body>
+</html>
