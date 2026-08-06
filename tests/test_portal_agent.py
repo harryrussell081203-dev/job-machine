@@ -18,6 +18,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import job_machine as jm  # noqa: E402
+import learn  # noqa: E402
 import portal_agent as pa  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -2071,3 +2072,53 @@ class TestWaitingForAFormThatHasNotRenderedYet(unittest.TestCase):
         _, fields = pa.wait_for_the_form(page, seconds=2)
         self.assertLess(len(pa.visible_fields(fields)), pa.MIN_FORM_FIELDS)
         self.assertLess(time.monotonic() - started, 6)
+
+
+class TestAnOptionalBoxDoesNotStopAnApplication(unittest.TestCase):
+    """Any flag used to abandon the application before pressing submit, and
+    two of them fired on OPTIONAL fields: a salary dropdown with no band
+    matching '35000', a number box that will not take 'negotiable'. Five
+    applications stalled on exactly that, and the form did not care - a
+    person would have left it blank and pressed submit."""
+
+    def dropdown(self, required):
+        return {"index": "0", "tag": "select", "type": "select",
+                "name": "salary", "id": "", "label": "Salary expectation",
+                "placeholder": "", "aria_label": "", "group_label": "",
+                "hint": "", "required": required, "maxlength": None,
+                "options": ["Under 20,000", "Over 100,000"],
+                "option_map": {}, "value": "", "visible": True}
+
+    def plan(self, required):
+        answers = dict(pa.load_answers())
+        answers["salary"] = "35000"
+        return pa.plan_answers([self.dropdown(required)], JOB, answers)
+
+    def test_an_optional_one_is_recorded_but_does_not_block(self):
+        _, flags = self.plan(required=False)
+        self.assertTrue(flags, "it must still be recorded as an answer gap")
+        self.assertTrue(flags[0].startswith(pa.OPTIONAL))
+        self.assertEqual(pa.blockers(flags), [])
+
+    def test_a_required_one_still_stops_everything(self):
+        _, flags = self.plan(required=True)
+        self.assertEqual(pa.blockers(flags), flags)
+
+    def test_learn_still_counts_the_optional_ones_as_gaps(self):
+        """Each is a line Harry could add to data/answers.json in ten
+        seconds - not blocking is not the same as not worth knowing."""
+        _, flags = self.plan(required=False)
+        gaps = learn.unanswered_questions(
+            {"jobs": {"a": {"portal_flags": flags, "company": "Acme"}}})
+        self.assertEqual(len(gaps), 1)
+
+    def test_the_man_doing_the_captcha_is_only_told_what_needs_him(self):
+        job = {"external_id": "a", "company": "Acme", "title": "T"}
+        with mock.patch.object(pa, "shot", return_value=None):
+            pa.bank_for_captcha(mock.MagicMock(), job, [],
+                                [f"{pa.OPTIONAL}salary has no option",
+                                 "'Notice period' is required"])
+        self.assertEqual(job["captcha_flags"], ["'Notice period' is required"])
+
+    def test_blockers_is_not_confused_by_an_empty_list(self):
+        self.assertEqual(pa.blockers([]), [])
