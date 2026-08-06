@@ -207,12 +207,23 @@ FIELD_RULES = [
     ("linkedin", r"linked-?in"),
     ("website", r"website|portfolio|personal site|github"),
     ("right_to_work_uk", r"right to work|eligible to work|authoris?ed to work|"
-                        r"legally entitled to work"),
+                        r"legally entitled to work|"
+                        # 'Do you have permanent residency in the UK?' is the
+                        # same question in different words, and DOF stopped on
+                        # it. Anchored to the UK on purpose: the Australian
+                        # version of this question is not one he can answer
+                        # Yes to, and must stay unrecognised.
+                        r"permanent residen(ce|cy) in the uk|"
+                        r"(settled|pre-settled) status"),
     ("needs_sponsorship", r"sponsorship|visa|work permit"),
     ("security_clearance", r"security clearance|clearance level|\bsc\b|\bdv\b|vetting"),
     ("armed_forces_veteran", r"armed forces|veteran|ex-?forces|military service|"
                              r"service leaver"),
     ("driving_licence", r"driving licen[cs]e|driver'?s licen[cs]e|full licence"),
+    # Asked separately from the licence, and often required. T-Tech's form
+    # stopped on it with fourteen of fifteen fields already filled.
+    ("own_car", r"(have|own|access to) (a |your own )?(car|vehicle)|"
+                r"use of a (car|vehicle)"),
     ("notice_period", r"notice period|how much notice"),
     ("earliest_start_date", r"start date|available from|availability|when can you start"),
     ("salary_expectation", r"salary|remuneration|rate expectation|expected pay"),
@@ -222,7 +233,11 @@ FIELD_RULES = [
     ("shift_work", r"shift work|shift pattern|night work"),
     ("current_employer", r"current employer|present employer|company name"),
     ("current_job_title", r"current (job )?title|current role|job title|occupation"),
-    ("years_experience", r"years of experience|years'? experience|how many years"),
+    # 'Industry Experience (Years)' and 'Role Experience (Years)' both went
+    # unrecognised - the old pattern wanted the word 'years' before
+    # 'experience' and these put it after, in brackets.
+    ("years_experience", r"years of experience|years'? experience|how many years|"
+                         r"experience\s*\(\s*years?\s*\)"),
     ("highest_qualification", r"highest (level of )?(qualification|education)"),
     ("university", r"university|college|institution"),
     ("degree", r"degree|qualification|course|field of study|subject"),
@@ -594,6 +609,31 @@ def plan_answers(fields, job, answers, instructions="", state=None):
             continue
 
         key = match_key(field)
+
+        # A TICK IS A CLAIM, NOT A VALUE.
+        #
+        # DOF's form asks for education as a column of checkboxes -
+        # 'Doctorate', 'Masters Degree', 'Bachelors Degree'. Every one of them
+        # matched the answer bank's 'degree' key, and the plan came back as
+        # 'put this text in that box'. It never landed, because you cannot
+        # fill a checkbox, so it failed and was recorded as a flag.
+        #
+        # That is luck, not design. A checkbox is a yes/no assertion about
+        # Harry, and the only honest way to tick 'Masters Degree' is to hold
+        # one. He does not. So a checkbox is ticked only from an answer that
+        # is itself a yes or a no; anything else is a question for him, and a
+        # stalled application is far better than a qualification claimed.
+        if field.get("type") == "checkbox" and key:
+            answer = str(answers.get(key) or "").strip().lower()
+            if answer.startswith(YES_WORDS):
+                plan.append({"field": field, "value": True, "kind": "check",
+                             "source": f"bank:{key}"})
+            elif not answer.startswith(NO_WORDS) and field.get("required"):
+                flags.append(f"'{field.get('label') or field.get('name')}' is a "
+                             f"box to tick and '{key}' is not a yes or a no - "
+                             f"only Harry can say")
+            continue
+
         if key and answers.get(key) is not None:
             value = answers[key]
             if field.get("options"):

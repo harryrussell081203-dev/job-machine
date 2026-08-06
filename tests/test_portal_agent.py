@@ -2389,3 +2389,75 @@ class TestTheQuestionIsNotTheAnswerWord(unittest.TestCase):
         _, failed = pa.apply_plan(self.page, plan)
         self.assertEqual(failed, [])
         self.assertTrue(self.page.is_checked('input[name="visa"][value="n"]'))
+
+
+class TestATickIsAClaimNotAValue(unittest.TestCase):
+    """DOF asks for education as a column of checkboxes - 'Doctorate',
+    'Masters Degree', 'Bachelors Degree'. Every one matched the answer bank's
+    'degree' key, and the plan came back as 'put this text in that box'.
+
+    It never landed, because you cannot fill a checkbox - so it failed and was
+    recorded as a flag. That is luck, not design. The only honest way to tick
+    'Masters Degree' is to hold one, and Harry does not."""
+
+    def box(self, label, **over):
+        field = {"index": "0", "tag": "input", "type": "checkbox",
+                 "label": label, "name": "", "id": "", "placeholder": "",
+                 "aria_label": "", "group_label": "", "hint": "",
+                 "maxlength": None, "options": [], "option_map": {},
+                 "value": "", "visible": True, "required": True}
+        field.update(over)
+        return field
+
+    def plan(self, label, **over):
+        return pa.plan_answers([self.box(label, **over)], JOB,
+                               pa.load_answers())
+
+    def test_it_will_not_claim_a_qualification_he_does_not_hold(self):
+        plan, flags = self.plan("Masters Degree")
+        self.assertEqual(plan, [])
+        self.assertTrue(pa.blockers(flags))
+
+    def test_not_even_by_accident_through_apply_plan(self):
+        """The old behaviour planned a 'text' write onto a checkbox, and only
+        avoided ticking it because page.fill() happens to fail there."""
+        plan, _ = self.plan("Masters Degree")
+        self.assertFalse(any(p["kind"] == "check" for p in plan))
+
+    def test_a_box_it_can_honestly_tick_is_still_ticked(self):
+        plan, flags = self.plan("I have the right to work in the UK")
+        self.assertEqual([p["kind"] for p in plan], ["check"])
+        self.assertEqual(pa.blockers(flags), [])
+
+    def test_a_no_answer_leaves_the_box_alone_and_says_nothing(self):
+        """He has no car. The honest act is to leave it unticked, not to
+        stall the application over it."""
+        plan, flags = self.plan("Do you have a car you can use for work?")
+        self.assertEqual(plan, [])
+        self.assertEqual(pa.blockers(flags), [])
+
+    def test_the_answers_the_last_run_asked_for_are_now_in_the_bank(self):
+        """Every one of these stopped a filled application, and each was
+        answerable from what Harry has already told it."""
+        answers = pa.load_answers()
+        for label, key in (
+                ("* Do you have a car that you can use for work purposes?",
+                 "own_car"),
+                ("* Do you have a permanent residency in the UK?",
+                 "right_to_work_uk"),
+                ("* Industry Experience (Years)", "years_experience"),
+                ("* Role Experience (Years)", "years_experience")):
+            with self.subTest(label=label):
+                self.assertEqual(pa.match_key({"label": label}), key)
+                self.assertTrue(answers.get(key))
+
+    def test_the_australian_version_stays_unrecognised(self):
+        """'Permanent residency in the UK' is a Yes. The Australian one is
+        not, and answering it from the same key would be a lie."""
+        self.assertIsNone(pa.match_key(
+            {"label": "I am an Australian Citizen/Permanent Resident"}))
+
+    def test_no_car_is_grounded_in_the_licence_he_does_not_have(self):
+        answers = pa.load_answers()
+        self.assertEqual(answers["driving_licence"], "No")
+        self.assertEqual(answers["own_car"], "No")
