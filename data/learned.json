@@ -1,0 +1,153 @@
+{
+  "_README": [
+    "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
+    "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
+  ],
+  "updated_at": "2026-08-06T00:31:39.052899+00:00",
+  "emails": {
+    "sent": 25,
+    "human_replies": 2
+  },
+  "verdicts": [],
+  "not_yet": [
+    {
+      "dimension": "template",
+      "why": "0 of 5 option(s) have 8+ sends",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "contact",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "recipient",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "hour",
+      "why": "0 of 7 option(s) have 8+ sends",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "score",
+      "why": "1 of 3 option(s) have 8+ sends",
+      "sends_needed": 8
+    }
+  ],
+  "platform_order": {
+    "employer's own site": 0.005172413793103448,
+    "oracle": 0.5,
+    "smartrecruiters": 0.0,
+    "teamtailor": 0.5,
+    "ashby": 0.5,
+    "workable": 0.0375,
+    "greenhouse": 0.5,
+    "successfactors": 0.5,
+    "recruitee": 0.0,
+    "reed": 0.0
+  },
+  "answer_gaps": [
+    {
+      "question": "'' has no option matching '35000'",
+      "times": 5,
+      "first_seen_at": "Staffline"
+    },
+    {
+      "question": "'Pays' has no option matching 'United Kingdom'",
+      "times": 1,
+      "first_seen_at": "Speedy Services"
+    },
+    {
+      "question": "unrecognised required field 'Organisation'",
+      "times": 1,
+      "first_seen_at": "Staffline"
+    },
+    {
+      "question": "unrecognised required field '* Address'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Place of Permanent Residence'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Industry Experience (Years)'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Role Experience (Years)'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "could not answer '* Cover letter' from Harry's own information",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'I am an Australian Citizen/Permanent Resident'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "could not answer '* Please confirm your preferred Australian Domestic Airport.' from Harry",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'YES'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "answer bank has no 'offshore_willing' and '* How many years of experience do you have as a",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'Certificate of Safety Training'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'BOSIET CA-EBS'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'MSIC'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'HV/LV - FSE Ship'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'AMSA Medical'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'Platform Supply Vessels'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'Dive Support Vessels'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'Anchor Handling Tug Supply Vessels'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    }
+  ]
+}
