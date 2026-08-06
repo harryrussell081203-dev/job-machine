@@ -399,7 +399,62 @@ def page_instructions(page):
     return "\n".join(f"- {line}" for line in lines)
 
 
-def ground_free_text(field, job, answers, instructions=""):
+# ======================================================================
+# NOT PAYING FOR THE SAME ANSWER TWICE
+# ======================================================================
+# Application forms ask the same handful of things. 'What is your notice
+# period', 'Do you have the right to work in the UK', 'How did you hear about
+# us' - the answer does not change between employers, and every one of them
+# was costing a Gemini call on a free tier that allows about ten a minute.
+# That is what put a run eight minutes into 429s for a single application.
+#
+# So a grounded answer is kept and reused. This is also the answer bank
+# building itself: every question the machine works out once, it knows.
+#
+# WHAT IS NEVER CACHED. A question about THIS employer has a different right
+# answer for every employer, and reusing one would send Boskalis a paragraph
+# about why he wants to work for DOF - which is worse than sending nothing.
+ABOUT_THIS_EMPLOYER = re.compile(
+    r"\b(this|our|your) (role|job|company|organisation|organization|position|"
+    r"vacancy|team|business)\b|why (do you want to |would you like to )?"
+    r"(work |join )?(for |at |with )?(us|our)\b|why this|about us\b|"
+    r"interest(ed)? in (this|our)", re.I)
+ANSWER_CACHE = "portal_answer_cache"
+
+
+def cache_key(question):
+    return re.sub(r"[^a-z0-9 ]+", "", (question or "").lower()).strip()[:120]
+
+
+def reusable(question, answer, job):
+    """Is this answer true of every employer, or only of this one?"""
+    if ABOUT_THIS_EMPLOYER.search(question or ""):
+        return False
+    company = (job.get("company") or "").strip()
+    if company and company.lower() in (answer or "").lower():
+        return False
+    if company and company.lower() in (question or "").lower():
+        return False
+    return True
+
+
+def remembered_answer(state, question, job):
+    if state is None or not reusable(question, "", job):
+        return None
+    entry = (state.get(ANSWER_CACHE) or {}).get(cache_key(question))
+    return entry.get("answer") if entry else None
+
+
+def remember_answer(state, question, answer, job):
+    if state is None or not reusable(question, answer, job):
+        return
+    state.setdefault(ANSWER_CACHE, {})[cache_key(question)] = {
+        # 'at' rather than 'first_answered_at' so union_earliest in
+        # tools/merge_state.py can actually compare two of these.
+        "answer": answer, "question": question[:200], "at": jm.now()}
+
+
+def ground_free_text(field, job, answers, instructions="", state=None):
     """Free-text question with no bank entry: let Gemini answer, but only from
     facts we hold, only if it says which fact it used, and inside whatever the
     form said it would accept."""
@@ -407,6 +462,13 @@ def ground_free_text(field, job, answers, instructions=""):
                 or field.get("name") or "").strip()
     if not question:
         return None
+    # Answered this one before, on a question whose answer does not depend on
+    # the employer? Then it is already known, and asking again costs a call
+    # from a quota of about ten a minute.
+    known = remembered_answer(state, question, job)
+    if known:
+        print(f"[portal] reusing a known answer for '{question[:50]}'")
+        return known
     hint = (field.get("hint") or "").strip()
     # A stated cap beats a guess from maxlength, and a maxlength beats nothing.
     limit = word_limit(hint, question, instructions) \
@@ -446,11 +508,13 @@ def ground_free_text(field, job, answers, instructions=""):
         return None
     if jm.slop_check(str(answer)):
         return None
-    return trim_to_words(str(answer).strip(), word_limit(hint, question,
-                                                         instructions))
+    final = trim_to_words(str(answer).strip(),
+                          word_limit(hint, question, instructions))
+    remember_answer(state, question, final, job)
+    return final
 
 
-def plan_answers(fields, job, answers, instructions=""):
+def plan_answers(fields, job, answers, instructions="", state=None):
     """Work out what goes in every box. Returns (plan, flags).
 
     'instructions' is what the page itself told the applicant, read once and
@@ -523,7 +587,8 @@ def plan_answers(fields, job, answers, instructions=""):
         if field.get("type") in ("textarea", "text", "email", "tel", "url", "number") \
                 and (COVER_PATTERNS.search(field_text(field))
                      or field.get("type") == "textarea"):
-            answer = ground_free_text(field, job, answers, instructions)
+            answer = ground_free_text(field, job, answers, instructions,
+                                      state)
             if answer:
                 plan.append({"field": field, "value": answer, "kind": "text",
                              "source": "grounded"})
@@ -1305,7 +1370,7 @@ def apply_to_job(page, job, answers, submit, state=None):
         if instructions:
             print(f"[portal] page {pages + 1} gives "
                   f"{instructions.count(chr(10)) + 1} instruction(s) to follow")
-        plan, flags = plan_answers(fields, job, answers, instructions)
+        plan, flags = plan_answers(fields, job, answers, instructions, state)
         filled, failed = apply_plan(surface, plan)
         filled_all += filled
         flags_all += flags + failed
@@ -1619,8 +1684,13 @@ def there_is_a_form_to_fill(job):
         return True                      # the listing IS the portal
     if job.get("apply_url") and classify_url(job["apply_url"])[1]:
         return True                      # already resolved to one
-    if job.get("ats"):
-        return True                      # a previous run found their board
+    # A previous run found their board - but only if it is one with a form
+    # behind it. job['ats'] is also set to 'reed' or 'indeed', which are job
+    # boards, and trusting those let four agency adverts back into the queue
+    # after they had been ruled out: they cost a browser and a domain lookup
+    # each to reach 'MANUAL, not counted, moving on'.
+    if job.get("ats") and job["ats"] in SUPPORTED_ATS:
+        return True
     text = " ".join(str(job.get(k) or "") for k in ("description", "apply_hint"))
     match = ATS_LINK_RE.search(text)
     if match and classify_url(match.group(0).rstrip(").,'\""))[1]:

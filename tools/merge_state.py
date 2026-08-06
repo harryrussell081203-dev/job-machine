@@ -148,7 +148,7 @@ def union_latest(theirs, ours):
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
          "agency_registered", "sms_sent", "contact_numbers",
-         "last_summary_at"}
+         "portal_answer_cache", "last_summary_at"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -199,6 +199,19 @@ def merge(theirs, ours):
                               ours.get("agency_registered", {}))
     if registered:
         out["agency_registered"] = registered
+
+    # The answers the machine has already worked out, keyed by the question.
+    # Both sides are kept and the earliest answer wins, because these are
+    # questions whose answer does not depend on the employer - the second
+    # answer to 'what is your notice period' is not better than the first, and
+    # keeping one steady answer means two applications never contradict each
+    # other. Losing this costs a Gemini call per question on a free tier that
+    # allows about ten a minute, which is what once put a run eight minutes
+    # into 429s for a single application.
+    cached = union_earliest(theirs.get("portal_answer_cache", {}),
+                            ours.get("portal_answer_cache", {}))
+    if cached:
+        out["portal_answer_cache"] = cached
 
     # One text per person, ever. Losing a record here means texting somebody
     # a second time, so the earliest wins for the same reason it does for the
