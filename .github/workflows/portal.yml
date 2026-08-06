@@ -15,6 +15,7 @@ on:
       - "fire-probe/**"            # ask the board APIs only - seconds, no browser
       - "fire-inspect/**"          # open employer-board apply pages, fill nothing
       - "fire-covenant/**"         # rebuild the Armed Forces Covenant list
+      - "fire-applied/**"          # record the ones Harry finished himself
   workflow_dispatch:
     inputs:
       submit:
@@ -54,6 +55,31 @@ jobs:
 
       - run: pip install requests dnspython playwright reportlab
       - run: playwright install --with-deps chromium
+
+      # WORK THE LIVE QUEUE, NOT THE BRANCH'S SNAPSHOT.
+      #
+      # A fire-* branch is a feature branch, and its data/state.json is
+      # whatever was committed to it - which can be days old. The runner was
+      # reading that, so every forced run worked an out-of-date queue: it
+      # re-attempted jobs main already had marked done, and never saw the ones
+      # main had scored since. fire-burn/6 spent its whole budget on four
+      # agency adverts that main knew were dead ends, and never touched the
+      # eight Workable applications actually waiting.
+      #
+      # Only state.json. Every other file in data/ is configuration - the
+      # agency list, the goals, the answer bank - and a branch is allowed to
+      # change those; that is often the point of the branch.
+      - name: Start from the live state, not the branch's copy
+        if: startsWith(github.ref_name, 'fire-')
+        run: |
+          DEFAULT="${{ github.event.repository.default_branch }}"
+          git fetch origin "$DEFAULT" --depth=1
+          if git cat-file -e "origin/$DEFAULT:data/state.json" 2>/dev/null; then
+            git checkout "origin/$DEFAULT" -- data/state.json
+            python -c "import json;d=json.load(open('data/state.json'));print(f'[state] working the live queue: {len(d[\"jobs\"])} jobs from $DEFAULT')"
+          else
+            echo "[state] no state on $DEFAULT, using the branch's copy"
+          fi
 
       - name: Harvest a month and work the queue
         env:
@@ -105,6 +131,25 @@ jobs:
             # because it assumed the wrong page structure.
             python tools/covenant_list.py --inspect || true
             python tools/covenant_list.py --write
+            exit 0
+          fi
+          # The applications Harry did himself. --scan reads the inbox for
+          # the employer's own 'we have received your application', which is
+          # proof of the one thing the machine cannot otherwise know; --mark
+          # is for when he has simply said so. Seconds, no browser.
+          # The name after the slash says which one, so 'fire-applied/dof'
+          # records the DOF application and needs nothing configured
+          # anywhere. 'fire-applied/scan' just reads the inbox, and
+          # 'fire-applied/all' means he has cleared the whole list.
+          if [[ "${GITHUB_REF_NAME}" == fire-applied/* ]]; then
+            WHICH="${GITHUB_REF_NAME#fire-applied/}"
+            echo "fire-applied branch: recording '${WHICH}' as done"
+            case "${WHICH}" in
+              all)        python tools/applied.py --all --scan ;;
+              scan|"")    python tools/applied.py --scan ;;
+              *)          python tools/applied.py --mark "${WHICH//-/ }" --scan ;;
+            esac
+            python tools/applied.py --list
             exit 0
           fi
           if [[ "${GITHUB_REF_NAME}" == fire-probe/* ]]; then

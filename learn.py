@@ -191,7 +191,14 @@ def platform_success(state):
         cell["tried"] += 1
         cell["reached"] += int(bool(job.get("portal_filled")
                                     or job.get("captcha_answers")))
-        cell["submitted"] += int(job.get("status") == "portal_submitted")
+        # An application Harry finished by hand is a real application, and
+        # every count of 'how many have we applied for' should say so. It is
+        # NOT evidence that the agent finishes this platform - a portal that
+        # always needs a human at the end would otherwise be ranked as though
+        # the machine sails through it, and the queue would be worked in
+        # exactly the wrong order.
+        cell["submitted"] += int(job.get("status") == "portal_submitted"
+                                 and not job.get("finished_by_hand_at"))
     for cell in out.values():
         cell["reach_rate"] = cell["reached"] / max(cell["tried"], 1)
         cell["finish_rate"] = cell["submitted"] / max(cell["tried"], 1)
