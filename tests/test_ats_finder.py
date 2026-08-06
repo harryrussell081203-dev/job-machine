@@ -452,3 +452,63 @@ class TestGivingUpOnAHungServer(unittest.TestCase):
         with mock.patch.object(af.requests, "get", side_effect=hangs), \
              mock.patch.object(af, "HARD_TIMEOUT", 0.2):
             self.assertIsNone(af.careers_page_ats("slow.example.com"))
+
+
+class TestAskingAgainWithTheBrowser(unittest.TestCase):
+    """'nlb.org.uk could not be read at all', then '0 form fields found' -
+    four times in one run, on Northern Lighthouse Board, Speedy Hire, Innserve
+    and KBM. Every one is a real employer with a real careers page. They were
+    unreadable because careers_page_ats asks with requests, and a corporate
+    site behind a WAF answers a bare Python user-agent with 403 while serving
+    a browser perfectly well. There is a browser open and idle at that moment."""
+
+    def page(self, html, url="https://x.example.com/careers"):
+        return mock.Mock(goto=mock.Mock(), wait_for_timeout=mock.Mock(),
+                         content=mock.Mock(return_value=html), url=url)
+
+    def test_the_browser_finds_the_ats_requests_could_not_see(self):
+        page = self.page(
+            '<a href="https://apply.workable.com/nlb/">Our vacancies</a>')
+        self.assertEqual(
+            af.careers_page_in_browser(page, "nlb.org.uk"),
+            ("workable", "https://apply.workable.com/nlb/"))
+
+    def test_their_own_careers_page_beats_the_job_boards_interstitial(self):
+        page = self.page("<h1>Work for us</h1><p>No vacancies listed.</p>")
+        ats, url = af.careers_page_in_browser(page, "speedyhire.co.uk")
+        self.assertIsNone(ats)
+        self.assertTrue(url)
+
+    def test_a_site_that_will_not_load_at_all_is_still_a_miss(self):
+        page = mock.Mock(goto=mock.Mock(side_effect=RuntimeError("dead")),
+                         wait_for_timeout=mock.Mock())
+        self.assertIsNone(af.careers_page_in_browser(page, "gone.example.com"))
+
+    def test_it_needs_a_browser_and_a_domain(self):
+        self.assertIsNone(af.careers_page_in_browser(None, "x.com"))
+        self.assertIsNone(af.careers_page_in_browser(self.page("<p>x</p>"), ""))
+
+    def test_the_cheap_question_is_still_asked_first(self):
+        """A page load costs seconds where a GET costs milliseconds, and most
+        sites answer the cheap one fine."""
+        job = {"company": "Acme Energy", "title": "Technician",
+               "company_domain": "acme.example.com"}
+        with mock.patch.object(af, "find_board", return_value=None), \
+             mock.patch.object(af, "careers_page_ats",
+                               return_value=("greenhouse",
+                                             "https://boards.greenhouse.io/a")), \
+             mock.patch.object(af, "careers_page_in_browser") as browser, \
+             mock.patch.object(af, "slug_from_board_url", return_value=None):
+            af.find_application_url(mock.Mock(), job)
+        browser.assert_not_called()
+
+    def test_and_the_browser_is_asked_only_when_it_fails(self):
+        job = {"company": "Northern Lighthouse Board", "title": "Technician",
+               "company_domain": "nlb.org.uk"}
+        with mock.patch.object(af, "find_board", return_value=None), \
+             mock.patch.object(af, "careers_page_ats", return_value=None), \
+             mock.patch.object(af, "careers_page_in_browser",
+                               return_value=(None, "https://nlb.org.uk/careers")), \
+             mock.patch.object(af, "own_site_application", return_value=None):
+            url, ats = af.find_application_url(mock.Mock(), job)
+        self.assertEqual(url, "https://nlb.org.uk/careers")
