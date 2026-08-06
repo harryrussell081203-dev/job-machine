@@ -515,6 +515,25 @@ def ground_free_text(field, job, answers, instructions="", state=None):
     return final
 
 
+# A field the agent could not fill that NOBODY HAS TO FILL.
+#
+# Any flag used to abandon the application before pressing submit, and two of
+# them fired on optional fields: a salary dropdown with no band matching
+# '35000', a number box that will not take 'negotiable'. Five applications
+# stalled on exactly that. The form did not care - the field was optional and
+# a person would have left it blank and pressed submit.
+#
+# These are still recorded, because learn.py counts them into the answer gaps
+# and each one is a line Harry could add to data/answers.json. They just do
+# not stop an application any more.
+OPTIONAL = "(optional) "
+
+
+def blockers(flags):
+    """The flags that really do need a person. Optional ones do not."""
+    return [f for f in flags if not str(f).startswith(OPTIONAL)]
+
+
 def plan_answers(fields, job, answers, instructions="", state=None):
     """Work out what goes in every box. Returns (plan, flags).
 
@@ -563,16 +582,20 @@ def plan_answers(fields, job, answers, instructions="", state=None):
             if field.get("options"):
                 option = choose_option(field, value)
                 if option is None:
-                    flags.append(f"'{field.get('label') or field.get('name')}' has no "
-                                 f"option matching '{value}'")
+                    flags.append(
+                        f"{'' if field.get('required') else OPTIONAL}"
+                        f"'{field.get('label') or field.get('name')}' has no "
+                        f"option matching '{value}'")
                     continue
                 value = option
             else:
                 value = coerce_value(field, value)
                 if value is None:
-                    flags.append(f"could not fit '{answers[key]}' into "
-                                 f"'{field.get('label') or field.get('name')}' "
-                                 f"({field.get('type')} field)")
+                    flags.append(
+                        f"{'' if field.get('required') else OPTIONAL}"
+                        f"could not fit '{answers[key]}' into "
+                        f"'{field.get('label') or field.get('name')}' "
+                        f"({field.get('type')} field)")
                     continue
             plan.append({"field": field, "value": value, "kind": "choice"
                          if field.get("options") else "text", "source": f"bank:{key}"})
@@ -1122,7 +1145,9 @@ def bank_for_captcha(page, job, plan, flags):
                              "value": str(p["value"]),
                              "source": p["source"]}
                             for p in plan if p["kind"] != "file"],
-        "captcha_flags": flags,
+        # Only what really needs him. An optional box the agent could not
+        # fill is not a job for the man doing the CAPTCHA.
+        "captcha_flags": blockers(flags),
         "captcha_banked_at": jm.now(),
         "portal_screenshot": shot(page, job, "captcha"),
     })
@@ -1436,9 +1461,14 @@ def apply_to_job(page, job, answers, submit, state=None):
         if kind == "scored":
             job["portal_bot_check"] = "invisible, submitted anyway"
 
-        if flags_all:
+        # Only the ones that really need a person. A form is allowed to have
+        # a box the agent could not fill as long as nobody has to fill it -
+        # that is what 'optional' means, and a person would have left it
+        # blank and pressed submit.
+        stuck = blockers(flags_all)
+        if stuck:
             job.update({"status": "portal_review",
-                        "portal_reason": f"{len(flags_all)} question(s) need "
+                        "portal_reason": f"{len(stuck)} question(s) need "
                                          f"Harry, on page {pages + 1}"})
             return False
 
