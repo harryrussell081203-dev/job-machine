@@ -17305,6 +17305,7 @@
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826564788?se=vEhR5DiP8RGEXPnK-S0EZA&utm_medium=api&utm_source=afe77721&v=17CF2BB1BD46F5B74E390A34E7B846E47F97DF8B"
   },
   "adzuna_5826565275": {
+   "account_tried": true,
    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5826565275?se=vEhR5DiP8RGEXPnK-S0EZA&utm_medium=api&utm_source=afe77721&v=F3D862A6C6387058DAA84C2F4B6AE8E8A1F75BDE",
    "ats": null,
    "company": "NT Engineering & Manufacturing",
@@ -17313,8 +17314,8 @@
    "found_at": "2026-08-03T12:43:52.328670+00:00",
    "listing_text_len": 500,
    "location": "Edinburgh, Scotland",
-   "portal_attempted_at": "2026-08-04T16:03:08.754748+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:17:30.709885+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682445+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/nt-engineering-manufacturing-adzuna_5826565275-noform.png",
    "posted_at": "2026-08-03T13:08:58+00:00",
@@ -17326,7 +17327,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Electrical Maintenance Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826565275?se=vEhR5DiP8RGEXPnK-S0EZA&utm_medium=api&utm_source=afe77721&v=F3D862A6C6387058DAA84C2F4B6AE8E8A1F75BDE"
   },
@@ -20533,7 +20534,8 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5826814173?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5826814305": {
-   "apply_url": "https://www.adzuna.co.uk/jobs/details/5826814305/apply?aztt=eyJhbGciOiJIUzI1NiJ9.eyJ0dCI6ImFwaSIsInRzIjoiYWZlNzc3MjEiLCJjaSI6IlVKTWRzUDJQOFJHMEZkTHl3N1B1OXciLCJpYXQiOjE3ODU4NDU1MTcsImV4cCI6MTc4NjQ1MDMxN30.dn6_vrlcqTQcE7Pz2U-Vks9t7uDeSg2952jtgWOFenc&v=1995A8ED07D7EE8EFE425E4531425A514C225609&se=",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/details/5826814305/apply?aztt=eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODYwMDc4NjIsInRzIjoiYWZlNzc3MjEiLCJleHAiOjE3ODY2MTI2NjIsInR0IjoiYXBpIiwiY2kiOiJzc1pHclhlUjhSR211WTBCZTBOdzVnIn0.brXd0LFB5eNAlJpGW-lDpmzxkcHYUpTmTcGq44eGC2w&v=1995A8ED07D7EE8EFE425E4531425A514C225609&se=",
    "ats": null,
    "company": "Circet Ireland & UK",
    "description": "Telecoms Technician - Poling - Network Build (Scotland) Field-Based | Full-Time | Experienced / Operative Role Build and Maintain the Openreach Network - Join Circet UK Circet UK is seeking skilled and motivated Poling Operatives to join our operations across Scotland. This field-based role plays a key part in the construction and maintenance of the Openreach network, ensuring works are completed safely, efficiently, and to the highest quality standards. Reporting into the Field Operations team\u2026",
@@ -20541,8 +20543,8 @@
    "found_at": "2026-08-04T12:02:47.571751+00:00",
    "listing_text_len": 6006,
    "location": "Aberdeen, Aberdeenshire",
-   "portal_attempted_at": "2026-08-04T12:12:03.055957+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:17:47.910012+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682685+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/circet-ireland-uk-adzuna_5826814305-noform.png",
    "posted_at": "2026-08-03T20:48:20+00:00",
@@ -20553,7 +20555,7 @@
    "search_location": "Aberdeen",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Telecoms Technician - Poling",
    "url": "https://www.adzuna.co.uk/jobs/details/5826814305?utm_medium=api&utm_source=afe77721"
   },
@@ -20828,6 +20830,7 @@
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826829749?se=OEKiGPyP8RGheoXx42yHgg&utm_medium=api&utm_source=afe77721&v=6B91D1DC31F96DF698F6253D497530AACB9CCB79"
   },
   "adzuna_5826830143": {
+   "account_tried": true,
    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5826830143?se=3FOPSPyP8RGheoXx42yHgg&utm_medium=api&utm_source=afe77721&v=7B061765D17EAF3D4102C8F9B76BBDED2EE019DF",
    "ats": null,
    "company": "Ross-shire Engineering Limited",
@@ -20836,8 +20839,8 @@
    "found_at": "2026-08-04T12:02:47.583935+00:00",
    "listing_text_len": 501,
    "location": "Cumbernauld, North Lanarkshire",
-   "portal_attempted_at": "2026-08-04T12:12:52.305936+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:18:01.028525+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682775+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/ross-shire-engineering-limited-adzuna_5826830143-noform.png",
    "posted_at": "2026-08-03T21:30:29+00:00",
@@ -20848,7 +20851,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Commissioning Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826830143?se=3FOPSPyP8RGheoXx42yHgg&utm_medium=api&utm_source=afe77721&v=7B061765D17EAF3D4102C8F9B76BBDED2EE019DF"
   },
@@ -31804,7 +31807,8 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828940049?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828940116": {
-   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828940116?aztt=eyJhbGciOiJIUzI1NiJ9.eyJ0cyI6ImFmZTc3NzIxIiwiaWF0IjoxNzg1OTQ0NTg0LCJjaSI6IkxzbUlXT1NROFJHcmhmam1pMmZCM1EiLCJ0dCI6ImFwaSIsImV4cCI6MTc4NjU0OTM4NH0.h_oGxA_2bA8KvS530q34DUb-8kSKb3Btofo_aYVLhYc&from_adp=1&v=656D34FF09A745C15F0B80BF767322087B1311FA&se=",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828940116?aztt=eyJhbGciOiJIUzI1NiJ9.eyJjaSI6IkdEeEhmSGVSOFJHMVNaeXowb3ZKNnciLCJleHAiOjE3ODY2MTI1ODAsImlhdCI6MTc4NjAwNzc4MCwidHQiOiJhcGkiLCJ0cyI6ImFmZTc3NzIxIn0.NgyhSKYDBeNSYOvpH6TK4sLfgQk8ZKVX7WVt483GNd8&from_adp=1&v=656D34FF09A745C15F0B80BF767322087B1311FA&se=",
    "ats": null,
    "company": "NOV",
    "description": "Job Description Objectives As a Service Technician, you'll play a key role in ensuring our Digital Completion Services and instrumentation systems are prepared, tested and operating reliably for customers worldwide. Working from our Aberdeen facility, you'll split your time between the workshop and customer sites, supporting equipment build, testing, commissioning and troubleshooting. When required, you'll travel offshore and internationally to provide installation and operational support. This\u2026",
@@ -31812,8 +31816,8 @@
    "found_at": "2026-08-05T11:11:50.947930+00:00",
    "listing_text_len": 5752,
    "location": "Aberdeen, Aberdeenshire",
-   "portal_attempted_at": "2026-08-05T15:43:10.004542+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:16:26.147502+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T09:03:18.415173+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/nov-adzuna_5828940116-noform.png",
    "posted_at": "2026-08-05T11:24:47+00:00",
@@ -31824,7 +31828,7 @@
    "search_location": "Aberdeen",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Service Technician Electrical & Instrumentation",
    "url": "https://www.adzuna.co.uk/jobs/details/5828940116?utm_medium=api&utm_source=afe77721"
   },
@@ -37188,7 +37192,7 @@
      "value": "True"
     }
    ],
-   "captcha_banked_at": "2026-08-06T09:05:19.172292+00:00",
+   "captcha_banked_at": "2026-08-06T09:14:57.402635+00:00",
    "captcha_flags": [
     "unrecognised required field '* Address'",
     "unrecognised required field '* Place of Permanent Residence'",
@@ -37204,7 +37208,8 @@
    "found_at": "2026-08-02T19:54:56.571713+00:00",
    "listing_text_len": 4022,
    "location": "Aberdeen",
-   "portal_attempted_at": "2026-08-06T09:04:28.006880+00:00",
+   "portal_attempted_at": "2026-08-06T09:14:05.893806+00:00",
+   "portal_bot_check": "challenge",
    "portal_fields_seen": 23,
    "portal_filled": [
     {
@@ -38074,7 +38079,7 @@
      "value": "True"
     }
    ],
-   "captcha_banked_at": "2026-08-06T09:07:07.405952+00:00",
+   "captcha_banked_at": "2026-08-06T09:15:51.104560+00:00",
    "captcha_flags": [
     "unrecognised required field 'YES'",
     "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
@@ -38107,7 +38112,8 @@
      "tier": 2
     }
    ],
-   "portal_attempted_at": "2026-08-06T09:06:16.970936+00:00",
+   "portal_attempted_at": "2026-08-06T09:15:02.669809+00:00",
+   "portal_bot_check": "challenge",
    "portal_fields_seen": 11,
    "portal_filled": [
     {
@@ -38586,16 +38592,16 @@
    "url": "https://www.reed.co.uk/jobs/field-service-engineer/57047782"
   },
   "reed_57052854": {
-   "apply_url": "https://jobs.smartrecruiters.com",
-   "ats": "smartrecruiters",
+   "apply_url": "https://www.reed.co.uk/jobs/valve-technician/57052854",
+   "ats": "reed",
    "company": "First Achieve Ltd",
    "description": "First Achieve's Engineering department are looking for a Senior Valve Technician to join our client in Aberdeen. This role involves a high level of responsibility, including the authority to halt unsafe work practices and conduct comprehensive assessments and repairs on a variety of valves and actuators. This role offers a fantastic opportunity to work in a multi-discipline, dynamic work environment with potential to travel offshore. Day-to-day ... ",
    "external_id": "reed_57052854",
    "found_at": "2026-08-01T19:49:11.220432+00:00",
    "listing_text_len": 2171,
    "location": "Westhill",
-   "portal_attempted_at": "2026-08-03T13:37:12.259152+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:16:02.622295+00:00",
+   "portal_reason": "reed portal - needs an account or runs a bot check, do this one by hand",
    "portal_reopened_at": "2026-08-06T07:50:44.683299+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/first-achieve-ltd-reed_57052854-noform.png",
    "salary_max": 43000.0,
@@ -38604,7 +38610,7 @@
    "score_reason": "While he has strong workshop experience, this is a 'Senior Valve Technician' role, which might be a slight stretch given his specific background, but his offshore experience is relevant.",
    "skip_reason": "no domain found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Valve Technician",
    "url": "https://www.reed.co.uk/jobs/valve-technician/57052854"
   },
@@ -39729,16 +39735,16 @@
    "url": "https://www.reed.co.uk/jobs/field-service-engineer-full-training/57106789"
   },
   "reed_57107007": {
-   "apply_url": "https://careers.smartrecruiters.com/schindler",
-   "ats": "smartrecruiters",
+   "apply_url": "https://www.reed.co.uk/jobs/workshop-service-engineer-pumps-motors-gearboxes/57187745?source=details.similarjobs",
+   "ats": "reed",
    "company": "Schindler UK & Ireland",
    "description": "Company description: Location: Aberdeen,&nbsp;Scotland,&nbsp;United Kingdom&nbsp; Job ID: &nbsp;89859&nbsp; We Elevate... Quality of urban life Our elevators, escalators, and moving walks safely transport more than two&nbsp;billion of us up and down buildings and across transportation hubs every day. As part of the Schindler team, you\u2019ll discover meaningful work that enhances&nbsp;quality of life for communities, and contribute to making places ... ",
    "external_id": "reed_57107007",
    "found_at": "2026-08-01T19:49:11.220336+00:00",
    "listing_text_len": 3664,
    "location": "Aberdeenshire",
-   "portal_attempted_at": "2026-08-03T13:37:49.442307+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:16:12.486636+00:00",
+   "portal_reason": "reed portal - needs an account or runs a bot check, do this one by hand",
    "portal_reopened_at": "2026-08-06T07:50:44.683376+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/schindler-uk-ireland-reed_57107007-noform.png",
    "salary_max": null,
@@ -39747,7 +39753,7 @@
    "score_reason": "This Lift Service Engineer role in Aberdeenshire aligns with his engineering technician and maintenance skills, and is in a good location.",
    "skip_reason": "no domain found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Lift Service Engineer",
    "url": "https://www.reed.co.uk/jobs/lift-service-engineer/57107007"
   },
@@ -40081,16 +40087,16 @@
    "url": "https://www.reed.co.uk/jobs/forklift-engineer/57128012"
   },
   "reed_57128130": {
-   "apply_url": "https://jobs.smartrecruiters.com/StandardBankGroup/744000141265849-engineer-data-business-transformation-corporate-investment-banking-",
-   "ats": "smartrecruiters",
+   "apply_url": "https://www.reed.co.uk/jobs/service-engineer/57128130",
+   "ats": "reed",
    "company": "ASC Connections Ltd",
    "description": "Service Engineer | Training | 50,000+ Potential | Overtime x1.5 - 2.0 | Company Van | Progression A Service Engineer opportunity has become available with an established manufacturer supplying innovative thermal management systems across a range of growing industries. As the business continues to expand its UK operations, this position offers full training, premium overtime, paid commute time, a company van and genuine opportunities for long-ter...",
    "external_id": "reed_57128130",
    "found_at": "2026-08-02T01:27:08.908039+00:00",
    "listing_text_len": 2903,
    "location": "FK77NU",
-   "portal_attempted_at": "2026-08-03T13:38:02.143315+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:16:18.477113+00:00",
+   "portal_reason": "reed portal - needs an account or runs a bot check, do this one by hand",
    "portal_reopened_at": "2026-08-06T07:50:44.683411+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/asc-connections-ltd-reed_57128130-noform.png",
    "posted_at": "2026-07-15T00:00:00+00:00",
@@ -40101,7 +40107,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Service Engineer",
    "url": "https://www.reed.co.uk/jobs/service-engineer/57128130"
   },
