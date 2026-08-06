@@ -66,6 +66,9 @@ PAGE_TIMEOUT_MS = 45000
 
 ANSWERS_PATH = os.path.join(jm.ROOT, "data", "answers.json")
 SHOTS_DIR = os.path.join(jm.ROOT, "screenshots")
+# The DOM of pages that beat the agent, shipped out as an artifact so the
+# failure can be reproduced offline instead of guessed at a run per guess.
+PAGES_DIR = os.path.join(jm.ROOT, "kept-pages")
 
 # Portals that take a full application with no account and no bot check.
 SUPPORTED_ATS = {
@@ -894,14 +897,85 @@ def settle(surface):
         pass
 
 
+# The tags that mean the agent lost. Every one of these is a page worth
+# bringing home: a submitted application and an ordinary page of a working
+# wizard are not, and keeping those would bury the failures in the artifact.
+A_DEFEAT = ("noform", "notanapplication", "stuck", "account", "toolong")
+
+
 def shot(page, job, tag):
     os.makedirs(SHOTS_DIR, exist_ok=True)
     safe = re.sub(r"[^a-z0-9]+", "-", (job.get("company") or "job").lower())[:40]
     path = os.path.join(SHOTS_DIR, f"{safe}-{job['external_id']}-{tag}.png")
+    # Every place the agent gives up already takes a screenshot, so hanging
+    # the DOM capture here means no give-up can be added later that forgets
+    # to record itself. A picture shows what the page looked like; only the
+    # DOM shows what the agent was actually reading.
+    if tag in A_DEFEAT:
+        keep_the_page(page, job, tag)
     try:
         page.screenshot(path=path, full_page=True)
         return path
     except Exception:
+        return None
+
+
+# ======================================================================
+# BRINGING THE PAGE HOME
+# ======================================================================
+# Every failure so far has been diagnosed from one line of log - '0 form
+# fields found' - and each round of guessing what that page really was cost a
+# run and twenty minutes of queueing. A screenshot shows what it looked like;
+# it does not show the DOM, and the DOM is what the agent reads.
+#
+# So a page that beats the agent is saved and shipped out as an artifact. It
+# becomes an offline fixture, the failure is reproduced in a unit test in
+# seconds, and the fix is proved before a single run is fired.
+#
+# WHAT IS STRIPPED. Artifacts on a public repository are public. The page is
+# captured with every value the agent typed removed - no name, no address, no
+# phone number, no answer - because what is needed is the SHAPE of the form
+# and none of Harry's details. Scripts go too: they are megabytes of tracker
+# and they are what makes a saved page unopenable offline.
+STRIP_JS = r"""
+() => {
+  document.querySelectorAll('input').forEach(el => {
+    if (!/^(hidden|checkbox|radio|submit|button)$/i.test(el.type || '')) {
+      el.setAttribute('value', '');
+    }
+  });
+  document.querySelectorAll('textarea').forEach(el => { el.textContent = ''; });
+  document.querySelectorAll('script,noscript,iframe[src*="track" i]')
+          .forEach(el => el.remove());
+  return document.documentElement.outerHTML;
+}
+"""
+
+
+def keep_the_page(page, job, tag):
+    """Save the DOM of a page that defeated the agent, values removed.
+
+    Never allowed to fail a run: this is diagnostics, and losing the recording
+    of a failure must not turn it into a worse one."""
+    try:
+        html = page.evaluate(STRIP_JS)
+    except Exception as e:
+        print(f"[portal] could not keep the page: {type(e).__name__}")
+        return None
+    try:
+        os.makedirs(PAGES_DIR, exist_ok=True)
+        safe = re.sub(r"[^a-z0-9]+", "-",
+                      (job.get("company") or "job").lower())[:40]
+        path = os.path.join(PAGES_DIR,
+                            f"{safe}-{job.get('external_id')}-{tag}.html")
+        with open(path, "w") as f:
+            f.write(f"<!-- {page.url}\n     {job.get('title')} at "
+                    f"{job.get('company')}\n     kept because: {tag} -->\n")
+            f.write(html)
+        print(f"[portal] kept the page that beat us -> {path}")
+        return path
+    except Exception as e:
+        print(f"[portal] could not keep the page: {type(e).__name__}: {e}")
         return None
 
 
@@ -1044,11 +1118,23 @@ def apply_to_job(page, job, answers, submit, state=None):
               timeout=PAGE_TIMEOUT_MS)
     page.wait_for_timeout(2500)  # let the form render
 
-    # A bot check up front means we cannot even read the form. Nothing to bank.
+    # A bot check up front means we cannot even read the form, so there are no
+    # answers to bank. It is still a CAPTCHA standing between Harry and an
+    # application, and he asked for every one of those on his list with a link
+    # - so it goes on the list with nothing filled and says so, rather than
+    # being filed as 'manual' and never seen again.
     if has_captcha(page) and not collect_fields(page):
-        job.update({"status": "portal_manual",
-                    "portal_reason": "bot check before the form loaded",
+        job.update({"status": "portal_awaiting_captcha",
+                    "portal_reason": "bot check before the form even loaded - "
+                                     "nothing could be filled in first",
+                    "captcha_answers": [],
+                    "captcha_flags": ["the bot check runs before the form "
+                                      "loads, so none of it could be filled "
+                                      "in for you - this one is from scratch"],
+                    "portal_awaiting_captcha_at": jm.now(),
                     "portal_screenshot": shot(page, job, "captcha")})
+        print(f"[portal] CAPTCHA up front at {job.get('company')} - on the "
+              f"list for Harry, nothing pre-filled")
         return False
 
     filled_all, flags_all, pages = [], [], 0

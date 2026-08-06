@@ -8,7 +8,9 @@ touches a real employer's portal.
 """
 import json
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -1149,6 +1151,88 @@ class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
         job = state["jobs"]["a"]
         self.assertTrue(job.get("portal_reopened_at"))
         self.assertIn("press Apply", job["portal_reason"])
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestBringingTheLosingPageHome(unittest.TestCase):
+    """Every failure so far was diagnosed from one line of log - '0 form
+    fields found' - and each guess at what that page really was cost a run and
+    twenty minutes of queueing. A screenshot shows what it looked like. The
+    DOM is what the agent reads, so the DOM is what comes home.
+
+    Artifacts on a public repository are public, so everything the agent
+    typed is stripped first: what is wanted is the SHAPE of the form and none
+    of Harry's details."""
+
+    FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fixtures", "instructed_form.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.FORM)
+        self.addCleanup(self.page.close)
+        self.dir = tempfile.mkdtemp()
+        patch = mock.patch.object(pa, "PAGES_DIR", self.dir)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def kept(self, tag="noform"):
+        job = {"external_id": "x1", "company": "Acme Energy", "title": "Tech"}
+        path = pa.keep_the_page(self.page, job, tag)
+        self.assertIsNotNone(path)
+        return open(path).read()
+
+    def test_the_shape_of_the_form_survives(self):
+        markup = self.kept()
+        for needed in ('name="full_name"', 'name="why"', 'name="cv"',
+                       "Maximum 200 words", "three sentences"):
+            self.assertIn(needed, markup)
+
+    def test_nothing_he_typed_comes_with_it(self):
+        """This artifact is downloadable by anyone."""
+        self.page.fill("#name", "Harry Russell")
+        self.page.fill("#why", "I live at 12 Example Street, Aberdeen")
+        markup = self.kept()
+        self.assertNotIn("Harry Russell", markup)
+        self.assertNotIn("Example Street", markup)
+        self.assertNotIn("Aberdeen", markup)
+
+    def test_it_records_where_the_page_came_from(self):
+        self.assertIn("instructed_form.html", self.kept())
+
+    def test_only_a_defeat_is_kept(self):
+        """A submitted application and an ordinary wizard page are not
+        failures, and keeping them would bury the ones that are."""
+        job = {"external_id": "x1", "company": "Acme", "title": "T"}
+        with mock.patch.object(pa, "keep_the_page") as keep:
+            for tag in ("submitted", "page1", "page2", "captcha"):
+                pa.shot(self.page, job, tag)
+            keep.assert_not_called()
+            for tag in pa.A_DEFEAT:
+                pa.shot(self.page, job, tag)
+            self.assertEqual(keep.call_count, len(pa.A_DEFEAT))
+
+    def test_a_page_that_will_not_be_read_does_not_fail_the_run(self):
+        """Losing the recording of a failure must not become a worse one."""
+        broken = mock.Mock(evaluate=mock.Mock(side_effect=RuntimeError),
+                           url="https://x/1")
+        self.assertIsNone(pa.keep_the_page(broken, {"external_id": "a"}, "noform"))
 
 
 class TestReadingWhatTheFormActuallyAsksFor(unittest.TestCase):

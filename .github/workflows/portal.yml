@@ -166,6 +166,20 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+      # The DOM of every page that beat the agent, with everything it typed
+      # stripped out. A screenshot shows what a page looked like; only this
+      # shows what the agent was reading. Downloaded, each one becomes an
+      # offline fixture, so the next failure is reproduced in a unit test in
+      # seconds instead of guessed at one twenty-minute run per guess.
+      - name: Keep the pages that beat us
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-that-beat-us
+          path: kept-pages/
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Commit state
         if: always()
         env:

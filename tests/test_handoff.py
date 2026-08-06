@@ -72,15 +72,28 @@ class TestBankingACaptchaBlockedApplication(unittest.TestCase):
         self.assertEqual(job["status"], "portal_awaiting_captcha")
         self.assertEqual(len(job["captcha_answers"]), 1)
 
-    def test_a_bot_check_before_the_form_loads_has_nothing_to_bank(self):
+    def test_a_bot_check_before_the_form_loads_still_reaches_his_list(self):
+        """Nothing to bank, but it is still a CAPTCHA standing between Harry
+        and an application, and he asked for every one of those on the list
+        with a link. Filed as 'manual' it would never be seen again."""
         job = {"external_id": "a", "title": "T", "company": "C",
                "apply_url": "https://x/1"}
         with mock.patch.object(pa, "collect_fields", return_value=[]), \
              mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
              mock.patch.object(pa, "shot", return_value=None):
             pa.apply_to_job(mock.MagicMock(), job, {}, submit=True)
-        self.assertEqual(job["status"], "portal_manual")
-        self.assertNotIn("captcha_answers", job)
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
+        self.assertEqual(job["captcha_answers"], [])
+        self.assertIn(job, handoff.pending({"jobs": {"a": job}}))
+
+    def test_it_says_plainly_that_nothing_was_filled_in(self):
+        """A prefill button that places zero fields wastes his time twice."""
+        job = {"external_id": "a", "title": "T", "company": "C",
+               "apply_url": "https://x/1", "status": "portal_awaiting_captcha",
+               "captcha_answers": []}
+        markup = handoff.card(job, 0)
+        self.assertNotIn("copyFill", markup)
+        self.assertIn("Nothing pre-filled", markup)
 
 
 class TestHandoffPage(unittest.TestCase):
