@@ -1153,6 +1153,104 @@ class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
         self.assertIn("press Apply", job["portal_reason"])
 
 
+class TestNotPayingForTheSameAnswerTwice(unittest.TestCase):
+    """A burn run had thirteen minutes of browser time and spent eight of them
+    asleep on Gemini 429s, for ONE application, giving up twice anyway. Forms
+    ask the same handful of things - notice period, right to work, how did you
+    hear about us - and every one was costing a call on a free tier that
+    allows about ten a minute."""
+
+    FIELD = {"type": "textarea", "label": "What is your notice period?"}
+
+    def ask(self, state, field=None, answer="Four weeks.", company="Acme"):
+        job = dict(JOB, company=company)
+        with mock.patch.object(pa.jm, "gemini_json", return_value={
+                "answer": answer, "fact_used": "profile"}) as called, \
+             mock.patch.object(pa.jm, "slop_check", return_value=False):
+            got = pa.ground_free_text(field or self.FIELD, job, {},
+                                      state=state)
+        return got, called.call_count
+
+    def test_the_second_time_costs_nothing(self):
+        state = {}
+        first, calls = self.ask(state)
+        self.assertEqual(calls, 1)
+        second, calls = self.ask(state)
+        self.assertEqual(calls, 0)
+        self.assertEqual(second, first)
+
+    def test_it_is_still_known_on_the_next_run(self):
+        """Which is what makes it an answer bank rather than a cache."""
+        state = {}
+        self.ask(state)
+        self.assertTrue(state[pa.ANSWER_CACHE])
+        entry = next(iter(state[pa.ANSWER_CACHE].values()))
+        self.assertIn("notice period", entry["question"].lower())
+        self.assertTrue(entry["at"])
+
+    def test_an_answer_about_this_employer_is_never_reused(self):
+        """Reusing one would send Boskalis a paragraph about why he wants to
+        work for DOF, which is worse than sending nothing."""
+        for question in ("Why do you want to work for us?",
+                         "What interests you about this role?",
+                         "Why this company?",
+                         "What do you know about our organisation?"):
+            with self.subTest(question=question):
+                state = {}
+                self.ask(state, {"type": "textarea", "label": question})
+                self.assertEqual(state.get(pa.ANSWER_CACHE, {}), {})
+
+    def test_an_answer_naming_the_employer_is_never_reused(self):
+        """Even to a question that looked general."""
+        state = {}
+        self.ask(state, {"type": "textarea", "label": "Tell us about yourself"},
+                 answer="I have followed Boskalis for years.",
+                 company="Boskalis")
+        self.assertEqual(state.get(pa.ANSWER_CACHE, {}), {})
+
+    def test_the_same_question_worded_slightly_differently_still_hits(self):
+        state = {}
+        self.ask(state, {"type": "textarea", "label": "Notice period?"})
+        _, calls = self.ask(state, {"type": "textarea",
+                                    "label": "  notice period  "})
+        self.assertEqual(calls, 0)
+
+    def test_it_works_with_no_state_at_all(self):
+        """Every caller must not have to have one."""
+        got, calls = self.ask(None)
+        self.assertEqual(got, "Four weeks.")
+        self.assertEqual(calls, 1)
+
+
+class TestTheRateLimitCannotEatTheRun(unittest.TestCase):
+    """Eight minutes of a thirteen-minute run, spent asleep, for nothing.
+    Every other job in the queue paid for it."""
+
+    def setUp(self):
+        patch = mock.patch.object(pa.jm, "_gemini_waited", 0.0)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_waiting_is_budgeted_for_the_whole_run_not_per_call(self):
+        with mock.patch.object(pa.jm, "_gemini_waited",
+                               pa.jm.GEMINI_WAIT_BUDGET), \
+             mock.patch.object(pa.jm, "GEMINI_API_KEY", "k"):
+            self.assertTrue(pa.jm.gemini_exhausted())
+            with self.assertRaises(RuntimeError) as caught:
+                pa.jm.gemini("anything")
+            self.assertIn("budget", str(caught.exception))
+
+    def test_a_fresh_run_is_not_exhausted(self):
+        self.assertFalse(pa.jm.gemini_exhausted())
+
+    def test_the_agent_falls_back_rather_than_stopping(self):
+        """An application filled from the bank with two questions flagged
+        beats a perfect one that is never attempted."""
+        with mock.patch.object(pa.jm, "gemini_json", return_value=None):
+            self.assertIsNone(pa.ground_free_text(
+                {"type": "textarea", "label": "Why?"}, JOB, {}))
+
+
 class TestItNeverClaimsAnApplicationItDidNotSend(unittest.TestCase):
     """The worst bug in this file, and it was in the success path.
 
@@ -1281,7 +1379,8 @@ class TestItNeverClaimsAnApplicationItDidNotSend(unittest.TestCase):
              mock.patch.object(pa, "captcha_kind", return_value=None), \
              mock.patch.object(pa, "has_captcha", return_value=False), \
              mock.patch.object(pa, "plan_answers",
-                               side_effect=lambda f, j, a, instructions="":
+                               side_effect=lambda f, j, a, instructions="",
+                                   state=None:
                                    seen.append(instructions) or ([], [])), \
              mock.patch.object(pa, "apply_plan", return_value=([], [])), \
              mock.patch.object(pa, "page_instructions", return_value=""), \

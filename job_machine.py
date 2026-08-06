@@ -512,7 +512,23 @@ AGENCY_NAME = re.compile(
     # have filed as an employer - one email ever, and a speculative 'nothing
     # advertised that I can see' note to a firm whose business is advertising
     # things.
-    r"atlas professionals|spencer ogden|rullion|simpson booth",
+    r"atlas professionals|spencer ogden|rullion|simpson booth|"
+    # A burn run spent its budget on eight job-board adverts and reached one
+    # form. Six of the eight were recruiters this pattern did not recognise,
+    # so they were treated as employers with a portal to find, and there was
+    # never a portal: an agency's advert on a board has no application form of
+    # its own. Each one cost a browser, a domain lookup and about fifteen
+    # seconds to learn nothing.
+    #
+# 'consultancy' was here; 'consulting' was not, which is the commoner
+    # spelling, and it cost the run Anderson Wright Consulting.
+    #
+    # Nothing broader than this on purpose. The obvious next step is a word
+    # like 'hire', 'people' or 'jobs' - and Speedy Hire is a plant hire
+    # company that employs technicians directly. Calling a real employer an
+    # agency drops it out of the portal queue for good, which is a worse
+    # mistake than the fifteen seconds this is meant to save.
+    r"consulting\b|expert employment",
     re.I)
 AGENCY_BODY = re.compile(
     r"our client|on behalf of (our|a) client|we are recruiting for|"
@@ -801,6 +817,24 @@ _gemini_last_call = 0.0
 # rather than trusting each caller to sleep, and batch wherever possible - a
 # 429 storm costs far more time than the gap does.
 GEMINI_MIN_INTERVAL = float(env_int("GEMINI_MIN_INTERVAL", 7))
+# How long a whole run may spend WAITING on rate limits before it stops asking.
+#
+# A burn run had thirteen minutes of browser time and spent eight of them
+# asleep on 429s, for one application: five waits of about a minute, twice
+# over, and it gave up both times anyway. Every other job in the queue paid
+# for that, and nothing was gained.
+#
+# So the waiting is budgeted for the run as a whole. Past the budget Gemini is
+# simply unavailable: the caller falls back to the answer bank, flags what it
+# cannot ground, and the run carries on filling forms. An application filled
+# from the bank with two questions flagged is worth more than a perfect one
+# that never gets attempted because the run ran out of clock.
+GEMINI_WAIT_BUDGET = float(env_int("GEMINI_WAIT_BUDGET", 150))
+_gemini_waited = 0.0
+
+
+def gemini_exhausted():
+    return _gemini_waited >= GEMINI_WAIT_BUDGET
 
 
 def _retry_delay(response, fallback):
@@ -817,9 +851,12 @@ def _retry_delay(response, fallback):
 
 def gemini(prompt, max_tokens=800, as_json=True, temperature=0.4):
     """One Gemini call. Returns the raw text, or raises."""
-    global _gemini_thinking_supported, _gemini_last_call
+    global _gemini_thinking_supported, _gemini_last_call, _gemini_waited
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY not set")
+    if gemini_exhausted():
+        raise RuntimeError(
+            f"rate-limit budget spent ({_gemini_waited:.0f}s waited this run)")
     wait = GEMINI_MIN_INTERVAL - (time.monotonic() - _gemini_last_call)
     if wait > 0:
         time.sleep(wait)
@@ -848,10 +885,19 @@ def gemini(prompt, max_tokens=800, as_json=True, temperature=0.4):
                 continue
             if r.status_code in (429, 500, 502, 503, 504):
                 wait = _retry_delay(r, 15 * (attempt + 1))
-                print(f"[gemini] {r.status_code}, waiting {wait:.0f}s")
-                time.sleep(wait)
-                _gemini_last_call = time.monotonic()
+                # Never wait past the run's budget - sleep only what is left.
+                wait = min(wait, GEMINI_WAIT_BUDGET - _gemini_waited)
                 last = RuntimeError(f"HTTP {r.status_code}")
+                if wait <= 0:
+                    print(f"[gemini] {r.status_code} and the rate-limit budget "
+                          f"is spent - not asking again this run")
+                    raise last
+                print(f"[gemini] {r.status_code}, waiting {wait:.0f}s "
+                      f"({_gemini_waited + wait:.0f}s of "
+                      f"{GEMINI_WAIT_BUDGET:.0f}s budget)")
+                time.sleep(wait)
+                _gemini_waited += wait
+                _gemini_last_call = time.monotonic()
                 continue
             r.raise_for_status()
             parts = r.json()["candidates"][0]["content"]["parts"]
