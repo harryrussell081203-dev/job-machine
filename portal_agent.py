@@ -179,14 +179,31 @@ def decline_option(field):
 FIELD_RULES = [
     ("first_name", r"first[\s_-]*name|forename|given[\s_-]*name"),
     ("last_name", r"last[\s_-]*name|surname|family[\s_-]*name"),
-    ("full_name", r"^(full[\s_-]*)?name$|your name|applicant name"),
+    # Anchored the same way '^address$' was, and just as unmatchable: the
+    # haystack is label + name + id + placeholder, so it is never bare. A box
+    # labelled 'Full name' came back as an unrecognised required field.
+    # Unanchored is safe here because first_name and last_name are matched
+    # above, and 'name' on its own is deliberately NOT matched - 'Company
+    # name' is not what he is called.
+    ("full_name", r"full[\s_-]*name|your name|applicant name"),
     ("email", r"e-?mail"),
     ("phone", r"phone|mobile|telephone|contact number"),
-    ("address_line_1", r"address(\s*line)?\s*1|street address|^address$"),
+    # '^address$' could never match. field_text() concatenates the label with
+    # the name, id, placeholder and aria-label, so the haystack is never the
+    # bare word - and a box labelled 'Address', or '* Address' with the
+    # required marker on it, went unrecognised. DOF asked for one and the
+    # application stopped there with the answer sitting in the bank.
+    #
+    # \baddress\b is safe because 'email' is matched before this line and
+    # takes 'Email address' with it.
+    ("address_line_1", r"address(\s*line)?\s*1|street address|\baddress\b"),
     ("city", r"city|town"),
     ("county", r"county|region|province"),
     ("postcode", r"post[\s_-]*code|zip"),
-    ("country", r"country"),
+    # 'Place of Permanent Residence' is a country question however it is
+    # dressed up, and DOF stopped on one.
+    ("country", r"country|place of (permanent )?residence|nationality|"
+                r"where do you (currently )?live"),
     ("linkedin", r"linked-?in"),
     ("website", r"website|portfolio|personal site|github"),
     ("right_to_work_uk", r"right to work|eligible to work|authoris?ed to work|"
@@ -853,6 +870,58 @@ def has_captcha(page):
     return captcha_kind(page) == "challenge"
 
 
+def tick(page, selector, field):
+    """Tick a box that a designer has hidden behind something prettier.
+
+    THIS IS WHAT WAS STOPPING THE APPLICATIONS. Two forms were filled almost
+    to the end - nine of eleven fields at EnerMech, eleven of twenty-three at
+    DOF - and both stalled on the same box: 'I have read, understand and
+    accept the content of the Privacy Notice'. The agent had already decided
+    to tick it; the tick itself failed.
+
+    Playwright's check() refuses to touch a control it judges unactionable,
+    and almost every modern form hides the real <input type=checkbox> under a
+    styled span so it can draw its own. The input is real, it is in the form,
+    and it is what gets submitted - it simply is not what the user clicks.
+
+    So: ask nicely, then force it, then click the label a person would have
+    clicked, then set it directly and tell the page it changed. The last
+    resort is legitimate here in a way it would not be for a claim of fact:
+    the decision to tick was already taken by the code above, on a consent
+    box the application cannot be sent without."""
+    # Short timeouts on purpose. A checkbox is actionable or it is not, and
+    # waiting thirty seconds to be told so does not change the answer - it
+    # just spends a minute of the run on every styled box, of which a form
+    # has several.
+    for attempt in ({}, {"force": True}):
+        try:
+            page.check(selector, timeout=TICK_TIMEOUT_MS, **attempt)
+            return
+        except Exception:
+            pass
+    if field.get("id"):
+        try:
+            page.click(f'label[for="{field["id"]}"]', timeout=TICK_TIMEOUT_MS)
+            if page.is_checked(selector):
+                return
+        except Exception:
+            pass
+    # A disabled box is not hidden, it is refused. Setting .checked on one
+    # would look like success here and send nothing at all, which is the
+    # worst outcome available: an application believed complete and not made.
+    if page.get_attribute(selector, "disabled") is not None:
+        raise RuntimeError("the box is disabled - the form will not take it")
+    # Last resort: set it and fire the events a real click would have fired,
+    # so a framework listening for them still sees the change.
+    page.eval_on_selector(selector, """(el) => {
+        el.checked = true;
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+    }""")
+    if not page.is_checked(selector):
+        raise RuntimeError("the box would not tick")
+
+
 def apply_plan(page, plan):
     """Put the planned answers into the page. Returns what actually landed."""
     filled, failed = [], []
@@ -863,7 +932,7 @@ def apply_plan(page, plan):
             if item["kind"] == "file":
                 page.set_input_files(selector, item["value"], timeout=PAGE_TIMEOUT_MS)
             elif item["kind"] == "check":
-                page.check(selector, timeout=PAGE_TIMEOUT_MS)
+                tick(page, selector, field)
             elif field["type"] == "select":
                 page.select_option(selector, label=item["value"],
                                    timeout=PAGE_TIMEOUT_MS)
@@ -871,8 +940,8 @@ def apply_plan(page, plan):
                 # check the exact button in this group, not the first 'Yes' on
                 # the page - forms often ask several yes/no questions
                 target = (field.get("option_map") or {}).get(item["value"])
-                page.check(f'[data-jm="{target}"]' if target else selector,
-                           timeout=PAGE_TIMEOUT_MS)
+                tick(page, f'[data-jm="{target}"]' if target else selector,
+                     field)
             else:
                 page.fill(selector, str(item["value"]), timeout=PAGE_TIMEOUT_MS)
             filled.append({"field": field.get("label") or field.get("name"),
@@ -1283,6 +1352,9 @@ def reach_the_form(page):
 
 
 MIN_FORM_FIELDS = jm.env_int("PORTAL_MIN_FIELDS", 3)
+# A tick either lands or it does not; thirty seconds of waiting changes
+# nothing and a form has several boxes.
+TICK_TIMEOUT_MS = jm.env_int("PORTAL_TICK_TIMEOUT_MS", 3000)
 # How many Apply-shaped buttons to press before deciding there is no form.
 MAX_APPLY_CLICKS = jm.env_int("PORTAL_APPLY_CLICKS", 3)
 # How long to let a JavaScript form render after the click.
@@ -1918,7 +1990,14 @@ def reopen_fallbacks(state, dry_run=True):
     an account is still parked: nothing about that has changed."""
     reopened = []
     for job in state["jobs"].values():
-        if not job.get("portal_fallback_at") or not job.get("apply_url"):
+        if not job.get("portal_fallback_at"):
+            continue
+        # A stored apply_url is not required. The run resolves the application
+        # URL itself - best_apply_url() takes the listing and finds the
+        # employer's board or their careers page - so demanding one in advance
+        # locked out every job that failed BEFORE that URL was ever written.
+        # The listing URL is enough to try again from.
+        if not (job.get("apply_url") or job.get("url")):
             continue
         if not MISDIAGNOSED.search(job.get("portal_reason") or ""):
             continue
