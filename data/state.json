@@ -37602,6 +37602,7 @@
     }
    ],
    "captcha_banked_at": "2026-08-06T00:07:02.019091+00:00",
+   "captcha_done_at": "2026-08-06T08:29:21.424507+00:00",
    "captcha_flags": [
     "unrecognised required field '* Address'",
     "unrecognised required field '* Place of Permanent Residence'",
@@ -37628,6 +37629,7 @@
    "company": "DOF",
    "description": "Join us as our next Electro-Technical Officer (ETO)! DOF is seeking experienced and knowledgeable ETOs for current and future job opportunities to join our team. This role offers the opportunity work offshore and broaden your experience in the maintenance and operation of electrical and electronic systems on our highly specialised vessels. Our ETOs take pride in our vessels and equipment, and work to the highest standards to deliver safe and efficient operations to our clients. Our team aligns to DOF's values; Respect - Integrity - Teamwork - Excellence - And above all we are Safe. This is an opportunity to express interest in joining our Marine team and utilising your skills on our world-class vessels. To understand more about how we operate, watch our values video here. Responsibilities: Maintaining and administering all electrical, electronic installations, machinery automation, DP and navigation systems, as well as communication and network systems. Ensuring the electronic equipment onboard is suitable and compatible with the vessel electrical supplies. Checking electronic equipment and ensure it complies with the regulations. Managing a detailed log where all maintenance is recorded. Requirements Electro-Technical Officer certificate of competency (STCW regulation III/6) with a minimum of two years offshore experience. Previous experience working in the offshore oil and gas industry on DP vessels, such as Platform Supply Vessels, Dive Support Vessels, Anchor Handling Tug Supply Vessels, Multi-purpose Supply Vessels and/or Construction Support Vessels. Hold a current AMSA and/or Norwegian medical or similar. Hold a current BOSIET, CAEBS and MISC is preferred. DP-KPOS certified is highly desirable. Excellent verbal and written communication skills, coupled with intermediate computer skills and knowledge. Strong troubleshooting and technical skills with highly service minded and solution oriented. Ability to travel at short notice with Australian Work rights. Identify yourself with our core values: Respect - Integrity - Teamwork - Excellence - And above all we are Safe. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Location This position will be based offshore in Australian waters with occasional opportunities internationally. Applications: This is an opportunity to express your interest in working with DOF. The expression of interest will remain open until 9 October 2026 . The DOF Recruitment team may contact you at any stage between submitting your application and the closing date, regarding potential opportunities with DOF. For inquiries, contact: Ridela Sheila \u2013 Recruitment Administrator on +61 8 9278 8700. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. How to Apply Please submit your application wi",
    "external_id": "board-workable-6ffb8f0152fe",
+   "finished_by_hand_at": "2026-08-06T08:29:21.424528+00:00",
    "found_at": "2026-08-02T19:54:56.571957+00:00",
    "listing_text_len": 4058,
    "location": "Perth",
@@ -37719,15 +37721,16 @@
     "State/Territory Electrical Trade qualifications: Error"
    ],
    "portal_pages": 1,
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "finished by hand (he said so)",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-6ffb8f0152fe-captcha.png",
+   "portal_submitted_at": "2026-08-06T08:29:21.424531+00:00",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981978+00:00",
    "score": 80,
    "score_reason": "The candidate's electrical engineering apprenticeship and experience with complex electronic systems make him a strong candidate for an Electro-Technical Officer role.",
    "skip_reason": "no domain found",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "portal_submitted",
    "title": "Expression of Interest - Electro-Technical Officers",
    "url": "https://apply.workable.com/j/6DE49E46DD/apply"
   },
