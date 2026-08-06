@@ -5858,16 +5858,17 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5823114133?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5823134554": {
-   "apply_url": "https://jobs.smartrecruiters.com/AECOM2/744000141257809-tamheer-engineer",
-   "ats": "smartrecruiters",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5823134554?aztt=eyJhbGciOiJIUzI1NiJ9.eyJjaSI6ImVsaVFySFdSOFJHbFVzbkM3MF9qX2ciLCJleHAiOjE3ODY2MTE4MDEsInR0IjoiYXBpIiwidHMiOiJhZmU3NzcyMSIsImlhdCI6MTc4NjAwNzAwMX0.JfwgxLKcGzWHTxqQFen0b4RgttPxt1xf5BEIqhI-Moo&from_adp=1&v=647A13BA5EF743056D71BA17B9B84EAE233A74B5&se=",
+   "ats": null,
    "company": "Fisher House, PO Box 4",
    "description": "Job Advert Electrical Engineer Permanent position Westhill, Aberdeen The Role: To provide engineering design solutions and through life engineering to support the JFD product range. Workload can vary from new product design to meet client or internal specifications, through to supporting an existing client\u2019s request to upgrade or change equipment in the field. Key Duties and responsibilities: Provide engineering design input to new products and provide engineering support to the existing produc\u2026",
    "external_id": "adzuna_5823134554",
    "found_at": "2026-08-01T20:57:53.734061+00:00",
    "listing_text_len": 7943,
    "location": "Westhill, Inverness",
-   "portal_attempted_at": "2026-08-03T13:04:56.802184+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:03:27.878412+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682167+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/fisher-house-po-box-4-adzuna_5823134554-noform.png",
    "posted_at": "2026-08-01T02:17:53+00:00",
@@ -5878,7 +5879,7 @@
    "search_location": "Inverness",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Electrical Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5823134554?utm_medium=api&utm_source=afe77721"
   },
@@ -10875,8 +10876,8 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5823975097?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5824009884": {
-   "apply_url": "https://careers.smartrecruiters.com/orionelectrotech",
-   "ats": "smartrecruiters",
+   "apply_url": "https://www.adzuna.co.uk/jobs/details/5824009884?utm_medium=api&utm_source=afe77721",
+   "ats": null,
    "company": "Orion Electrotech",
    "company_domain": "orion-group.co.uk",
    "description": "Workshop Technician \u2013 Livingston Are you an experienced Plant or Municipal Vehicle Technician looking for a stable, workshop\u2011based role? We are a market\u2011leading manufacturer and maintainer of specialist vehicles, and we\u2019re looking for a skilled Workshop Technician to join our high\u2011performing team in Livingston. This role is heavily focused on municipal and specialist plant equipment, and candidates with hands\u2011on experience working on road sweepers, grit spreaders, gully suckers, refuse vehicles\u2026",
@@ -10884,8 +10885,8 @@
    "found_at": "2026-08-01T20:57:53.732807+00:00",
    "listing_text_len": 7056,
    "location": "Livingston, West Lothian",
-   "portal_attempted_at": "2026-08-03T13:05:09.790912+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:03:39.183093+00:00",
+   "portal_reason": "Error: Page.goto: Navigation to \"https://www.adzuna.co.uk/jobs/details/5824009884?utm_medium=api&utm_source=afe77721\" is interrupted by another navigation to \"https://www.adzuna.co.uk/jobs/details/5824009884",
    "portal_reopened_at": "2026-08-06T07:50:44.682252+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/orion-electrotech-adzuna_5824009884-noform.png",
    "posted_at": "2026-08-01T15:04:41+00:00",
@@ -10896,7 +10897,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_failed",
    "title": "Workshop Technician",
    "url": "https://www.adzuna.co.uk/jobs/details/5824009884?utm_medium=api&utm_source=afe77721"
   },
@@ -11040,16 +11041,17 @@
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5824033981?se=DvHkpOuN8RG8JMyxbRrc7Q&utm_medium=api&utm_source=afe77721&v=018661F79110D2056D0E0536D2459F3550CDBCA6"
   },
   "adzuna_5824034085": {
-   "apply_url": "https://jobs.smartrecruiters.com/AECOM2/744000141257809-tamheer-engineer",
-   "ats": "smartrecruiters",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5824034085?se=MAdBNhGO8RG8JMyxbRrc7Q&utm_medium=api&utm_source=afe77721&v=AAC228047922BAF4C179B17A4743F0E51BD2865A",
+   "ats": null,
    "company": "Morson Edge",
    "description": "Morson is collaborating with a leading defence manufacturer to recruit a Manufacturing Engineer to join their team based in Glasgow. Job Details 37 hours per week Weekend working required Competitive, flexible hourly rate About the Opportunity Become a vital member of the dynamic manufacturing team within OME (Optronics and Missile Electronics), driving industrialisation projects and providing ongoing support throughout production. You will report directly to the Manufacturing Engineering Manag\u2026",
    "external_id": "adzuna_5824034085",
    "found_at": "2026-08-02T01:27:08.905352+00:00",
    "listing_text_len": 501,
    "location": "Whiteinch, Glasgow",
-   "portal_attempted_at": "2026-08-03T13:05:22.420333+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:03:44.983279+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682268+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/morson-edge-adzuna_5824034085-noform.png",
    "posted_at": "2026-08-01T15:15:40+00:00",
@@ -11060,7 +11062,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Manufacturing Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5824034085?se=MAdBNhGO8RG8JMyxbRrc7Q&utm_medium=api&utm_source=afe77721&v=AAC228047922BAF4C179B17A4743F0E51BD2865A"
   },
@@ -15353,8 +15355,8 @@
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826081823?se=gBCP4CyP8RGz_OUphEvySQ&utm_medium=api&utm_source=afe77721&v=02AD848EF68F2CA03C4D16FC2058E1ADBB0FE80D"
   },
   "adzuna_5826081838": {
-   "apply_url": "https://careers.smartrecruiters.com/encore",
-   "ats": "smartrecruiters",
+   "apply_url": null,
+   "ats": "greenhouse",
    "company": "Encore",
    "company_domain": "encorebostonharbor.com",
    "description": "Audio Visual Technician Glasgow, UK 28,000 (dependent on experience) Company Benefits for an AV Technician: Private Healthcare after 12 months service Employee supported volunteering Enhanced family leave provisions Perkbox and Employee assistance Programme Company sick pay Employee recognition scheme Generous employee referral scheme Clearly defined Career path (and all the important support along the way) Access to state-of-the-art technology Global presence and opportunities worldwide Long S\u2026",
@@ -15362,8 +15364,8 @@
    "found_at": "2026-08-03T11:17:23.888787+00:00",
    "listing_text_len": 501,
    "location": "Glasgow, Scotland",
-   "portal_attempted_at": "2026-08-03T13:07:48.698919+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:03:53.680348+00:00",
+   "portal_reason": "greenhouse is where Encore recruit, but this advert is not on their board - it is probably an agency listing",
    "portal_reopened_at": "2026-08-06T07:50:44.682356+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/encore-adzuna_5826081838-noform.png",
    "posted_at": "2026-08-02T23:28:54+00:00",
@@ -15374,7 +15376,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Audio Visual Technician",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826081838?se=vFJl4SyP8RG-sJGTcHAFJw&utm_medium=api&utm_source=afe77721&v=A463BC83168B74D461C91E8258CD72C860DF4E0D"
   },
@@ -16702,16 +16704,17 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5826524764?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5826554936": {
-   "apply_url": "https://careers.smartrecruiters.com/morganhunt",
-   "ats": "smartrecruiters",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5826554936?se=luk95jiP8RG-sJGTcHAFJw&utm_medium=api&utm_source=afe77721&v=AC78BC1BC32331F8DA3B1C1A89967938588994E2",
+   "ats": null,
    "company": "Morgan Hunt Group Limited",
    "description": "Morgan Hunt are seeking a skilled Electrician to work with a large maintenance organisation. The successful candidate will be responsible for performing Electrical Installation Condition Reports (EICR) in both tenanted and void properties. Key Responsibilities: Perform Electrical Installation Condition Reports (EICR) in tenanted and void properties. Complete all relevant paperwork and documentation accurately and on time. Carry out remedial repairs identified during EICR checks. Conduct inspect\u2026",
    "external_id": "adzuna_5826554936",
    "found_at": "2026-08-03T12:43:52.329291+00:00",
    "listing_text_len": 501,
    "location": "Dumbarton, West Dunbartonshire",
-   "portal_attempted_at": "2026-08-03T13:30:40.411882+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:03:58.894549+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682380+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/morgan-hunt-group-limited-adzuna_5826554936-noform.png",
    "posted_at": "2026-08-03T12:22:44+00:00",
@@ -16722,7 +16725,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Electrician",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5826554936?se=luk95jiP8RG-sJGTcHAFJw&utm_medium=api&utm_source=afe77721&v=AC78BC1BC32331F8DA3B1C1A89967938588994E2"
   },
@@ -20412,6 +20415,7 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5826814093?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5826814103": {
+   "account_tried": true,
    "apply_url": "https://jobs.smartrecruiters.com/Boskalis/744000141220219",
    "ats": "smartrecruiters",
    "company": "Boskalis",
@@ -20426,8 +20430,8 @@
    "listing_text_len": 6072,
    "location": "Aberdeen, Aberdeenshire",
    "other_contacts": [],
-   "portal_attempted_at": "2026-08-04T12:12:11.213425+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:04:07.269488+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682611+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/boskalis-adzuna_5826814103-noform.png",
    "posted_at": "2026-08-03T20:47:55+00:00",
@@ -20438,7 +20442,7 @@
    "search_location": "Aberdeen",
    "skip_reason": "domain does not belong to this company",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Senior ROV Pilot Technician",
    "url": "https://www.adzuna.co.uk/jobs/details/5826814103?utm_medium=api&utm_source=afe77721"
   },
@@ -28271,8 +28275,8 @@
    "listing_text_len": 4467,
    "location": "Edinburgh, Scotland",
    "portal_attempted_at": "2026-08-05T16:08:17.726221+00:00",
-   "portal_fallback_at": "2026-08-05T16:43:41.902537+00:00",
-   "portal_reason": "a form, but not an application form - no CV upload and no name-and-email pair",
+   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_reopened_at": "2026-08-06T09:03:18.414806+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/stannah-adzuna_5828151715-notanapplication.png",
    "posted_at": "2026-08-04T20:48:26+00:00",
    "salary_max": 44977.85,
@@ -28282,7 +28286,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "scored",
    "title": "Lift Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5828151715?utm_medium=api&utm_source=afe77721"
   },
@@ -29278,8 +29282,8 @@
    "listing_text_len": 6609,
    "location": "Edinburgh, Scotland",
    "portal_attempted_at": "2026-08-05T16:08:34.567780+00:00",
-   "portal_fallback_at": "2026-08-05T16:43:41.902554+00:00",
-   "portal_reason": "only 0 form fields found, the application is probably behind a login",
+   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_reopened_at": "2026-08-06T09:03:18.414917+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/quest-global-engineering-limited-adzuna_5828410446-noform.png",
    "posted_at": "2026-08-05T00:53:56+00:00",
    "salary_max": 64824.7,
@@ -29289,7 +29293,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "scored",
    "title": "Senior RF Microwave Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5828410446?utm_medium=api&utm_source=afe77721"
   },
@@ -30516,8 +30520,8 @@
    "listing_text_len": 501,
    "location": "Whiteinch, Glasgow",
    "portal_attempted_at": "2026-08-05T16:08:47.473729+00:00",
-   "portal_fallback_at": "2026-08-05T16:43:41.902563+00:00",
-   "portal_reason": "only 1 form fields found, the application is probably behind a login",
+   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_reopened_at": "2026-08-06T09:03:18.414995+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/peel-ports-group-adzuna_5828634608-noform.png",
    "posted_at": "2026-08-05T03:20:53+00:00",
    "salary_max": 56486.19,
@@ -30527,7 +30531,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "scored",
    "title": "Engineer - Electrical",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5828634608?se=zNDBKMKQ8RG_2t8OCQTK4g&utm_medium=api&utm_source=afe77721&v=CCFCF49832B379390758A12BAA3DA872F0DCCB76"
   },
@@ -30880,8 +30884,8 @@
    "listing_text_len": 501,
    "location": "Glasgow, Scotland",
    "portal_attempted_at": "2026-08-05T16:09:00.690995+00:00",
-   "portal_fallback_at": "2026-08-05T16:43:41.902567+00:00",
-   "portal_reason": "only 1 form fields found, the application is probably behind a login",
+   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_reopened_at": "2026-08-06T09:03:18.415070+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/the-sterling-choice-ltd-adzuna_5828820592-noform.png",
    "posted_at": "2026-08-05T08:27:56+00:00",
    "salary_max": 50000,
@@ -30891,7 +30895,7 @@
    "search_location": "Glasgow",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "scored",
    "title": "Maintenance Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5828820592?se=HLQrNriQ8RGRle027vtZ2w&utm_medium=api&utm_source=afe77721&v=28B70A03E79AAB6E18B3C88608CAB4D2ECCEB0AA"
   },
@@ -31809,8 +31813,8 @@
    "listing_text_len": 5752,
    "location": "Aberdeen, Aberdeenshire",
    "portal_attempted_at": "2026-08-05T15:43:10.004542+00:00",
-   "portal_fallback_at": "2026-08-05T16:43:41.902574+00:00",
-   "portal_reason": "only 0 form fields found, the application is probably behind a login",
+   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_reopened_at": "2026-08-06T09:03:18.415173+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/nov-adzuna_5828940116-noform.png",
    "posted_at": "2026-08-05T11:24:47+00:00",
    "salary_max": 48118.9,
@@ -31820,7 +31824,7 @@
    "search_location": "Aberdeen",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "scored",
    "title": "Service Technician Electrical & Instrumentation",
    "url": "https://www.adzuna.co.uk/jobs/details/5828940116?utm_medium=api&utm_source=afe77721"
   },
@@ -37105,19 +37109,179 @@
   "board-workable-101ec5bc512a": {
    "apply_url": "https://apply.workable.com/j/3E50FF075B/apply",
    "ats": "workable",
+   "captcha_answers": [
+    {
+     "label": "* First name",
+     "name": "firstname",
+     "source": "bank:first_name",
+     "type": "text",
+     "value": "Harry"
+    },
+    {
+     "label": "* Last name",
+     "name": "lastname",
+     "source": "bank:last_name",
+     "type": "text",
+     "value": "Russell"
+    },
+    {
+     "label": "* Email",
+     "name": "email",
+     "source": "bank:email",
+     "type": "email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "label": "* Phone +1",
+     "name": "phone",
+     "source": "bank:phone",
+     "type": "tel",
+     "value": "07398 530978"
+    },
+    {
+     "label": "city",
+     "name": "city",
+     "source": "bank:city",
+     "type": "text",
+     "value": "Aberdeen"
+    },
+    {
+     "label": "postcode",
+     "name": "postcode",
+     "source": "bank:postcode",
+     "type": "text",
+     "value": "AB25 3AJ"
+    },
+    {
+     "label": "country",
+     "name": "country",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    },
+    {
+     "label": "Current Role Title (Optional)",
+     "name": "CA_619",
+     "source": "bank:current_job_title",
+     "type": "text",
+     "value": "Workshop Technician"
+    },
+    {
+     "label": "Summary (Optional)",
+     "name": "summary",
+     "source": "grounded",
+     "type": "textarea",
+     "value": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Australia. I also do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I am an ex-Royal Navy Communications & Information Specialist and a Workshop Technician with experience in assembly, testing, and fault diagnosis of subsea acoustic positioning systems. I have DV security clearance and an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance)."
+    },
+    {
+     "label": "Available Start Date (Optional)",
+     "name": "CA_625",
+     "source": "bank:earliest_start_date",
+     "type": "text",
+     "value": "Immediately"
+    },
+    {
+     "label": "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.",
+     "name": "gdpr",
+     "source": "consent",
+     "type": "checkbox",
+     "value": "True"
+    }
+   ],
+   "captcha_banked_at": "2026-08-06T09:05:19.172292+00:00",
+   "captcha_flags": [
+    "unrecognised required field '* Address'",
+    "unrecognised required field '* Place of Permanent Residence'",
+    "unrecognised required field 'Doctorate'",
+    "could not answer '* Cover letter' from Harry's own information",
+    "unrecognised required field 'YES'",
+    "unrecognised required field 'YES'",
+    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+   ],
    "company": "DOF",
    "description": "Join DOF as our Data Controller ! In this role, you will coordinate the secure flow, storage, and quality of survey and inspection data across offshore and onshore operations. Working closely with project teams, offshore personnel, IT, and external stakeholders, you will help ensure critical operational data is administered efficiently, securely, and in line with company procedures. This is an exciting opportunity for someone with a strong IT and data management background who enjoys solving technical challenges, working collaboratively, and supporting innovative offshore operations. Learn more about DOF! Responsibilities Coordinate with project teams to ensure data management procedures are followed throughout project lifecycles. Coordinate the secure flow of operational data between offshore and onshore locations. Set up and administer project data accounts and user access. Administer onshore, offshore, and cloud-based data storage systems. Support the development and integration of data acquisition and management systems. Assist in the development of data quality control (QC) and analysis tools. Liaise with clients, subcontractors, and third-party providers regarding data management and storage requirements. Ensure data integrity and security are maintained at all times. Requirements A relevant bachelor\u2019s or master\u2019s degree in computer science, Information Technology, or a related field is preferred. Minimum 2 years' experience in data management or a similar IT-focused role. Good understanding of IT systems, networking, and data management principles. Knowledge or experience of offshore operations is beneficial. Experience with cloud storage platforms and virtual machine environments. Experience working with data acquisition systems is desirable. Identify yourself with our core values: Respect - Integrity - Teamwork \u2013 Excellence - And above all we are Safe. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Are you a structured and self-motivated professional with strong communication skills? Then we encourage you to apply. Location This position will be based in Aberdeen, UK. Application due date: 26.07.2026 Due to the holiday period, the recruitment process may take longer than usual and will start after the application deadline. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Well-being: With a modern fleet of vessels, we focus on your comfort and well-being while on the job, we have well maintained vessels, comfortable cabins, great food and access to the internet to keep in touch with family and friends. Diversity & Inclusion : At DOF,",
    "external_id": "board-workable-101ec5bc512a",
    "found_at": "2026-08-02T19:54:56.571713+00:00",
    "listing_text_len": 4022,
    "location": "Aberdeen",
+   "portal_attempted_at": "2026-08-06T09:04:28.006880+00:00",
+   "portal_fields_seen": 23,
+   "portal_filled": [
+    {
+     "field": "* First name",
+     "source": "bank:first_name",
+     "value": "Harry"
+    },
+    {
+     "field": "* Last name",
+     "source": "bank:last_name",
+     "value": "Russell"
+    },
+    {
+     "field": "* Email",
+     "source": "bank:email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "field": "* Phone +1",
+     "source": "bank:phone",
+     "value": "07398 530978"
+    },
+    {
+     "field": "city",
+     "source": "bank:city",
+     "value": "Aberdeen"
+    },
+    {
+     "field": "postcode",
+     "source": "bank:postcode",
+     "value": "AB25 3AJ"
+    },
+    {
+     "field": "country",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    },
+    {
+     "field": "Current Role Title (Optional)",
+     "source": "bank:current_job_title",
+     "value": "Workshop Technician"
+    },
+    {
+     "field": "Summary (Optional)",
+     "source": "grounded",
+     "value": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Austral"
+    },
+    {
+     "field": "",
+     "source": "cv",
+     "value": "/home/runner/work/job-machine/job-machine/cv/tailored/Harry_Russell_CV_instrumentation_maintenance.pdf"
+    },
+    {
+     "field": "Available Start Date (Optional)",
+     "source": "bank:earliest_start_date",
+     "value": "Immediately"
+    }
+   ],
+   "portal_flags": [
+    "unrecognised required field '* Address'",
+    "unrecognised required field '* Place of Permanent Residence'",
+    "unrecognised required field 'Doctorate'",
+    "could not answer '* Cover letter' from Harry's own information",
+    "unrecognised required field 'YES'",
+    "unrecognised required field 'YES'",
+    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+   ],
+   "portal_pages": 1,
+   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-101ec5bc512a-captcha.png",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981967+00:00",
    "score": 75,
    "score_reason": "The candidate's Royal Navy experience in secure comms and network engineering aligns well with the data controller role's focus on secure data flow and administration.",
    "skip_reason": "no domain found",
    "source": "board:workable",
-   "status": "no_email",
+   "status": "portal_awaiting_captcha",
    "title": "Data Controller",
    "url": "https://apply.workable.com/j/3E50FF075B/apply"
   },
@@ -37845,6 +38009,76 @@
   "board-workable-8b9987fa4971": {
    "apply_url": "https://apply.workable.com/j/05C4475483/apply",
    "ats": "workable",
+   "captcha_answers": [
+    {
+     "label": "* First name",
+     "name": "firstname",
+     "source": "bank:first_name",
+     "type": "text",
+     "value": "Harry"
+    },
+    {
+     "label": "* Last name",
+     "name": "lastname",
+     "source": "bank:last_name",
+     "type": "text",
+     "value": "Russell"
+    },
+    {
+     "label": "* Email",
+     "name": "email",
+     "source": "bank:email",
+     "type": "email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "label": "* Phone +1",
+     "name": "phone",
+     "source": "bank:phone",
+     "type": "tel",
+     "value": "07398 530978"
+    },
+    {
+     "label": "Cover letter (Optional)",
+     "name": "cover_letter",
+     "source": "grounded",
+     "type": "textarea",
+     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
+    },
+    {
+     "label": "* Please confirm your current notice period?",
+     "name": "QA_10874470",
+     "source": "bank:notice_period",
+     "type": "textarea",
+     "value": "None, available immediately"
+    },
+    {
+     "label": "* Please confirm your salary expectations?",
+     "name": "QA_10874471",
+     "source": "bank:salary_expectation",
+     "type": "textarea",
+     "value": "35000"
+    },
+    {
+     "label": "* Please confirm your current salary?",
+     "name": "QA_10874472",
+     "source": "bank:salary_expectation",
+     "type": "textarea",
+     "value": "35000"
+    },
+    {
+     "label": "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.",
+     "name": "gdpr",
+     "source": "consent",
+     "type": "checkbox",
+     "value": "True"
+    }
+   ],
+   "captcha_banked_at": "2026-08-06T09:07:07.405952+00:00",
+   "captcha_flags": [
+    "unrecognised required field 'YES'",
+    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+   ],
    "company": "EnerMech",
    "company_domain": "enermech.com",
    "contact_email": "africa.recruitment@enermech.com",
@@ -37873,13 +38107,69 @@
      "tier": 2
     }
    ],
+   "portal_attempted_at": "2026-08-06T09:06:16.970936+00:00",
+   "portal_fields_seen": 11,
+   "portal_filled": [
+    {
+     "field": "* First name",
+     "source": "bank:first_name",
+     "value": "Harry"
+    },
+    {
+     "field": "* Last name",
+     "source": "bank:last_name",
+     "value": "Russell"
+    },
+    {
+     "field": "* Email",
+     "source": "bank:email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "field": "* Phone +1",
+     "source": "bank:phone",
+     "value": "07398 530978"
+    },
+    {
+     "field": "",
+     "source": "cv",
+     "value": "/home/runner/work/job-machine/job-machine/cv/Harry_Russell_CV.pdf"
+    },
+    {
+     "field": "Cover letter (Optional)",
+     "source": "grounded",
+     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
+    },
+    {
+     "field": "* Please confirm your current notice period?",
+     "source": "bank:notice_period",
+     "value": "None, available immediately"
+    },
+    {
+     "field": "* Please confirm your salary expectations?",
+     "source": "bank:salary_expectation",
+     "value": "35000"
+    },
+    {
+     "field": "* Please confirm your current salary?",
+     "source": "bank:salary_expectation",
+     "value": "35000"
+    }
+   ],
+   "portal_flags": [
+    "unrecognised required field 'YES'",
+    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+   ],
+   "portal_pages": 1,
+   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/enermech-board-workable-8b9987fa4971-captcha.png",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981983+00:00",
    "score": 70,
    "score_reason": "The candidate's electrical engineering apprenticeship and workshop experience make him suitable for the electrician aspect of this role, despite lacking crane operator experience.",
    "skip_reason": "company already contacted",
    "source": "board:workable",
-   "status": "skipped",
+   "status": "portal_awaiting_captcha",
    "title": "Crane Operator Electrician 3/3",
    "url": "https://apply.workable.com/j/05C4475483/apply"
   },
@@ -38203,16 +38493,16 @@
    "url": "https://www.reed.co.uk/jobs/trainee-ai-engineer/56395865"
   },
   "reed_56478026": {
-   "apply_url": "https://recruitee.com/",
-   "ats": "recruitee",
+   "apply_url": "https://www.reed.co.uk/jobs/it-engineer/57093879?source=details.similarjobs",
+   "ats": "reed",
    "company": "IT Career Switch",
    "description": "Trainee Network Engineer - No Experience Required Are you looking to kick-start a new career in IT? We are recruiting for companies who are looking to employ our Network Engineer Traineeship graduates to keep up with their growth. The best part is you will not need any previous experience as full training will be provided. You will also have the reassurance of a job guarantee ( 24K- 45K) upon completion. We are currently placing over 100 of our ... ",
    "external_id": "reed_56478026",
    "found_at": "2026-08-01T19:49:11.220309+00:00",
    "listing_text_len": 3719,
    "location": "AB101AN",
-   "portal_attempted_at": "2026-08-03T13:26:57.533858+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:05:33.523294+00:00",
+   "portal_reason": "reed portal - needs an account or runs a bot check, do this one by hand",
    "portal_reopened_at": "2026-08-06T07:50:44.683266+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/it-career-switch-reed_56478026-noform.png",
    "salary_max": 45000.0,
@@ -38221,7 +38511,7 @@
    "score_reason": "This is a good match for his Royal Navy experience in network engineering and communications, and it's in Aberdeen.",
    "skip_reason": "no domain found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Trainee Network Engineer",
    "url": "https://www.reed.co.uk/jobs/trainee-network-engineer/56478026"
   },
@@ -38351,8 +38641,8 @@
    "url": "https://www.reed.co.uk/jobs/senior-av-technician/57053586"
   },
   "reed_57058516": {
-   "apply_url": "https://careers.smartrecruiters.com/adecco",
-   "ats": "smartrecruiters",
+   "apply_url": null,
+   "ats": "recruitee",
    "company": "Adecco ",
    "company_domain": "adeccousa.com",
    "description": "Are you an Electrical Maintenance Engineer looking to take the next step in your career? This is an exciting opportunity to join a well-established and highly respected manufacturing operation that continues to invest in its people, equipment and engineering capability. You'll play a key role in keeping a fast-paced production environment running at its best, varied tasks and a supportive engineering team that values expertise and initiative. Wh... ",
@@ -38360,8 +38650,8 @@
    "found_at": "2026-08-01T19:49:11.220334+00:00",
    "listing_text_len": 2587,
    "location": "Forfar",
-   "portal_attempted_at": "2026-08-03T13:27:11.809816+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:05:34.297085+00:00",
+   "portal_reason": "recruitee is where Adecco  recruit, but this advert is not on their board - it is probably an agency listing",
    "portal_reopened_at": "2026-08-06T07:50:44.683315+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/adecco--reed_57058516-noform.png",
    "salary_max": 50000.0,
@@ -38370,7 +38660,7 @@
    "score_reason": "His electrical apprenticeship and maintenance experience make him a good fit for an Electrical Maintenance Engineer, though Forfar is a bit outside Aberdeen.",
    "skip_reason": "no real address found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Electrical Maintenance Engineer",
    "url": "https://www.reed.co.uk/jobs/electrical-maintenance-engineer/57058516"
   },
@@ -38754,8 +39044,12 @@
    "url": "https://www.reed.co.uk/jobs/trainee-network-engineer/57079280"
   },
   "reed_57079297": {
-   "apply_url": "https://recruitee.com/",
-   "ats": "recruitee",
+   "apply_url": "https://newtotraining.com/career-programmes/network-engineer/",
+   "ats": null,
+   "captcha_answers": [],
+   "captcha_flags": [
+    "the bot check runs before the form loads, so none of it could be filled in for you - this one is from scratch"
+   ],
    "company": "Newto Training",
    "company_domain": "newto.co.uk",
    "description": "Launch Your Network Engineer Career - Job Guaranteed! With Newto Training\u2019s Network Engineer Career Programme, you\u2019ll gain 4 top certifications (Azure Fundamentals, CompTIA Network+, uCisco CCNA, Forescout FSCA) plus real-world project work that doubles as hands-on experience. 100+ hours of live training Practical skills in troubleshooting, networking (Cisco), Azure cloud, Splunk SIEM &amp; Tenable vulnerability management Job guarantee with our... ",
@@ -38763,17 +39057,18 @@
    "found_at": "2026-08-01T19:49:11.220376+00:00",
    "listing_text_len": 1172,
    "location": "United Kingdom",
-   "portal_attempted_at": "2026-08-03T13:27:24.689890+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:05:52.988491+00:00",
+   "portal_awaiting_captcha_at": "2026-08-06T09:05:56.187053+00:00",
+   "portal_reason": "bot check before the form even loaded - nothing could be filled in first",
    "portal_reopened_at": "2026-08-06T07:50:44.683348+00:00",
-   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/newto-training-reed_57079297-noform.png",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/newto-training-reed_57079297-captcha.png",
    "salary_max": 78000.0,
    "salary_min": 25000.0,
    "score": 75,
    "score_reason": "This is a good match for Harry's Royal Navy communications and network engineering experience, but it's a training program rather than a direct job and not in Aberdeen.",
    "skip_reason": "no real address found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_awaiting_captcha",
    "title": "Network Engineer (no experience required)",
    "url": "https://www.reed.co.uk/jobs/network-engineer-no-experience-required/57079297"
   },
@@ -40514,16 +40809,16 @@
    "url": "https://www.reed.co.uk/jobs/wind-turbine-engineer-scotland-patch/57154868"
   },
   "reed_57156255": {
-   "apply_url": "https://careers.smartrecruiters.com/tarmac",
-   "ats": "smartrecruiters",
+   "apply_url": "https://www.reed.co.uk/jobs/multi-skilled-maintenance-engineer-training-on-high-voltage/57107786?source=details.similarjobs",
+   "ats": "reed",
    "company": "Tarmac Trading Limited",
    "description": "Reliability Technician Job Introduction We are currently looking for a Reliability Technician to join our Engineering team at our Dunbar Cement Plant, located close to Edinburgh and easily accessible from Edinburgh, Berwick-upon-Tweed, North Berwick, Haddington and the surrounding areas. As a key member of the maintenance team, you will play a vital role in improving equipment reliability and reducing plant failures within a large-scale continuo...",
    "external_id": "reed_57156255",
    "found_at": "2026-08-02T01:27:08.907701+00:00",
    "listing_text_len": 5071,
    "location": "Dunbar",
-   "portal_attempted_at": "2026-08-03T13:29:26.561507+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:06:16.970843+00:00",
+   "portal_reason": "reed portal - needs an account or runs a bot check, do this one by hand",
    "portal_reopened_at": "2026-08-06T07:50:44.683438+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/tarmac-trading-limited-reed_57156255-noform.png",
    "posted_at": "2026-07-24T00:00:00+00:00",
@@ -40534,7 +40829,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "reed",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Reliability Technician",
    "url": "https://www.reed.co.uk/jobs/reliability-technician/57156255"
   },
@@ -41970,6 +42265,11 @@
  "morning_goal_rotation": 1,
  "morning_sent_on": "2026-08-05",
  "portal_answer_cache": {
+  "cover letter optional": {
+   "answer": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}",
+   "at": "2026-08-06T09:06:21.840760+00:00",
+   "question": "Cover letter (Optional)"
+  },
   "reference details optional": {
    "answer": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian visa or work rights for Australia. I do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I hold an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).",
    "at": "2026-08-06T07:52:11.592402+00:00",
