@@ -301,3 +301,77 @@ class TestAStatusNobodyToldTheMergeAbout(unittest.TestCase):
         self.assertLess(order["portal_review"], order["portal_awaiting_captcha"])
         self.assertLess(order["portal_awaiting_captcha"], order["portal_ready"])
         self.assertLess(order["portal_ready"], order["portal_submitted"])
+
+
+class TestABurnRunKeepsItsWork(unittest.TestCase):
+    """The same merge bug as the statuses, pointing the other way, and worse.
+
+    reopen_fallbacks() REMOVES portal_fallback_at and writes
+    portal_reopened_at in its place. So after a burn run:
+
+        ours   (the runner)  no portal_fallback_at, status portal_manual
+        theirs (main)        portal_fallback_at from days ago, no_email
+
+    reopened(ours) was '' and reopened(theirs) was a real timestamp, so
+    THEIRS won - and the side that had opened a browser, filled a form and
+    recorded the outcome was thrown away. A whole burn run landed on main
+    having recorded nothing: seven pages captured, nine screenshots taken,
+    zero attempts saved."""
+
+    def theirs(self):
+        return {"status": "no_email", "score": 85,
+                "portal_fallback_at": "2026-08-04T15:00:00+00:00",
+                "portal_reason": "only 0 form fields found"}
+
+    def ours(self, **over):
+        job = {"status": "portal_manual", "score": 85,
+               "portal_reopened_at": "2026-08-06T00:25:00+00:00",
+               "portal_attempted_at": "2026-08-06T00:25:30+00:00",
+               "portal_screenshot": "shot.png",
+               "portal_reason": "needs a login"}
+        job.update(over)
+        return job
+
+    def test_the_run_that_did_the_work_keeps_it(self):
+        won = ms.pick(self.theirs(), self.ours())
+        self.assertEqual(won["status"], "portal_manual")
+        self.assertTrue(won.get("portal_attempted_at"))
+
+    def test_a_filled_application_is_not_reverted_either(self):
+        """The one that matters most: every answer worked out, banked, and
+        deleted by the merge on the way home."""
+        won = ms.pick(self.theirs(),
+                      self.ours(status="portal_awaiting_captcha",
+                                captcha_answers=[{"label": "Name"}]))
+        self.assertEqual(won["status"], "portal_awaiting_captcha")
+        self.assertEqual(len(won["captcha_answers"]), 1)
+
+    def test_a_submitted_one_certainly_is_not(self):
+        won = ms.pick(self.theirs(), self.ours(status="portal_submitted"))
+        self.assertEqual(won["status"], "portal_submitted")
+
+    def test_a_real_fallback_still_beats_a_stale_reopening(self):
+        """The fix must not overshoot. A run that has just RELEASED a job to
+        the email route is the newest word on it."""
+        stale = self.ours(portal_reopened_at="2026-08-01T00:00:00+00:00")
+        fresh = {"status": "scored", "score": 85,
+                 "portal_fallback_at": "2026-08-06T09:00:00+00:00"}
+        self.assertEqual(ms.pick(stale, fresh)["status"], "scored")
+
+    def test_every_field_that_steps_a_job_back_is_known_to_the_merge(self):
+        """The guard, matching the one on statuses. Add a field anywhere that
+        deliberately re-opens a record, and this fails until the merge knows
+        about it - because a step backwards the merge cannot see is a step
+        backwards that silently undoes the run which took it."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pattern = re.compile(r'\["(\w*(?:reopened|fallback|rescored)\w*_at)"\]'
+                             r'\s*=')
+        found = set()
+        for name in os.listdir(root):
+            if not name.endswith(".py"):
+                continue
+            with open(os.path.join(root, name)) as f:
+                found.update(pattern.findall(f.read()))
+        missing = sorted(f for f in found if f not in ms.REOPENING_FIELDS)
+        self.assertEqual(missing, [],
+                         f"re-opening fields the merge cannot see: {missing}")

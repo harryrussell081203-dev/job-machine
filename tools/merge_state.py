@@ -47,26 +47,43 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else -1
 
 
-REOPENING_FIELDS = ("rescored_at", "portal_fallback_at")
+REOPENING_FIELDS = ("rescored_at", "portal_fallback_at", "portal_reopened_at")
 
 
 def reopened(job):
     """When was this record deliberately put back in the queue?
 
-    Two stages do it, for different reasons, and both move a listing BACKWARDS
-    through PROGRESS on purpose:
+    Three stages do it, for different reasons, and all move a listing
+    BACKWARDS through PROGRESS on purpose:
 
       rescored_at        a profile change invalidated the score, so the
                          listing goes back to 'new' to be judged again
       portal_fallback_at the application portal could not be driven, so the
                          listing goes back to 'scored' to be emailed instead
+      portal_reopened_at a bug that parked it has been fixed, so it goes back
+                         to 'scored' to be tried again
 
     Only the first was handled here. The second ranks 'scored' (1) below
     'portal_manual' (7), so every one of the eighty-six listings the fallback
     released was reverted by this function on the way back to main - the stage
     ran correctly, three runs in a row, and its work was thrown away each time.
 
-    The newest deliberate re-opening wins, whichever stage did it."""
+    THE THIRD IS THE SAME BUG AGAIN, POINTING THE OTHER WAY, and it is worse.
+    reopen_fallbacks() REMOVES portal_fallback_at and writes portal_reopened_at
+    in its place. So after a burn run:
+
+        ours   (the runner)  no portal_fallback_at, status portal_manual
+        theirs (main)        portal_fallback_at from days ago, status no_email
+
+    reopened(ours) was the empty string and reopened(theirs) was a real
+    timestamp, so THEIRS won every time - and the side that had actually
+    opened a browser, filled a form and recorded the outcome was discarded.
+    A whole burn run landed on main having recorded nothing at all: seven
+    pages captured, nine screenshots taken, zero attempts saved.
+
+    The newest deliberate re-opening wins, whichever stage did it - and a
+    re-opening is now always newer than the fallback it replaced, so the run
+    that did the work keeps it."""
     return max(str(job.get(field) or "") for field in REOPENING_FIELDS)
 
 
