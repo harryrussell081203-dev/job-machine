@@ -1153,6 +1153,204 @@ class TestReopeningWhatTheOldBugsParked(unittest.TestCase):
         self.assertIn("press Apply", job["portal_reason"])
 
 
+class TestItNeverClaimsAnApplicationItDidNotSend(unittest.TestCase):
+    """The worst bug in this file, and it was in the success path.
+
+    After pressing submit, if the page carried no confirmation wording, the
+    agent recorded portal_submitted anyway. The commonest reason a page comes
+    back saying nothing is that it came back REJECTING the application - so
+    the one case that most needed catching was being counted as a win, and
+    Harry would have been told he had applied for jobs he had not."""
+
+    def job(self):
+        # A recognised ATS, so the run gets past 'is this an application form
+        # at all' and reaches the submit, which is what is under test here.
+        return {"external_id": "a", "title": "Tech", "company": "Acme",
+                "apply_url": "https://boards.greenhouse.io/acme/jobs/1"}
+
+    def run_submit(self, page, errors, finished=False, moved=True):
+        """Drive apply_to_job to the submit, with the far side's reply faked."""
+        fields = [{"index": "0", "name": "full_name", "label": "Full name",
+                   "type": "text", "required": True, "options": [],
+                   "option_map": {}, "visible": True, "id": "", "hint": "",
+                   "placeholder": "", "aria_label": "", "group_label": "",
+                   "maxlength": None, "tag": "input", "value": ""}] * 4
+        # Three calls a pass: the loop's own, the one taken before pressing
+        # submit, and the one taken after. Only the third differs when the
+        # page really moved on.
+        signatures = iter(["same", "same", "moved" if moved else "same"])
+        job = self.job()
+        with mock.patch.object(pa, "collect_fields", return_value=fields), \
+             mock.patch.object(pa, "captcha_kind", return_value=None), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "plan_answers", return_value=([], [])), \
+             mock.patch.object(pa, "apply_plan", return_value=([], [])), \
+             mock.patch.object(pa, "page_instructions", return_value=""), \
+             mock.patch.object(pa, "click_next", return_value=None), \
+             mock.patch.object(pa, "click_submit", return_value=True), \
+             mock.patch.object(pa, "looks_finished", return_value=finished), \
+             mock.patch.object(pa, "validation_errors", side_effect=errors), \
+             mock.patch.object(pa, "page_signature",
+                               side_effect=lambda *a: next(signatures, "moved")), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "keep_the_page", return_value=None):
+            result = pa.apply_to_job(page, job, {}, submit=True)
+        return result, job
+
+    def test_a_rejected_application_is_not_recorded_as_sent(self):
+        errors = [[{"message": "This field is required", "field": "reference"}],
+                  [{"message": "This field is required", "field": "reference"}]]
+        sent, job = self.run_submit(mock.MagicMock(), errors)
+        self.assertFalse(sent)
+        self.assertEqual(job["status"], "portal_review")
+        self.assertIn("This field is required", job["portal_reason"])
+        self.assertEqual(job["portal_rejected_with"], ["This field is required"])
+
+    def test_what_the_form_objected_to_is_kept_word_for_word(self):
+        """Every one of these is a line Harry can add to data/answers.json,
+        and learn.py counts them - that is the self-improvement loop."""
+        errors = [[{"message": "Enter a valid UK postcode", "field": "pc"}]] * 2
+        _, job = self.run_submit(mock.MagicMock(), errors)
+        self.assertIn("form rejected: Enter a valid UK postcode",
+                      job["portal_flags"])
+
+    def test_the_same_form_coming_back_silently_is_not_a_submission(self):
+        """No confirmation, no complaint, and the form still sitting there."""
+        sent, job = self.run_submit(mock.MagicMock(), [[], []], moved=False)
+        self.assertFalse(sent)
+        self.assertEqual(job["status"], "portal_review")
+        self.assertIn("nothing was sent", job["portal_reason"])
+
+    def test_a_page_that_moves_on_without_objecting_is_still_counted(self):
+        """Plenty of real portals confirm in wording nothing recognises. That
+        is a doubt to record, not a reason to throw the application away."""
+        sent, job = self.run_submit(mock.MagicMock(), [[], []], moved=True)
+        self.assertTrue(sent)
+        self.assertEqual(job["status"], "portal_submitted")
+        self.assertIn("not recognised", job["portal_confirmation"])
+
+    def test_a_real_confirmation_is_still_a_clean_submission(self):
+        sent, job = self.run_submit(mock.MagicMock(), [[]], finished=True)
+        self.assertTrue(sent)
+        self.assertEqual(job["status"], "portal_submitted")
+        self.assertNotIn("portal_confirmation", job)
+
+    def test_it_goes_round_once_and_only_once(self):
+        """A form that refuses the same answer twice will not take it a
+        third time, and the run has other applications waiting."""
+        calls = []
+
+        def errors(*a):
+            calls.append(1)
+            return [{"message": "Required", "field": "x"}]
+
+        page = mock.MagicMock()
+        fields = [{"index": "0", "name": "n", "label": "L", "type": "text",
+                   "required": True, "options": [], "option_map": {},
+                   "visible": True, "id": "", "hint": "", "placeholder": "",
+                   "aria_label": "", "group_label": "", "maxlength": None,
+                   "tag": "input", "value": ""}] * 4
+        job = self.job()
+        with mock.patch.object(pa, "collect_fields", return_value=fields), \
+             mock.patch.object(pa, "captcha_kind", return_value=None), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "plan_answers", return_value=([], [])), \
+             mock.patch.object(pa, "apply_plan", return_value=([], [])), \
+             mock.patch.object(pa, "page_instructions", return_value=""), \
+             mock.patch.object(pa, "click_next", return_value=None), \
+             mock.patch.object(pa, "click_submit", return_value=True), \
+             mock.patch.object(pa, "looks_finished", return_value=False), \
+             mock.patch.object(pa, "validation_errors", side_effect=errors), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "keep_the_page", return_value=None):
+            pa.apply_to_job(page, job, {}, submit=True)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(job["status"], "portal_review")
+
+    def test_the_second_pass_is_told_what_the_form_objected_to(self):
+        """Otherwise it writes the same answer again and the retry is
+        theatre."""
+        seen = []
+        page = mock.MagicMock()
+        fields = [{"index": "0", "name": "n", "label": "L", "type": "text",
+                   "required": True, "options": [], "option_map": {},
+                   "visible": True, "id": "", "hint": "", "placeholder": "",
+                   "aria_label": "", "group_label": "", "maxlength": None,
+                   "tag": "input", "value": ""}] * 4
+        with mock.patch.object(pa, "collect_fields", return_value=fields), \
+             mock.patch.object(pa, "captcha_kind", return_value=None), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "plan_answers",
+                               side_effect=lambda f, j, a, instructions="":
+                                   seen.append(instructions) or ([], [])), \
+             mock.patch.object(pa, "apply_plan", return_value=([], [])), \
+             mock.patch.object(pa, "page_instructions", return_value=""), \
+             mock.patch.object(pa, "click_next", return_value=None), \
+             mock.patch.object(pa, "click_submit", return_value=True), \
+             mock.patch.object(pa, "looks_finished", return_value=False), \
+             mock.patch.object(pa, "validation_errors", return_value=[
+                 {"message": "Answer must be under 200 words", "field": "w"}]), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "keep_the_page", return_value=None):
+            pa.apply_to_job(page, self.job(), {}, submit=True)
+        self.assertEqual(len(seen), 2)
+        self.assertNotIn("REJECTED", seen[0])
+        self.assertIn("Answer must be under 200 words", seen[1])
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestReadingARealFormsComplaint(unittest.TestCase):
+    """Off a real DOM, because a rejection is only findable by walking the
+    page: it is an aria-describedby target, a span with class 'error', or
+    nothing at all but a failed checkValidity()."""
+
+    FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fixtures", "rejecting_form.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.FORM)
+        self.addCleanup(self.page.close)
+
+    def test_a_clean_form_is_not_complaining(self):
+        self.assertEqual(pa.validation_errors(self.page), [])
+
+    def test_the_rejection_is_read_in_the_forms_own_words(self):
+        self.page.click("#go")
+        self.page.wait_for_timeout(200)
+        messages = [e["message"] for e in pa.validation_errors(self.page)]
+        self.assertIn("This field is required", messages)
+
+    def test_the_old_code_would_have_called_this_a_submission(self):
+        """No confirmation wording anywhere on the rejected page."""
+        self.page.click("#go")
+        self.page.wait_for_timeout(200)
+        self.assertFalse(pa.looks_finished(self.page))
+        self.assertTrue(pa.validation_errors(self.page))
+
+    def test_filling_what_it_asked_for_gets_it_through(self):
+        self.page.fill("#ref", "REF-1")
+        self.page.click("#go")
+        self.page.wait_for_timeout(200)
+        self.assertEqual(pa.validation_errors(self.page), [])
+        self.assertTrue(pa.looks_finished(self.page))
+
+
 @unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
                      "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
 class TestBringingTheLosingPageHome(unittest.TestCase):

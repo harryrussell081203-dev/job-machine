@@ -1,0 +1,51 @@
+<!doctype html>
+<!--
+  A form that REJECTS the first submission, which is what really happens and
+  what the agent used to record as a success.
+
+  Press Submit and the page comes back looking almost identical, carrying
+  'This field is required' next to the box it objected to. There is no
+  confirmation wording anywhere, so the old code fell through to 'submit
+  pressed, no confirmation found' and wrote status=portal_submitted - telling
+  Harry he had applied for a job he had not.
+
+  Everything here is done without navigation, on purpose: a rejection that
+  reloads the page is easy to spot, and a rejection that re-renders in place
+  is the one that fooled it.
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply - Technician</title></head>
+<body>
+<h1>Apply for this role</h1>
+
+<form id="apply" onsubmit="return false">
+  <label for="name">Full name</label>
+  <input id="name" name="full_name" type="text">
+
+  <div>
+    <label for="ref">Reference number</label>
+    <input id="ref" name="reference" type="text" aria-describedby="ref-err">
+    <span id="ref-err" class="error hidden"></span>
+  </div>
+
+  <button id="go" type="button">Submit application</button>
+</form>
+
+<script>
+  // Not stripped by STRIP_JS in the artifact path - this is a local fixture
+  // and the behaviour IS the thing under test.
+  document.getElementById('go').addEventListener('click', function () {
+    var ref = document.getElementById('ref');
+    var err = document.getElementById('ref-err');
+    if (!ref.value) {
+      ref.setAttribute('aria-invalid', 'true');
+      err.textContent = 'This field is required';
+      err.classList.remove('hidden');
+      return;
+    }
+    document.body.innerHTML =
+      '<h1>Thank you</h1><p>Your application has been submitted.</p>';
+  });
+</script>
+</body>
+</html>
