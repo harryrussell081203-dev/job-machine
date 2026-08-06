@@ -19044,7 +19044,8 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5826675652?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5826675653": {
-   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5826675653?aztt=eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODU4NDU2OTUsImV4cCI6MTc4NjQ1MDQ5NSwiY2kiOiJDand5R3Y2UDhSR1lDOGV3NGo0WF9BIiwidHQiOiJhcGkiLCJ0cyI6ImFmZTc3NzIxIn0.eKE-Y2XgnRitkI1QiOYAPamPh_rZUyW5sqEoIPWlVZY&from_adp=1&v=B94551C0BCB2EE47E5AD3CB637E75EE9D005A645&se=",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5826675653?aztt=eyJhbGciOiJIUzI1NiJ9.eyJ0cyI6ImFmZTc3NzIxIiwidHQiOiJhcGkiLCJjaSI6IlpNa2VUWDJSOFJHbEY1QjFoTW9zV2ciLCJleHAiOjE3ODY2MTUwNzcsImlhdCI6MTc4NjAxMDI3N30.m4J3vRC8MLxqh52lZiT2kBBZYZnFHK-fbVhOEKY08cU&from_adp=1&v=B94551C0BCB2EE47E5AD3CB637E75EE9D005A645&se=",
    "ats": null,
    "company": "Dover Corporation",
    "description": "Job Requisition ID: 66709 Department: Manuf. & Operations (DEPT_MFGOP) At Dover Fueling Solutions (DFS), we are taking fueling and convenience retail to the next level. We are passionate about cultivating excellence in everything we do, but what really fuels us is our people. They\u2019re the heart of our company. As an employee, our promise to you is that you\u2019ll work on new and innovative products and solutions, be mentored by managers and teammates who are collaborative, caring, and act with integ\u2026",
@@ -19052,8 +19053,8 @@
    "found_at": "2026-08-04T12:02:47.573938+00:00",
    "listing_text_len": 16563,
    "location": "Dundee, Scotland",
-   "portal_attempted_at": "2026-08-04T12:15:00.978748+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:58:03.904399+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.682591+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dover-corporation-adzuna_5826675653-noform.png",
    "posted_at": "2026-08-03T16:25:59+00:00",
@@ -19064,7 +19065,7 @@
    "search_location": "Dundee",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Assembly Operator",
    "url": "https://www.adzuna.co.uk/jobs/details/5826675653?utm_medium=api&utm_source=afe77721"
   },
@@ -28012,6 +28013,13 @@
      "value": "35000"
     },
     {
+     "label": "* Do you have the right to work in the UK without sponsorship",
+     "name": "QA_12224427",
+     "source": "bank:right_to_work_uk",
+     "type": "radio",
+     "value": "YES"
+    },
+    {
      "label": "* How many years of IT service desk/field engineer experience do you have?",
      "name": "QA_12224860",
      "source": "bank:years_experience",
@@ -28026,10 +28034,9 @@
      "value": "United Kingdom"
     }
    ],
-   "captcha_banked_at": "2026-08-06T09:32:20.430449+00:00",
+   "captcha_banked_at": "2026-08-06T09:53:17.264059+00:00",
    "captcha_flags": [
-    "unrecognised required field 'YES'",
-    "unrecognised required field 'YES'"
+    "unrecognised required field '* Do you have a car that you can use for work purposes?'"
    ],
    "company": "T-Tech",
    "description": "Job Title: IT Field Engineer Location: Glasgow & Edinburgh Are you ready to take your IT support career to the next level? Do you thrive on tackling complex challenges and providing top-notch service? Look no further! We are seeking a highly skilled and passionate Service Desk Specialist to join our dynamic team and support a key clients. What will your day to day look like? 1. 2nd Line Support: Serve as the go-to problem-solver and hero of the Service Desk, providing exceptional support to our\u2026",
@@ -28037,7 +28044,7 @@
    "found_at": "2026-08-04T19:08:35.697997+00:00",
    "listing_text_len": 8400,
    "location": "Edinburgh, Scotland",
-   "portal_attempted_at": "2026-08-06T09:32:15.908077+00:00",
+   "portal_attempted_at": "2026-08-06T09:53:07.080846+00:00",
    "portal_bot_check": "challenge",
    "portal_fields_seen": 15,
    "portal_filled": [
@@ -28082,7 +28089,7 @@
      "value": "United Kingdom"
     },
     {
-     "field": "",
+     "field": "Choose file or drag and drop here",
      "source": "cv",
      "value": "/home/runner/work/job-machine/job-machine/cv/tailored/Harry_Russell_CV_communications.pdf"
     },
@@ -28097,6 +28104,11 @@
      "value": "35000"
     },
     {
+     "field": "* Do you have the right to work in the UK without sponsorship",
+     "source": "bank:right_to_work_uk",
+     "value": "YES"
+    },
+    {
      "field": "* How many years of IT service desk/field engineer experience do you have?",
      "source": "bank:years_experience",
      "value": "5"
@@ -28108,8 +28120,7 @@
     }
    ],
    "portal_flags": [
-    "unrecognised required field 'YES'",
-    "unrecognised required field 'YES'"
+    "unrecognised required field '* Do you have a car that you can use for work purposes?'"
    ],
    "portal_pages": 1,
    "portal_reason": "form filled, blocked by a bot check - needs you",
@@ -37318,6 +37329,13 @@
      "value": "07398 530978"
     },
     {
+     "label": "* Address",
+     "name": "address",
+     "source": "bank:address_line_1",
+     "type": "text",
+     "value": "31 Cadenhead Road"
+    },
+    {
      "label": "city",
      "name": "city",
      "source": "bank:city",
@@ -37339,6 +37357,13 @@
      "value": "United Kingdom"
     },
     {
+     "label": "* Place of Permanent Residence",
+     "name": "CA_616",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    },
+    {
      "label": "Current Role Title (Optional)",
      "name": "CA_619",
      "source": "bank:current_job_title",
@@ -37353,11 +37378,25 @@
      "value": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Australia. I also do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I am an ex-Royal Navy Communications & Information Specialist and a Workshop Technician with experience in assembly, testing, and fault diagnosis of subsea acoustic positioning systems. I have DV security clearance and an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance)."
     },
     {
+     "label": "Current Notice Period (Optional)",
+     "name": "CA_622",
+     "source": "bank:notice_period",
+     "type": "text",
+     "value": "None, available immediately"
+    },
+    {
      "label": "Available Start Date (Optional)",
      "name": "CA_625",
      "source": "bank:earliest_start_date",
      "type": "text",
      "value": "Immediately"
+    },
+    {
+     "label": "* Do you have a right to work in the UK",
+     "name": "QA_12045117",
+     "source": "bank:right_to_work_uk",
+     "type": "radio",
+     "value": "YES"
     },
     {
      "label": "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.",
@@ -37367,15 +37406,11 @@
      "value": "True"
     }
    ],
-   "captcha_banked_at": "2026-08-06T09:14:57.402635+00:00",
+   "captcha_banked_at": "2026-08-06T09:53:36.982132+00:00",
    "captcha_flags": [
-    "unrecognised required field '* Address'",
-    "unrecognised required field '* Place of Permanent Residence'",
-    "unrecognised required field 'Doctorate'",
+    "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
     "could not answer '* Cover letter' from Harry's own information",
-    "unrecognised required field 'YES'",
-    "unrecognised required field 'YES'",
-    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+    "unrecognised required field '* Do you have a permanent residency in the UK?'"
    ],
    "company": "DOF",
    "description": "Join DOF as our Data Controller ! In this role, you will coordinate the secure flow, storage, and quality of survey and inspection data across offshore and onshore operations. Working closely with project teams, offshore personnel, IT, and external stakeholders, you will help ensure critical operational data is administered efficiently, securely, and in line with company procedures. This is an exciting opportunity for someone with a strong IT and data management background who enjoys solving technical challenges, working collaboratively, and supporting innovative offshore operations. Learn more about DOF! Responsibilities Coordinate with project teams to ensure data management procedures are followed throughout project lifecycles. Coordinate the secure flow of operational data between offshore and onshore locations. Set up and administer project data accounts and user access. Administer onshore, offshore, and cloud-based data storage systems. Support the development and integration of data acquisition and management systems. Assist in the development of data quality control (QC) and analysis tools. Liaise with clients, subcontractors, and third-party providers regarding data management and storage requirements. Ensure data integrity and security are maintained at all times. Requirements A relevant bachelor\u2019s or master\u2019s degree in computer science, Information Technology, or a related field is preferred. Minimum 2 years' experience in data management or a similar IT-focused role. Good understanding of IT systems, networking, and data management principles. Knowledge or experience of offshore operations is beneficial. Experience with cloud storage platforms and virtual machine environments. Experience working with data acquisition systems is desirable. Identify yourself with our core values: Respect - Integrity - Teamwork \u2013 Excellence - And above all we are Safe. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Are you a structured and self-motivated professional with strong communication skills? Then we encourage you to apply. Location This position will be based in Aberdeen, UK. Application due date: 26.07.2026 Due to the holiday period, the recruitment process may take longer than usual and will start after the application deadline. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Well-being: With a modern fleet of vessels, we focus on your comfort and well-being while on the job, we have well maintained vessels, comfortable cabins, great food and access to the internet to keep in touch with family and friends. Diversity & Inclusion : At DOF,",
@@ -37383,7 +37418,7 @@
    "found_at": "2026-08-02T19:54:56.571713+00:00",
    "listing_text_len": 4022,
    "location": "Aberdeen",
-   "portal_attempted_at": "2026-08-06T09:14:05.893806+00:00",
+   "portal_attempted_at": "2026-08-06T09:53:22.387455+00:00",
    "portal_bot_check": "challenge",
    "portal_fields_seen": 23,
    "portal_filled": [
@@ -37408,6 +37443,11 @@
      "value": "07398 530978"
     },
     {
+     "field": "* Address",
+     "source": "bank:address_line_1",
+     "value": "31 Cadenhead Road"
+    },
+    {
      "field": "city",
      "source": "bank:city",
      "value": "Aberdeen"
@@ -37423,6 +37463,11 @@
      "value": "United Kingdom"
     },
     {
+     "field": "* Place of Permanent Residence",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    },
+    {
      "field": "Current Role Title (Optional)",
      "source": "bank:current_job_title",
      "value": "Workshop Technician"
@@ -37433,24 +37478,35 @@
      "value": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Austral"
     },
     {
-     "field": "",
+     "field": "Choose file or drag and drop here",
      "source": "cv",
      "value": "/home/runner/work/job-machine/job-machine/cv/tailored/Harry_Russell_CV_instrumentation_maintenance.pdf"
+    },
+    {
+     "field": "Current Notice Period (Optional)",
+     "source": "bank:notice_period",
+     "value": "None, available immediately"
     },
     {
      "field": "Available Start Date (Optional)",
      "source": "bank:earliest_start_date",
      "value": "Immediately"
+    },
+    {
+     "field": "* Do you have a right to work in the UK",
+     "source": "bank:right_to_work_uk",
+     "value": "YES"
+    },
+    {
+     "field": "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.",
+     "source": "consent",
+     "value": "True"
     }
    ],
    "portal_flags": [
-    "unrecognised required field '* Address'",
-    "unrecognised required field '* Place of Permanent Residence'",
-    "unrecognised required field 'Doctorate'",
+    "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
     "could not answer '* Cover letter' from Harry's own information",
-    "unrecognised required field 'YES'",
-    "unrecognised required field 'YES'",
-    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
+    "unrecognised required field '* Do you have a permanent residency in the UK?'"
    ],
    "portal_pages": 1,
    "portal_reason": "form filled, blocked by a bot check - needs you",
@@ -38226,6 +38282,13 @@
      "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
     },
     {
+     "label": "* Do you have the 'Right to Work' in the UK?",
+     "name": "QA_10874469",
+     "source": "bank:right_to_work_uk",
+     "type": "radio",
+     "value": "YES"
+    },
+    {
      "label": "* Please confirm your current notice period?",
      "name": "QA_10874470",
      "source": "bank:notice_period",
@@ -38254,11 +38317,8 @@
      "value": "True"
     }
    ],
-   "captcha_banked_at": "2026-08-06T09:15:51.104560+00:00",
-   "captcha_flags": [
-    "unrecognised required field 'YES'",
-    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
-   ],
+   "captcha_banked_at": "2026-08-06T09:56:09.537663+00:00",
+   "captcha_flags": [],
    "company": "EnerMech",
    "company_domain": "enermech.com",
    "contact_email": "africa.recruitment@enermech.com",
@@ -38287,7 +38347,7 @@
      "tier": 2
     }
    ],
-   "portal_attempted_at": "2026-08-06T09:15:02.669809+00:00",
+   "portal_attempted_at": "2026-08-06T09:53:42.184493+00:00",
    "portal_bot_check": "challenge",
    "portal_fields_seen": 11,
    "portal_filled": [
@@ -38312,7 +38372,7 @@
      "value": "07398 530978"
     },
     {
-     "field": "",
+     "field": "Choose file or drag and drop here",
      "source": "cv",
      "value": "/home/runner/work/job-machine/job-machine/cv/Harry_Russell_CV.pdf"
     },
@@ -38320,6 +38380,11 @@
      "field": "Cover letter (Optional)",
      "source": "grounded",
      "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
+    },
+    {
+     "field": "* Do you have the 'Right to Work' in the UK?",
+     "source": "bank:right_to_work_uk",
+     "value": "YES"
     },
     {
      "field": "* Please confirm your current notice period?",
@@ -38335,12 +38400,14 @@
      "field": "* Please confirm your current salary?",
      "source": "bank:salary_expectation",
      "value": "35000"
+    },
+    {
+     "field": "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.",
+     "source": "consent",
+     "value": "True"
     }
    ],
-   "portal_flags": [
-    "unrecognised required field 'YES'",
-    "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
-   ],
+   "portal_flags": [],
    "portal_pages": 1,
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/enermech-board-workable-8b9987fa4971-captcha.png",
@@ -38446,19 +38513,189 @@
   "board-workable-a6d8323b4f46": {
    "apply_url": "https://apply.workable.com/j/F73D522261/apply",
    "ats": "workable",
+   "captcha_answers": [
+    {
+     "label": "* First name",
+     "name": "firstname",
+     "source": "bank:first_name",
+     "type": "text",
+     "value": "Harry"
+    },
+    {
+     "label": "* Last name",
+     "name": "lastname",
+     "source": "bank:last_name",
+     "type": "text",
+     "value": "Russell"
+    },
+    {
+     "label": "* Email",
+     "name": "email",
+     "source": "bank:email",
+     "type": "email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "label": "* Phone +1",
+     "name": "phone",
+     "source": "bank:phone",
+     "type": "tel",
+     "value": "07398 530978"
+    },
+    {
+     "label": "* Address",
+     "name": "address",
+     "source": "bank:address_line_1",
+     "type": "text",
+     "value": "31 Cadenhead Road"
+    },
+    {
+     "label": "city",
+     "name": "city",
+     "source": "bank:city",
+     "type": "text",
+     "value": "Aberdeen"
+    },
+    {
+     "label": "postcode",
+     "name": "postcode",
+     "source": "bank:postcode",
+     "type": "text",
+     "value": "AB25 3AJ"
+    },
+    {
+     "label": "country",
+     "name": "country",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    },
+    {
+     "label": "* Place of Permanent Residence",
+     "name": "CA_616",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    },
+    {
+     "label": "Current Role Title (Optional)",
+     "name": "CA_619",
+     "source": "bank:current_job_title",
+     "type": "text",
+     "value": "Workshop Technician"
+    },
+    {
+     "label": "* Expected Salary Range",
+     "name": "CA_621",
+     "source": "bank:salary_expectation",
+     "type": "text",
+     "value": "35000"
+    },
+    {
+     "label": "* Current Notice Period",
+     "name": "CA_622",
+     "source": "bank:notice_period",
+     "type": "text",
+     "value": "None, available immediately"
+    }
+   ],
+   "captcha_banked_at": "2026-08-06T09:58:17.104904+00:00",
+   "captcha_flags": [
+    "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
+    "could not answer '* Cover letter' from Harry's own information",
+    "unrecognised required field 'Australian Citizen/Permanent Resident'"
+   ],
    "company": "DOF",
    "description": "Join our team as an ROV Technical Support Lead Due to continued growth, we are looking for an ROV Technical Support Lead to join our high-performing team ROV team on a permanent basis. Primarily you will be working on: Providing onshore & remote technical support to ROV operations & offshore personnel. Support project execution, including vessel mobilisations, yard activities, and audits. Assist with troubleshooting, system configuration, and technical problem resolution related to ROV's. Liaise with offshore teams to ensure operational continuity and minimise downtime. Engage with sub-contractors, suppliers & internal department to support operations. Continuous improvement initiatives & operational efficiency. In this role, you will be the bridge between our ROV operational onshore & offshore team. This role will involve supporting project delivery through your technical expertise from equipment selection through to mobilisation planning to maintain our reputation for excellence and HSEQ integrity. If you are a team player who would like to work closely with people from different parts of the world, this role could be for you. Requirements Trade or Tertiary qualification in Mechanical or Electrical fields. IMCA qualification as ROV Supervisor or equivalent. Proven experience working with ROV Systems, electronics & interfacing. Team leadership experience. Extensive experience in testing, troubleshooting, and technical diagnostics. Highly confident, self-motivated, self-disciplined person with sound management and organisational skills. Must be able to perform and achieve at a high level with minimal supervision. A strong understanding and commitment to HSEQ. Aligned with our values: Respect, Integrity, Teamwork, Excellence \u2013 and above all, Safety. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Location: Perth CBD, Western Australia with flexible hybrid options available. Travel to remote or offshore work sites/vessels required from time to time where needed Application due date: July 10th 2026 Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Worldwide Fleet: Be a part of our global operations and gain exposure to a diverse range of projects and locations. Career Growth: We encourage internal mobility and provide opportunities to grow within the company, whether it's moving upwards or exploring new roles sideways. Companies are their people: Respect, Integrity, Teamwork, Excellence and above all we are SAFE - Our values interact with each other, shape our remarkable team and are embedded in our policies, our code of business conduct and guid",
    "external_id": "board-workable-a6d8323b4f46",
    "found_at": "2026-08-02T19:54:56.573968+00:00",
    "listing_text_len": 4033,
    "location": "Perth",
+   "portal_attempted_at": "2026-08-06T09:58:11.652083+00:00",
+   "portal_bot_check": "challenge",
+   "portal_fields_seen": 20,
+   "portal_filled": [
+    {
+     "field": "* First name",
+     "source": "bank:first_name",
+     "value": "Harry"
+    },
+    {
+     "field": "* Last name",
+     "source": "bank:last_name",
+     "value": "Russell"
+    },
+    {
+     "field": "* Email",
+     "source": "bank:email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "field": "* Phone +1",
+     "source": "bank:phone",
+     "value": "07398 530978"
+    },
+    {
+     "field": "* Address",
+     "source": "bank:address_line_1",
+     "value": "31 Cadenhead Road"
+    },
+    {
+     "field": "city",
+     "source": "bank:city",
+     "value": "Aberdeen"
+    },
+    {
+     "field": "postcode",
+     "source": "bank:postcode",
+     "value": "AB25 3AJ"
+    },
+    {
+     "field": "country",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    },
+    {
+     "field": "* Place of Permanent Residence",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    },
+    {
+     "field": "Current Role Title (Optional)",
+     "source": "bank:current_job_title",
+     "value": "Workshop Technician"
+    },
+    {
+     "field": "Choose file or drag and drop here",
+     "source": "cv",
+     "value": "/home/runner/work/job-machine/job-machine/cv/tailored/Harry_Russell_CV_instrumentation_maintenance.pdf"
+    },
+    {
+     "field": "* Expected Salary Range",
+     "source": "bank:salary_expectation",
+     "value": "35000"
+    },
+    {
+     "field": "* Current Notice Period",
+     "source": "bank:notice_period",
+     "value": "None, available immediately"
+    }
+   ],
+   "portal_flags": [
+    "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
+    "could not answer '* Cover letter' from Harry's own information",
+    "unrecognised required field 'Australian Citizen/Permanent Resident'"
+   ],
+   "portal_pages": 1,
+   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-a6d8323b4f46-captcha.png",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981989+00:00",
    "score": 75,
    "score_reason": "The candidate's experience with subsea acoustic systems, fault diagnosis, and technical support aligns well with providing ROV technical support.",
    "skip_reason": "no domain found",
    "source": "board:workable",
-   "status": "no_email",
+   "status": "portal_awaiting_captcha",
    "title": "ROV Technical Support Lead",
    "url": "https://apply.workable.com/j/F73D522261/apply"
   },
@@ -39238,8 +39475,8 @@
    "found_at": "2026-08-01T19:49:11.220376+00:00",
    "listing_text_len": 1172,
    "location": "United Kingdom",
-   "portal_attempted_at": "2026-08-06T09:05:52.988491+00:00",
-   "portal_awaiting_captcha_at": "2026-08-06T09:05:56.187053+00:00",
+   "portal_attempted_at": "2026-08-06T09:57:43.032771+00:00",
+   "portal_awaiting_captcha_at": "2026-08-06T09:57:46.171933+00:00",
    "portal_reason": "bot check before the form even loaded - nothing could be filled in first",
    "portal_reopened_at": "2026-08-06T07:50:44.683348+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/newto-training-reed_57079297-captcha.png",

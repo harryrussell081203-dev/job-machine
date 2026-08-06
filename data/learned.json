@@ -3,7 +3,7 @@
     "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
     "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
   ],
-  "updated_at": "2026-08-06T09:48:04.692822+00:00",
+  "updated_at": "2026-08-06T09:58:22.545400+00:00",
   "emails": {
     "sent": 28,
     "human_replies": 2
@@ -45,6 +45,11 @@
     },
     {
       "question": "could not answer '* Cover letter' from Harry's own information",
+      "times": 3,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measure",
       "times": 2,
       "first_seen_at": "DOF"
     },
@@ -62,11 +67,6 @@
       "question": "unrecognised required field '* Do you have a car that you can use for work purposes?'",
       "times": 1,
       "first_seen_at": "T-Tech"
-    },
-    {
-      "question": "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measure",
-      "times": 1,
-      "first_seen_at": "DOF"
     },
     {
       "question": "unrecognised required field '* Do you have a permanent residency in the UK?'",
