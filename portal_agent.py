@@ -822,6 +822,65 @@ def looks_finished(page):
         return False
 
 
+# ======================================================================
+# WHAT THE FORM SAYS WHEN IT REJECTS YOU
+# ======================================================================
+# The agent pressed submit and, if the page that came back carried no
+# confirmation wording, recorded the application as SUBMITTED anyway. The
+# commonest reason a page comes back without confirmation is that it came back
+# with validation errors - so the one case that most needed catching was the
+# one being counted as a success. Harry would have been told he had applied
+# for jobs he had not.
+#
+# It is also the biggest lever there is on actually submitting. A form that
+# rejects an application says exactly what is wrong with it, in its own words,
+# right next to the field. Reading that and fixing the named field is the
+# difference between nought submitted and some.
+ERROR_JS = r"""
+() => {
+  const out = [];
+  const seen = new Set();
+  const push = (text, name) => {
+    const clean = (text || '').replace(/\s+/g, ' ').trim();
+    if (!clean || clean.length > 200 || seen.has(clean)) return;
+    seen.add(clean);
+    out.push({message: clean, field: name || ''});
+  };
+  // What the page has explicitly marked as wrong.
+  document.querySelectorAll('[aria-invalid="true"]').forEach(el => {
+    const id = el.getAttribute('aria-describedby') || '';
+    id.split(/\s+/).forEach(x => {
+      const node = document.getElementById(x);
+      if (node) push(node.innerText, el.name || el.id);
+    });
+    if (!id) push(el.validationMessage, el.name || el.id);
+  });
+  // What it says in words.
+  document.querySelectorAll(
+    '[role="alert"],.error,.errors,[class*="error" i],[class*="invalid" i]'
+  ).forEach(el => {
+    if (el.querySelector('input,select,textarea')) return;  // a wrapper
+    push(el.innerText, '');
+  });
+  // And what the browser itself refuses to send.
+  document.querySelectorAll('input,select,textarea').forEach(el => {
+    if (el.willValidate && !el.checkValidity()) {
+      push(el.validationMessage, el.name || el.id);
+    }
+  });
+  return out.slice(0, 12);
+}
+"""
+
+
+def validation_errors(surface):
+    """What the form objected to, in its own words. [] if it did not."""
+    try:
+        return surface.evaluate(ERROR_JS) or []
+    except Exception:
+        return []
+
+
 def page_signature(surface, fields):
     """Enough to tell whether pressing Next actually moved anything.
 
@@ -1139,6 +1198,9 @@ def apply_to_job(page, job, answers, submit, state=None):
 
     filled_all, flags_all, pages = [], [], 0
     seen = set()
+    # One second go at a form that told us what was wrong with the first,
+    # and what it said, so the second pass is not a repeat of the first.
+    retried, rejected = False, []
 
     while pages < MAX_PAGES:
         if looks_finished(page):
@@ -1231,6 +1293,15 @@ def apply_to_job(page, job, answers, submit, state=None):
             instructions = page_instructions(page)
         except Exception:
             instructions = ""
+        # And anything the form has already rejected. A complaint is the
+        # clearest instruction a page ever gives - it is the page saying, in
+        # its own words, exactly why the last answer was not good enough.
+        # Without this the second pass would write the same thing again and
+        # the retry would be theatre.
+        if rejected:
+            instructions += ("\n- This form REJECTED the previous answer with: "
+                             + "; ".join(rejected[-4:])
+                             + ". Do not repeat whatever caused that.")
         if instructions:
             print(f"[portal] page {pages + 1} gives "
                   f"{instructions.count(chr(10)) + 1} instruction(s) to follow")
@@ -1274,6 +1345,7 @@ def apply_to_job(page, job, answers, submit, state=None):
                         "portal_reason": "filled and checked, waiting for "
                                          "PORTAL_SUBMIT"})
             return False
+        before = page_signature(surface, fields)
         if not click_submit(surface):
             job.update({"status": "portal_review",
                         "portal_reason": "could not find the submit button"})
@@ -1287,15 +1359,66 @@ def apply_to_job(page, job, answers, submit, state=None):
                         "portal_reason": f"submitted after {pages} page(s)",
                         "portal_screenshot": shot(page, job, "submitted")})
             return True
-        # Submitted, but the far side did not say so in words this recognises.
-        # Recorded as sent with the doubt attached rather than silently
-        # counted either way.
+
+        # No confirmation. Before believing anything, ask the form whether it
+        # REJECTED the application - which is the commonest reason a page
+        # comes back saying nothing, and used to be counted as a success.
+        problems = validation_errors(surface)
+        if problems:
+            wording = "; ".join(p["message"] for p in problems)[:300]
+            print(f"[portal] the form rejected it: {wording}")
+            if not retried:
+                # It told us exactly what is wrong. Fix the named fields and
+                # go round once - once, because a form that rejects the same
+                # answer twice is not going to take it the third time.
+                retried = True
+                seen.discard(before)
+                # Kept apart from flags_all on purpose. That list means
+                # 'questions only Harry can answer' and is checked BEFORE
+                # the submit, so putting a rejection in it would make the
+                # second pass give up on the way round instead of pressing
+                # submit again - the retry would never happen.
+                rejected = [p["message"] for p in problems]
+                continue
+            job.update({"status": "portal_review",
+                        "portal_pages": pages,
+                        "portal_filled": filled_all,
+                        # Recorded as flags too: every one is a line Harry
+                        # could add to data/answers.json, and learn.py counts
+                        # them into the answer gaps.
+                        "portal_flags": flags_all + [
+                            f"form rejected: {p['message']}" for p in problems],
+                        "portal_rejected_with": [p["message"]
+                                                 for p in problems],
+                        "portal_reason": f"the form would not accept it: "
+                                         f"{wording}",
+                        "portal_screenshot": shot(page, job, "stuck")})
+            return False
+
+        # No confirmation and no complaint. If the form is still sitting
+        # there unchanged, nothing was sent, whatever the button did.
+        after = page_signature(surface, collect_fields(page))
+        if after == before:
+            job.update({"status": "portal_review",
+                        "portal_pages": pages,
+                        "portal_filled": filled_all,
+                        "portal_flags": flags_all,
+                        "portal_reason": "pressed submit and the same form "
+                                         "came back unchanged - nothing was "
+                                         "sent",
+                        "portal_screenshot": shot(page, job, "stuck")})
+            return False
+
+        # The page moved on and raised no objection, but did not say the words
+        # this recognises. Recorded as sent with the doubt attached rather
+        # than silently counted either way.
         job.update({"status": "portal_submitted",
                     "portal_submitted_at": jm.now(),
                     "portal_pages": pages,
                     "portal_confirmation": "not recognised - check the shot",
-                    "portal_reason": "submit pressed, no confirmation wording "
-                                     "found on the page that came back",
+                    "portal_reason": "submit pressed, the page moved on and "
+                                     "raised no objection, but said nothing "
+                                     "this recognises as confirmation",
                     "portal_screenshot": shot(page, job, "submitted")})
         return True
 
