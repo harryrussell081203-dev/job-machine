@@ -3,7 +3,7 @@
     "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
     "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
   ],
-  "updated_at": "2026-08-06T09:18:09.244911+00:00",
+  "updated_at": "2026-08-06T09:33:01.949713+00:00",
   "emails": {
     "sent": 28,
     "human_replies": 2
@@ -39,24 +39,14 @@
   "platform_order": {},
   "answer_gaps": [
     {
+      "question": "unrecognised required field 'YES'",
+      "times": 6,
+      "first_seen_at": "T-Tech"
+    },
+    {
       "question": "'' has no option matching '35000'",
       "times": 5,
       "first_seen_at": "Staffline"
-    },
-    {
-      "question": "unrecognised required field 'YES'",
-      "times": 4,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field '* Address'",
-      "times": 2,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field '* Place of Permanent Residence'",
-      "times": 2,
-      "first_seen_at": "DOF"
     },
     {
       "question": "could not answer '* Cover letter' from Harry's own information",
@@ -75,6 +65,16 @@
     },
     {
       "question": "unrecognised required field 'Doctorate'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Address'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Place of Permanent Residence'",
       "times": 1,
       "first_seen_at": "DOF"
     },

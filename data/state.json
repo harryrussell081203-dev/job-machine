@@ -25049,6 +25049,7 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5827888966?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5827889569": {
+   "account_tried": true,
    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5827889569?se=cIwSVBmQ8RGJSr6zDeCjPA&utm_medium=api&utm_source=afe77721&v=65826B899447CF5BF87C806CAE7D6BB0BB1C09E4",
    "ats": null,
    "company": "CV Technical",
@@ -25057,8 +25058,8 @@
    "found_at": "2026-08-04T15:30:01.107512+00:00",
    "listing_text_len": 500,
    "location": "Kirkcaldy, Fife",
-   "portal_attempted_at": "2026-08-05T12:04:09.693924+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:32:07.113768+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T07:50:44.683048+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/cv-technical-adzuna_5827889569-noform.png",
    "posted_at": "2026-08-04T15:20:09+00:00",
@@ -25069,7 +25070,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Mechanical Maintenance Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5827889569?se=cIwSVBmQ8RGJSr6zDeCjPA&utm_medium=api&utm_source=afe77721&v=65826B899447CF5BF87C806CAE7D6BB0BB1C09E4"
   },
@@ -27937,12 +27938,182 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828135157?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828137735": {
+   "apply_url": "https://apply.workable.com/j/58491E29EC/apply",
+   "ats": "workable",
+   "captcha_answers": [
+    {
+     "label": "* First name",
+     "name": "firstname",
+     "source": "bank:first_name",
+     "type": "text",
+     "value": "Harry"
+    },
+    {
+     "label": "* Last name",
+     "name": "lastname",
+     "source": "bank:last_name",
+     "type": "text",
+     "value": "Russell"
+    },
+    {
+     "label": "* Email",
+     "name": "email",
+     "source": "bank:email",
+     "type": "email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "label": "* Phone +1",
+     "name": "phone",
+     "source": "bank:phone",
+     "type": "tel",
+     "value": "07398 530978"
+    },
+    {
+     "label": "* Address",
+     "name": "address",
+     "source": "bank:address_line_1",
+     "type": "text",
+     "value": "31 Cadenhead Road"
+    },
+    {
+     "label": "city",
+     "name": "city",
+     "source": "bank:city",
+     "type": "text",
+     "value": "Aberdeen"
+    },
+    {
+     "label": "postcode",
+     "name": "postcode",
+     "source": "bank:postcode",
+     "type": "text",
+     "value": "AB25 3AJ"
+    },
+    {
+     "label": "country",
+     "name": "country",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    },
+    {
+     "label": "Cover letter (Optional)",
+     "name": "cover_letter",
+     "source": "grounded",
+     "type": "textarea",
+     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
+    },
+    {
+     "label": "* Expected salary",
+     "name": "CA_44509",
+     "source": "bank:salary_expectation",
+     "type": "text",
+     "value": "35000"
+    },
+    {
+     "label": "* How many years of IT service desk/field engineer experience do you have?",
+     "name": "QA_12224860",
+     "source": "bank:years_experience",
+     "type": "text",
+     "value": "5"
+    },
+    {
+     "label": "* Where do you currently live?",
+     "name": "QA_12224861",
+     "source": "bank:country",
+     "type": "text",
+     "value": "United Kingdom"
+    }
+   ],
+   "captcha_banked_at": "2026-08-06T09:32:20.430449+00:00",
+   "captcha_flags": [
+    "unrecognised required field 'YES'",
+    "unrecognised required field 'YES'"
+   ],
    "company": "T-Tech",
    "description": "Job Title: IT Field Engineer Location: Glasgow & Edinburgh Are you ready to take your IT support career to the next level? Do you thrive on tackling complex challenges and providing top-notch service? Look no further! We are seeking a highly skilled and passionate Service Desk Specialist to join our dynamic team and support a key clients. What will your day to day look like? 1. 2nd Line Support: Serve as the go-to problem-solver and hero of the Service Desk, providing exceptional support to our\u2026",
    "external_id": "adzuna_5828137735",
    "found_at": "2026-08-04T19:08:35.697997+00:00",
    "listing_text_len": 8400,
    "location": "Edinburgh, Scotland",
+   "portal_attempted_at": "2026-08-06T09:32:15.908077+00:00",
+   "portal_bot_check": "challenge",
+   "portal_fields_seen": 15,
+   "portal_filled": [
+    {
+     "field": "* First name",
+     "source": "bank:first_name",
+     "value": "Harry"
+    },
+    {
+     "field": "* Last name",
+     "source": "bank:last_name",
+     "value": "Russell"
+    },
+    {
+     "field": "* Email",
+     "source": "bank:email",
+     "value": "harryrussell081203@gmail.com"
+    },
+    {
+     "field": "* Phone +1",
+     "source": "bank:phone",
+     "value": "07398 530978"
+    },
+    {
+     "field": "* Address",
+     "source": "bank:address_line_1",
+     "value": "31 Cadenhead Road"
+    },
+    {
+     "field": "city",
+     "source": "bank:city",
+     "value": "Aberdeen"
+    },
+    {
+     "field": "postcode",
+     "source": "bank:postcode",
+     "value": "AB25 3AJ"
+    },
+    {
+     "field": "country",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    },
+    {
+     "field": "",
+     "source": "cv",
+     "value": "/home/runner/work/job-machine/job-machine/cv/tailored/Harry_Russell_CV_communications.pdf"
+    },
+    {
+     "field": "Cover letter (Optional)",
+     "source": "grounded",
+     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
+    },
+    {
+     "field": "* Expected salary",
+     "source": "bank:salary_expectation",
+     "value": "35000"
+    },
+    {
+     "field": "* How many years of IT service desk/field engineer experience do you have?",
+     "source": "bank:years_experience",
+     "value": "5"
+    },
+    {
+     "field": "* Where do you currently live?",
+     "source": "bank:country",
+     "value": "United Kingdom"
+    }
+   ],
+   "portal_flags": [
+    "unrecognised required field 'YES'",
+    "unrecognised required field 'YES'"
+   ],
+   "portal_pages": 1,
+   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/t-tech-adzuna_5828137735-captcha.png",
    "posted_at": "2026-08-04T19:44:27+00:00",
    "salary_max": 38000,
    "salary_min": 38000,
@@ -27951,7 +28122,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "no_email",
+   "status": "portal_awaiting_captcha",
    "title": "IT Field Engineer - Scotland",
    "url": "https://www.adzuna.co.uk/jobs/details/5828137735?utm_medium=api&utm_source=afe77721"
   },
@@ -28268,6 +28439,7 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828151712?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828151715": {
+   "account_tried": true,
    "apply_url": "https://corporate.stannah.com/careers/stannah-lift-engineer-jobs/",
    "ats": null,
    "company": "Stannah",
@@ -28277,10 +28449,10 @@
    "found_at": "2026-08-04T19:56:06.402575+00:00",
    "listing_text_len": 4467,
    "location": "Edinburgh, Scotland",
-   "portal_attempted_at": "2026-08-05T16:08:17.726221+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:32:37.295059+00:00",
+   "portal_reason": "only 2 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T09:03:18.414806+00:00",
-   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/stannah-adzuna_5828151715-notanapplication.png",
+   "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/stannah-adzuna_5828151715-noform.png",
    "posted_at": "2026-08-04T20:48:26+00:00",
    "salary_max": 44977.85,
    "salary_min": 44977.85,
@@ -28289,7 +28461,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Lift Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5828151715?utm_medium=api&utm_source=afe77721"
   },
@@ -29276,7 +29448,8 @@
    "url": "https://www.adzuna.co.uk/jobs/details/5828400252?utm_medium=api&utm_source=afe77721"
   },
   "adzuna_5828410446": {
-   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828410446?aztt=eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3ODY1NTA5MDgsImlhdCI6MTc4NTk0NjEwOCwidHQiOiJhcGkiLCJ0cyI6ImFmZTc3NzIxIiwiY2kiOiJuQjFaNWVlUThSR0dyTzN3NURibW1BIn0.5-KG6JE_Kvi5DXpVRPApLoRTooGutXZ2DP3CwegJHIY&from_adp=1&v=F6864F9C41F09A2252402E3FBDC4B9DEA656BA8A&se=",
+   "account_tried": true,
+   "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5828410446?aztt=eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODYwMDg3NjgsInRzIjoiYWZlNzc3MjEiLCJ0dCI6ImFwaSIsImV4cCI6MTc4NjYxMzU2OCwiY2kiOiJoQk15eVhtUjhSR211WTBCZTBOdzVnIn0.-fZ2BE85DVqblsZVJ2KdNii7UglT8V7nw6D-vTdwllk&from_adp=1&v=F6864F9C41F09A2252402E3FBDC4B9DEA656BA8A&se=",
    "ats": null,
    "company": "Quest Global Engineering Limited",
    "description": "Quest Global is an organisation at the forefront of innovation and one of the worlds fastest growing engineering services firms with deep domain knowledge and recognised expertise in the top OEMs across seven industries. We are a twenty-five-year-old company on a journey to becoming a centenary one, driven by aspiration, hunger and humility. We are looking for humble geniuses, who believe that engineering has the potential to make the impossible, possible; innovators, who are not only inspired \u2026",
@@ -29284,8 +29457,8 @@
    "found_at": "2026-08-05T11:38:49.476393+00:00",
    "listing_text_len": 6609,
    "location": "Edinburgh, Scotland",
-   "portal_attempted_at": "2026-08-05T16:08:34.567780+00:00",
-   "portal_reason": "re-opened: the agent gave up here before it could press Apply or read an iframe",
+   "portal_attempted_at": "2026-08-06T09:32:53.987153+00:00",
+   "portal_reason": "only 0 form fields found after pressing apply and checking the frames, so it needs a login or a person",
    "portal_reopened_at": "2026-08-06T09:03:18.414917+00:00",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/quest-global-engineering-limited-adzuna_5828410446-noform.png",
    "posted_at": "2026-08-05T00:53:56+00:00",
@@ -29296,7 +29469,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "scored",
+   "status": "portal_manual",
    "title": "Senior RF Microwave Engineer",
    "url": "https://www.adzuna.co.uk/jobs/details/5828410446?utm_medium=api&utm_source=afe77721"
   },
