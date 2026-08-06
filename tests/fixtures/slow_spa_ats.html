@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  What SmartRecruiters actually is, and what the agent kept losing to.
+
+  Boskalis was recorded twice as "clicked 'I'm interested', only 0 form fields
+  found after pressing apply and checking the frames". The click worked
+  perfectly both times. The agent looked before the form existed.
+
+  Two things here, and both were real:
+
+    1. THE FORM IS A JAVASCRIPT RENDER. Pressing Apply starts a fetch and the
+       fields appear when it lands - 4 seconds here, which is ordinary on a
+       cold cache and past the fixed 2500ms sleep the agent used to take.
+
+    2. THE FIRST BUTTON IS NOT THE FORM. 'I'm interested' leads to a page
+       whose only content is ANOTHER apply button. One click reached a dead
+       end and the agent reported no form rather than pressing on.
+
+  The advert itself carries a search box and a newsletter signup, which is
+  exactly the "0, 1 or 2 fields" the real logs show.
+-->
+<html>
+<head><meta charset="utf-8"><title>ROV Pilot Technician - Boskalis</title></head>
+<body>
+<h1>Senior ROV Pilot Technician</h1>
+<p>Aberdeen, United Kingdom &middot; Full-time</p>
+
+<!-- the advert's own furniture: not an application form -->
+<input type="search" name="q" aria-label="Search all jobs">
+<input type="email" name="newsletter" aria-label="Job alerts by email">
+
+<div id="stage">
+  <button id="interested" type="button">I'm interested</button>
+</div>
+
+<script>
+  var stage = document.getElementById('stage');
+
+  document.getElementById('interested').addEventListener('click', function () {
+    // step one leads to another button, not to the form
+    stage.innerHTML =
+      '<h2>Apply for this role</h2>' +
+      '<p>Please complete the application form.</p>' +
+      '<button id="start" type="button">Apply now</button>';
+    document.getElementById('start').addEventListener('click', function () {
+      stage.innerHTML = '<p id="loading">Loading application form...</p>';
+      // step two renders the real form well after 2500ms
+      setTimeout(function () {
+        stage.innerHTML =
+          '<form id="apply">' +
+          '<label for="fn">First name</label>' +
+          '<input id="fn" name="first_name" type="text" required>' +
+          '<label for="ln">Surname</label>' +
+          '<input id="ln" name="last_name" type="text" required>' +
+          '<label for="em">Email address</label>' +
+          '<input id="em" name="email" type="email" required>' +
+          '<label for="ph">Phone</label>' +
+          '<input id="ph" name="phone" type="tel">' +
+          '<label for="cv">Upload your CV</label>' +
+          '<input id="cv" name="cv" type="file">' +
+          '<button type="submit">Submit application</button>' +
+          '</form>';
+      }, 4000);
+    });
+  });
+</script>
+</body>
+</html>

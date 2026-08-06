@@ -25,6 +25,7 @@ this agent does not try to defeat bot protection.
     python portal_agent.py --run --submit   # actually press submit
 """
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -1160,7 +1161,7 @@ NOT_APPLY = re.compile(
     r"applied|application process|apply for a (bursary|grant|loan)", re.I)
 
 
-def open_the_form(page):
+def open_the_form(page, already=()):
     """Click through to the application form, if it is behind a button.
 
     HALF OF EVERY APPLICATION THIS AGENT HAS EVER SEEN DIED HERE. Of 121 jobs
@@ -1170,7 +1171,11 @@ def open_the_form(page):
     loaded the advert, counted the fields on the advert, found a search box and
     a newsletter signup, and gave up on a page that was working perfectly.
 
-    Returns True if something was clicked, so the caller knows to look again."""
+    Returns the label clicked, or None. 'already' is what has been pressed on
+    this page already, so a second call opens a different door instead of the
+    same one - SmartRecruiters puts 'I\'m interested' on the advert and the
+    real form a step further on, and pressing the first button twice reaches
+    nothing."""
     for text in APPLY_TEXTS:
         for role in ("button", "link"):
             try:
@@ -1180,13 +1185,14 @@ def open_the_form(page):
                 label = (control.inner_text() or "")[:80]
                 if NOT_APPLY.search(label):
                     continue
+                if label.strip() in (already or ()):
+                    continue
                 control.click(timeout=PAGE_TIMEOUT_MS)
-                page.wait_for_timeout(2500)
-                print(f"[portal] clicked '{label.strip()}' to reach the form")
-                return True
+                print(f"[portal] clicked \'{label.strip()}\' to reach the form")
+                return label.strip()
             except Exception:
                 continue
-    return False
+    return None
 
 
 def visible_fields(fields):
@@ -1228,12 +1234,54 @@ def reach_the_form(page):
     surface, fields = form_surface(page)
     if len(visible_fields(fields)) >= MIN_FORM_FIELDS:
         return surface, fields
-    if open_the_form(page):
-        surface, fields = form_surface(page)
+
+    # Press Apply, then WAIT FOR THE FORM rather than sleeping a fixed 2.5
+    # seconds and hoping. Every modern ATS is a JavaScript application: the
+    # click starts a fetch and the fields appear when it lands, which on a
+    # cold cache is regularly past three seconds. Boskalis was recorded as
+    # 'clicked I am interested, 0 form fields found' twice - the click worked
+    # perfectly and the agent looked before the form existed.
+    #
+    # And more than one door. SmartRecruiters puts 'I am interested' on the
+    # advert and the real form a step further on; a single click reaches a
+    # page whose only content is another Apply button.
+    clicked = []
+    for _ in range(MAX_APPLY_CLICKS):
+        label = open_the_form(page, already=clicked)
+        if not label:
+            break
+        clicked.append(label)
+        surface, fields = wait_for_the_form(page)
+        if len(visible_fields(fields)) >= MIN_FORM_FIELDS:
+            return surface, fields
     return surface, fields
 
 
 MIN_FORM_FIELDS = jm.env_int("PORTAL_MIN_FIELDS", 3)
+# How many Apply-shaped buttons to press before deciding there is no form.
+MAX_APPLY_CLICKS = jm.env_int("PORTAL_APPLY_CLICKS", 3)
+# How long to let a JavaScript form render after the click.
+FORM_RENDER_WAIT = jm.env_int("PORTAL_FORM_WAIT", 12)
+
+
+def wait_for_the_form(page, seconds=None):
+    """Poll until the form has rendered, or the time is up.
+
+    A fixed sleep is either too short - which is what was happening - or a tax
+    paid on every application that did not need it. Polling is both fast when
+    the form is there and patient when it is not."""
+    limit = FORM_RENDER_WAIT if seconds is None else seconds
+    deadline = time.monotonic() + limit
+    best = form_surface(page)
+    while True:
+        if len(visible_fields(best[1])) >= MIN_FORM_FIELDS:
+            return best
+        if time.monotonic() >= deadline:
+            return best
+        page.wait_for_timeout(750)
+        surface, fields = form_surface(page)
+        if len(visible_fields(fields)) > len(visible_fields(best[1])):
+            best = (surface, fields)
 
 
 def apply_to_job(page, job, answers, submit, state=None):
@@ -1727,10 +1775,43 @@ def portal_candidates(state):
     # browser time produces more submitted applications - and the order gets
     # better on its own every run, because every run adds evidence.
     weights = learned_weights(state)
+
     def value(job):
         platform = job.get("ats") or "employer's own site"
-        return -((job.get("score") or 0) * (0.5 + weights.get(platform, 0.5)))
-    return sorted(out, key=value)
+        # Until there is evidence, a recognised ATS is worth more than an
+        # unknown one, and that is not a guess. A job on Workable or
+        # Greenhouse has a form this agent knows how to open and fill. A job
+        # with no ATS means the portal has still to be found, and every
+        # single '0 form fields found' in the logs was one of those, while
+        # the one form ever reached was a Workable page.
+        default = 0.6 if platform in SUPPORTED_ATS else 0.3
+        return -((job.get("score") or 0) * (0.5 + weights.get(platform,
+                                                              default)))
+    return spread_across_employers(sorted(out, key=value))
+
+
+def spread_across_employers(ordered):
+    """Best first, but never the same employer twice before everyone's turn.
+
+    Seven of the thirty jobs in the queue were DOF, all on the same portal,
+    and they sorted to the front together. A run with a budget of eight would
+    spend seven of it on one employer's bot check - and every one of those
+    seven fails for the same reason, because it is the same portal. The other
+    twenty-three companies, on four different platforms, never got looked at.
+
+    So the queue is dealt out in rounds: the best job at each employer, then
+    the second-best at each, and so on. The order within a round is unchanged,
+    so the best job overall is still first. What it buys is that one bad
+    portal can only ever cost one attempt before something different is
+    tried - which is the whole difference between learning that DOF has a
+    CAPTCHA and learning it seven times."""
+    rounds = collections.defaultdict(list)
+    seen = collections.Counter()
+    for job in ordered:
+        who = (job.get("company") or "?").strip().lower()
+        rounds[seen[who]].append(job)
+        seen[who] += 1
+    return [job for depth in sorted(rounds) for job in rounds[depth]]
 
 
 def learned_weights(state):

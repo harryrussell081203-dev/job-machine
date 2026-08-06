@@ -142,9 +142,35 @@ class TestLearningWhichPlatformsFinish(unittest.TestCase):
 
     def test_an_untried_platform_is_unproven_not_condemned(self):
         """Otherwise a new platform never gets the evidence to be judged."""
-        state = {"jobs": {"a": {"portal_attempted_at": jm.now(),
-                                "ats": "newthing", "status": "portal_manual"}}}
+        state = {"jobs": {
+            "a": {"portal_attempted_at": jm.now(), "ats": "newthing",
+                  "status": "portal_manual"},
+            # something, somewhere, has finished - otherwise the whole
+            # ordering is withheld, which is the case below
+            "b": {"portal_attempted_at": jm.now(), "ats": "greenhouse",
+                  "portal_filled": ["a"], "status": "portal_submitted"}}}
         self.assertEqual(learn.platform_order(state)["newthing"], 0.5)
+
+    def test_with_nothing_finished_anywhere_it_offers_no_opinion(self):
+        """THE ZERO TRAP. All 122 of the first attempts were made while the
+        agent could not press Apply, could not see into an iframe, and
+        believed a hidden field about its own visibility. Nothing finished,
+        so every weight collapsed to about the same number - an ordering of
+        platforms by how badly a since-fixed bug happened to fail on them.
+        No opinion is the honest answer, and the caller then falls back to
+        the score and to whether it knows the platform's forms."""
+        state = {"jobs": {f"j{i}": {"portal_attempted_at": jm.now(),
+                                    "ats": ats, "status": "portal_manual"}
+                          for i, ats in enumerate(
+                              ["taleo"] * 4 + ["workable"] * 4)}}
+        self.assertEqual(learn.platform_order(state), {})
+
+    def test_a_platform_that_has_failed_is_floored_not_zeroed(self):
+        """'Has never worked yet' is not 'can never work'. A weight of nought
+        is a platform never tried again, which is how a system stops finding
+        out it was wrong."""
+        weights = learn.platform_order(self.state())
+        self.assertGreater(weights["taleo"], 0)
 
 
 class TestWhatGetsWritten(unittest.TestCase):

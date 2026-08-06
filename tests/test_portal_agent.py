@@ -11,6 +11,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -1988,3 +1989,85 @@ class TestTheQueueLearnsItsOwnOrder(unittest.TestCase):
     def test_a_broken_learner_never_stops_a_run(self):
         with mock.patch.dict("sys.modules", {"learn": None}):
             self.assertIsInstance(pa.learned_weights({"jobs": {}}), dict)
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestWaitingForAFormThatHasNotRenderedYet(unittest.TestCase):
+    """Boskalis, twice: 'clicked I'm interested, only 0 form fields found
+    after pressing apply and checking the frames'. The click worked perfectly
+    both times - the agent looked before the form existed.
+
+    SmartRecruiters is 11 of the 30 jobs in the queue, the biggest single
+    platform there is, and every one of them was failing this way."""
+
+    SPA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "fixtures", "slow_spa_ats.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.SPA)
+        self.addCleanup(self.page.close)
+
+    def test_the_advert_alone_is_not_a_form(self):
+        """A search box and a newsletter signup - the '0, 1 or 2 fields' the
+        real logs kept reporting."""
+        seen = pa.visible_fields(pa.collect_fields(self.page))
+        self.assertLess(len(seen), pa.MIN_FORM_FIELDS)
+
+    def test_one_click_and_a_fixed_sleep_would_still_find_nothing(self):
+        """The old behaviour, reproduced. This is what was happening."""
+        pa.open_the_form(self.page)
+        self.page.wait_for_timeout(2500)
+        seen = pa.visible_fields(pa.collect_fields(self.page))
+        self.assertLess(len(seen), pa.MIN_FORM_FIELDS)
+
+    def test_it_presses_on_through_both_doors_and_finds_the_form(self):
+        surface, fields = pa.reach_the_form(self.page)
+        shown = pa.visible_fields(fields)
+        self.assertGreaterEqual(len(shown), pa.MIN_FORM_FIELDS)
+        labels = " | ".join(f.get("label") or f.get("aria_label") or ""
+                            for f in fields).lower()
+        for expected in ("first name", "surname", "email", "cv"):
+            self.assertIn(expected, labels)
+
+    def test_it_does_not_press_the_same_button_twice(self):
+        """Pressing 'I'm interested' again reaches the same dead end."""
+        first = pa.open_the_form(self.page)
+        self.assertEqual(first, "I'm interested")
+        second = pa.open_the_form(self.page, already=[first])
+        self.assertNotEqual(second, first)
+
+    def test_waiting_returns_as_soon_as_the_form_is_there(self):
+        """Patient when it must be, not a tax on every application."""
+        pa.open_the_form(self.page)
+        pa.open_the_form(self.page, already=["I'm interested"])
+        started = time.monotonic()
+        _, fields = pa.wait_for_the_form(self.page, seconds=20)
+        took = time.monotonic() - started
+        self.assertGreaterEqual(len(pa.visible_fields(fields)),
+                                pa.MIN_FORM_FIELDS)
+        self.assertLess(took, 12, "waited well past the form appearing")
+
+    def test_it_gives_up_on_a_page_that_never_renders_one(self):
+        page = self.browser.new_page()
+        self.addCleanup(page.close)
+        page.set_content("<h1>No vacancies</h1><input name=q aria-label=Search>")
+        started = time.monotonic()
+        _, fields = pa.wait_for_the_form(page, seconds=2)
+        self.assertLess(len(pa.visible_fields(fields)), pa.MIN_FORM_FIELDS)
+        self.assertLess(time.monotonic() - started, 6)
