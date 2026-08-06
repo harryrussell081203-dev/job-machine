@@ -534,6 +534,55 @@ def own_site_application(page, careers_url, title):
         return vacancy
 
 
+CAREERS_PATHS = ("/careers", "/jobs", "/vacancies", "/careers/vacancies",
+                 "/about/careers", "/work-for-us", "")
+
+
+def careers_page_in_browser(page, domain):
+    """The same search, done with the browser that is already open.
+
+    'nlb.org.uk could not be read at all' - and then '0 form fields found',
+    four times in one run, on Northern Lighthouse Board, Speedy Hire, Innserve
+    and KBM. Every one of those is a real employer with a real careers page.
+    They were unreadable because careers_page_ats asks with requests, and a
+    corporate site behind a WAF answers a bare Python user-agent with a 403
+    while serving a browser perfectly well.
+
+    There is a browser open at that moment with nothing to do. Using it turns
+    'we know nothing' into either the employer's ATS - which is an application
+    the agent can actually fill - or at worst their real careers page, which
+    beats the job board's interstitial that was being used instead.
+
+    Deliberately after the requests version, not instead of it: a page load
+    costs seconds where a GET costs milliseconds, and most sites answer the
+    cheap question fine."""
+    if page is None or not domain:
+        return None
+    for path in CAREERS_PATHS:
+        url = f"https://{domain}{path}"
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(1200)
+        except Exception:
+            continue
+        try:
+            html = page.content()
+        except Exception:
+            continue
+        match = ATS_URL_RE.search(html or "")
+        if match:
+            found = match.group(0).rstrip(").,'\"")
+            ats = portal_agent.classify_url(found)[0]
+            print(f"[ats] {domain} was unreadable to requests; the browser "
+                  f"found {ats}: {found[:80]}")
+            return ats, found
+        if path:
+            print(f"[ats] {domain} was unreadable to requests; the browser "
+                  f"reached their careers page: {url}")
+            return None, page.url or url
+    return None
+
+
 def find_application_url(page, job, session=None):
     """The employer's real application page for this job, or None.
 
@@ -563,6 +612,10 @@ def find_application_url(page, job, session=None):
         return None, None
     job["company_domain"] = domain
     found = careers_page_ats(domain, session=session)
+    if not found:
+        # Blocked to requests is not the same as absent. Ask again with the
+        # browser, which is open and idle at this exact moment.
+        found = careers_page_in_browser(page, domain)
     if not found:
         return None, None
     ats, url = found
