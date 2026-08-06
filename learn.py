@@ -206,18 +206,42 @@ def platform_success(state):
 
 
 def platform_order(state):
-    """{ats: weight} - highest expected value first.
+    """{ats: weight} - highest expected value first, or {} for 'I don't know'.
 
     Ranked by how often a platform is finished, then by how often a form is
     even reached, with anything untried given the benefit of the doubt so a
-    new platform is not starved of the evidence it needs to be judged."""
+    new platform is not starved of the evidence it needs to be judged.
+
+    THE ZERO TRAP. Every one of the first 122 attempts was made while the
+    agent could not press an Apply button, could not see into an iframe, and
+    believed a hidden field about its own visibility. Nothing finished
+    anywhere, so every finish rate was 0 and every weight collapsed to about
+    the same number - the ordering carried no information at all, and what
+    little it did carry was a ranking of platforms by how badly a since-fixed
+    bug had happened to fail on them. That is precisely the noise this file
+    exists to refuse.
+
+    So: if nothing has EVER been submitted, there is nothing here to learn
+    from, and it says so by returning no opinion at all rather than a
+    confident ordering of zeros. The caller then falls back to score and to
+    whether the platform is one whose forms the agent knows how to open.
+
+    Once something has finished, the rates mean something - and even then a
+    platform is floored rather than zeroed, because 'has never worked yet' is
+    not 'can never work' and a weight of nought is a platform never tried
+    again, which is how a system stops finding out it was wrong."""
     stats = platform_success(state)
+    if not any(cell["submitted"] for cell in stats.values()):
+        print("[learn] nothing has finished anywhere yet - no platform "
+              "ordering, which is the honest answer rather than a ranking "
+              "of zeroes")
+        return {}
     weights = {}
     for name, cell in stats.items():
         if cell["tried"] < 3:
             weights[name] = 0.5          # unproven, not condemned
             continue
-        weights[name] = cell["finish_rate"] + 0.3 * cell["reach_rate"]
+        weights[name] = max(0.1, cell["finish_rate"] + 0.3 * cell["reach_rate"])
     return weights
 
 
