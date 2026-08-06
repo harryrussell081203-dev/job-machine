@@ -375,3 +375,59 @@ class TestABurnRunKeepsItsWork(unittest.TestCase):
         missing = sorted(f for f in found if f not in ms.REOPENING_FIELDS)
         self.assertEqual(missing, [],
                          f"re-opening fields the merge cannot see: {missing}")
+
+
+class TestARerunCanActuallyUpdateARecord(unittest.TestCase):
+    """T-Tech was filled to 13 of 15 fields at 09:32, and attempted again at
+    09:44 with two bugs fixed. The merge kept the 09:32 version.
+
+    Both sides said portal_awaiting_captcha, both had the same number of
+    keys, and the tie-break was '>=' - which always favours whatever is
+    already on main. Three of the five applications that run worked on were
+    discarded that way, and the numbers came back as though it had barely
+    run. A stage that cannot record a second attempt cannot be improved,
+    because no improvement can ever be observed."""
+
+    def attempt(self, when, **over):
+        job = {"status": "portal_awaiting_captcha",
+               "portal_attempted_at": when,
+               "portal_filled": ["a"], "captcha_answers": [1]}
+        job.update(over)
+        return job
+
+    def test_the_newer_attempt_wins_at_the_same_status(self):
+        old = self.attempt("2026-08-06T09:32:15")
+        new = self.attempt("2026-08-06T09:44:02")
+        self.assertEqual(ms.pick(old, new)["portal_attempted_at"],
+                         "2026-08-06T09:44:02")
+        self.assertEqual(ms.pick(new, old)["portal_attempted_at"],
+                         "2026-08-06T09:44:02")
+
+    def test_it_is_not_fooled_by_the_older_record_being_fatter(self):
+        old = self.attempt("2026-08-06T09:32:15", portal_screenshot="a.png",
+                           portal_flags=["x"], portal_pages=2, ats="workable")
+        new = self.attempt("2026-08-06T09:44:02")
+        self.assertEqual(ms.pick(old, new)["portal_attempted_at"],
+                         "2026-08-06T09:44:02")
+
+    def test_any_stamp_counts_not_just_the_attempt(self):
+        """Every stage stamps what it did; the newest of them is the truth."""
+        old = {"status": "sent", "sent_at": "2026-08-01T10:00:00"}
+        new = {"status": "sent", "sent_at": "2026-08-01T10:00:00",
+               "replied_at": "2026-08-05T11:00:00"}
+        self.assertEqual(ms.pick(old, new), new)
+
+    def test_a_further_status_still_beats_a_newer_one(self):
+        """Recency is the tie-break, not the rule. A sent application does
+        not lose to a fresher 'skipped'."""
+        sent = {"status": "sent", "sent_at": "2026-08-01T10:00:00"}
+        later = {"status": "skipped", "scored_at": "2026-08-06T10:00:00"}
+        self.assertEqual(ms.pick(sent, later)["status"], "sent")
+
+    def test_two_records_with_no_stamps_at_all_still_pick_one(self):
+        a, b = {"status": "new"}, {"status": "new", "score": 70}
+        self.assertIn(ms.pick(a, b), (a, b))
+        self.assertEqual(ms.last_touched({"status": "new"}), "")
+
+    def test_a_non_string_stamp_does_not_crash_the_merge(self):
+        self.assertEqual(ms.last_touched({"scored_at": None, "x_at": 12}), "")

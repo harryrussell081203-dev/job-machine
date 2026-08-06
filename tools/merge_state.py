@@ -114,7 +114,30 @@ def pick(a, b):
         return a if len(a) >= len(b) else b
     if rank(a) != rank(b):
         return a if rank(a) > rank(b) else b
+    # Same status on both sides. Then the newer record is the true one, and
+    # 'more keys' is not a proxy for it.
+    #
+    # A re-attempt could never be recorded. T-Tech was filled to 13 of 15
+    # fields at 09:32 and attempted again at 09:44 with two bugs fixed - and
+    # the merge kept the 09:32 version, because both said
+    # portal_awaiting_captcha, both had the same number of keys, and the
+    # tie-break was '>=' which favours whatever is already on main. Three of
+    # the five applications that run worked on were discarded that way, and
+    # the numbers came back looking as though it had barely run.
+    fresh_a, fresh_b = last_touched(a), last_touched(b)
+    if fresh_a != fresh_b:
+        return a if fresh_a > fresh_b else b
     return a if len(a) >= len(b) else b
+
+
+def last_touched(job):
+    """The most recent thing that happened to this record.
+
+    Every stage stamps what it did with an ISO timestamp, so the newest of
+    them is when this record was last worked on. String comparison is
+    correct for ISO-8601 and does not need parsing."""
+    return max((str(v) for k, v in job.items()
+                if k.endswith("_at") and isinstance(v, str)), default="")
 
 
 def union_earliest(theirs, ours):
