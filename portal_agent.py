@@ -1452,14 +1452,30 @@ def apply_to_job(page, job, answers, submit, state=None):
                     "portal_pages": pages + 1,
                     "portal_screenshot": shot(page, job, f"page{pages + 1}")})
 
-        # Fill first, then check for a bot check: a filled form is worth
+        # Fill first, then look at the bot check: a filled form is worth
         # banking even when a CAPTCHA stops us submitting it.
+        #
+        # LET THE FAR SIDE DECIDE, NOT THE DETECTOR. This used to bank the
+        # application and stop the moment it saw a challenge, so the machine
+        # was refusing to press a button it had never tried. Two applications
+        # in one run were filled completely - eleven fields at DOF, nine at
+        # EnerMech - and abandoned on the agent's own guess about a widget.
+        #
+        # Pressing submit with an unsolved CAPTCHA costs nothing: the far side
+        # refuses it, which is exactly the state we were in anyway. And there
+        # is now an honest way to tell what happened - a confirmation, a
+        # complaint from the form, or the same page sitting there unchanged.
+        # So the attempt is made, and the bank is what happens when it fails.
+        #
+        # It is only tried where a submit would happen anyway: on the last
+        # page, with nothing outstanding that needs Harry, and only when the
+        # run was asked to submit at all.
         kind = captcha_kind(page)
-        if kind == "challenge":
+        job["portal_bot_check"] = kind or "none"
+        bot_check_here = kind == "challenge"
+        if bot_check_here and not submit:
             bank_for_captcha(page, job, plan, flags_all)
             return False
-        if kind == "scored":
-            job["portal_bot_check"] = "invisible, submitted anyway"
 
         # Only the ones that really need a person. A form is allowed to have
         # a box the agent could not fill as long as nobody has to fill it -
@@ -1467,9 +1483,12 @@ def apply_to_job(page, job, answers, submit, state=None):
         # blank and pressed submit.
         stuck = blockers(flags_all)
         if stuck:
-            job.update({"status": "portal_review",
-                        "portal_reason": f"{len(stuck)} question(s) need "
-                                         f"Harry, on page {pages + 1}"})
+            if bot_check_here:
+                bank_for_captcha(page, job, plan, flags_all)
+            else:
+                job.update({"status": "portal_review",
+                            "portal_reason": f"{len(stuck)} question(s) need "
+                                             f"Harry, on page {pages + 1}"})
             return False
 
         # Next before submit, always. A page carrying both is a page where
@@ -1489,9 +1508,16 @@ def apply_to_job(page, job, answers, submit, state=None):
                                          "PORTAL_SUBMIT"})
             return False
         before = page_signature(surface, fields)
+        if bot_check_here:
+            print(f"[portal] {job.get('company')}: a bot check is on this "
+                  f"page - pressing submit anyway to find out whether it "
+                  f"really stops it")
         if not click_submit(surface):
-            job.update({"status": "portal_review",
-                        "portal_reason": "could not find the submit button"})
+            if bot_check_here:
+                bank_for_captcha(page, job, plan, flags_all)
+            else:
+                job.update({"status": "portal_review",
+                            "portal_reason": "could not find the submit button"})
             return False
         page.wait_for_timeout(3000)
         pages += 1
@@ -1507,6 +1533,18 @@ def apply_to_job(page, job, answers, submit, state=None):
         # REJECTED the application - which is the commonest reason a page
         # comes back saying nothing, and used to be counted as a success.
         problems = validation_errors(surface)
+        # A bot check that really does stop it: the form is still there and
+        # complaining, or still there saying nothing. Either way the answers
+        # are banked and it goes on Harry's list, exactly as before - the
+        # only thing that has changed is that the button was actually tried.
+        if bot_check_here:
+            wording = "; ".join(p["message"] for p in problems)[:200]
+            print(f"[portal] the bot check held: "
+                  f"{wording or 'the form came back unchanged'}")
+            bank_for_captcha(page, job, plan, flags_all)
+            job["portal_reason"] = ("form filled and submit pressed - the bot "
+                                    "check stopped it, so it needs you")
+            return False
         if problems:
             wording = "; ".join(p["message"] for p in problems)[:300]
             print(f"[portal] the form rejected it: {wording}")

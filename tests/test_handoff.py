@@ -51,7 +51,13 @@ class TestBankingACaptchaBlockedApplication(unittest.TestCase):
                          ["convictions: only Harry can answer it"])
 
     def test_a_filled_form_behind_a_captcha_is_banked_not_discarded(self):
-        """The whole point: fill first, then discover the bot check."""
+        """The whole point: fill first, then discover the bot check.
+
+        Submit IS pressed now, because refusing to press a button the agent
+        has never tried was costing completely filled applications on the
+        agent's own guess about a widget. What must not change is where it
+        ends up when the check really does hold: banked, with every answer,
+        on Harry's list."""
         job = {"external_id": "a", "title": "Technician", "company": "Acme",
                "apply_url": "https://boards.greenhouse.io/acme/jobs/1"}
         page = mock.MagicMock()
@@ -65,10 +71,14 @@ class TestBankingACaptchaBlockedApplication(unittest.TestCase):
                                return_value=([planned("First name", "Harry")], [])), \
              mock.patch.object(pa, "apply_plan", return_value=([], [])), \
              mock.patch.object(pa, "shot", return_value=None), \
-             mock.patch.object(pa, "click_submit") as submit:
+             mock.patch.object(pa, "keep_the_page", return_value=None), \
+             mock.patch.object(pa, "looks_finished", return_value=False), \
+             mock.patch.object(pa, "validation_errors", return_value=[]), \
+             mock.patch.object(pa, "click_submit",
+                               return_value=True) as submit:
             result = pa.apply_to_job(page, job, {}, submit=True)
         self.assertFalse(result)
-        submit.assert_not_called()
+        submit.assert_called_once()
         self.assertEqual(job["status"], "portal_awaiting_captcha")
         self.assertEqual(len(job["captcha_answers"]), 1)
 

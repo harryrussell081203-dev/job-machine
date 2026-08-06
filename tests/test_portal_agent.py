@@ -2122,3 +2122,99 @@ class TestAnOptionalBoxDoesNotStopAnApplication(unittest.TestCase):
 
     def test_blockers_is_not_confused_by_an_empty_list(self):
         self.assertEqual(pa.blockers([]), [])
+
+
+class TestItPressesSubmitEvenWithABotCheckOnThePage(unittest.TestCase):
+    """The agent was refusing to press a button it had never tried.
+
+    Two applications in one run were filled completely - eleven fields at
+    DOF, nine at EnerMech - and abandoned on the agent's own guess about a
+    widget. Pressing submit with an unsolved CAPTCHA costs nothing: the far
+    side refuses it, which is the state we were in anyway. And there is now
+    an honest way to tell what happened afterwards."""
+
+    FIELDS = [{"index": "0", "name": "n", "label": "Full name", "type": "text",
+               "required": True, "options": [], "option_map": {},
+               "visible": True, "id": "", "hint": "", "placeholder": "",
+               "aria_label": "", "group_label": "", "maxlength": None,
+               "tag": "input", "value": ""}] * 4
+
+    def job(self):
+        return {"external_id": "a", "title": "Tech", "company": "DOF",
+                "apply_url": "https://apply.workable.com/j/1"}
+
+    def apply(self, submit=True, finished=False, errors=(), moved=False):
+        job = self.job()
+        signatures = iter(["same", "same", "moved" if moved else "same"])
+        with mock.patch.object(pa, "collect_fields", return_value=self.FIELDS), \
+             mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "plan_answers",
+                               return_value=([{"field": self.FIELDS[0],
+                                               "value": "Harry",
+                                               "kind": "text",
+                                               "source": "bank:first_name"}],
+                                             [])), \
+             mock.patch.object(pa, "apply_plan", return_value=([], [])), \
+             mock.patch.object(pa, "page_instructions", return_value=""), \
+             mock.patch.object(pa, "click_next", return_value=None), \
+             mock.patch.object(pa, "click_submit", return_value=True) as click, \
+             mock.patch.object(pa, "looks_finished", return_value=finished), \
+             mock.patch.object(pa, "validation_errors", return_value=list(errors)), \
+             mock.patch.object(pa, "page_signature",
+                               side_effect=lambda *a: next(signatures, "moved")), \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "keep_the_page", return_value=None):
+            result = pa.apply_to_job(mock.MagicMock(), job, {}, submit=submit)
+        return result, job, click
+
+    def test_the_button_is_actually_pressed(self):
+        _, _, click = self.apply()
+        click.assert_called_once()
+
+    def test_if_it_goes_through_that_is_a_real_application(self):
+        sent, job, _ = self.apply(finished=True)
+        self.assertTrue(sent)
+        self.assertEqual(job["status"], "portal_submitted")
+
+    def test_if_the_bot_check_holds_it_still_goes_on_his_list(self):
+        """Nothing is lost by trying - this is exactly where it was before."""
+        sent, job, _ = self.apply(finished=False)
+        self.assertFalse(sent)
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
+        self.assertTrue(job["captcha_answers"])
+        self.assertIn("bot check stopped it", job["portal_reason"])
+
+    def test_a_complaint_from_the_form_is_not_mistaken_for_a_submission(self):
+        sent, job, _ = self.apply(
+            errors=[{"message": "Please complete the reCAPTCHA", "field": ""}])
+        self.assertFalse(sent)
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
+
+    def test_with_submit_off_it_banks_without_pressing_anything(self):
+        """A dry run must not press submit on anything, bot check or not."""
+        sent, job, click = self.apply(submit=False)
+        self.assertFalse(sent)
+        click.assert_not_called()
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
+
+    def test_what_kind_of_check_it_was_is_recorded(self):
+        """So the next failure can be diagnosed without guessing."""
+        _, job, _ = self.apply()
+        self.assertEqual(job["portal_bot_check"], "challenge")
+
+    def test_a_question_only_harry_can_answer_still_banks_it(self):
+        job = self.job()
+        with mock.patch.object(pa, "collect_fields", return_value=self.FIELDS), \
+             mock.patch.object(pa, "captcha_kind", return_value="challenge"), \
+             mock.patch.object(pa, "has_captcha", return_value=False), \
+             mock.patch.object(pa, "plan_answers",
+                               return_value=([], ["'X' is required"])), \
+             mock.patch.object(pa, "apply_plan", return_value=([], [])), \
+             mock.patch.object(pa, "page_instructions", return_value=""), \
+             mock.patch.object(pa, "click_submit") as click, \
+             mock.patch.object(pa, "shot", return_value=None), \
+             mock.patch.object(pa, "keep_the_page", return_value=None):
+            pa.apply_to_job(mock.MagicMock(), job, {}, submit=True)
+        click.assert_not_called()
+        self.assertEqual(job["status"], "portal_awaiting_captcha")
