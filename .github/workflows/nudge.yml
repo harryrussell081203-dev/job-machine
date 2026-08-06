@@ -7,10 +7,16 @@ name: job-machine captcha nudge
 # done, they are one puzzle away from being sent - and the easiest to forget,
 # because they live in a build artifact nobody opens. Hence a text.
 #
-# 17:15 UTC is 18:15 BST and 17:15 GMT, which is the point in the day he is
-# most likely to be at home with the phone in his hand and ten minutes spare.
-# Not the morning: a captcha needs a browser and a sit-down, and a nudge that
-# arrives when it cannot be acted on is a nudge that gets swiped away.
+# THE EMAIL HAS MOVED TO THE MORNING. Harry does the whole list in one sitting
+# at the desktop and hands them all back in one reply, so the list wants to
+# arrive at the START of the day it will be cleared - see morning.yml.
+#
+# What is left here is the text, and only as a backstop: if the morning list
+# is still sitting untouched by the evening, one line on the phone saying how
+# many are waiting. It sends nothing when there is nothing waiting, so a day
+# he clears them is a day he hears nothing more about it.
+#
+# 17:15 UTC is 18:15 BST and 17:15 GMT.
 on:
   schedule:
     - cron: "15 17 * * *"
@@ -52,11 +58,12 @@ jobs:
           # The email carries the page with the one-click prefill on it, for
           # the desktop. The text carries one link, for the phone. Both from
           # the same moment so they arrive together and agree with each other.
+          # Anything he has already cleared comes off before we count.
+          python tools/applied.py --scan || true
           if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
             python tools/handoff.py --email --force
             python sms.py --captcha-nudge --force
           else
-            python tools/handoff.py --email
             python sms.py --captcha-nudge
           fi
 

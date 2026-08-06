@@ -142,5 +142,127 @@ class TestReadingTheEmployersReceipt(unittest.TestCase):
                 self.assertFalse(applied.A_RECEIPT.search(subject))
 
 
+
+class TestHandingThemBackInOneReply(unittest.TestCase):
+    """The whole hand-back has to be one action on a desktop, because that is
+    where a CAPTCHA gets solved and where he already is when he finishes. He
+    does the list in one sitting and replies 'done'."""
+
+    SUBJECT = "[job-machine] 5 applications need only the CAPTCHA"
+
+    def setUp(self):
+        patch = mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com")
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def reply(self, body, sender="Harry <harry@example.com>", subject=None):
+        return (sender, subject if subject is not None else self.SUBJECT, body)
+
+    def state(self):
+        return {"jobs": {j["external_id"]: j for j in (
+            banked("a", "DOF", "Data Controller"),
+            banked("b", "T-Tech", "IT Field Engineer"),
+            banked("c", "EnerMech", "Crane Operator"))}}
+
+    def test_one_word_clears_the_whole_list(self):
+        st = self.state()
+        self.assertEqual(applied.read_his_reply(st, [self.reply("done")]), 3)
+        self.assertEqual(applied.waiting(st), [])
+
+    def test_the_words_he_might_actually_use(self):
+        for word in ("done", "Done", "all done", "finished", "completed",
+                     "did them", "sent", "applied"):
+            with self.subTest(word=word):
+                st = self.state()
+                self.assertEqual(
+                    applied.read_his_reply(st, [self.reply(word)]), 3)
+
+    def test_naming_some_clears_only_those(self):
+        st = self.state()
+        self.assertEqual(
+            applied.read_his_reply(st, [self.reply("done DOF, T-Tech")]), 2)
+        left = [j["company"] for j in applied.waiting(st)]
+        self.assertEqual(left, ["EnerMech"])
+
+    def test_the_quoted_email_below_does_not_count_as_naming_them(self):
+        """His reply carries the whole list underneath it. Only the first
+        line is his."""
+        st = self.state()
+        body = ("done\n\nOn 6 Aug, job-machine wrote:\n"
+                "> 1. Data Controller - DOF\n> 2. IT Field Engineer - T-Tech\n")
+        self.assertEqual(applied.read_his_reply(st, [self.reply(body)]), 3)
+
+    def test_nobody_else_can_clear_his_list(self):
+        st = self.state()
+        self.assertEqual(applied.read_his_reply(
+            st, [self.reply("done", sender="recruiter@agency.com")]), 0)
+        self.assertEqual(len(applied.waiting(st)), 3)
+
+    def test_a_reply_to_some_other_email_does_not_clear_it(self):
+        st = self.state()
+        self.assertEqual(applied.read_his_reply(
+            st, [self.reply("done", subject="Re: your morning brief")]), 0)
+        self.assertEqual(len(applied.waiting(st)), 3)
+
+    def test_a_reply_that_is_not_saying_done_does_nothing(self):
+        for body in ("can you look at the DOF one again",
+                     "not done yet", "I will do these tonight",
+                     "why is this one on the list?"):
+            with self.subTest(body=body):
+                st = self.state()
+                self.assertEqual(
+                    applied.read_his_reply(st, [self.reply(body)]), 0)
+
+    def test_replying_twice_does_not_double_count(self):
+        st = self.state()
+        mail = [self.reply("done"), self.reply("done")]
+        self.assertEqual(applied.read_his_reply(st, mail), 3)
+
+    def test_they_are_recorded_as_applications_he_made(self):
+        st = self.state()
+        applied.read_his_reply(st, [self.reply("done")])
+        for job in st["jobs"].values():
+            self.assertEqual(job["status"], "portal_submitted")
+            self.assertTrue(job["finished_by_hand_at"])
+            self.assertIn("replied", job["portal_reason"])
+
+    def test_an_empty_list_needs_no_reply_read(self):
+        self.assertEqual(applied.read_his_reply({"jobs": {}},
+                                                [self.reply("done")]), 0)
+
+
+class TestTheListIsBuiltToGrow(unittest.TestCase):
+    """Three of these is a different job from fifteen. It has to stay
+    workable as the machine fills more of them."""
+
+    def test_the_text_list_is_numbered_so_he_can_keep_his_place(self):
+        from tools import handoff
+        jobs = [banked("a", "DOF"), banked("b", "T-Tech"),
+                banked("c", "EnerMech")]
+        text = handoff.plain_list(jobs)
+        self.assertIn("1. ", text)
+        self.assertIn("3. ", text)
+
+    def test_the_email_says_how_to_hand_them_back(self):
+        from tools import handoff
+        st = {"jobs": {"a": banked("a")}, "handoff_emailed_on": None}
+        with mock.patch.object(handoff, "OUT_FILE", "/tmp/hb_test.html"), \
+             mock.patch.object(handoff, "OUT_DIR", "/tmp"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com"), \
+             mock.patch.object(jm, "send_email") as send:
+            handoff.email_page(st, force=True)
+        body = send.call_args.args[2]
+        self.assertIn("REPLY TO THIS EMAIL WITH 'DONE'", body)
+        self.assertIn("done DOF, T-Tech", body)
+
+    def test_the_page_says_it_too(self):
+        from tools import handoff
+        with mock.patch.object(handoff, "OUT_FILE", "/tmp/hb_page.html"), \
+             mock.patch.object(handoff, "OUT_DIR", "/tmp"):
+            handoff.build({"jobs": {"a": banked("a")}})
+        page = open("/tmp/hb_page.html").read()
+        self.assertIn("reply to the email", page)
+        self.assertIn("<code>done</code>", page)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

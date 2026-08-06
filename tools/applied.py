@@ -52,6 +52,23 @@ A_RECEIPT = re.compile(
     r"(been )?(received|submitted|sent)|application received|"
     r"received your application|thanks for applying", re.I)
 
+# HARRY SAYING HE HAS DONE THEM.
+#
+# The whole hand-back has to be one action on a desktop, because that is where
+# a CAPTCHA gets solved and that is where he already is when he finishes. He
+# does not have a terminal open and should not need one.
+#
+# So: he replies to the morning email. 'done' clears the list. 'done DOF,
+# T-Tech' clears those two. Nothing else in the inbox can trigger it - the
+# message has to come FROM his own address, which is the same address the list
+# was sent to, so nobody else can mark his applications as sent.
+HE_SAYS_DONE = re.compile(
+    r"^\s*(all\s+)?(done|did|finished|completed|complete|sent|applied)\b", re.I)
+# The email that started the thread. Kept narrow so a reply to some other
+# job-machine mail cannot clear the CAPTCHA list.
+HANDOFF_SUBJECT = re.compile(r"needs? only the captcha|waiting on a captcha",
+                             re.I)
+
 
 def waiting(state):
     return handoff.pending(state)
@@ -112,6 +129,46 @@ def _confirmations(since_days=14):
     return out
 
 
+def named_in(text, jobs):
+    """The jobs he named in his reply, or all of them if he named none.
+
+    'done' means the list. 'done DOF, T-Tech' means those two. Naming one is
+    the exception, not the rule - the point of this is that finishing the lot
+    costs one word."""
+    body = str(text or "")
+    # Only the first line matters. Everything after it is the quoted email he
+    # replied to, which contains every company name on the list.
+    first = body.strip().splitlines()[0] if body.strip() else ""
+    named = [j for j in jobs
+             if (j.get("company") or "").strip().lower() in first.lower()
+             and len((j.get("company") or "").strip()) >= 3]
+    return named or list(jobs)
+
+
+def read_his_reply(state, mail):
+    """Mark what he says he has done. Returns how many."""
+    jobs = waiting(state)
+    if not jobs:
+        return 0
+    me = (jm.GMAIL_ADDRESS or "").lower()
+    done = 0
+    for sender, subject, body in mail:
+        if me not in (sender or "").lower():
+            continue
+        if not HANDOFF_SUBJECT.search(subject or ""):
+            continue
+        if not HE_SAYS_DONE.search((body or "").strip()):
+            continue
+        for job in named_in(body, jobs):
+            if job.get(DONE):
+                continue
+            mark(job, "he replied to say he had done it")
+            print(f"[applied] {job.get('company')} - {job.get('title')} "
+                  f"marked done from his reply")
+            done += 1
+    return done
+
+
 def scan(state, since_days=14):
     """Mark anything the employer has confirmed receiving."""
     jobs = waiting(state)
@@ -121,7 +178,10 @@ def scan(state, since_days=14):
     mail = _confirmations(since_days)
     if not mail:
         return 0
-    done = 0
+    # What he has told us himself comes first, and is the whole point of the
+    # loop: fill, hand over, he replies 'done', the machine believes him.
+    done = read_his_reply(state, mail)
+    jobs = waiting(state)
     for job in jobs:
         company = (job.get("company") or "").strip().lower()
         if len(company) < 3:

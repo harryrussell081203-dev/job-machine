@@ -118,7 +118,7 @@ def card(job, index):
                   'it and fill it in as normal.</p>')
     return f"""
 <article>
-  <h3>{html.escape(job.get('title') or '?')}
+  <h3><span class=n>{index + 1}.</span>{html.escape(job.get('title') or '?')}
       <span class=co>{html.escape(job.get('company') or '?')}</span>
       <span class=score>{job.get('score') or '-'}</span></h3>
   <p><a href="{html.escape(job.get('apply_url') or '#')}" target="_blank"
@@ -147,6 +147,10 @@ table{{border-collapse:collapse;font-size:13px;margin-top:8px;width:100%}}
 td{{border-bottom:1px solid #eee;padding:4px 6px;vertical-align:top}}
 .hidden{{position:absolute;left:-9999px}}
 ol{{font-size:14px}}
+.handback{{background:#f4f8f4;border:1px solid #cfe0cf;border-radius:8px;
+padding:10px 14px;font-size:14px}}
+code{{background:#eee;padding:1px 5px;border-radius:3px}}
+.n{{color:#999;font-weight:normal;margin-right:6px}}
 </style></head><body>
 <h1>Applications waiting on a CAPTCHA</h1>
 <p><b>{len(jobs)}</b> waiting, <b>{sum(1 for j in jobs if j.get('captcha_answers'))}</b>
@@ -159,6 +163,10 @@ of them already filled in. For each one:</p>
       loads, so there was nothing to read and nothing to fill.</li>
   <li>Attach the CV, solve the CAPTCHA, press Submit.</li>
 </ol>
+<p class=handback><b>When you have finished, reply to the email this page
+came with, and just say <code>done</code>.</b> That clears the whole list and
+counts them as applied for, so tomorrow you only get new ones. Say
+<code>done DOF, T-Tech</code> if you only got through some.</p>
 <p class=m>The bot cannot hand you a live session - a CAPTCHA is tied to the
 browser that loaded it, and that browser is gone. What it can hand you is every
 answer, so this takes seconds rather than minutes.</p>
@@ -184,8 +192,12 @@ EMAILED = "handoff_emailed_on"
 def plain_list(jobs):
     """The same list in text, for reading on a phone without opening anything."""
     lines = []
-    for job in jobs:
-        lines.append(f"{job.get('title') or '?'} - {job.get('company') or '?'}"
+    for number, job in enumerate(jobs, 1):
+        # Numbered, because this list is meant to grow. Working through
+        # fifteen of these is a different job from working through three, and
+        # a number is how he keeps his place.
+        lines.append(f"{number}. {job.get('title') or '?'} - "
+                     f"{job.get('company') or '?'}"
                      f"  (score {job.get('score') or '-'})")
         lines.append(f"  {job.get('apply_url') or ''}")
         answers = job.get("captcha_answers") or []
@@ -239,7 +251,15 @@ def email_page(state, force=False):
         f"console (F12, Console, Enter), and every field fills at once. Then "
         f"attach the CV, do the puzzle and press submit.\n\n"
         f"On a phone the links above still work, you just fill them in by "
-        f"hand.\n"
+        f"hand.\n\n"
+        f"------------------------------------------------------------\n"
+        f"WHEN YOU HAVE DONE THEM: REPLY TO THIS EMAIL WITH 'DONE'.\n"
+        f"------------------------------------------------------------\n"
+        f"That clears the whole list and they are counted as applied for, so "
+        f"tomorrow's email is only new ones. Reply 'done DOF, T-Tech' if you "
+        f"only got through some of them.\n\n"
+        f"You do not have to reply at all for the ones where the employer "
+        f"emails a confirmation - those come off the list on their own.\n"
     )
     jm.send_email(jm.GMAIL_ADDRESS, subject, body, attach_cv=False,
                   attachments=[("captcha-handoff.html", "text", "html", page)])
