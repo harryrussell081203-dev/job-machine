@@ -2298,3 +2298,94 @@ class TestTheBoxThatStoppedTwoApplications(unittest.TestCase):
         page.set_content('<input id="x" data-jm="0" type="checkbox" disabled>')
         with self.assertRaises(Exception):
             pa.tick(page, '[data-jm="0"]', {"id": "x"})
+
+
+@unittest.skipUnless(os.environ.get("PORTAL_BROWSER_TESTS") == "1",
+                     "set PORTAL_BROWSER_TESTS=1 to drive a real browser")
+class TestTheQuestionIsNotTheAnswerWord(unittest.TestCase):
+    """T-Tech: thirteen of fifteen fields filled, the privacy box ticked, and
+    the run stopped on 'unrecognised required field YES' - twice.
+
+    The question sits in a <p> and the controls in a SIBLING div, so
+    el.closest('div') from the input is the options div, which has no heading
+    in it. The group label came back empty, the label fell through to the
+    option text, and a question the answer bank could answer was recorded as
+    an unrecognised required field called 'YES'."""
+
+    FORM = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "fixtures", "yes_no_question.html")
+
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        launch = {}
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch["executable_path"] = "/opt/pw-browsers/chromium"
+        cls.browser = cls._pw.chromium.launch(**launch)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls._pw.stop()
+
+    def setUp(self):
+        self.page = self.browser.new_page()
+        self.page.goto("file://" + self.FORM)
+        self.addCleanup(self.page.close)
+        self.fields = pa.collect_fields(self.page)
+
+    def field(self, name):
+        for f in self.fields:
+            if f.get("name") == name:
+                return f
+        self.fail(f"no field named {name}")
+
+    def test_the_question_is_read_from_above_the_options(self):
+        self.assertIn("right to work", self.field("rtw")["label"].lower())
+        self.assertIn("sponsorship", self.field("visa")["label"].lower())
+
+    def test_no_field_is_labelled_with_a_bare_answer_word(self):
+        for f in self.fields:
+            self.assertNotIn((f.get("label") or "").strip().lower(),
+                             ("yes", "no"), f"{f.get('name')} is labelled "
+                                            f"with its own answer")
+
+    def test_the_answer_bank_can_now_answer_them(self):
+        self.assertEqual(pa.match_key(self.field("rtw")), "right_to_work_uk")
+        self.assertEqual(pa.match_key(self.field("visa")),
+                         "needs_sponsorship")
+
+    def test_nothing_on_this_page_needs_a_person_any_more(self):
+        plan, flags = pa.plan_answers(self.fields, JOB, pa.load_answers())
+        self.assertEqual(pa.blockers(flags), [])
+        filled, failed = pa.apply_plan(self.page, plan)
+        self.assertEqual(failed, [])
+        self.assertTrue(self.page.is_checked('input[name="rtw"][value="y"]'),
+                        "should have answered YES to right to work")
+        self.assertTrue(self.page.is_checked('input[name="visa"][value="n"]'),
+                        "should have answered NO to needing sponsorship")
+
+    def test_an_ordinary_label_is_left_alone(self):
+        """The climb must not overwrite labels that were already right."""
+        self.assertEqual(self.field("first_name")["label"], "First name")
+        self.assertEqual(self.field("email")["label"], "Email")
+
+    def test_the_second_option_can_actually_be_chosen(self):
+        """Every 'No' to a yes/no question was silently failing to land.
+
+        The radio-group loop stamps each button with `${i}-${n}` and hands
+        those back in option_map. The outer loop then reached the same button
+        on a later turn and stamped its own index over the top, so
+        option_map's '5-1' pointed at nothing and the check timed out. It
+        only ever hit buttons after the first - which is to say, every answer
+        that was not the first option, on every form, from the beginning."""
+        visa = self.field("visa")
+        handle = visa["option_map"]["NO"]
+        self.assertTrue(
+            self.page.locator(f'[data-jm="{handle}"]').count(),
+            "option_map points at an element that is not on the page")
+        plan, _ = pa.plan_answers(self.fields, JOB, pa.load_answers())
+        _, failed = pa.apply_plan(self.page, plan)
+        self.assertEqual(failed, [])
+        self.assertTrue(self.page.is_checked('input[name="visa"][value="n"]'))

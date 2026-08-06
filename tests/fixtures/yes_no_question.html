@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  The last thing standing between a filled application and a submitted one.
+
+  T-Tech: thirteen of fifteen fields filled, the privacy box ticked, and the
+  run stopped on "unrecognised required field 'YES'" - twice.
+
+  This is the shape that caused it. The question is in a <p>, and the controls
+  are in a SIBLING div. el.closest('div') from the input is the options div,
+  which contains no heading at all, so the group label came back empty, the
+  label fell through to the option text, and a Yes/No question the answer bank
+  could answer was recorded as an unrecognised required field called 'YES'.
+
+  Both questions here are answerable from data/answers.json:
+    right to work in the UK  -> Yes
+    sponsorship needed       -> No
+-->
+<html>
+<head><meta charset="utf-8"><title>Apply</title></head>
+<body>
+<h1>Apply for this role</h1>
+<form id="apply">
+  <label for="fn">First name</label>
+  <input id="fn" name="first_name" type="text" required>
+  <label for="ln">Surname</label>
+  <input id="ln" name="last_name" type="text" required>
+  <label for="em">Email</label>
+  <input id="em" name="email" type="email" required>
+
+  <div class="question">
+    <p>Do you have the right to work in the UK?</p>
+    <div class="options">
+      <label><input type="radio" name="rtw" value="y" required> YES</label>
+      <label><input type="radio" name="rtw" value="n"> NO</label>
+    </div>
+  </div>
+
+  <div class="question">
+    <p>Will you now or in the future require sponsorship for a work visa?</p>
+    <div class="options">
+      <label><input type="radio" name="visa" value="y" required> YES</label>
+      <label><input type="radio" name="visa" value="n"> NO</label>
+    </div>
+  </div>
+
+  <button type="submit">Submit application</button>
+</form>
+</body>
+</html>
