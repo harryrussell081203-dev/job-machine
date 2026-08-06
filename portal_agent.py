@@ -1982,7 +1982,25 @@ def portal_candidates(state):
         if not there_is_a_form_to_fill(job):
             continue
         if job.get("status") in ("portal_submitted", "portal_manual",
-                                 "portal_review", "portal_ready", "portal_failed"):
+                                 "portal_review", "portal_ready",
+                                 "portal_failed",
+                                 # Filled, banked and on Harry's list. The
+                                 # work on it is DONE - it is waiting on a
+                                 # human at a bot check, not on the machine.
+                                 #
+                                 # Re-doing it every run was the single
+                                 # biggest drag on throughput: a burn run with
+                                 # a budget of eight spent six of it refilling
+                                 # DOF, T-Tech and EnerMech, which were
+                                 # already sitting complete on his list, while
+                                 # new jobs waited. It also churned the list
+                                 # under him - the same applications
+                                 # reappearing each morning with slightly
+                                 # different answers.
+                                 #
+                                 # It comes back only if he says he did it, or
+                                 # never: applied.py marks it submitted.
+                                 "portal_awaiting_captcha"):
             continue
         # Already handed to the email route because this portal defeated us.
         # Without this it would be picked up as an ordinary 'scored' job, fail

@@ -49,6 +49,31 @@ jobs:
             python morning.py --send
           fi
 
+      # THE CAPTCHA LIST, IN THE MORNING, WHEN HE WILL ACT ON IT.
+      #
+      # It used to go out at 17:15 with the evening nudge. He asked for it in
+      # the morning instead: he does the lot in one sitting at the desktop and
+      # hands them back in one reply, so the list wants to arrive at the start
+      # of the day it will be cleared, not the end of it.
+      #
+      # --scan first, deliberately. It reads his reply to YESTERDAY's list and
+      # takes those off before today's is built, so the email he opens is only
+      # what is actually left. Without that he would get this morning's list
+      # still carrying last night's work.
+      - name: Read yesterday's reply, then send today's CAPTCHA list
+        env:
+          PYTHONUNBUFFERED: "1"
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python tools/applied.py --scan || true
+          if [[ "${GITHUB_REF_NAME}" == fire-morning/* ]]; then
+            python tools/handoff.py --email --force
+          else
+            python tools/handoff.py --email
+          fi
+          python tools/applied.py --list
+
       - name: Commit state
         if: always()
         env:
