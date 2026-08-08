@@ -1302,6 +1302,102 @@ def domain_matches_company(company, domain):
     return rest in own_words
 
 
+# Words that belong to the legal wrapper, not the name anyone types into a
+# browser bar. Stripped when building candidate domains - but NOT 'recruitment'
+# or 'engineering', which small firms put in their domain constantly
+# ('ernestgordonrecruitment.com' is the real one).
+LEGAL_TAIL = re.compile(
+    r"\b(ltd|limited|plc|llp|llc|inc|incorporated|holdings|the)\b\.?", re.I)
+DOMAIN_GUESS_CAP = env_int("DOMAIN_GUESS_CAP", 8)
+
+
+def domain_candidates(company):
+    """Domains a firm of this name plausibly owns, most likely first.
+
+    Clearbit knows the big names and has never heard of Ernest Gordon
+    Recruitment of Bristol, and 82 of the 114 jobs the letter route could not
+    write to failed there - the single largest blockage in the whole system,
+    on the one channel that has ever produced a reply.
+
+    Small UK firms are consistent about this: the domain is the trading name
+    with the spaces taken out, on .co.uk or .com."""
+    name = LEGAL_TAIL.sub(" ", company or "")
+    name = re.sub(r"[^A-Za-z0-9 &]", " ", name).replace("&", " and ")
+    words = [w for w in name.lower().split() if w]
+    if not words:
+        return []
+    stems = []
+    joined = "".join(words)
+    if 3 <= len(joined) <= 30:
+        stems.append(joined)
+    # Firms with a long trading name are usually known by the first two words:
+    # 'Ernest Gordon Recruitment' answers to ernestgordon.co.uk as well. Not
+    # when the second word is a joiner, though - 'Dron & Dickson' would give
+    # 'dronand', which is nobody.
+    if len(words) > 2 and words[1] not in ("and", "of", "the", "for"):
+        short = "".join(words[:2])
+        if 3 <= len(short) <= 30:
+            stems.append(short)
+    if len(words) > 1:
+        hyphen = "-".join(words)
+        if len(hyphen) <= 34:
+            stems.append(hyphen)
+    out = []
+    for stem in stems:
+        for tld in (".co.uk", ".com"):
+            candidate = stem + tld
+            if candidate not in out:
+                out.append(candidate)
+    return out[:DOMAIN_GUESS_CAP]
+
+
+def site_confirms_company(domain, company):
+    """Does the site at this domain actually say it is this company?
+
+    The guard that makes guessing safe at all. Without it a guess is a
+    coin-toss dressed as a fact, and the failure mode is not an empty inbox -
+    it is an application about Harry's naval service landing at a stranger's
+    firm that happens to own the domain."""
+    tokens = name_tokens(company)
+    if not tokens:
+        return False
+    try:
+        r = requests.get(f"https://{domain}", headers=UA, timeout=12,
+                         allow_redirects=True)
+        if r.status_code != 200 or not r.text:
+            return False
+        page = re.sub(r"[^a-z0-9 ]", " ", r.text[:200000].lower())
+    except Exception:
+        return False
+    # Every word of the name has to be on their own front page.
+    return all(re.search(rf"\b{re.escape(t)}\b", page) for t in tokens)
+
+
+def guess_domain(company):
+    """A domain for a firm Clearbit has never heard of, or None.
+
+    Two gates, and both must pass: the domain has to accept mail, and the site
+    has to say it is this company. A guess that clears both is not really a
+    guess any more.
+
+    A one-word name is refused outright, for the reason the Clearbit path
+    refuses it: 'Sanctuary' matched Sanctuary Clothing in California, and an
+    application about Harry's naval service was one run from a stranger's
+    inbox. A single word on a front page is not identification."""
+    if len(name_tokens(company)) < 2:
+        return None
+    for candidate in domain_candidates(company):
+        if not has_mx(candidate):
+            continue
+        if not site_confirms_company(candidate, company):
+            print(f"[discover] {candidate} takes mail but does not look like "
+                  f"'{company}' - not using it")
+            continue
+        print(f"[discover] guessed and confirmed {candidate} for '{company}'")
+        return candidate
+    return None
+
+
 def find_domain(company):
     """Clearbit autocomplete: free, no key.
 
@@ -1342,7 +1438,11 @@ def find_domain(company):
             # match - 'wood' must not match 'woodforest'
             if wanted_tokens <= name_tokens(hit.get("name", "")):
                 return domain
-        print(f"[discover] no confident domain for '{company}'")
+        print(f"[discover] clearbit has no confident match for '{company}', "
+              f"trying the obvious domains")
+        guessed = guess_domain(company)
+        if guessed:
+            return guessed
     except Exception as e:
         print(f"[discover] clearbit '{company}': {e}")
     return None
