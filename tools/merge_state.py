@@ -47,13 +47,14 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else -1
 
 
-REOPENING_FIELDS = ("rescored_at", "portal_fallback_at", "portal_reopened_at")
+REOPENING_FIELDS = ("rescored_at", "portal_fallback_at", "portal_reopened_at",
+                    "pruned_overseas_at")
 
 
 def reopened(job):
     """When was this record deliberately put back in the queue?
 
-    Three stages do it, for different reasons, and all move a listing
+    Four stages do it, for different reasons, and all move a listing
     BACKWARDS through PROGRESS on purpose:
 
       rescored_at        a profile change invalidated the score, so the
@@ -62,6 +63,8 @@ def reopened(job):
                          listing goes back to 'scored' to be emailed instead
       portal_reopened_at a bug that parked it has been fixed, so it goes back
                          to 'scored' to be tried again
+      pruned_overseas_at the advert says the job is in another country, so it
+                         goes to 'skipped' however far along it was
 
     Only the first was handled here. The second ranks 'scored' (1) below
     'portal_manual' (7), so every one of the eighty-six listings the fallback

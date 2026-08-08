@@ -364,8 +364,13 @@ class TestABurnRunKeepsItsWork(unittest.TestCase):
         about it - because a step backwards the merge cannot see is a step
         backwards that silently undoes the run which took it."""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        pattern = re.compile(r'\["(\w*(?:reopened|fallback|rescored)\w*_at)"\]'
-                             r'\s*=')
+        # 'pruned' is on this list because the guard MISSED it. Five
+        # Australian applications were pruned on the runner and every one came
+        # back, because prune_overseas sets 'skipped' - a deliberate step
+        # backwards - and the merge could not see the field that marked it as
+        # deliberate. Fourth time this exact shape has cost a run's work.
+        pattern = re.compile(
+            r'\["(\w*(?:reopened|fallback|rescored|pruned)\w*_at)"\]\s*=')
         found = set()
         for name in os.listdir(root):
             if not name.endswith(".py"):
