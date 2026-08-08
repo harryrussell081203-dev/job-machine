@@ -2068,6 +2068,15 @@ def speculative(state):
     """Two short notes a day to curated employers who are not advertising.
     Real addresses only, one per company ever - same rules as everything else."""
     targets = load_targets()
+    # Covenant signatories first, whatever order the file happens to be in.
+    #
+    # spec_targets.py appends new targets to the end, so the signatories
+    # landed behind seventy-two existing entries - at two notes a day, five
+    # weeks before the first one was written to. These are the only employers
+    # in the whole project where meeting the bar can produce an interview by
+    # POLICY rather than by persuasion, so they do not queue behind firms
+    # picked because they once advertised.
+    targets = sorted(targets, key=lambda t: not t.get("covenant"))
     done = state.setdefault("spec_done", {})
     sent = 0
     for target in targets:

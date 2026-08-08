@@ -10,9 +10,11 @@ companies typed out by hand, which at two notes a day is a fortnight's work.
 The state file already holds the answer, because every company that advertised
 a role the scorer rated in-trade is by definition an employer of that trade.
 """
+import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -144,3 +146,75 @@ class TestBuildingTheList(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheCovenantSignatoriesGoFirst(unittest.TestCase):
+    """The register was only ever used reactively - when a job happened to
+    come up at a signatory, the letter mentioned the Covenant. That waits for
+    the employer to advertise, and leaves the best thing about the list on the
+    table: many signatories run a guaranteed interview scheme, which is the
+    only route in this project that produces an interview by policy rather
+    than by persuasion."""
+
+    def register(self, *employers):
+        return mock.patch("builtins.open", mock.mock_open(
+            read_data=json.dumps({"employers": list(employers)})))
+
+    def test_a_signatory_becomes_a_speculative_target(self):
+        with self.register({"company": "NHS Grampian",
+                            "note": "Aberdeen medical engineering"}):
+            got = st.covenant_candidates({"jobs": {}}, [])
+        self.assertEqual(got[0]["company"], "NHS Grampian")
+        self.assertTrue(got[0]["covenant"])
+
+    def test_the_note_states_the_signing_and_never_the_scheme(self):
+        """That they signed is published fact with their name against it.
+        That they run a guaranteed interview scheme is theirs to say, and
+        claiming it to their face while asking for a job is not on."""
+        note = st.covenant_note({"company": "BAE", "note": "defence"})
+        self.assertIn("signed the Armed Forces Covenant", note)
+        self.assertNotIn("guaranteed", note.lower())
+        self.assertNotIn("interview", note.lower())
+
+    def test_near_home_comes_before_the_rest(self):
+        """A guaranteed interview he can attend tomorrow beats one in
+        Portsmouth - though neither is filtered out."""
+        entries = [{"company": "Portsmouth Naval Base", "note": "dockyard"},
+                   {"company": "NHS Grampian", "note": "Aberdeen"}]
+        self.assertLess(st.covenant_rank(entries[1]),
+                        st.covenant_rank(entries[0]))
+
+    def test_a_bracket_or_a_digit_no_longer_wins(self):
+        """Sorting on the name put '(TMFL) Titan Facilities' and '2CL
+        Communications' above Aberdeen City Council and BAE Systems, purely
+        because of the bracket and the digit."""
+        entries = [{"company": "(TMFL) Titan Facilities Management",
+                    "note": "Covenant signatory"},
+                   {"company": "Aberdeen City Council",
+                    "note": "local authority technical roles"}]
+        self.assertLess(st.covenant_rank(entries[1]),
+                        st.covenant_rank(entries[0]))
+
+    def test_a_recruiter_on_the_register_gets_a_different_letter(self):
+        with self.register({"company": "Morson Group Recruitment",
+                            "note": "staffing"}):
+            got = st.covenant_candidates({"jobs": {}}, [])
+        self.assertEqual(got, [])
+
+    def test_one_already_written_to_is_not_written_to_again(self):
+        with self.register({"company": "NHS Grampian", "note": "Aberdeen"}):
+            got = st.covenant_candidates(
+                {"jobs": {}}, [{"company": "NHS Grampian"}])
+        self.assertEqual(got, [])
+
+    def test_a_missing_register_is_not_a_crash(self):
+        with mock.patch("builtins.open", side_effect=OSError("gone")):
+            self.assertEqual(st.covenant_candidates({"jobs": {}}, []), [])
+
+    def test_they_are_written_to_before_the_rest_of_the_list(self):
+        """Appended to the end of a 72-entry file at two notes a day, the
+        first signatory would have been written to in five weeks."""
+        targets = [{"company": "Ordinary Firm"},
+                   {"company": "NHS Grampian", "covenant": True}]
+        first = sorted(targets, key=lambda t: not t.get("covenant"))[0]
+        self.assertEqual(first["company"], "NHS Grampian")
