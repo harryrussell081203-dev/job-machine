@@ -37,6 +37,7 @@ written to speculatively. One approach per company, ever, same as everywhere.
 """
 import argparse
 import json
+import re
 import sys
 
 import job_machine as jm
@@ -112,6 +113,95 @@ def note_for(company, jobs):
     return f"has advertised in Aberdeen for {shown}"
 
 
+# ======================================================================
+# THE COVENANT SIGNATORIES
+# ======================================================================
+# The register in data/veteran_employers.json is used reactively: when a job
+# happens to come up at a signatory, the letter mentions the Covenant. That
+# leaves the best thing about the list on the table entirely, because it waits
+# for the employer to advertise.
+#
+# Many signatories run a guaranteed interview scheme - a veteran who meets the
+# minimum criteria for a role gets interviewed. That is the only route in this
+# project that produces an interview by POLICY rather than by persuasion, and
+# there is no reason to wait for an advert before asking about it.
+#
+# WHAT THE LETTER MAY AND MAY NOT SAY. That a company signed the Covenant is a
+# published fact and may be stated. That they run a guaranteed interview
+# scheme is NOT - it varies by employer and is theirs to say. So the note
+# records only the signing, and the letter asks the question.
+
+
+def covenant_note(entry):
+    """Why this firm is being written to, in terms that are true of them.
+
+    Deliberately does not claim a scheme. 'has signed the Armed Forces
+    Covenant' is on GOV.UK with their name against it; 'runs a guaranteed
+    interview scheme' would be a claim about an employer's internal policy
+    made on their behalf, to their face, by someone asking them for a job."""
+    where = (entry.get("note") or "").strip()
+    base = "has signed the Armed Forces Covenant"
+    return f"{base}, {where}" if where and where != "Covenant signatory" else base
+
+
+# Where he can physically attend an interview tomorrow. Not a filter - he will
+# take rotational work anywhere - but a guaranteed interview in Aberdeen is
+# worth more than one in Portsmouth, so it goes first.
+NEAR_HOME = re.compile(
+    r"aberdeen|dundee|edinburgh|glasgow|inverness|scotland|scottish|fife|"
+    r"stirling|montrose|peterhead|fraserburgh|highland|grampian|"
+    r"lanarkshire|ayrshire|renfrew|falkirk|livingston|dunfermline", re.I)
+
+
+def covenant_rank(entry):
+    """Best first: near home, then the ones we know something about.
+
+    Sorting on the name alone put '(TMFL) Titan Facilities Management' and
+    '2CL Communications' above Aberdeen City Council and BAE Systems, purely
+    because of the bracket and the digit. Alphabetical order is not a
+    judgement about anything."""
+    text = f"{entry.get('company') or ''} {entry.get('note') or ''}"
+    near = 0 if NEAR_HOME.search(text) else 1
+    # A note that says something about the firm means the register carried a
+    # real pledge, which is both a better letter and a sign of a real employer.
+    described = 0 if (entry.get("note") or "").strip() not in (
+        "", "Covenant signatory") else 1
+    return (near, described, (entry.get("company") or "").lower())
+
+
+def covenant_candidates(state, existing):
+    """[(company, note)] for signatories worth a speculative letter.
+
+    Scotland first, because a guaranteed interview he can physically attend
+    beats one in Portsmouth - but not filtered on it, because he will take
+    rotational and offshore work anywhere that comes with the arrangements."""
+    known = known_already(state, existing)
+    try:
+        with open(jm.VETERAN_PATH) as f:
+            entries = json.load(f).get("employers", [])
+    except Exception as e:
+        print(f"[spec] no Covenant register to read ({e})")
+        return []
+    out = []
+    for entry in entries:
+        company = (entry.get("company") or "").strip()
+        key = jm.company_key(company)
+        if not company or not key or key in known:
+            continue
+        if not looks_like_an_employer(company):
+            continue
+        # A recruiter is a different letter entirely - see the note at the top
+        # of this file. looks_like_an_employer() only checks the SHAPE of the
+        # name; whether the firm is an agency is jm.is_agency's question, and
+        # signatories include Morson and Hays.
+        if jm.is_agency({"company": company}):
+            continue
+        out.append((covenant_rank(entry), company, covenant_note(entry)))
+    out.sort(key=lambda row: row[0])
+    print(f"[spec] {len(out)} Covenant signatory(s) not yet written to")
+    return [{"company": c, "note": n, "covenant": True} for _, c, n in out]
+
+
 def known_already(state, existing):
     """Everything that must not be added again, from every register we keep."""
     seen = {jm.company_key(t.get("company")) for t in existing}
@@ -156,7 +246,15 @@ def run(write=False):
         print(f"[targets] cannot read {jm.TARGETS_PATH}")
         return 1
     existing = data.get("targets", [])
-    found = candidates(state, existing)
+    # Covenant signatories FIRST. Every other target is a firm that might read
+    # the letter; a signatory has published a commitment to people exactly
+    # like him, and where a scheme exists he meets it by having served.
+    #
+    # Composed here rather than inside candidates(), which stays a pure
+    # function of the state file - it is the thing worth unit-testing, and
+    # having it read the register off disk made it untestable and broke two
+    # tests that were right to complain.
+    found = covenant_candidates(state, existing) + candidates(state, existing)
 
     print(f"[targets] {len(existing)} curated, {len(found)} new employer(s) "
           f"with evidence they hire this trade")
