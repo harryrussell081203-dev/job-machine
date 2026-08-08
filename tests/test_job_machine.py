@@ -1993,3 +1993,81 @@ class TestSendingWhenTheModelIsUnavailable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestGuessingADomainClearbitNeverHeardOf(unittest.TestCase):
+    """82 of the 114 jobs the letter route could not write to failed at 'no
+    domain found' - the largest single blockage in the system, on the one
+    channel that has ever produced a reply. Clearbit knows the big names and
+    has never heard of Ernest Gordon Recruitment of Bristol.
+
+    Small UK firms are consistent: the domain is the trading name with the
+    spaces taken out, on .co.uk or .com."""
+
+    def test_it_builds_the_domains_a_firm_would_actually_own(self):
+        got = jm.domain_candidates("Ernest Gordon Recruitment Limited")
+        self.assertIn("ernestgordonrecruitment.co.uk", got)
+        self.assertIn("ernestgordon.co.uk", got)
+
+    def test_the_legal_tail_is_dropped_but_the_trade_word_is_not(self):
+        """'Limited' is never in a domain. 'Recruitment' constantly is."""
+        got = " ".join(jm.domain_candidates("Rise Technical Recruitment Limited"))
+        self.assertNotIn("limited", got)
+        self.assertIn("risetechnicalrecruitment.co.uk", got)
+
+    def test_an_ampersand_does_not_produce_a_nonsense_stem(self):
+        """'Dron & Dickson' must not offer up 'dronand.co.uk', which is
+        nobody."""
+        got = jm.domain_candidates("Dron & Dickson")
+        self.assertIn("dronanddickson.co.uk", got)
+        self.assertNotIn("dronand.co.uk", got)
+
+    def test_it_is_bounded_so_one_company_cannot_eat_a_run(self):
+        many = jm.domain_candidates("A Very Long Company Name Indeed Limited")
+        self.assertLessEqual(len(many), jm.DOMAIN_GUESS_CAP)
+
+    def test_a_domain_that_takes_mail_but_is_someone_else_is_refused(self):
+        """The guard that makes guessing safe. Without it a guess is a
+        coin-toss, and the failure is not an empty inbox - it is Harry's
+        application landing at a stranger's firm."""
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "site_confirms_company", return_value=False):
+            self.assertIsNone(jm.guess_domain("Ernest Gordon Recruitment"))
+
+    def test_a_domain_that_passes_both_gates_is_used(self):
+        with mock.patch.object(jm, "has_mx", side_effect=lambda d: d.endswith(".co.uk")), \
+             mock.patch.object(jm, "site_confirms_company", return_value=True):
+            self.assertEqual(jm.guess_domain("Speedy Hire"), "speedyhire.co.uk")
+
+    def test_a_domain_with_no_mail_is_never_used(self):
+        with mock.patch.object(jm, "has_mx", return_value=False), \
+             mock.patch.object(jm, "site_confirms_company", return_value=True):
+            self.assertIsNone(jm.guess_domain("Speedy Hire"))
+
+    def test_a_one_word_name_is_refused_outright(self):
+        """'Sanctuary' matched Sanctuary Clothing in California, and an
+        application about Harry's naval service was one run from a stranger's
+        inbox. A single word on a front page is not identification."""
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "site_confirms_company", return_value=True):
+            self.assertIsNone(jm.guess_domain("Sanctuary"))
+            self.assertIsNone(jm.guess_domain("Cammach Ltd"))
+
+    def test_the_site_check_needs_every_word_of_the_name(self):
+        page = mock.Mock(status_code=200,
+                         text="<h1>Ernest Gordon Recruitment</h1> Bristol")
+        with mock.patch.object(jm.requests, "get", return_value=page):
+            self.assertTrue(jm.site_confirms_company(
+                "ernestgordon.co.uk", "Ernest Gordon Recruitment Ltd"))
+        other = mock.Mock(status_code=200, text="<h1>Gordon's Gin</h1>")
+        with mock.patch.object(jm.requests, "get", return_value=other):
+            self.assertFalse(jm.site_confirms_company(
+                "gordon.co.uk", "Ernest Gordon Recruitment Ltd"))
+
+    def test_a_dead_site_is_not_a_confirmation(self):
+        with mock.patch.object(jm.requests, "get",
+                               side_effect=OSError("refused")):
+            self.assertFalse(jm.site_confirms_company("x.co.uk", "A B"))
+        with mock.patch.object(jm.requests, "get",
+                               return_value=mock.Mock(status_code=404, text="")):
+            self.assertFalse(jm.site_confirms_company("x.co.uk", "A B"))
