@@ -2126,6 +2126,65 @@ def reopen_fallbacks(state, dry_run=True):
     return len(reopened)
 
 
+def positively_abroad(job):
+    """Is there EVIDENCE this job is in another country?
+
+    Not the same question as in_reach(), and the difference matters. in_reach
+    asks 'is this one of the places we recognise', which is right for an
+    employer's worldwide board where a miss means we simply do not know. Used
+    to prune records it is catastrophic: the first version of this deleted 669
+    jobs, among them Colliston, Arbroath and Coupar Angus, Blairgowrie -
+    Scottish towns whose only crime was not being on a list of fifteen names.
+
+    Absence of evidence is not evidence of absence. This asks for the
+    evidence."""
+    location = (job.get("location") or "")
+    if LOCATION_ABROAD.search(location):
+        return True
+    advert = f"{job.get('title') or ''}\n{(job.get('description') or '')[:4000]}"
+    if DEFINITELY_OVERSEAS.search(advert):
+        return True
+    return bool(any(p in location.lower() for p in AMBIGUOUS_PLACE)
+                and A_COUNTRY_ELSEWHERE.search(advert))
+
+
+def prune_overseas(state, dry_run=True):
+    """Take jobs that are not in this country back out of the file.
+
+    The location check runs at harvest, so fixing it only helps what comes
+    next. Five Australian applications were already filled in and sitting on
+    Harry's morning list when it was fixed, and he was about to spend an hour
+    on them - so the existing file gets the same test applied to it.
+
+    Anything already SENT is left exactly as it is. A letter that has gone has
+    gone, and rewriting the record of it would not un-send it."""
+    pruned = []
+    for job in state["jobs"].values():
+        if job.get("status") in ("sent", "replied", "spec_sent", "test_sent",
+                                 "portal_submitted"):
+            continue
+        if not positively_abroad(job):
+            continue
+        pruned.append(job)
+        if dry_run:
+            continue
+        job.update({
+            "status": "skipped",
+            "skip_reason": "not in this country - the advert says so even "
+                           "though the location field looked local",
+            "pruned_overseas_at": jm.now(),
+        })
+        # It must also come off the CAPTCHA list, which is the whole point.
+        job.pop("captcha_answers", None)
+        job.pop("captcha_flags", None)
+    print(f"[portal] {len(pruned)} job(s) out of the country"
+          f"{' would be' if dry_run else ''} removed")
+    for job in pruned[:12]:
+        print(f"    {(job.get('location') or '?'):12} {(job.get('company') or '')[:18]:20} "
+              f"{(job.get('title') or '')[:44]}")
+    return len(pruned)
+
+
 def portal_sends_today(state):
     return state.setdefault("portal_counts", {}).get(jm.today(), 0)
 
@@ -2360,15 +2419,77 @@ def diagnose(state, limit=12, headless=True):
             print(f"  -> {r['company']}: {r['url']}")
 
 
-def in_reach(location):
+# Place names on the list below that are NOT only in Scotland. Perth is the
+# one that cost real time: DOF's board lists twenty roles at 'Perth', and it
+# is Perth, Western Australia. Five of them reached Harry's list, filled in,
+# ready for him to spend a morning on - one titled 'ROV Pilot Technician |
+# APAC' outright. 'Aberdeen' is also a district of Hong Kong, 'Hamilton' is in
+# Ontario and New Zealand, and 'Highland' is in California.
+# Kept to the one the evidence actually shows, and deliberately not widened.
+# 'Aberdeen' is also a district of Hong Kong - and it is also Harry's home
+# city and the single commonest location in the file, so treating it as
+# ambiguous threw out real Aberdeen jobs the moment a global employer's advert
+# happened to mention an overseas office. A false positive here costs a job.
+AMBIGUOUS_PLACE = ("perth",)
+
+# Markers that appear in a job advert only when the job is really THERE. Any
+# one of these settles it, whatever the location field claims:
+#   AMSA   Australian Maritime Safety Authority
+#   MSIC   Maritime Security Identification Card - Australian
+#   APAC / ANZ   the region the role belongs to, often right in the title
+# and the rest are things no British advert says.
+DEFINITELY_OVERSEAS = re.compile(
+    r"\bAPAC\b|\bANZ\b|\bAMSA\b|\bMSIC\b|western australia|"
+    r"superannuation|state/territory|fair work (act|commission)|"
+    r"medicare levy|\bNSW\b|\bQLD\b|\bWA\b(?= *,| based)|"
+    r"green card|\bH-?1B\b|401\(k\)|emiratisation|\bEEA\b national visa",
+    re.I)
+
+# Weaker: a country named in the advert. On its own this proves nothing - a
+# Aberdeen firm may well mention its Houston office - but on an AMBIGUOUS
+# place name it tips the balance, because a Scottish advert has no reason to
+# name Australia at all.
+A_COUNTRY_ELSEWHERE = re.compile(
+    r"\baustralia\b|\bnew zealand\b|\bsingapore\b|\bunited states\b|"
+    r"\bcanada\b|\bnorway\b|\bnetherlands\b|\bqatar\b|\bUAE\b|"
+    r"\bhouston\b|\bdubai\b|\bperth, (wa|western)", re.I)
+
+# A country named in the LOCATION field itself settles it on its own.
+LOCATION_ABROAD = re.compile(
+    r"australia|new zealand|singapore|united states|\bUSA\b|canada|norway|"
+    r"netherlands|qatar|\bUAE\b|dubai|texas|houston|malaysia|brazil|angola",
+    re.I)
+
+
+def in_reach(location, job=None):
     """Is this posting somewhere Harry could actually take the job?
 
     Employers' boards are worldwide. Without this, a Greenhouse board would
-    happily offer him a technician role in Houston."""
+    happily offer him a technician role in Houston.
+
+    Matching the place name alone is not enough, and that is not a
+    hypothetical: 'perth' is on the list below because of Perth, Perthshire,
+    and DOF used it to put five Australian applications in front of him -
+    filled in, on his morning list, one of them titled '| APAC'. So when the
+    advert itself says where the job is, the advert wins over the field."""
     low = (location or "").lower()
     if not low:
         return False
-    return any(place.lower() in low for place in jm.SEARCH_LOCATIONS + NEARBY)
+    if LOCATION_ABROAD.search(low):
+        return False
+    if not any(place.lower() in low for place in jm.SEARCH_LOCATIONS + NEARBY):
+        return False
+    if job is None:
+        return True
+    advert = f"{job.get('title') or ''}\n{(job.get('description') or '')[:4000]}"
+    if DEFINITELY_OVERSEAS.search(advert):
+        return False
+    # An ambiguous place name plus a country named in the advert. A Scottish
+    # advert has no reason to mention Australia; a Perth, WA one does.
+    if any(place in low for place in AMBIGUOUS_PLACE) \
+            and A_COUNTRY_ELSEWHERE.search(advert):
+        return False
+    return True
 
 
 NEARBY = ["scotland", "aberdeenshire", "grampian", "highland", "fife",
@@ -2485,7 +2606,7 @@ def harvest_boards(state):
             }
             if job["external_id"] in state["jobs"]:
                 continue
-            if not in_reach(posting["location"]):
+            if not in_reach(posting["location"], job):
                 continue
             if jm.title_excluded(job["title"]) or not jm.worth_scoring(job):
                 continue
@@ -2566,6 +2687,9 @@ def harvest_month(state):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Fill in real application portals")
+    parser.add_argument("--prune-overseas", action="store_true",
+                        help="remove jobs the advert says are not in this "
+                             "country, including ones already filled in")
     parser.add_argument("--reopen-fallbacks", action="store_true",
                         help="put back in the queue the jobs the old bugs "
                              "parked on the email route")
@@ -2586,6 +2710,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     state = jm.load()
+    if args.prune_overseas:
+        # Never a dry run when asked for by name: the point is to get them off
+        # his list before he spends a morning on them.
+        prune_overseas(state, dry_run=False)
+        jm.save(state)
+        if not (args.run or args.submit):
+            return 0
+
     if args.reopen_fallbacks:
         reopen_fallbacks(state, dry_run=not (args.run or args.submit))
         jm.save(state)
