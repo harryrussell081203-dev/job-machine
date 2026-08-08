@@ -50072,11 +50072,12 @@
    "found_at": "2026-08-08T20:38:37.994918+00:00",
    "location": "Edinburgh, Scotland",
    "posted_at": "2026-08-08T18:32:51+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.367793+00:00",
    "salary_max": 64931,
    "salary_min": 64931,
    "score": null,
    "search_location": "Edinburgh",
-   "skip_reason": "off target (pre-filter)",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "adzuna",
    "status": "skipped",
    "title": "Senior Product Manager I - International Accounting",
@@ -53735,7 +53736,7 @@
    "found_at": "2026-08-02T19:54:48.074055+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.661776+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.381555+00:00",
    "rescored_at": "2026-08-04T14:37:20.981965+00:00",
    "score": 45,
    "score_reason": "This role is for a Nitrogen Technician, which is outside the candidate's direct experience, though it is an offshore/O&G role.",
@@ -53996,7 +53997,7 @@
    "found_at": "2026-08-02T19:54:56.572926+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.664446+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.384203+00:00",
    "score": 45,
    "score_reason": "This is an Expression of Interest for cadetships/traineeships, which is too junior and not an active job opening, also located outside Aberdeen.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54116,7 +54117,7 @@
    "found_at": "2026-08-02T19:54:56.574107+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.668172+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.387891+00:00",
    "score": 35,
    "score_reason": "This Senior Surveyor role is located in Perth, Australia, and requires a degree/diploma in surveying, which he does not fully meet.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54190,7 +54191,7 @@
    "found_at": "2026-08-04T12:03:05.286667+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.672187+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.391770+00:00",
    "rescored_at": "2026-08-04T14:37:20.981973+00:00",
    "score": 50,
    "score_reason": "This is an expression of interest for students and graduates, which aligns with his paused BEng, but is not a direct job application.",
@@ -54209,7 +54210,7 @@
    "found_at": "2026-08-02T19:54:56.572765+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.673547+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.393090+00:00",
    "score": 15,
    "score_reason": "This Steward role is hospitality/housekeeping, which is on his exclude list and located in Perth, Australia.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54227,7 +54228,7 @@
    "found_at": "2026-08-02T19:54:56.572059+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.673889+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.393420+00:00",
    "score": 15,
    "score_reason": "This Marine Deck Officer role is for experienced officers, not his field, and located in Perth, Australia.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54340,7 +54341,7 @@
    "found_at": "2026-08-02T19:54:56.572639+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.677378+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.396839+00:00",
    "score": 40,
    "score_reason": "While subsea is relevant, this ROV Supervisor role is in Perth (Australia) and requires specific ROV supervisory experience he lacks.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54409,7 +54410,7 @@
    "found_at": "2026-08-02T19:54:56.573915+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.681094+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.400416+00:00",
    "score": 25,
    "score_reason": "This Project Surveyor role is in Perth (Australia) and requires specific surveying experience he does not possess.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54673,7 +54674,7 @@
    "found_at": "2026-08-02T19:54:56.572265+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.682340+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.401611+00:00",
    "rescored_at": "2026-08-04T14:37:20.981980+00:00",
    "score": 65,
    "score_reason": "While the candidate has an engineering background, this role requires an engineer watchkeeper certificate, which he does not explicitly state having.",
@@ -54714,11 +54715,12 @@
    "portal_reason": "bot check before the form loaded",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-8102ddf9dce7-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.402713+00:00",
    "score": 75,
    "score_reason": "The candidate's Royal Navy experience in secure comms, network engineering, and safety-critical equipment aligns well with the ETO role, but the location is not Aberdeen.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "no_email",
+   "status": "skipped",
    "title": "Electro-Technical Officers (ETO-III/6)",
    "url": "https://apply.workable.com/j/4B10A17E32/apply"
   },
@@ -54731,7 +54733,7 @@
    "found_at": "2026-08-02T19:54:56.571986+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.684886+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.404052+00:00",
    "score": 10,
    "score_reason": "This is a Marine Cook role, which is completely unrelated to the candidate's experience and target roles.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54749,7 +54751,7 @@
    "found_at": "2026-08-02T19:54:48.074138+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.684901+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.404065+00:00",
    "score": 20,
    "score_reason": "This is a Procurement Manager role, which is outside the candidate's target and experience, and located in Perth.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -54974,109 +54976,7 @@
   "board-workable-99ae00db9404": {
    "apply_url": "https://apply.workable.com/j/9D65132BAB/apply",
    "ats": "workable",
-   "captcha_answers": [
-    {
-     "label": "* First name",
-     "name": "firstname",
-     "source": "bank:first_name",
-     "type": "text",
-     "value": "Harry"
-    },
-    {
-     "label": "* Last name",
-     "name": "lastname",
-     "source": "bank:last_name",
-     "type": "text",
-     "value": "Russell"
-    },
-    {
-     "label": "* Email",
-     "name": "email",
-     "source": "bank:email",
-     "type": "email",
-     "value": "harryrussell081203@gmail.com"
-    },
-    {
-     "label": "* Phone +1",
-     "name": "phone",
-     "source": "bank:phone",
-     "type": "tel",
-     "value": "07398 530978"
-    },
-    {
-     "label": "* Address",
-     "name": "address",
-     "source": "bank:address_line_1",
-     "type": "text",
-     "value": "31 Cadenhead Road"
-    },
-    {
-     "label": "city",
-     "name": "city",
-     "source": "bank:city",
-     "type": "text",
-     "value": "Aberdeen"
-    },
-    {
-     "label": "postcode",
-     "name": "postcode",
-     "source": "bank:postcode",
-     "type": "text",
-     "value": "AB25 3AJ"
-    },
-    {
-     "label": "country",
-     "name": "country",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Place of Permanent Residence",
-     "name": "CA_616",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Current Role Title",
-     "name": "CA_619",
-     "source": "bank:current_job_title",
-     "type": "text",
-     "value": "Workshop Technician"
-    },
-    {
-     "label": "Industry Experience (Years) (Optional)",
-     "name": "CA_629",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "* Role Experience (Years)",
-     "name": "CA_630",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "Available Start Date (Optional)",
-     "name": "CA_625",
-     "source": "bank:earliest_start_date",
-     "type": "text",
-     "value": "Immediately"
-    }
-   ],
    "captcha_banked_at": "2026-08-06T10:17:30.296561+00:00",
-   "captcha_flags": [
-    "unrecognised required field '* Do you have rights to work in Australia?'",
-    "'0-1 years' is a box to tick and 'years_experience' is not a yes or a no - only Harry can say",
-    "'1-2 years' is a box to tick and 'years_experience' is not a yes or a no - only Harry can say",
-    "'2-3 years' is a box to tick and 'years_experience' is not a yes or a no - only Harry can say",
-    "'3 years +' is a box to tick and 'years_experience' is not a yes or a no - only Harry can say",
-    "unrecognised required field '* Do you have a a valid OGUK medical?'",
-    "unrecognised required field '* Do you have a valid BOSIET-CAEBS?'"
-   ],
    "company": "DOF",
    "description": "Join our team as a ROV Pilot Technician We are looking for experienced ROV Pilot Technicians to join our Expression of Interest Talent Pool to be considered for future vacancies with DOF. As an ROV Pilot Technician in DOF you will have the chance to gain knowledge and collaborate with our experienced and passionate ROV team. We are looking for ROV Pilot Technicians with experience working across the following: Subsea Offshore environment operating ROV Systems preferably with XLX or UHD exposure If you are a team player who would like to work closely with people from different parts of the world, we would encourage you to apply. Requirements Ability to demonstrate 1-2 years offshore experience as a ROV Pilot Technician Relevant qualifications in Electrical, Electronic, Hydraulics or Mechanics. IMCA PT1 or PT2 Level OGUK Medical & BOSIET CAEBS MSIC Excellent communication, interpersonal and collaboration skills. Highly service minded, enthusiastic and solution oriented. Aligned with our values: Respect, Integrity, Teamwork, Excellence \u2013 and above all, Safety Adaptable and resilient approach to work remotely and manage offshore vessel demands. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Location: Various vessel locations across the APAC region Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Worldwide Fleet: Be a part of our global operations and gain exposure to a diverse range of projects and locations. Career Growth: We encourage internal mobility and provide opportunities to grow within the company, whether it's moving upwards or exploring new roles sideways. Companies are their people: Respect, Integrity, Teamwork, Excellence and above all we are SAFE - Our values interact with each other, shape our remarkable team and are embedded in our policies, our code of business conduct and guide our strong safe and ethical culture Competitive remuneration and benefits: We offer a competitive wages, training and professional development & Employee Assistance Programs (EAP) Supportive and diverse team environment: DOF\u2019s Engineering department has a supportive, diverse and collaborative local and international team. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Only shortlisted applicants with full Australian working rights will be contacted to discuss their application. DOF is an employer who embraces Equal Employment Opportunity and promotes diversity in our workforce. We encourage people of all ages and backgrounds, including Australian Aboriginal and/or Torres Strait Islander to apply.",
    "external_id": "board-workable-99ae00db9404",
@@ -55171,133 +55071,19 @@
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-99ae00db9404-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.406146+00:00",
    "score": 70,
    "score_reason": "The candidate's experience with subsea acoustic systems and fault diagnosis aligns well with an ROV Pilot Technician role, but the location is Perth.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "skipped",
    "title": "Expression of Interest - ROV Pilot Technician | APAC",
    "url": "https://apply.workable.com/j/9D65132BAB/apply"
   },
   "board-workable-9ebfc4f01b49": {
    "apply_url": "https://apply.workable.com/j/A1AEE9B89B/apply",
    "ats": "workable",
-   "captcha_answers": [
-    {
-     "label": "* First name",
-     "name": "firstname",
-     "source": "bank:first_name",
-     "type": "text",
-     "value": "Harry"
-    },
-    {
-     "label": "* Last name",
-     "name": "lastname",
-     "source": "bank:last_name",
-     "type": "text",
-     "value": "Russell"
-    },
-    {
-     "label": "* Email",
-     "name": "email",
-     "source": "bank:email",
-     "type": "email",
-     "value": "harryrussell081203@gmail.com"
-    },
-    {
-     "label": "* Phone +1",
-     "name": "phone",
-     "source": "bank:phone",
-     "type": "tel",
-     "value": "07398 530978"
-    },
-    {
-     "label": "* Address",
-     "name": "address",
-     "source": "bank:address_line_1",
-     "type": "text",
-     "value": "31 Cadenhead Road"
-    },
-    {
-     "label": "city",
-     "name": "city",
-     "source": "bank:city",
-     "type": "text",
-     "value": "Aberdeen"
-    },
-    {
-     "label": "postcode",
-     "name": "postcode",
-     "source": "bank:postcode",
-     "type": "text",
-     "value": "AB25 3AJ"
-    },
-    {
-     "label": "country",
-     "name": "country",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Place of Permanent Residence",
-     "name": "CA_616",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Expected Salary Range",
-     "name": "CA_621",
-     "source": "bank:salary_expectation",
-     "type": "text",
-     "value": "35000"
-    },
-    {
-     "label": "* Current Notice Period",
-     "name": "CA_622",
-     "source": "bank:notice_period",
-     "type": "text",
-     "value": "None, available immediately"
-    },
-    {
-     "label": "* Industry Experience (Years)",
-     "name": "CA_629",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "* Available Start Date",
-     "name": "CA_625",
-     "source": "bank:earliest_start_date",
-     "type": "text",
-     "value": "Immediately"
-    },
-    {
-     "label": "Cover letter (Optional)",
-     "name": "cover_letter",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
-    },
-    {
-     "label": "* If you are not a Australian resident, do you have full working rights in Australia and which visa were you granted?",
-     "name": "QA_11151027",
-     "source": "bank:needs_sponsorship",
-     "type": "text",
-     "value": "No"
-    }
-   ],
    "captcha_banked_at": "2026-08-06T10:17:47.441199+00:00",
-   "captcha_flags": [
-    "unrecognised required field '* Are you and Australian Permanent Resident or Citizen?'",
-    "answer bank has no 'willing_to_relocate' and 'I am interested in relocating to Perth, Australia' is required",
-    "answer bank has no 'offshore_willing' and '* How many years of offshore data\u2011processing experience do you have?' is required",
-    "could not answer '* Which survey and geomatics software platforms have you configured and operated, and at what level (beginner/intermediate/advanced)?' from Harry's own information",
-    "answer bank has no 'offshore_willing' and '* Indicate whether you have experience processing offshore survey datasets that includes the following. Comment against each : Multibeam Sidescan sonar Sub-Bottom Profiler Bathymetry Navigation data' is required",
-    "could not answer '* Explain your experience with GIS and charting tools, including the types of geospatial products you have produced.' from Harry's own information"
-   ],
    "company": "DOF",
    "description": "Join our team as a Geomatics Survey Specialist Due to continued growth, we are looking for experienced Geomatics Survey Specialists to join our high-performing team Survey & Inspection team on a permanent basis. Primarily you will be working on: Project planning including hardware/software needs. Configuring and troubleshooting survey hardware and software suites. Maintain functional integrity of NAS drives, dongles, HDDs, Azure storage and VMs, and client-specific applications. Manage vessel-based data acquisition and oversee the end-to-end transfer of data to office, cloud, and archive systems. Process complex offshore datasets, including multibeam, side-scan sonar, sub-bottom profiler, bathymetry, and navigation. Maintain rigorous data integrity and ensure all databases reflect real-time project status. Lead the preparation of final reports and perform technical reviews of peer reports. Continuous improvement of our current systems & exploring emerging technologies In this role, you will be the bridge between complex field data and high-quality project deliverables. This role will involve managing end-to-end geomatics workflows in accordance to industry compliance and collaborating with project teams to maintain our reputation for excellence and HSEQ integrity. If you are a team player who would like to work closely with people from different parts of the world, this role could be for you. Requirements Degree or Diploma in Hydrographic Surveying / Geophysics, Geoscience Or a closely related discipline. Minimum 5+ years in offshore data processing experience with experience on complex offshore survey projects. IMCA Competence for a Geomatic Surveyor. Proficient in configuring and troubleshooting survey hardware and software suites. Proficient in GIS & Data Management - Strong Knowledge of GIS, charting tools, cloud-based workflows, and QA/QC methodologies. Skilled in processing multibeam, side-scan sonar, sub-bottom profiler, and navigation. Highly confident, self-motivated, self-disciplined person with sound management and organisational skills. Must be able to perform and achieve at a high level with minimal supervision. A strong understanding and commitment to HSEQ. Aligned with our values: Respect, Integrity, Teamwork, Excellence \u2013 and above all, Safety. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Location: Perth CBD, Western Australia with flexible hybrid options available. Travel to remote or offshore work sites/vessels required from time to time where needed Based overseas? Relocation packages available Application due date: June 28th 2026 Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here ",
    "external_id": "board-workable-9ebfc4f01b49",
@@ -55401,143 +55187,20 @@
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-9ebfc4f01b49-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.406927+00:00",
    "rescored_at": "2026-08-04T14:37:20.981986+00:00",
    "score": 70,
    "score_reason": "The candidate's experience with subsea acoustic positioning systems and data management from his Navy role makes him a good fit for a Geomatics Survey Specialist.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "skipped",
    "title": "Geomatics Survey Specialist",
    "url": "https://apply.workable.com/j/A1AEE9B89B/apply"
   },
   "board-workable-a4b93825665f": {
    "apply_url": "https://apply.workable.com/j/07C5067183/apply",
    "ats": "workable",
-   "captcha_answers": [
-    {
-     "label": "* First name",
-     "name": "firstname",
-     "source": "bank:first_name",
-     "type": "text",
-     "value": "Harry"
-    },
-    {
-     "label": "* Last name",
-     "name": "lastname",
-     "source": "bank:last_name",
-     "type": "text",
-     "value": "Russell"
-    },
-    {
-     "label": "* Email",
-     "name": "email",
-     "source": "bank:email",
-     "type": "email",
-     "value": "harryrussell081203@gmail.com"
-    },
-    {
-     "label": "* Phone +1",
-     "name": "phone",
-     "source": "bank:phone",
-     "type": "tel",
-     "value": "07398 530978"
-    },
-    {
-     "label": "* Address",
-     "name": "address",
-     "source": "bank:address_line_1",
-     "type": "text",
-     "value": "31 Cadenhead Road"
-    },
-    {
-     "label": "city",
-     "name": "city",
-     "source": "bank:city",
-     "type": "text",
-     "value": "Aberdeen"
-    },
-    {
-     "label": "postcode",
-     "name": "postcode",
-     "source": "bank:postcode",
-     "type": "text",
-     "value": "AB25 3AJ"
-    },
-    {
-     "label": "country",
-     "name": "country",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Place of Permanent Residence",
-     "name": "CA_616",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Current Role Title",
-     "name": "CA_619",
-     "source": "bank:current_job_title",
-     "type": "text",
-     "value": "Workshop Technician"
-    },
-    {
-     "label": "Summary (Optional)",
-     "name": "summary",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Australia. I also do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I am an ex-Royal Navy Communications & Information Specialist and a Workshop Technician with experience in assembly, testing, and fault diagnosis of subsea acoustic positioning systems. I have DV security clearance and an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance)."
-    },
-    {
-     "label": "Current Salary (Optional)",
-     "name": "CA_620",
-     "source": "bank:salary_expectation",
-     "type": "text",
-     "value": "35000"
-    },
-    {
-     "label": "Industry Experience (Years) (Optional)",
-     "name": "CA_629",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "Role Experience (Years) (Optional)",
-     "name": "CA_630",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "Available Start Date (Optional)",
-     "name": "CA_625",
-     "source": "bank:earliest_start_date",
-     "type": "text",
-     "value": "Immediately"
-    },
-    {
-     "label": "Cover letter (Optional)",
-     "name": "cover_letter",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
-    },
-    {
-     "label": "* Do you have valid Australian work rights? (Please detail Australian Visa information if applicable) ?",
-     "name": "QA_11644379",
-     "source": "bank:needs_sponsorship",
-     "type": "radio",
-     "value": "NO"
-    }
-   ],
    "captcha_banked_at": "2026-08-06T10:18:02.744849+00:00",
-   "captcha_flags": [
-    "unrecognised required field '* Do you have a valid BOSIET-CAEBS/FOET?'"
-   ],
    "company": "DOF",
    "description": "Join our team as an ROV Sub Engineer DOF Australia is seeking experienced ROV Sub Engineers to join our offshore team on our vessel within the APAC region. This role will be working within the ROV team with the operation, maintenance & administration of ROV systems, associated tooling, sensors & spars under the guidance of the ROV Supervisor. This is an opportunity to express interest in joining our ROV Offshore projects team and utilising your skills on our world class fleet of vessels. Requirements Ability to demonstrate 2 years offshore experience in ROV operations as a Pilot Tech (Sub Engineer). Relevant qualifications and/or recognised Australian technical trade certification. Documented IMCA base competency logbook is beneficial with an IMCA based certification. Experienced with ROV Work Class systems particularly with XLX\u2019s or equivalent. OGUK Medical, BOSIET CAEBS certifications are required. Hold a current MSIC. Excellent communication, interpersonal and collaboration skills. Highly service minded, enthusiastic and solution oriented. Identify yourself with our core values: Respect - Integrity - Teamwork - Excellence - And above all we are Safe. Adaptable and resilient approach to work remotely and manage offshore vessel demands. Benefits Worldwide Fleet: Be a part of our global operations and gain exposure to a diverse range of projects and locations. Career Growth: We encourage internal mobility and provide opportunities to grow within the company, whether it's moving upwards or exploring new roles sideways. Companies are their people: Respect, Integrity, Teamwork, Excellence and above all we are SAFE - Our values interact with each other, shape our remarkable team and are embedded in our policies, our code of business conduct and guide our strong safe and ethical culture Supportive and diverse team environment: DOF\u2019s ROV department has a supportive, diverse and collaborative local and international team. How to Apply This is an excellent casual opportunity to work Offshore and with a dynamic and friendly team at DOF. Due to the immediate resource requirement for this position, only suitable candidates that meet the position requirements and timelines will be contacted. As this is a casual requirement, you will need to have in place a current legal work rights for Australia will apply.",
    "external_id": "board-workable-a4b93825665f",
@@ -55646,109 +55309,19 @@
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-a4b93825665f-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.406998+00:00",
    "score": 70,
    "score_reason": "The candidate's workshop and subsea systems experience is relevant to an ROV Sub Engineer role, but the location is Perth.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "skipped",
    "title": "Expression of Interest - ROV Sub Engineer",
    "url": "https://apply.workable.com/j/07C5067183/apply"
   },
   "board-workable-a6d8323b4f46": {
    "apply_url": "https://apply.workable.com/j/F73D522261/apply",
    "ats": "workable",
-   "captcha_answers": [
-    {
-     "label": "* First name",
-     "name": "firstname",
-     "source": "bank:first_name",
-     "type": "text",
-     "value": "Harry"
-    },
-    {
-     "label": "* Last name",
-     "name": "lastname",
-     "source": "bank:last_name",
-     "type": "text",
-     "value": "Russell"
-    },
-    {
-     "label": "* Email",
-     "name": "email",
-     "source": "bank:email",
-     "type": "email",
-     "value": "harryrussell081203@gmail.com"
-    },
-    {
-     "label": "* Phone +1",
-     "name": "phone",
-     "source": "bank:phone",
-     "type": "tel",
-     "value": "07398 530978"
-    },
-    {
-     "label": "* Address",
-     "name": "address",
-     "source": "bank:address_line_1",
-     "type": "text",
-     "value": "31 Cadenhead Road"
-    },
-    {
-     "label": "city",
-     "name": "city",
-     "source": "bank:city",
-     "type": "text",
-     "value": "Aberdeen"
-    },
-    {
-     "label": "postcode",
-     "name": "postcode",
-     "source": "bank:postcode",
-     "type": "text",
-     "value": "AB25 3AJ"
-    },
-    {
-     "label": "country",
-     "name": "country",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Place of Permanent Residence",
-     "name": "CA_616",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "Current Role Title (Optional)",
-     "name": "CA_619",
-     "source": "bank:current_job_title",
-     "type": "text",
-     "value": "Workshop Technician"
-    },
-    {
-     "label": "* Expected Salary Range",
-     "name": "CA_621",
-     "source": "bank:salary_expectation",
-     "type": "text",
-     "value": "35000"
-    },
-    {
-     "label": "* Current Notice Period",
-     "name": "CA_622",
-     "source": "bank:notice_period",
-     "type": "text",
-     "value": "None, available immediately"
-    }
-   ],
    "captcha_banked_at": "2026-08-06T09:58:17.104904+00:00",
-   "captcha_flags": [
-    "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
-    "could not answer '* Cover letter' from Harry's own information",
-    "unrecognised required field 'Australian Citizen/Permanent Resident'"
-   ],
    "company": "DOF",
    "description": "Join our team as an ROV Technical Support Lead Due to continued growth, we are looking for an ROV Technical Support Lead to join our high-performing team ROV team on a permanent basis. Primarily you will be working on: Providing onshore & remote technical support to ROV operations & offshore personnel. Support project execution, including vessel mobilisations, yard activities, and audits. Assist with troubleshooting, system configuration, and technical problem resolution related to ROV's. Liaise with offshore teams to ensure operational continuity and minimise downtime. Engage with sub-contractors, suppliers & internal department to support operations. Continuous improvement initiatives & operational efficiency. In this role, you will be the bridge between our ROV operational onshore & offshore team. This role will involve supporting project delivery through your technical expertise from equipment selection through to mobilisation planning to maintain our reputation for excellence and HSEQ integrity. If you are a team player who would like to work closely with people from different parts of the world, this role could be for you. Requirements Trade or Tertiary qualification in Mechanical or Electrical fields. IMCA qualification as ROV Supervisor or equivalent. Proven experience working with ROV Systems, electronics & interfacing. Team leadership experience. Extensive experience in testing, troubleshooting, and technical diagnostics. Highly confident, self-motivated, self-disciplined person with sound management and organisational skills. Must be able to perform and achieve at a high level with minimal supervision. A strong understanding and commitment to HSEQ. Aligned with our values: Respect, Integrity, Teamwork, Excellence \u2013 and above all, Safety. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Location: Perth CBD, Western Australia with flexible hybrid options available. Travel to remote or offshore work sites/vessels required from time to time where needed Application due date: July 10th 2026 Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Worldwide Fleet: Be a part of our global operations and gain exposure to a diverse range of projects and locations. Career Growth: We encourage internal mobility and provide opportunities to grow within the company, whether it's moving upwards or exploring new roles sideways. Companies are their people: Respect, Integrity, Teamwork, Excellence and above all we are SAFE - Our values interact with each other, shape our remarkable team and are embedded in our policies, our code of business conduct and guid",
    "external_id": "board-workable-a6d8323b4f46",
@@ -55834,12 +55407,13 @@
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-a6d8323b4f46-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.407633+00:00",
    "rescored_at": "2026-08-04T14:37:20.981989+00:00",
    "score": 75,
    "score_reason": "The candidate's experience with subsea acoustic systems, fault diagnosis, and technical support aligns well with providing ROV technical support.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "skipped",
    "title": "ROV Technical Support Lead",
    "url": "https://apply.workable.com/j/F73D522261/apply"
   },
@@ -56173,7 +55747,7 @@
    "found_at": "2026-08-02T19:54:56.572846+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.693320+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.412240+00:00",
    "score": 30,
    "score_reason": "This is a general marine rating role, which is not aligned with his technical engineering or specialist comms background.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -56191,7 +55765,7 @@
    "found_at": "2026-08-02T19:54:56.571851+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.693692+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.412611+00:00",
    "score": 35,
    "score_reason": "This is primarily a crane operator role, which does not align with his technical engineering or comms experience.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
@@ -56237,118 +55811,7 @@
   "board-workable-e2c66783d399": {
    "apply_url": "https://apply.workable.com/j/4E38E2580F/apply",
    "ats": "workable",
-   "captcha_answers": [
-    {
-     "label": "* First name",
-     "name": "firstname",
-     "source": "bank:first_name",
-     "type": "text",
-     "value": "Harry"
-    },
-    {
-     "label": "* Last name",
-     "name": "lastname",
-     "source": "bank:last_name",
-     "type": "text",
-     "value": "Russell"
-    },
-    {
-     "label": "* Email",
-     "name": "email",
-     "source": "bank:email",
-     "type": "email",
-     "value": "harryrussell081203@gmail.com"
-    },
-    {
-     "label": "* Phone +1",
-     "name": "phone",
-     "source": "bank:phone",
-     "type": "tel",
-     "value": "07398 530978"
-    },
-    {
-     "label": "* Address",
-     "name": "address",
-     "source": "bank:address_line_1",
-     "type": "text",
-     "value": "31 Cadenhead Road"
-    },
-    {
-     "label": "city",
-     "name": "city",
-     "source": "bank:city",
-     "type": "text",
-     "value": "Aberdeen"
-    },
-    {
-     "label": "postcode",
-     "name": "postcode",
-     "source": "bank:postcode",
-     "type": "text",
-     "value": "AB25 3AJ"
-    },
-    {
-     "label": "country",
-     "name": "country",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "* Place of Permanent Residence",
-     "name": "CA_616",
-     "source": "bank:country",
-     "type": "text",
-     "value": "United Kingdom"
-    },
-    {
-     "label": "Current Role Title (Optional)",
-     "name": "CA_619",
-     "source": "bank:current_job_title",
-     "type": "text",
-     "value": "Workshop Technician"
-    },
-    {
-     "label": "* Current Salary",
-     "name": "CA_620",
-     "source": "bank:salary_expectation",
-     "type": "text",
-     "value": "35000"
-    },
-    {
-     "label": "Industry Experience (Years) (Optional)",
-     "name": "CA_629",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "Role Experience (Years) (Optional)",
-     "name": "CA_630",
-     "source": "bank:years_experience",
-     "type": "text",
-     "value": "5"
-    },
-    {
-     "label": "Available Start Date (Optional)",
-     "name": "CA_625",
-     "source": "bank:earliest_start_date",
-     "type": "text",
-     "value": "Immediately"
-    },
-    {
-     "label": "Cover letter (Optional)",
-     "name": "cover_letter",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
-    }
-   ],
    "captcha_banked_at": "2026-08-06T10:17:20.965835+00:00",
-   "captcha_flags": [
-    "'* Do you have Diving, ROV or Rigging Supervisor qualification relevant and/or Engineering, Technical or Trade Background relevant' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
-    "unrecognised required field '* Do you have Australian work rights?'"
-   ],
    "company": "DOF",
    "description": "As part of our commitment to excellence, we are opening expressions of interest (EOI) for Shift/Bridge Supervisors who are passionate about working in a challenging and rewarding environment. This position is a central focal point for all subsea intervention projects (Both onshore & offshore) operations conducted from the vessel during shift periods. As Shift Supervisor you will act as a Role Model for the teams, promote the DOF Subsea values and brand. You will maintain a close operational communication with the Offshore & Diving Manager, ROV Supervisor, Marine Crew, as well as onboard Client Representatives, approved sub-contractors and suppliers DOF is renowned for its innovative solutions and dedication to sustainable practices in the energy sector. Our team members play an integral role in maintaining the high standards that our clients expect and deserve. By joining DOF, you'll be part of a forward-thinking organization that values collaboration, integrity, and continuous improvement. We welcome applications from Supervisors who are ready to tackle diverse challenges and help us drive our mission forward. If you believe you possess the skills and expertise required to excel in a fast-paced environment, we encourage you to express your interest in this position, as we are continuously looking to expand our workforce with top-notch talent that can contribute to our ongoing success. Requirements Diving, ROV or Rigging Supervisor qualification relevant and/or Engineering, Technical or Trade Background relevant 5-10 years of relevant subsea operational experience Comprehensive knowledge of offshore construction & maintenance techniques/procedures including Air Diving, Saturation Diving, ROV operation procedures, on offshore barges & vessels Good written & oral communication skills IT/Computer literate Strong understanding of safety regulations and compliance standards. Good problem solving & decision-making ability Aligned with our values: Respect, Integrity, Teamwork, Excellence \u2013 and above all, Safety Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Worldwide Fleet: Be a part of our global operations and gain exposure to a diverse range of projects and locations. Career Growth: We encourage internal mobility and provide opportunities to grow within the company, whether it's moving upwards or exploring new roles sideways. Companies are their people: Respect, Integrity, Teamwork, Excellence and above all we are SAFE - Our values interact with each other, shape our remarkable team and are embedded in our policies, our code of business conduct and guide our strong safe and ethical culture Supportive and diverse team environment: DOF\u2019s Diving department has a supportive, diverse and collaborative local and international team. How to Apply This is an excellent casual opportunity to work Offshore and with a dynamic and friendly team at DOF. Due to the immediate resource requirement for this position, only suitable candidates that m",
    "external_id": "board-workable-e2c66783d399",
@@ -56448,12 +55911,13 @@
    "portal_reason": "form filled, blocked by a bot check - needs you",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-e2c66783d399-captcha.png",
    "posted_at": null,
+   "pruned_overseas_at": "2026-08-08T21:14:04.415504+00:00",
    "rescored_at": "2026-08-04T14:37:20.981992+00:00",
    "score": 75,
    "score_reason": "This role aligns well with his subsea experience and offshore work preference, despite being a supervisory role which he might grow into.",
-   "skip_reason": "no domain found",
+   "skip_reason": "not in this country - the advert says so even though the location field looked local",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "skipped",
    "title": "Expression of Interest - Shift/Bridge Supervisor",
    "url": "https://apply.workable.com/j/4E38E2580F/apply"
   },
@@ -56483,7 +55947,7 @@
    "found_at": "2026-08-02T19:54:56.570872+00:00",
    "location": "Perth",
    "posted_at": null,
-   "pruned_overseas_at": "2026-08-08T20:41:56.698637+00:00",
+   "pruned_overseas_at": "2026-08-08T21:14:04.417416+00:00",
    "score": 10,
    "score_reason": "This is an accounting role, which is completely unrelated to his experience and target.",
    "skip_reason": "not in this country - the advert says so even though the location field looked local",
