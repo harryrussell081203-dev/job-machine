@@ -3,16 +3,16 @@
     "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
     "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
   ],
-  "updated_at": "2026-08-06T10:18:08.285110+00:00",
+  "updated_at": "2026-08-08T21:02:20.284913+00:00",
   "emails": {
-    "sent": 28,
-    "human_replies": 2
+    "sent": 38,
+    "human_replies": 3
   },
   "verdicts": [],
   "not_yet": [
     {
       "dimension": "template",
-      "why": "1 of 5 option(s) have 8+ sends",
+      "why": "the intervals still overlap - no real difference yet",
       "sends_needed": 8
     },
     {
@@ -27,7 +27,7 @@
     },
     {
       "dimension": "hour",
-      "why": "0 of 10 option(s) have 8+ sends",
+      "why": "1 of 12 option(s) have 8+ sends",
       "sends_needed": 8
     },
     {
@@ -59,6 +59,31 @@
       "first_seen_at": "Speedy Services"
     },
     {
+      "question": "'ctl02$ctl00$ctl00$mainContentArea$mainContentArea$mainContentArea$CandidateAdvertApplicat",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Please review our Candidate Privacy Agreement and confirm your acceptance.: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like email alerts about relevant jobs?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like to keep up-to-date with what's happening in your industry?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like to receive SMS alerts?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
       "question": "unrecognised required field 'Organisation'",
       "times": 1,
       "first_seen_at": "Staffline"
@@ -67,6 +92,21 @@
       "question": "unrecognised required field '* Do you have a car that you can use for work purposes?'",
       "times": 1,
       "first_seen_at": "T-Tech"
+    },
+    {
+      "question": "unrecognised required field 'Full Name *'",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
+    },
+    {
+      "question": "could not answer 'Bio *' from Harry's own information",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
+    },
+    {
+      "question": "answer bank has no 'website' and 'By using this form you agree with the storage and handli",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
     },
     {
       "question": "unrecognised required field '* Do you have a permanent residency in the UK?'",
@@ -95,46 +135,6 @@
     },
     {
       "question": "unrecognised required field 'I am an Australian Citizen/Permanent Resident'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "could not answer '* Please confirm your preferred Australian Domestic Airport.' from Harry",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'YES'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "answer bank has no 'offshore_willing' and '* How many years of experience do you have as a",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'Certificate of Safety Training'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'BOSIET CA-EBS'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'MSIC'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'HV/LV - FSE Ship'",
-      "times": 1,
-      "first_seen_at": "DOF"
-    },
-    {
-      "question": "unrecognised required field 'AMSA Medical'",
       "times": 1,
       "first_seen_at": "DOF"
     }
