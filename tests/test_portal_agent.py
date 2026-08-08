@@ -2461,3 +2461,122 @@ class TestATickIsAClaimNotAValue(unittest.TestCase):
         answers = pa.load_answers()
         self.assertEqual(answers["driving_licence"], "No")
         self.assertEqual(answers["own_car"], "No")
+
+
+class TestItKnowsWhichCountryTheJobIsIn(unittest.TestCase):
+    """DOF's board lists twenty roles at 'Perth'. It is Perth, WESTERN
+    AUSTRALIA. Five of them reached Harry's morning list filled in and ready
+    to work through - one titled 'ROV Pilot Technician | APAC' outright - and
+    'perth' is on the nearby-places list because of Perth, Perthshire."""
+
+    def job(self, location, title="Technician", description=""):
+        return {"location": location, "title": title,
+                "description": description, "company": "DOF"}
+
+    # ---- the ones that must be caught -------------------------------
+    def test_the_region_in_the_title_settles_it(self):
+        job = self.job("Perth", "Expression of Interest - ROV Pilot | APAC")
+        self.assertFalse(pa.in_reach("Perth", job))
+        self.assertTrue(pa.positively_abroad(job))
+
+    def test_a_ticket_only_that_country_issues_settles_it(self):
+        for marker in ("You will hold a current AMSA medical.",
+                       "An MSIC is required for this role.",
+                       "Based in our Western Australia operations.",
+                       "Salary plus superannuation."):
+            with self.subTest(marker=marker):
+                self.assertTrue(
+                    pa.positively_abroad(self.job("Perth", "Surveyor", marker)))
+
+    def test_the_country_in_the_location_settles_it_on_its_own(self):
+        for where in ("Perth, Australia", "Houston, Texas", "Stavanger, Norway",
+                      "Dubai, UAE", "Singapore"):
+            with self.subTest(where=where):
+                self.assertFalse(pa.in_reach(where))
+                self.assertTrue(pa.positively_abroad(self.job(where)))
+
+    def test_an_ambiguous_place_plus_a_country_named_in_the_advert(self):
+        """A Scottish advert has no reason to mention Australia at all."""
+        job = self.job("Perth", "Geomatics Survey Specialist",
+                       "Our Australia fleet operates across the region.")
+        self.assertTrue(pa.positively_abroad(job))
+
+    # ---- and the ones that must NOT be -------------------------------
+    def test_perth_scotland_with_no_overseas_signal_is_fine(self):
+        job = self.job("Perth", "Instrumentation Technician",
+                       "Working across our Perth and Dundee sites.")
+        self.assertTrue(pa.in_reach("Perth", job))
+        self.assertFalse(pa.positively_abroad(job))
+
+    def test_aberdeen_is_never_treated_as_ambiguous(self):
+        """It is his home city and the commonest location in the file. A
+        global employer mentioning an overseas office must not cost him a job
+        on his own doorstep."""
+        job = self.job("Aberdeen", "ROV Supervisor",
+                       "DOF operates in Norway, Australia and the UK.")
+        self.assertFalse(pa.positively_abroad(job))
+        self.assertTrue(pa.in_reach("Aberdeen", job))
+
+    def test_a_scottish_town_nobody_listed_is_not_abroad(self):
+        """The first version of the prune deleted 669 jobs, among them
+        Colliston, Arbroath and Coupar Angus, Blairgowrie - Scottish towns
+        whose only crime was not being on a list of fifteen names. Absence of
+        evidence is not evidence of absence."""
+        for where in ("Colliston, Arbroath", "Coupar Angus, Blairgowrie",
+                      "Grange, St. Andrews", "Poyntzfield, Dingwall"):
+            with self.subTest(where=where):
+                self.assertFalse(pa.positively_abroad(self.job(where)))
+
+    def test_the_two_questions_are_not_the_same_question(self):
+        """in_reach asks 'do we recognise this place', which is right for a
+        worldwide board where a miss means we do not know. positively_abroad
+        asks for evidence, which is the only safe basis for deleting."""
+        unknown = self.job("Colliston, Arbroath")
+        self.assertFalse(pa.in_reach("Colliston, Arbroath", unknown))
+        self.assertFalse(pa.positively_abroad(unknown))
+
+
+class TestTakingThemBackOffHisList(unittest.TestCase):
+    """Fixing the check only helps what comes next. Five Australian
+    applications were already filled in and on his morning list."""
+
+    def state(self):
+        return {"jobs": {
+            "au": {"external_id": "au", "company": "DOF", "location": "Perth",
+                   "title": "ROV Pilot | APAC", "description": "MSIC required.",
+                   "status": "portal_awaiting_captcha",
+                   "captcha_answers": [{"label": "Name", "value": "Harry"}]},
+            "uk": {"external_id": "uk", "company": "EnerMech",
+                   "location": "Aberdeen", "title": "Crane Operator",
+                   "description": "Aberdeen based.",
+                   "status": "portal_awaiting_captcha",
+                   "captcha_answers": [{"label": "Name", "value": "Harry"}]},
+            "gone": {"external_id": "gone", "company": "DOF",
+                     "location": "Perth", "title": "Surveyor",
+                     "description": "AMSA medical required.",
+                     "status": "sent", "sent_at": jm.now()}}}
+
+    def test_the_overseas_one_comes_off_the_list(self):
+        from tools import handoff
+        st = self.state()
+        self.assertEqual(len(handoff.pending(st)), 2)
+        self.assertEqual(pa.prune_overseas(st, dry_run=False), 1)
+        left = [j["company"] for j in handoff.pending(st)]
+        self.assertEqual(left, ["EnerMech"])
+
+    def test_the_answers_go_with_it_so_it_cannot_come_back(self):
+        st = self.state()
+        pa.prune_overseas(st, dry_run=False)
+        self.assertNotIn("captcha_answers", st["jobs"]["au"])
+        self.assertEqual(st["jobs"]["au"]["status"], "skipped")
+
+    def test_a_letter_already_sent_is_left_exactly_alone(self):
+        """It has gone. Rewriting the record would not un-send it."""
+        st = self.state()
+        pa.prune_overseas(st, dry_run=False)
+        self.assertEqual(st["jobs"]["gone"]["status"], "sent")
+
+    def test_a_dry_run_counts_and_changes_nothing(self):
+        st = self.state()
+        self.assertEqual(pa.prune_overseas(st, dry_run=True), 1)
+        self.assertEqual(st["jobs"]["au"]["status"], "portal_awaiting_captcha")

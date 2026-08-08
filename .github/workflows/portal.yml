@@ -16,6 +16,7 @@ on:
       - "fire-inspect/**"          # open employer-board apply pages, fill nothing
       - "fire-covenant/**"         # rebuild the Armed Forces Covenant list
       - "fire-applied/**"          # record the ones Harry finished himself
+      - "fire-prune/**"            # drop jobs the advert says are abroad
   workflow_dispatch:
     inputs:
       submit:
@@ -149,6 +150,14 @@ jobs:
               scan|"")    python tools/applied.py --scan ;;
               *)          python tools/applied.py --mark "${WHICH//-/ }" --scan ;;
             esac
+            python tools/applied.py --list
+            exit 0
+          fi
+          # Jobs the advert says are in another country, taken back out -
+          # including ones already filled in and sitting on his list.
+          if [[ "${GITHUB_REF_NAME}" == fire-prune/* ]]; then
+            echo "fire-prune branch: removing jobs that are not in this country"
+            python portal_agent.py --prune-overseas
             python tools/applied.py --list
             exit 0
           fi
