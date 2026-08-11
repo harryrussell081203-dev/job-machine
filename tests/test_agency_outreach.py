@@ -520,3 +520,78 @@ class TestTheOffshoreTicketsQuestion(unittest.TestCase):
             with self.subTest(agency=agency["name"]):
                 if "I have been told" in ao.tickets_letter(agency)[1]:
                     self.assertTrue(agency.get("tickets_source"))
+
+
+class TestAskingToComeIn(unittest.TestCase):
+    """Harry asked for in-person meetings with the local recruitment offices.
+
+    An email gets a CV onto a database; twenty minutes across a desk gets a
+    consultant to remember a face, and a consultant who has met somebody puts
+    them forward for things that never reach an advert."""
+
+    def letter(self):
+        return ao.meeting_letter({"name": "TMM Recruitment"}, "Sarah")[1]
+
+    def test_it_says_he_does_not_drive_and_offers_to_meet_in_town(self):
+        """An office at Westhill is a bus and an afternoon, and finding that
+        out on the day is how a meeting gets missed."""
+        body = self.letter().lower()
+        self.assertIn("do not drive", body)
+        self.assertIn("somewhere central", body)
+
+    def test_it_never_guesses_where_their_office_is(self):
+        """Nothing in this project knows where these firms sit, and a letter
+        that guesses tells the reader it was not written for them."""
+        body = self.letter().lower()
+        self.assertIn("let me know where you are", body)
+        for invented in ("westhill", "dyce", "union street", "queens road"):
+            self.assertNotIn(invented, body)
+
+    def test_it_gives_times_he_can_genuinely_make(self):
+        """A consultant offering 2pm on a Tuesday is offering something he
+        would have to take leave for."""
+        body = self.letter().lower()
+        self.assertIn("working full time", body)
+        self.assertIn("after 5pm", body)
+        self.assertIn("take time off", body)
+
+    def test_it_leads_with_offshore_because_that_is_what_he_wants(self):
+        self.assertIn("offshore rotational work as a first choice",
+                      self.letter())
+
+    def test_the_ask_is_small_and_specific(self):
+        self.assertIn("twenty minutes", self.letter())
+
+    def test_no_cv_goes_with_it(self):
+        """They already have it - that is why they are on this list, and
+        sending it again says he has forgotten he wrote before."""
+        state = {ao.REGISTER: {jm.company_key("TMM Recruitment"): {}}}
+        with mock.patch.object(ao, "load_agencies",
+                               return_value=[{"name": "TMM Recruitment"}]), \
+             mock.patch.object(ao, "find_address",
+                               return_value=("s@tmm.co.uk", "Sarah")), \
+             mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "record_send"), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(ao.time, "sleep"), \
+             mock.patch.object(jm, "send_email") as send:
+            ao.run_meetings(state, send=True, limit=1)
+        self.assertIs(send.call_args.kwargs["attach_cv"], False)
+
+    def test_a_meeting_is_only_asked_of_firms_already_written_to(self):
+        """Cold, it is a bigger ask than 'please register me'. From somebody
+        they have already heard from it is simply the next step."""
+        agency = {"name": "TMM Recruitment"}
+        ok, why = ao.meeting_due({}, agency)
+        self.assertFalse(ok)
+        self.assertIn("not registered", why)
+        ok, _ = ao.meeting_due(
+            {ao.REGISTER: {jm.company_key("TMM Recruitment"): {}}}, agency)
+        self.assertTrue(ok)
+
+    def test_nobody_is_asked_twice(self):
+        state = {ao.REGISTER: {jm.company_key("TMM"): {}},
+                 ao.MEETING_ASKED: {jm.company_key("TMM"): {"at": jm.now()}}}
+        ok, why = ao.meeting_due(state, {"name": "TMM"})
+        self.assertFalse(ok)
+        self.assertIn("already asked", why)
