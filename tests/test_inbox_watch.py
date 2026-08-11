@@ -283,3 +283,111 @@ class TestReadingTheHeaders(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestWhatTheFirstLiveRunFound(unittest.TestCase):
+    """Two defects the tests did not catch and thirty-two real emails did.
+
+    Worth keeping as their own class, because both are the same mistake in
+    different clothes: assuming the state file's shape rather than checking it,
+    and assuming a cap on work is a cap on cost."""
+
+    def test_a_firm_written_to_through_the_agency_register_counts_as_tracked(self):
+        """It reported nought of thirty-two as tracked, in an inbox holding
+        Cammach answering the offshore-tickets letter. The agency letters, the
+        speculative letters and the charities each live in a register of their
+        own, and none of them is a job."""
+        state = {"jobs": {},
+                 "agency_registered": {"cammach": {
+                     "email": "recruitment@wearecammach.com"}}}
+        self.assertIn("recruitment@wearecammach.com",
+                      inbox_watch.tracked_addresses(state))
+
+    def test_a_consultant_replying_from_her_own_address_is_the_same_firm(self):
+        """The machine wrote to recruitment@wearecammach.com; Louise Young
+        answered from l.young@wearecammach.com. A consultant almost never
+        replies from the address on the contact-us page."""
+        state = {"agency_registered": {"cammach": {
+            "email": "recruitment@wearecammach.com"}}}
+        self.assertTrue(inbox_watch.is_tracked(
+            "l.young@wearecammach.com",
+            inbox_watch.tracked_addresses(state),
+            inbox_watch.tracked_domains(state)))
+
+    def test_two_strangers_on_gmail_are_not_the_same_firm(self):
+        state = {"jobs": {"a": {"contact_email": "someone@gmail.com"}}}
+        self.assertFalse(inbox_watch.is_tracked(
+            "anybody.else@gmail.com",
+            inbox_watch.tracked_addresses(state),
+            inbox_watch.tracked_domains(state)))
+
+    def test_a_register_that_stores_a_reason_instead_of_a_record(self):
+        """spec_done stores a string. Reading .email off it would take the
+        whole watcher down on a live state file."""
+        state = {"spec_done": {"acteon": "no domain or MX"}}
+        self.assertEqual(inbox_watch.tracked_addresses(state), set())
+
+    def test_the_cap_paces_the_work_and_never_discards_it(self):
+        """The first version recorded every fresh message and triaged the first
+        ten, so on a busy morning the eleventh was filed as seen, never read,
+        and never looked at again."""
+        messages = [message(key=f"<{i}@x>") for i in range(20)]
+        state = {}
+        with mock.patch.object(jm, "GEMINI_API_KEY", ""):
+            inbox_watch.scan(state, messages=messages)
+        self.assertEqual(len(state["inbox"]), inbox_watch.MAX_TRIAGE)
+        with mock.patch.object(jm, "GEMINI_API_KEY", ""):
+            inbox_watch.scan(state, messages=messages)
+        self.assertEqual(len(state["inbox"]), inbox_watch.MAX_TRIAGE * 2)
+
+    def test_mail_nobody_is_waiting_on_still_gets_a_look(self):
+        """'RE: Fire & Security Engineer - available now' from a real
+        consultant carries no question mark and is still worth reading."""
+        state = {}
+        seen = []
+        with mock.patch.object(inbox_watch, "triage",
+                               side_effect=lambda b: seen.extend(b) or {}):
+            inbox_watch.scan(state, messages=[message(body="Thanks, noted.")])
+        self.assertEqual(len(seen), 1)
+
+    def test_the_asks_are_read_first_when_the_budget_is_short(self):
+        state = {}
+        seen = []
+        messages = ([message(key=f"<n{i}@x>", body="Thanks, noted.")
+                     for i in range(inbox_watch.MAX_TRIAGE)]
+                    + [message(key="<ask@x>", body="Can you send your CV?")])
+        with mock.patch.object(inbox_watch, "triage",
+                               side_effect=lambda b: seen.extend(b) or {}):
+            inbox_watch.scan(state, messages=messages)
+        self.assertEqual(seen[0]["key"], "<ask@x>")
+
+    def test_an_out_of_office_is_not_a_thing_to_do(self):
+        for subject in ("Automatic reply: Could I come in and see you?",
+                        "Out of office", "Undeliverable: your message"):
+            with self.subTest(subject=subject):
+                self.assertTrue(inbox_watch.NOT_WORTH_READING.search(subject))
+
+    def test_a_real_reply_is_not_mistaken_for_an_auto_reply(self):
+        self.assertIsNone(inbox_watch.NOT_WORTH_READING.search(
+            "RE: Offshore tickets - would you ever sponsor them?"))
+
+    def test_marketing_from_a_bulk_subdomain_is_dropped(self):
+        for sender in ("specialoffers@email.currys.co.uk",
+                       "hello@news.example.com"):
+            with self.subTest(sender=sender):
+                self.assertTrue(inbox_watch.NOT_A_PERSON.search(sender))
+
+    def test_a_consultant_on_a_bare_company_domain_is_not(self):
+        for sender in ("l.young@wearecammach.com", "skazmi@hrcrecruitment.co.uk",
+                       "annie.thompson@forcesemployment.org.uk"):
+            with self.subTest(sender=sender):
+                self.assertIsNone(inbox_watch.NOT_A_PERSON.search(sender))
+
+    def test_without_a_key_only_the_asks_get_a_line(self):
+        """The batch carries mail nobody is waiting on now. Labelling that a
+        question would fill the list with nothing."""
+        with mock.patch.object(jm, "GEMINI_API_KEY", ""):
+            read = inbox_watch.triage([message(body="Thanks, received."),
+                                       message(key="<2@x>",
+                                               body="Can you send your CV?")])
+        self.assertEqual(list(read), ["<2@x>"])

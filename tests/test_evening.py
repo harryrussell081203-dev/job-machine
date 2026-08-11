@@ -118,9 +118,6 @@ class TestWhenItGoes(unittest.TestCase):
         self.assertNotIn("number", params)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 class TestTheRestOfHisMail(unittest.TestCase):
     """His words: "text me every evening about the emails I've received that
@@ -181,3 +178,43 @@ class TestTheRestOfHisMail(unittest.TestCase):
                                side_effect=RuntimeError("no register")):
             body = evening.compose(state)
         self.assertIn("Hydrasun", body)
+
+
+class TestNothingGoesSilent(unittest.TestCase):
+    """A message asked about on Monday is not new enough for Tuesday's digest,
+    and never beats an interview invitation to the two lines in the morning
+    text. Without a count of what is still open it simply stops being
+    mentioned, which is the same as losing it."""
+
+    def old_entry(self, days=4):
+        from datetime import datetime, timedelta, timezone
+        when = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        return {"who": "Graham Brown", "address": "g@frs.co.uk",
+                "subject": "Re: registering", "category": "document",
+                "do": "Send Graham a Word copy of the CV", "at": when,
+                "tracked": False}
+
+    def test_an_older_unanswered_message_is_still_counted(self):
+        state = {"jobs": {"j": {"company": "Hydrasun", "title": "Tech",
+                                "replied_at": jm.now(),
+                                "reply_category": "rejection"}},
+                 "inbox": {"old": self.old_entry()}}
+        body = evening.compose(state)
+        self.assertIn("1 older one still waiting", body)
+
+    def test_todays_mail_is_not_counted_twice(self):
+        state = {"jobs": {}, "inbox": {"new": dict(self.old_entry(),
+                                                   at=jm.now())}}
+        body = evening.compose(state)
+        self.assertIn("Graham Brown", body)
+        self.assertNotIn("older", body)
+
+    def test_nothing_outstanding_adds_no_line(self):
+        state = {"jobs": {"j": {"company": "Hydrasun", "title": "Tech",
+                                "replied_at": jm.now(),
+                                "reply_category": "rejection"}}}
+        self.assertNotIn("older", evening.compose(state))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
