@@ -1402,7 +1402,7 @@
    "source": "signature of ask@uws.ac.uk"
   }
  },
- "handoff_emailed_on": "2026-08-06",
+ "handoff_emailed_on": "2026-08-11",
  "inbox": {
   "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
    "address": "hello@gojiberry-news.com",
@@ -1419,6 +1419,14 @@
    "subject": "\u26a0\ufe0f No heartbeat from android phone [+44 7398 530978]",
    "tracked": false,
    "who": "httpSMS Support"
+  },
+  "<0100019ff28759f4-646c1466-56e0-4efa-8507-6e5e631c0d9c-000000@email.amazonses.com>": {
+   "address": "hello@hinge.co",
+   "at": "2026-08-11T20:33:04+00:00",
+   "seen_at": "2026-08-11T21:31:40.443937+00:00",
+   "subject": "Find your person with a HingeX offer",
+   "tracked": false,
+   "who": "Hinge Team"
   },
   "<0110019febe18be1-c3470672-a7c3-460c-b374-b0132d058a55-000000@eu-north-1.amazonses.com>": {
    "address": "arnold@httpsms.com",
@@ -66880,6 +66888,7 @@
     }
    ],
    "captcha_banked_at": "2026-08-06T09:53:36.982132+00:00",
+   "captcha_done_at": "2026-08-11T21:32:28.950406+00:00",
    "captcha_flags": [
     "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
     "could not answer '* Cover letter' from Harry's own information",
@@ -66888,6 +66897,7 @@
    "company": "DOF",
    "description": "Join DOF as our Data Controller ! In this role, you will coordinate the secure flow, storage, and quality of survey and inspection data across offshore and onshore operations. Working closely with project teams, offshore personnel, IT, and external stakeholders, you will help ensure critical operational data is administered efficiently, securely, and in line with company procedures. This is an exciting opportunity for someone with a strong IT and data management background who enjoys solving technical challenges, working collaboratively, and supporting innovative offshore operations. Learn more about DOF! Responsibilities Coordinate with project teams to ensure data management procedures are followed throughout project lifecycles. Coordinate the secure flow of operational data between offshore and onshore locations. Set up and administer project data accounts and user access. Administer onshore, offshore, and cloud-based data storage systems. Support the development and integration of data acquisition and management systems. Assist in the development of data quality control (QC) and analysis tools. Liaise with clients, subcontractors, and third-party providers regarding data management and storage requirements. Ensure data integrity and security are maintained at all times. Requirements A relevant bachelor\u2019s or master\u2019s degree in computer science, Information Technology, or a related field is preferred. Minimum 2 years' experience in data management or a similar IT-focused role. Good understanding of IT systems, networking, and data management principles. Knowledge or experience of offshore operations is beneficial. Experience with cloud storage platforms and virtual machine environments. Experience working with data acquisition systems is desirable. Identify yourself with our core values: Respect - Integrity - Teamwork \u2013 Excellence - And above all we are Safe. Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right talent for this role, or another, and that could be you. Are you a structured and self-motivated professional with strong communication skills? Then we encourage you to apply. Location This position will be based in Aberdeen, UK. Application due date: 26.07.2026 Due to the holiday period, the recruitment process may take longer than usual and will start after the application deadline. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and a fleet of modern offshore/subsea vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, UK, USA, Singapore, Brazil, Argentina, Canada, Angola, Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclusion, recognition, and connection. Build a meaningful career in a workplace that puts people first. Unlocking the future, together. Benefits At DOF, we believe in providing our employees with a supportive and enriching work environment. Here are some of the benefits you can enjoy as part of our team: Well-being: With a modern fleet of vessels, we focus on your comfort and well-being while on the job, we have well maintained vessels, comfortable cabins, great food and access to the internet to keep in touch with family and friends. Diversity & Inclusion : At DOF,",
    "external_id": "board-workable-101ec5bc512a",
+   "finished_by_hand_at": "2026-08-11T21:32:28.950426+00:00",
    "found_at": "2026-08-02T19:54:56.571713+00:00",
    "listing_text_len": 4022,
    "location": "Aberdeen",
@@ -66982,15 +66992,16 @@
     "unrecognised required field '* Do you have a permanent residency in the UK?'"
    ],
    "portal_pages": 1,
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "finished by hand (confirmation email: Thanks for applying to DOF)",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-101ec5bc512a-captcha.png",
+   "portal_submitted_at": "2026-08-11T21:32:28.950430+00:00",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981967+00:00",
    "score": 75,
    "score_reason": "The candidate's Royal Navy experience in secure comms and network engineering aligns well with the data controller role's focus on secure data flow and administration.",
    "skip_reason": "no domain found",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "portal_submitted",
    "title": "Data Controller",
    "url": "https://apply.workable.com/j/3E50FF075B/apply"
   },
@@ -68617,6 +68628,7 @@
     }
    ],
    "captcha_banked_at": "2026-08-06T10:16:01.816943+00:00",
+   "captcha_done_at": "2026-08-11T21:32:28.952777+00:00",
    "captcha_flags": [
     "date_of_birth: '* Date of Birth' is required and only Harry can answer it",
     "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measurement & Control (year 1 completed, paused)'",
@@ -68625,6 +68637,7 @@
    "company": "DOF",
    "description": "Join DOF's growth as a ROV Supervisor! We are looking for multiple ROV Supervisors to strengthen our ROV team. In this role, you will play a key leadership role onboard our vessels in the Atlantic region, overseeing the safe and efficient execution of a wide range of offshore projects. As an ROV Supervisor, you will lead, support and develop ROV personnel while supervising the operation and maintenance of assigned ROV Systems. You will be responsible for fostering a strong safety culture, promoting clear communication, and ensuring all activities are carried out to the highest standards and in compliance with internal procedures and external regulations. Leading by example is essential, as you will set the standard for operational excellence, teamwork, and the wellbeing of everyone involved in the ROV operations. Tasks and responsibilities Supervise the operation on assigned ROV systems, and make sure all tasks defined in the work scope are preformed according to internal and external requirements. Participate in familiarization and debriefing activities prior to mobilization and demobilizations. Carry out pre-dive and post-dive checks, preventative maintenance routines, and ensure all activities, defects, and repairs are accurately recorded in dive logs and system documentation. We are seeking experienced ROV Supervisors with strong knowledge and understanding of the operation, maintenance, and troubleshooting of ROV and LARS systems. The main fleet of DOF ROV/LARS systems consists of: ROV Systems Kystdesign Shilling UHD Perry/Forum XLX, XLR, and XLX-C Argus LARS Systems ODIM/Rolls Royce Cetix/Sepro Ulmatec Dynacon MacArtney Evotec While our main operational hub is in the Atlantic region, DOF's modern fleet is operated worldwide, providing the opportunity to work across a variety of environments and cultures. If you are passionate about the offshore industry and eager to learn and grow in a challenging and rewarding environment this might be the perfect role for you. Click here to meet one of our ROV Pilots in DOF! Requirements Minimum (5) five years offshore experience from ROV operations or relevant (Training program can compensate for lack of experience.) Previous leadership experience is an advantage, but not mandatory. However, strong interest in developing leadership skills, with the ability to take responsibility for safe and efficient operations is essential. Qualified in Electrical, Electronic, Hydraulics our Mechanics. Documented IMCA based competence log for ROV Pilot Technician II (Experience can compensate for lack of formal competency.) Experience within IMR projects is beneficial Please upload your work grid in your application Is this the perfect role for you, but you don\u2019t meet every single requirement? We value the right person over a perfect match to a job description. Research shows that women and underrepresented groups are less likely to apply unless they meet every listed requirement, and we don\u2019t want that to hold great talent back, so we encourage you to apply. It\u2019s the best way for us to find the right person for this role, or another, and that could be you. Who we are DOF is a leading provider of integrated marine and subsea services to the global offshore energy market. We combine expertise, assets, and technology to execute integrated subsea and offshore operations safely, and reliably - every time. With a multinational team of approximately 6,000 people and the world\u2019s largest fleet of Construction Support Vessels (CSVs) and high-end Anchor Handling Tug Supply (AHTS) vessels, we support our partners with global reach, scale, and industry-leading capability. Our operational centres and business units are in Norway, Denmark, the UK, the USA, Singapore, Brazil, Argentina, Canada, Angola, the Philippines, and Australia. At DOF you join a trusted global organisation where safety, teamwork, and integrity come first. We offer strong career growth, supportive development, and a culture that values inclus",
    "external_id": "board-workable-cc03da22253a",
+   "finished_by_hand_at": "2026-08-11T21:32:28.952784+00:00",
    "found_at": "2026-08-02T19:54:56.573955+00:00",
    "listing_text_len": 4021,
    "location": "Aberdeen",
@@ -68739,14 +68752,15 @@
     "could not answer '* Cover letter' from Harry's own information"
    ],
    "portal_pages": 1,
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "finished by hand (confirmation email: Thanks for applying to DOF)",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/dof-board-workable-cc03da22253a-captcha.png",
+   "portal_submitted_at": "2026-08-11T21:32:28.952786+00:00",
    "posted_at": null,
    "score": 75,
    "score_reason": "His subsea experience and technical skills are relevant, but the 'Supervisor' role might require more direct leadership experience than he currently has.",
    "skip_reason": "no domain found",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "portal_submitted",
    "title": "ROV Supervisor",
    "url": "https://apply.workable.com/j/4C7A0F1D39/apply"
   },
@@ -73113,7 +73127,7 @@
   }
  },
  "last_summary_at": "2026-08-10T21:50:55.204629+00:00",
- "morning_goal_rotation": 1,
+ "morning_goal_rotation": 2,
  "morning_sent_on": "2026-08-11",
  "portal_answer_cache": {
   "cover letter optional": {
