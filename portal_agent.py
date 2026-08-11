@@ -229,6 +229,15 @@ FIELD_RULES = [
     ("salary_expectation", r"salary|remuneration|rate expectation|expected pay"),
     ("willing_to_relocate", r"relocat"),
     ("willing_to_travel", r"willing to travel|travel requirement"),
+    # The tickets come BEFORE the general offshore question, because a form
+    # asking 'Do you hold BOSIET?' must not be answered with 'Yes - rotational
+    # offshore work is my first choice'. He does not hold it; he can get it.
+    ("offshore_tickets", r"bosiet|opito|huet|mist\b|banksman|slinger|"
+                         r"offshore (survival|training|certificat|ticket)|"
+                         r"survival (training|certificat)"),
+    ("offshore_medical", r"offshore medical|oguk medical|ogu k|medical certificat"),
+    ("offshore_experience", r"offshore experience|years offshore|"
+                            r"experience offshore"),
     ("offshore_willing", r"offshore|rotation|work at sea"),
     ("shift_work", r"shift work|shift pattern|night work"),
     ("current_employer", r"current employer|present employer|company name"),

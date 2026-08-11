@@ -56,10 +56,35 @@ class TestAnswerBank(unittest.TestCase):
 
     def test_unknowns_are_still_null_not_guessed(self):
         answers = pa.load_answers()
-        for unknown in ("willing_to_relocate", "offshore_willing", "linkedin",
-                        "reference_1"):
+        # offshore_willing came off this list because HARRY answered it, in
+        # his own words: rotational offshore work is his first choice. The
+        # rule was never 'this key stays null forever' - it is that nothing
+        # here may be guessed on his behalf.
+        for unknown in ("willing_to_relocate", "linkedin", "reference_1"):
             self.assertIsNone(answers[unknown],
                               f"{unknown} must stay null until Harry fills it in")
+
+    def test_the_offshore_answers_are_his_and_are_honest(self):
+        """He wants rotational offshore work, holds none of the tickets, and
+        can get them through the Job Centre if a role is offered. Every part
+        of that has to be said, and the ticket answer must never read as a
+        claim to hold one."""
+        answers = pa.load_answers()
+        self.assertIn("first choice", answers["offshore_willing"].lower())
+        tickets = answers["offshore_tickets"].lower()
+        self.assertIn("not currently held", tickets)
+        self.assertIn("job centre", tickets)
+        self.assertIn("no civilian offshore experience",
+                      answers["offshore_experience"].lower())
+
+    def test_a_ticket_question_is_never_answered_with_enthusiasm(self):
+        """'Do you hold BOSIET?' answered with 'Yes - offshore is my first
+        choice' would be read as a yes. It is not one."""
+        for label in ("Do you hold a valid BOSIET?", "MIST certificate",
+                      "Banksman/Slinger ticket"):
+            with self.subTest(label=label):
+                key = pa.match_key({"label": label})
+                self.assertEqual(key, "offshore_tickets")
 
     def test_environment_overrides_the_file(self):
         with mock.patch.dict(os.environ, {"ANSWER_POSTCODE": "AB10 1XX"}):

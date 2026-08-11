@@ -155,6 +155,21 @@ TITLE_EXCLUSIONS = [
     "sales executive", "sales manager", "business development", "care assistant",
     "support worker", "hgv", "lgv", "delivery driver", "van driver", "chef",
     "waiter", "waitress", "bartender", "cleaner", "warehouse operative",
+    # ELECTRICAL ONLY. Harry has no mechanical experience and said so plainly:
+    # his apprenticeship, his Navy trade and his work at Sonardyne are all
+    # electrical, electronic and instrumentation. Applying him for a fitter's
+    # job wastes the approach and, worse, invites an interview he would have
+    # to talk his way out of.
+    #
+    # Only titles that are exclusively mechanical are here. 'Maintenance
+    # Technician' and 'Multi-skilled Engineer' stay, because those are usually
+    # electrically-biased or mixed and the advert decides - that is the
+    # scorer's job, not a keyword's.
+    "mechanical fitter", "mechanical technician", "mechanical engineer",
+    "mechanical maintenance", "mechanic", "hydraulic fitter", "pipefitter",
+    "pipe fitter", "welder", "fabricator", "plater", "machinist", "turner",
+    "sheet metal", "plumber", "gas engineer", "boiler engineer",
+    "vehicle technician", "tyre technician", "hgv technician",
 ]
 
 # Course adverts dressed up as vacancies. They turned up five at a time in the
@@ -181,18 +196,44 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
-- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife.
+- FIRST CHOICE, ABOVE EVERYTHING ELSE: an OFFSHORE ROTATIONAL post - 2 weeks on
+  / 2 weeks off, 3/3, back-to-back, any rotation. This is what he actually
+  wants and it should be scored highest whenever it appears. A rotational
+  offshore role in his trade beats a better-paid onshore one.
+- TARGET: ELECTRICAL and electronic work only - engineering technician,
+  electronics, instrumentation, controls, comms/radio, electrical maintenance,
+  workshop, offshore/O&G, defence, forces-friendly trades, or technical roles
+  in events & nightlife.
+- HE HAS NO MECHANICAL EXPERIENCE. Do not score or pitch him for fitter,
+  mechanic, welding, fabrication, pipework or plant-mechanical roles. Mixed
+  or multi-skilled roles are fine where the electrical side is the substance
+  of the job.
+- OFFSHORE TICKETS: he does NOT currently hold BOSIET, MIST, banksman/slinger
+  or an offshore medical. He CAN obtain them through the Job Centre if a role
+  is offered that requires them. Never claim he holds a ticket. Where a role
+  needs one, say plainly that he can have it in place before starting - that
+  is true, it is the reader's actual objection, and answering it is worth more
+  than any other sentence in the letter.
+- NO CIVILIAN OFFSHORE EXPERIENCE, and never imply otherwise. What he does
+  have is two years at sea on a Type 23 frigate - watchkeeping, working to
+  procedure in a safety-critical environment, living and working away on a
+  rotation - which is honest, relevant, and his to claim. Say that; do not
+  dress it up as offshore experience.
 - WHERE HE CAN WORK: Aberdeen is home and a daily commute there is ideal, but it
   is NOT a requirement and must not be scored as one. He will take work anywhere
-  in the world that comes with the arrangements to live it: offshore and
-  rotational postings (2/2, 3/3, 4/4, back-to-back), fly-in fly-out, residential
-  or camp accommodation, and roles that pay travel and lodging. A role that
-  matches his trade in Dundee, Inverness, Perth Australia, Norway or the Gulf is
-  worth as much as the same role in Aberdeen. Only mark a location down when the
-  job genuinely needs him to already live somewhere he cannot get to and offers
-  nothing towards it - and note that he does not drive, so a remote site with no
-  transport laid on is a real problem where a rotational one is not.
-- EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
+  he has the right to work that comes with the arrangements to live it: offshore
+  and rotational postings (2/2, 3/3, 4/4, back-to-back), fly-in fly-out,
+  residential or camp accommodation, and roles that pay travel and lodging. A
+  role that matches his trade in Dundee, Inverness, the North Sea or Norway is
+  worth as much as the same role in Aberdeen. The one hard limit is the right
+  to work: a role abroad that requires citizenship, residency or a work permit
+  he does not have is not a role he can take, however well it fits. Only mark a
+  location down for that, or when the job genuinely needs him to already live
+  somewhere he cannot get to and offers nothing towards it - and note that he
+  does not drive, so a remote site with no transport laid on is a real problem
+  where a rotational one is not.
+- EXCLUDE: senior/chartered roles, purely mechanical trades, unrelated
+  sales/care/driving/hospitality."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
 
@@ -1196,6 +1237,28 @@ def name_from_email(local):
     return parts[0].capitalize()
 
 
+def trusted_contact_name(job):
+    """The name to greet this recipient by, or None - worked out afresh.
+
+    NEVER trusts job['contact_name']. That field was written by whatever the
+    rules were on the day the address was found, and the rules have been wrong
+    before: 'mysupporthr@bakerhughes.com' was classified as a person and
+    stored as 'Mysupporthr', and stale records still carry names like that
+    into new letters long after the classifier was fixed.
+
+    Harry's own words: the system keeps mistaking generic inboxes for people.
+    A letter that opens 'Hello Recruitmentteam,' tells the reader in four
+    words that nobody wrote it, which is the whole game lost on the greeting
+    line. Re-deriving costs nothing - the address is right there - and it
+    means one fix to classify() repairs every record at once instead of only
+    the ones found afterwards."""
+    address = (job.get("contact_email") or "").strip()
+    if not address or "@" not in address:
+        return None
+    tier, name = classify(address)
+    return name if tier >= 3 else None
+
+
 def classify(address):
     """(tier, first_name). 3 named person > 2 hiring inbox > 1 generic > 0 unusable."""
     local = address.split("@")[0].lower()
@@ -1740,7 +1803,7 @@ def build_email(job, attempts=3):
         f"{CANDIDATE_PROFILE}\n\n"
         f"THE JOB:\nTitle: {job['title']}\nCompany: {job['company']}\n"
         f"Location: {job['location']}\n"
-        f"Recipient: {job.get('contact_name') or 'unknown, a shared hiring inbox'}\n"
+        f"Recipient: {trusted_contact_name(job) or 'unknown, a shared hiring inbox'}\n"
         f"Listing: {job['description'][:2000]}"
         + (VETERAN_INSTRUCTION if veteran_friendly(job) else "")
     )
