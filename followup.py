@@ -135,7 +135,10 @@ def greeting(job):
 
     So the name has to survive three tests: it is one word, it is not a
     mailbox word, and it is not simply the address with the @ taken off."""
-    name = (job.get("contact_name") or "").strip()
+    # Worked out from the address, never read off the record - see
+    # jm.trusted_contact_name(). A stored name was written under whatever the
+    # rules were that day, and those rules have been wrong.
+    name = (jm.trusted_contact_name(job) or "").strip()
     if not name or len(name.split()) != 1 or not name.isalpha() or len(name) < 3:
         return "Hello,"
     low = name.lower()

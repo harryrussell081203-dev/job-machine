@@ -19,7 +19,8 @@ name: job-machine captcha nudge
 # 17:15 UTC is 18:15 BST and 17:15 GMT.
 on:
   schedule:
-    - cron: "15 17 * * *"
+    - cron: "15 17 * * *"   # 18:15 BST / 17:15 GMT
+    - cron: "15 18 * * *"   # the other side of British Summer Time
   push:
     branches:
       - "fire-nudge/**"        # send today's nudge now, whatever the clock says
@@ -60,6 +61,15 @@ jobs:
           # the same moment so they arrive together and agree with each other.
           # Anything he has already cleared comes off before we count.
           python tools/applied.py --scan || true
+          # What came in today and what to do about it. His words: "a lot of
+          # people just call me randomly as a result of the system working and
+          # I have to figure out on the fly who's calling". One text at six,
+          # and tomorrow's callers are people he is expecting.
+          if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
+            python evening.py --send --force || true
+          else
+            python evening.py --send || true
+          fi
           if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
             python tools/handoff.py --email --force
             python sms.py --captcha-nudge --force
