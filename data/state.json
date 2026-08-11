@@ -1471,9 +1471,11 @@
   "<8e2b18533c8847709117b627f88b59ad@blueprint-recruitment.co.uk>": {
    "address": "smitchell@blueprint-recruitment.co.uk",
    "at": "2026-08-10T12:08:07+00:00",
-   "seen_at": "2026-08-11T20:18:58.325731+00:00",
+   "category": "question",
+   "do": "Ask specific questions about the role",
+   "seen_at": "2026-08-11T20:26:13.510350+00:00",
    "subject": "RE: Helklo from Steven at Blueprint Recruitment",
-   "tracked": false,
+   "tracked": true,
    "who": "Steven Mitchell"
   },
   "<920748aa70244e9d94654e94377350a3@LO0SPRMB0035.GBRP123.PROD.OUTLOOK.COM>": {
@@ -1495,9 +1497,11 @@
   "<AM7PR06MB63601FB449E76685A8894352EADE2@AM7PR06MB6360.eurprd06.prod.outlook.com>": {
    "address": "skazmi@hrcrecruitment.co.uk",
    "at": "2026-08-10T13:09:07+00:00",
-   "seen_at": "2026-08-11T20:18:58.325726+00:00",
+   "category": "document",
+   "do": "Send updated CV",
+   "seen_at": "2026-08-11T20:26:13.510346+00:00",
    "subject": "Engineering - details ",
-   "tracked": false,
+   "tracked": true,
    "who": "Saher Kazmi"
   },
   "<AM7PR06MB63609CFB9F054CC5B4A026D9EADE2@AM7PR06MB6360.eurprd06.prod.outlook.com>": {
@@ -1642,9 +1646,11 @@
   "<ced53ef0cde64ea1a4a011961d551155@blueprint-recruitment.co.uk>": {
    "address": "smitchell@blueprint-recruitment.co.uk",
    "at": "2026-08-10T10:49:23+00:00",
-   "seen_at": "2026-08-11T20:18:58.325736+00:00",
+   "category": "question",
+   "do": "Confirm interest in Aberdeen City Council role",
+   "seen_at": "2026-08-11T20:26:13.510355+00:00",
    "subject": "RE: Helklo from Steven at Blueprint Recruitment",
-   "tracked": false,
+   "tracked": true,
    "who": "Steven Mitchell"
   },
   "<ee346ddd-45b8-41ad-bcaf-03dc2f5acd3a@firefishsoftware.com>": {
