@@ -104,7 +104,17 @@ NOT_A_PERSON = re.compile(
     r"donotreply|bounce|postmaster|mailer-daemon|updates?@|info@jobs|"
     r"cv-?library|totaljobs|reed\.co\.uk|indeed|s1jobs|jobsite|linkedin|"
     r"glassdoor|adzuna|monster|jobserve|wowcher|beehiiv|alibabacloud|"
-    r"villagegym|creation\.co\.uk|usebouncer|secure\.", re.I)
+    r"villagegym|creation\.co\.uk|usebouncer|secure\.|specialoffers|"
+    # Bulk-mail subdomains. Marketing goes out from email.currys.co.uk and
+    # news.something.com; a person writes from the bare domain.
+    r"@(email|news|mail|marketing|campaigns?|info)\.", re.I)
+
+# And mail that is a person's address but not a person. An out-of-office is the
+# machine's own letter coming back at it, and a to-do list carrying three of
+# them is a to-do list he scrolls past.
+NOT_WORTH_READING = re.compile(
+    r"^\s*(automatic reply|auto(matic)?[- ]?response|autoreply|out of (the )?"
+    r"office|undeliverable|delivery status notification)", re.I)
 
 # What somebody wanting something from you writes. Used as the filter on what
 # is worth spending a model call on, and as the whole answer when there is no
@@ -186,6 +196,8 @@ def fetch_recent(days=None, limit=None):
             if not address or address == (jm.GMAIL_ADDRESS or "").lower():
                 continue
             subject = header_text(msg.get("Subject", ""))
+            if NOT_WORTH_READING.search(subject):
+                continue
             try:
                 when = parsedate_to_datetime(msg.get("Date", ""))
             except Exception:
@@ -217,11 +229,19 @@ def register(state):
 
 
 def tracked_addresses(state):
-    """Every address the reply watcher is already covering.
+    """Every address the machine has already written to.
 
     Not a reason to ignore the message - it is a reason not to text about it
-    twice. check_replies already classifies these and puts an interview
-    invitation on his phone within minutes of it landing."""
+    twice, and not to list it in the evening digest under a bare name when the
+    reply line above already gives the company and the role.
+
+    THE JOB RECORDS ARE NOT THE WHOLE STORY, and the first version of this
+    assumed they were. It walked state["jobs"] only, and on the first live run
+    it reported nought out of thirty-two messages as tracked - in an inbox that
+    included Cammach answering the offshore-tickets letter and TMM confirming a
+    meeting, both of which the machine itself had started. The agency letters,
+    the speculative letters, the charities and the asking-around letters are
+    each recorded in a register of their own, and none of them is a job."""
     out = set()
     for job in state.get("jobs", {}).values():
         for field in ("contact_email", "stakeholder_email"):
@@ -230,7 +250,45 @@ def tracked_addresses(state):
         for contact in job.get("other_contacts") or []:
             if contact.get("email"):
                 out.add(contact["email"].lower())
+    for name in ("companies_contacted", "agency_registered", "support_asked",
+                 "spec_done", "asked_around"):
+        for entry in (state.get(name) or {}).values():
+            if not isinstance(entry, dict):
+                continue          # spec_done stores a reason string, not a record
+            if entry.get("email"):
+                out.add(str(entry["email"]).lower())
+            for address in entry.get("emails") or []:
+                out.add(str(address).lower())
     return out
+
+
+# Mailbox providers, where two addresses sharing a domain means nothing at all.
+SHARED_DOMAINS = ("gmail.com", "googlemail.com", "outlook.com", "hotmail.com",
+                  "yahoo.com", "yahoo.co.uk", "icloud.com", "live.com",
+                  "aol.com", "btinternet.com", "sky.com", "me.com")
+
+
+def tracked_domains(state):
+    """The firms already in a conversation with him, by domain.
+
+    A consultant almost never replies from the address on the 'contact us'
+    page. The machine wrote to recruitment@wearecammach.com and Louise Young
+    answered from l.young@wearecammach.com - the same conversation, a different
+    mailbox, and matching on the address alone misses every one of them.
+
+    Not applied to the free mail providers, where a shared domain is a
+    coincidence rather than a company."""
+    out = set()
+    for address in tracked_addresses(state):
+        domain = address.partition("@")[2]
+        if domain and domain not in SHARED_DOMAINS:
+            out.add(domain)
+    return out
+
+
+def is_tracked(address, addresses, domains):
+    address = (address or "").lower()
+    return address in addresses or address.partition("@")[2] in domains
 
 
 # ======================================================================
@@ -247,11 +305,15 @@ def triage(messages):
     if not messages:
         return {}
     if not jm.GEMINI_API_KEY or jm.gemini_exhausted():
-        # No key, or the budget is spent. The regex above already decided these
-        # are asks, so say so plainly rather than silently dropping real mail.
+        # No key, or the budget is spent. Fall back to the regex: it cannot say
+        # what somebody wants, but it can say that somebody wants something,
+        # which beats silently dropping real mail. Only the messages that read
+        # as asks - the batch also carries mail nobody is waiting on, and
+        # labelling that a question would fill the list with nothing.
         return {m["key"]: {"category": "question",
                            "do": f"read {m['subject'][:50]}".strip()}
-                for m in messages}
+                for m in messages
+                if asks_something(m["subject"], m["body"])}
     blob = "\n\n".join(
         f"MESSAGE {i}\nFROM: {m['who']} <{m['address']}>\n"
         f"SUBJECT: {m['subject']}\n{sms.own_words(m['body'])[:600]}"
@@ -317,18 +379,27 @@ def scan(state, days=None, messages=None, send=False):
         print(f"[inbox] {len(messages)} read, nothing new")
         prune(state)
         return []
-    # Only what somebody is plausibly waiting on gets a model call. The rest is
-    # recorded as seen so it is never looked at again.
+    # What somebody is plausibly waiting on goes to the front of the queue, and
+    # the rest of the budget is spent on the remainder - a recruiter's "we have
+    # submitted your CV" carries no question mark and is still worth a line.
+    #
+    # THE CAP PACES THE WORK, IT DOES NOT DISCARD IT. The first version recorded
+    # every fresh message and only triaged the first ten, so on a busy morning
+    # the eleventh was filed as seen, never read, and never looked at again.
+    # Anything past the cap is simply left for the next run, which is two hours
+    # away.
     asking = [m for m in fresh if asks_something(m["subject"], m["body"])]
-    read = triage(asking[:MAX_TRIAGE])
-    tracked = tracked_addresses(state)
+    rest = [m for m in fresh if m not in asking]
+    batch = (asking + rest)[:MAX_TRIAGE]
+    read = triage(batch)
+    addresses, domains = tracked_addresses(state), tracked_domains(state)
     added = []
-    for message in fresh:
+    for message in batch:
         verdict = read.get(message["key"])
         entry = {"at": message["at"], "seen_at": jm.now(),
                  "who": message["who"], "address": message["address"],
                  "subject": message["subject"][:140],
-                 "tracked": message["address"] in tracked}
+                 "tracked": is_tracked(message["address"], addresses, domains)}
         if verdict:
             entry.update(verdict)
         known[message["key"]] = entry
@@ -340,8 +411,10 @@ def scan(state, days=None, messages=None, send=False):
               f"{entry.get('do', entry['subject'])}")
     shout(state, added, send=send)
     prune(state)
-    print(f"[inbox] {len(messages)} read, {len(fresh)} new, "
-          f"{len(added)} needing something")
+    waiting = len(fresh) - len(batch)
+    print(f"[inbox] {len(messages)} read, {len(fresh)} new, {len(batch)} "
+          f"triaged, {len(added)} needing something"
+          + (f", {waiting} left for the next run" if waiting else ""))
     return added
 
 
@@ -442,8 +515,22 @@ def main(argv=None):
     ap.add_argument("--list", action="store_true",
                     help="everything still outstanding, read nothing new")
     ap.add_argument("--done", metavar="KEY", help="he has dealt with that one")
+    ap.add_argument("--forget-unread", action="store_true",
+                    help="drop entries filed as seen but never actually read")
     args = ap.parse_args(argv)
     state = jm.load()
+    if args.forget_unread:
+        # A one-off, for the first live run. That version recorded every fresh
+        # message and triaged only the first ten, so twenty-one real emails -
+        # Cammach answering the offshore-tickets letter among them - were filed
+        # as seen, never read, and would never be looked at again. Forgetting
+        # them puts them back in front of the fixed watcher.
+        gone = [k for k, e in register(state).items() if not e.get("category")]
+        for key in gone:
+            del register(state)[key]
+        jm.save(state)
+        print(f"[inbox] forgot {len(gone)} message(s) that were never read")
+        return 0
     if args.done:
         if mark_done(state, args.done):
             jm.save(state)

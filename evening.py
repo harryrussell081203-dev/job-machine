@@ -170,9 +170,26 @@ def compose(state):
     body = head + ":\n" + "\n".join(f"- {l}" for l in lines + mail_lines)
     if more > 0:
         body += f"\n- and {more} more in your inbox"
+    older = still_waiting(state, exclude={k for k, _ in mail})
+    if older:
+        # Otherwise something asked for on Monday goes silent by Wednesday: it
+        # is not new enough for this text and never beats an interview
+        # invitation to the two lines in the morning one.
+        body += (f"\n{older} older one{'' if older == 1 else 's'} still "
+                 f"waiting on you.")
     # The point of the whole thing: he should recognise tomorrow's caller.
     body += "\nIf one of these rings tomorrow, that is who it is."
     return body
+
+
+def still_waiting(state, exclude=()):
+    """How many earlier days' messages nobody has had an answer to."""
+    try:
+        import inbox_watch
+        return len([k for k, _ in inbox_watch.outstanding(state)
+                    if k not in exclude])
+    except Exception:
+        return 0
 
 
 def job_subject(job):

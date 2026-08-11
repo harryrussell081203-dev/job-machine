@@ -19,6 +19,7 @@ on:
     branches:
       - "fire-reply/**"     # check the mail now
       - "fire-inbox/**"     # the same, and say out loud what the register holds
+      - "fire-reread/**"    # one-off: re-read what the first version never read
   workflow_dispatch: {}
 
 permissions:
@@ -40,6 +41,23 @@ jobs:
           python-version: "3.12"
 
       - run: pip install requests dnspython
+
+      # Same trap as run.yml and portal.yml: a fire-* branch's state.json is
+      # whatever it was when the branch was cut, and here that means the reply
+      # watcher would re-handle mail already handled and the inbox register
+      # would lose everything recorded since. state.json only - every other
+      # file in data/ is configuration a branch is allowed to change.
+      - name: Start from the live state, not the branch's copy
+        if: startsWith(github.ref_name, 'fire-')
+        run: |
+          DEFAULT="${{ github.event.repository.default_branch }}"
+          git fetch origin "$DEFAULT" --depth=1
+          if git cat-file -e "origin/$DEFAULT:data/state.json" 2>/dev/null; then
+            git checkout "origin/$DEFAULT" -- data/state.json
+            echo "[state] working the live queue from $DEFAULT"
+          else
+            echo "[state] no state on $DEFAULT, using the branch's copy"
+          fi
 
       - name: Check and handle replies
         env:
@@ -81,6 +99,22 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == fire-inbox/* ]]; then
             python inbox_watch.py --list || true
           fi
+      # A one-off for the first live run, which filed twenty-one real emails as
+      # seen without ever reading them. Push a fire-reread branch to put them
+      # back in front of the fixed watcher; harmless afterwards.
+      - name: Re-read what the first version never read
+        if: startsWith(github.ref_name, 'fire-reread/')
+        env:
+          PYTHONUNBUFFERED: "1"
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
+          SMS_FROM: ${{ vars.SMS_FROM }}
+        run: |
+          python inbox_watch.py --forget-unread
+          python inbox_watch.py --send
+          python inbox_watch.py --list
 
       - name: Commit state
         if: always()
