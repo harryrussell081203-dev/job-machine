@@ -228,7 +228,9 @@ def merge_inbox(theirs, ours):
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
          "agency_registered", "sms_sent", "contact_numbers",
-         "portal_answer_cache", "last_summary_at", "inbox"}
+         "portal_answer_cache", "last_summary_at", "inbox",
+         "agency_tickets_asked", "agency_meeting_asked", "morning_sent_on",
+         "evening_sent_on", "handoff_emailed_on", "morning_goal_rotation"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -352,10 +354,37 @@ def merge(theirs, ours):
     if seen:
         out["inbox"] = seen
 
-    for stamp in ("last_summary_at",):
+    # The two one-off asks to an agency: would you sponsor the tickets, and
+    # could I come in and see you. Same rule as the charities, for the same
+    # reason - the question is "has this ever been done", and losing an entry
+    # means a consultant gets the same letter twice a fortnight apart.
+    #
+    # These were falling through to carry_unknown, which says so in the log on
+    # every single run. It got them right by luck: it unions the dicts and lets
+    # theirs win, and theirs is main. A runner that wrote the letter and lost
+    # the record is exactly how the same firm gets asked twice.
+    for register in ("agency_tickets_asked", "agency_meeting_asked"):
+        asked = union_earliest(theirs.get(register, {}), ours.get(register, {}))
+        if asked:
+            out[register] = asked
+
+    # Day stamps: the later one wins. Each answers "has today's gone out yet",
+    # so an older value re-opens a guard that has already been spent and sends
+    # a second copy of something he has read.
+    for stamp in ("last_summary_at", "morning_sent_on", "evening_sent_on",
+                  "handoff_emailed_on"):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]
         if values:
             out[stamp] = max(values)
+
+    # Which standing goal the morning text is up to. The higher number wins:
+    # it only ever advances, and going backwards repeats a goal he read
+    # yesterday, which is the one thing that makes a daily text ignorable.
+    rotation = [n for n in (theirs.get("morning_goal_rotation"),
+                            ours.get("morning_goal_rotation"))
+                if isinstance(n, int)]
+    if rotation:
+        out["morning_goal_rotation"] = max(rotation)
 
     carry_unknown(out, theirs, ours)
     return out

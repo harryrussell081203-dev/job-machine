@@ -26,7 +26,21 @@ permissions:
   contents: write
 
 concurrency:
-  group: job-machine-replies
+  # Per branch, for the reason written out at length in run.yml: a concurrency
+  # group holds exactly ONE pending run, and a second run queueing behind an
+  # in-progress one CANCELS the first pending run rather than queueing after
+  # it. cancel-in-progress: false only protects the run already going.
+  #
+  # This group was shared across every ref. Runs here sit pending waiting for a
+  # hosted runner, and the schedule fires every two hours, so any fire-* branch
+  # pushed into the wrong twenty minutes was silently deleted before it
+  # executed a line. That cost several fire-run branches on one afternoon
+  # before it was understood.
+  #
+  # Keying on the ref means a forced check can never cancel another one, and
+  # main's scheduled runs still serialise against each other - which is the
+  # only place serialising was ever wanted.
+  group: job-machine-replies-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
