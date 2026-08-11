@@ -1,0 +1,116 @@
+{
+  "_README": [
+    "Organisations worth finding ONE person at, to ask how they got into",
+    "offshore rotational work. This is not a target list for applications -",
+    "ask_around.py asks a question and never asks for a job.",
+    "",
+    "NO NAMES IN THIS FILE, DELIBERATELY. Writing 'ask Dave the ops manager'",
+    "would be me inventing a person, and a letter to an invented person is",
+    "worse than no letter. ask_around.py finds a real named individual with a",
+    "published address on the organisation's own site, MX-checks it, and",
+    "writes to nobody at all if it cannot find one.",
+    "",
+    "'why' is the line that goes into the letter after 'I am writing to you",
+    "because...'. It has to be TRUE of that organisation and checkable by the",
+    "person reading it - they will know instantly if it is filler, and filler",
+    "is what makes a letter look sent rather than written.",
+    "",
+    "Three kinds of organisation are here, for three different answers:",
+    "  SKILLS BODIES AND TRAINING - their actual job is getting people in,",
+    "    and they know which routes are funded, which is Harry's live problem.",
+    "  ROV AND SUBSEA CONTRACTORS - closest to what he already does at",
+    "    Sonardyne, and the likeliest honest route offshore for him.",
+    "  OPERATORS - who decide what a contractor's crew must hold, so they",
+    "    know what the real minimum is rather than what an advert asks for.",
+    "",
+    "SONARDYNE IS DELIBERATELY NOT ON THIS LIST. It was, for a moment: he works",
+    "there and the people there know the kit. But a cold email to your current",
+    "employer asking how to get out of the workshop and offshore is a message",
+    "that can reach a line manager, and the downside is not a wasted approach -",
+    "it is the job he already has. That conversation is worth having, in person,",
+    "when he chooses. ask_around.py also refuses his employer in code, so adding",
+    "it back to this file is not enough to send one."
+  ],
+  "organisations": [
+    {
+      "organisation": "OPITO",
+      "why": "OPITO sets the BOSIET and MIST standards themselves, so you will know better than anyone whether there is a sensible order to do them in for someone not yet offshore",
+      "kind": "skills body"
+    },
+    {
+      "organisation": "Offshore Energies UK",
+      "why": "you work across the whole North Sea industry rather than one operator, so you see where people actually come in from",
+      "kind": "industry body"
+    },
+    {
+      "organisation": "AIS Survivex",
+      "why": "you train the people going offshore for the first time, so you meet more first-timers than anyone",
+      "kind": "training"
+    },
+    {
+      "organisation": "Petrofac",
+      "why": "you both train people and crew jobs, which is an unusual view of how someone gets their first rotation",
+      "kind": "training"
+    },
+    {
+      "organisation": "Maersk Training",
+      "why": "you see people coming into offshore work from other industries and from the forces",
+      "kind": "training"
+    },
+    {
+      "organisation": "ROVOP",
+      "why": "ROV work is the closest thing offshore to what I already do onshore at Sonardyne, and I would like to know whether that reads as relevant experience or not",
+      "kind": "rov"
+    },
+    {
+      "organisation": "Oceaneering",
+      "why": "your ROV crews use the kind of acoustic positioning kit I build and fault-find, and I want to know whether that counts for anything on the way in",
+      "kind": "rov"
+    },
+    {
+      "organisation": "Fugro",
+      "why": "your survey and ROV crews are the nearest offshore equivalent of the workshop side I already know",
+      "kind": "rov"
+    },
+    {
+      "organisation": "Ashtead Technology",
+      "why": "you rent and support subsea instrumentation offshore, which is the trade I already have onshore",
+      "kind": "subsea"
+    },
+    {
+      "organisation": "EnerMech",
+      "why": "you crew a lot of offshore technician work in the North Sea and I want to understand what the real minimum is to be considered",
+      "kind": "contractor"
+    },
+    {
+      "organisation": "Bilfinger Salamis UK",
+      "why": "you supply offshore maintenance crews across the North Sea, so you will know what an electrical technician actually needs to hold before anyone will take him",
+      "kind": "contractor"
+    },
+    {
+      "organisation": "Wood",
+      "why": "you crew offshore maintenance across the North Sea and will know whether an onshore electrical background is a way in or a dead end",
+      "kind": "contractor"
+    },
+    {
+      "organisation": "Harbour Energy",
+      "why": "as the operator you decide what a contractor's crew must hold, so you know the real minimum rather than what an advert asks for",
+      "kind": "operator"
+    },
+    {
+      "organisation": "TAQA",
+      "why": "you operate North Sea platforms directly, so you see what the crews coming aboard actually have behind them",
+      "kind": "operator"
+    },
+    {
+      "organisation": "Serica Energy",
+      "why": "you run North Sea assets with a small team, so you will have a clear view of what a technician needs before he is any use offshore",
+      "kind": "operator"
+    },
+    {
+      "organisation": "Ithaca Energy",
+      "why": "you operate in the North Sea and take on technicians through contractors, so you see who makes it and who does not",
+      "kind": "operator"
+    }
+  ]
+}

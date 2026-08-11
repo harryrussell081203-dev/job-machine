@@ -25,6 +25,7 @@ on:
       - "fire-sms/**"           # prove the phone bridge works, text nobody else
       - "fire-tickets/**"       # ask the agencies about sponsoring OPITO tickets
       - "fire-chase/**"         # the second letter, to whoever never answered
+      - "fire-ask/**"           # ask one person how they got offshore
   workflow_dispatch:
     inputs:
       test_mode:
@@ -161,6 +162,15 @@ jobs:
             python agency_outreach.py --send --tickets
             exit 0
           fi
+          # A separate avenue, and the only one that asks for nothing: one
+          # person, asked how they got their first offshore post. Deliberately
+          # slow - two or three a week - because it only works while it looks
+          # like a man asking around rather than a campaign.
+          if [[ "${GITHUB_REF_NAME}" == fire-ask/* ]]; then
+            echo "fire-ask branch: asking someone how they got offshore"
+            python ask_around.py --send
+            exit 0
+          fi
           # The second letter. Thirty-one went out, three came back, and the
           # rest were left alone forever - the cheapest thing wrong with this
           # system, because the address is known and the reader already chosen.
@@ -202,6 +212,9 @@ jobs:
           # send so a letter posted this run is never chased in the same
           # breath.
           python followup.py --send || true
+          # And one person asked how they got offshore. Its own cap and its
+          # own spacing - see ask_around.py.
+          python ask_around.py --send || true
           # Read back what this run just proved, so the next one starts
           # from it. Never allowed to fail the job.
           python learn.py --write || true

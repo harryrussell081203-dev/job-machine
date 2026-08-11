@@ -1237,6 +1237,17 @@ def name_from_email(local):
     return parts[0].capitalize()
 
 
+def load_answers_safe():
+    """data/answers.json, or {}. Here so modules that only need one fact out
+    of it do not each grow their own loader."""
+    try:
+        with open(os.path.join(ROOT, "data", "answers.json")) as f:
+            return {k: v for k, v in json.load(f).items()
+                    if not k.startswith("_")}
+    except Exception:
+        return {}
+
+
 def trusted_contact_name(job):
     """The name to greet this recipient by, or None - worked out afresh.
 
