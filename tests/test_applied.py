@@ -244,6 +244,9 @@ class TestTheListIsBuiltToGrow(unittest.TestCase):
         self.assertIn("3. ", text)
 
     def test_the_email_says_how_to_hand_them_back(self):
+        """It is a click now, not a sentence to compose at the end of a job
+        that is otherwise over - but replying still works, and the email has
+        to say so, because that is the habit he already has."""
         from tools import handoff
         st = {"jobs": {"a": banked("a")}, "handoff_emailed_on": None}
         with mock.patch.object(handoff, "OUT_FILE", "/tmp/hb_test.html"), \
@@ -252,17 +255,27 @@ class TestTheListIsBuiltToGrow(unittest.TestCase):
              mock.patch.object(jm, "send_email") as send:
             handoff.email_page(st, force=True)
         body = send.call_args.args[2]
-        self.assertIn("REPLY TO THIS EMAIL WITH 'DONE'", body)
-        self.assertIn("done DOF, T-Tech", body)
+        self.assertIn("Mark this one done", body)
+        self.assertIn("just press Send", body)
+        self.assertIn("'done'", body)
 
     def test_the_page_says_it_too(self):
         from tools import handoff
         with mock.patch.object(handoff, "OUT_FILE", "/tmp/hb_page.html"), \
-             mock.patch.object(handoff, "OUT_DIR", "/tmp"):
+             mock.patch.object(handoff, "OUT_DIR", "/tmp"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "harry@example.com"):
             handoff.build({"jobs": {"a": banked("a")}})
         page = open("/tmp/hb_page.html").read()
-        self.assertIn("reply to the email", page)
-        self.assertIn("<code>done</code>", page)
+        self.assertIn("Mark this one done", page)
+        self.assertIn("mailto:harry@example.com", page)
+
+    def test_the_old_way_of_saying_done_still_works(self):
+        """He has replied 'done' to this email before. Breaking a habit that
+        already works, to install a better one, is a worse trade than keeping
+        both - and it costs one line of regex."""
+        from tools import applied
+        self.assertTrue(applied.HANDOFF_SUBJECT.search(
+            "Re: [job-machine] 4 applications need only the CAPTCHA"))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

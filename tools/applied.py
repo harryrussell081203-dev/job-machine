@@ -66,8 +66,15 @@ HE_SAYS_DONE = re.compile(
     r"^\s*(all\s+)?(done|did|finished|completed|complete|sent|applied)\b", re.I)
 # The email that started the thread. Kept narrow so a reply to some other
 # job-machine mail cannot clear the CAPTCHA list.
-HANDOFF_SUBJECT = re.compile(r"needs? only the captcha|waiting on a captcha",
-                             re.I)
+#
+# The second half is the one-click hand-back. Every application on the page has
+# a "Mark this one done" link and the page has one for the lot; they are
+# mailto: links with the whole message already written, so finishing is a click
+# and Send rather than a sentence to compose at the end of a job that is
+# otherwise over. Those arrive as a FRESH message, not a reply, so matching on
+# the original subject would never have seen them - hence the marker.
+HANDOFF_SUBJECT = re.compile(
+    r"needs? only the captcha|waiting on a captcha|\[job-machine done\]", re.I)
 
 
 def waiting(state):
