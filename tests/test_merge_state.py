@@ -489,3 +489,45 @@ class TestTheInboxRegister(unittest.TestCase):
 
     def test_the_register_has_a_rule_so_it_never_falls_to_carry_unknown(self):
         self.assertIn("inbox", ms.KNOWN)
+
+
+class TestTheRegistersThatFellThroughTheCracks(unittest.TestCase):
+    """Five keys the merge was warning about on every single run.
+
+    carry_unknown got them right by luck - it unions the dicts and lets theirs
+    win, and theirs is main. A runner that wrote a letter and lost the record
+    is exactly how the same consultant gets asked twice."""
+
+    def test_a_meeting_request_is_never_sent_twice(self):
+        out = ms.merge({"agency_meeting_asked": {}},
+                       {"agency_meeting_asked": {"cammach": {"at": "2026-08-11"}}})
+        self.assertIn("cammach", out["agency_meeting_asked"])
+
+    def test_a_tickets_question_is_never_sent_twice(self):
+        out = ms.merge({"agency_tickets_asked": {"cammach": {"at": "2026-08-04"}}},
+                       {"agency_tickets_asked": {"cammach": {"at": "2026-08-11"}}})
+        self.assertEqual(out["agency_tickets_asked"]["cammach"]["at"],
+                         "2026-08-04")
+
+    def test_a_day_stamp_never_goes_backwards(self):
+        """Each answers 'has today's gone out yet'. An older value re-opens a
+        guard that has already been spent and sends him a second copy."""
+        for stamp in ("morning_sent_on", "evening_sent_on",
+                      "handoff_emailed_on"):
+            with self.subTest(stamp=stamp):
+                out = ms.merge({stamp: "2026-08-11"}, {stamp: "2026-08-04"})
+                self.assertEqual(out[stamp], "2026-08-11")
+
+    def test_the_goal_rotation_only_advances(self):
+        """Going backwards repeats a goal he read yesterday, which is the one
+        thing that makes a daily text ignorable."""
+        out = ms.merge({"morning_goal_rotation": 5},
+                       {"morning_goal_rotation": 2})
+        self.assertEqual(out["morning_goal_rotation"], 5)
+
+    def test_none_of_them_falls_to_carry_unknown_any_more(self):
+        for key in ("agency_meeting_asked", "agency_tickets_asked",
+                    "morning_sent_on", "evening_sent_on",
+                    "handoff_emailed_on", "morning_goal_rotation"):
+            with self.subTest(key=key):
+                self.assertIn(key, ms.KNOWN)
