@@ -1,4 +1,66 @@
 {
+ "agency_meeting_asked": {
+  "airswift": {
+   "at": "2026-08-11T12:06:37.461691+00:00",
+   "email": "info@airswift.com",
+   "name": "Airswift"
+  },
+  "brunel": {
+   "at": "2026-08-11T12:08:36.944335+00:00",
+   "email": "a.umair@brunel.net",
+   "name": "Brunel"
+  },
+  "cammach": {
+   "at": "2026-08-11T12:02:23.913531+00:00",
+   "email": "recruitment@wearecammach.com",
+   "name": "Cammach"
+  },
+  "matchtech": {
+   "at": "2026-08-11T12:12:03.636170+00:00",
+   "email": "complaints@matchtech.com",
+   "name": "Matchtech"
+  },
+  "morson": {
+   "at": "2026-08-11T12:10:52.189014+00:00",
+   "email": "webenquiry@morson.com",
+   "name": "Morson Group"
+  },
+  "murray": {
+   "at": "2026-08-11T12:14:39.021074+00:00",
+   "email": "info@murrayrecruitment.co.uk",
+   "name": "Murray Recruitment"
+  },
+  "nes fircroft": {
+   "at": "2026-08-11T12:05:35.311112+00:00",
+   "email": "bonnyville@nesfircroft.com",
+   "name": "NES Fircroft"
+  },
+  "petroplan": {
+   "at": "2026-08-11T12:07:32.633958+00:00",
+   "email": "zach.blaylock@petroplan.com",
+   "name": "Petroplan"
+  },
+  "rullion": {
+   "at": "2026-08-11T12:13:12.289530+00:00",
+   "email": "alistair.haigh@rullion.co.uk",
+   "name": "Rullion"
+  },
+  "spencer ogden": {
+   "at": "2026-08-11T12:09:41.774816+00:00",
+   "email": "amber.clark@spencer-ogden.com",
+   "name": "Spencer Ogden"
+  },
+  "texo": {
+   "at": "2026-08-11T12:04:22.179893+00:00",
+   "email": "info@texo.co.uk",
+   "name": "TEXO Recruitment"
+  },
+  "tmm": {
+   "at": "2026-08-11T12:03:27.960061+00:00",
+   "email": "abarry@tmmrecruitment.com",
+   "name": "TMM Recruitment"
+  }
+ },
  "agency_registered": {
   "airswift": {
    "at": "2026-08-04T19:06:03.308468+00:00",
@@ -69527,7 +69589,7 @@
   "2026-08-07": 4,
   "2026-08-08": 4,
   "2026-08-10": 10,
-  "2026-08-11": 10
+  "2026-08-11": 22
  },
  "spec_counts": {
   "2026-08-02": 2,
