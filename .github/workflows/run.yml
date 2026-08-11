@@ -26,6 +26,7 @@ on:
       - "fire-tickets/**"       # ask the agencies about sponsoring OPITO tickets
       - "fire-chase/**"         # the second letter, to whoever never answered
       - "fire-ask/**"           # ask one person how they got offshore
+      - "fire-meet/**"          # ask the agencies for twenty minutes in person
   workflow_dispatch:
     inputs:
       test_mode:
@@ -154,6 +155,15 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == fire-signup/* ]]; then
             echo "fire-signup branch: asking to be registered"
             python support_outreach.py --send --only registration
+            exit 0
+          fi
+          # Twenty minutes across a desk. An email gets a CV onto a database;
+          # a consultant who has met somebody puts them forward for the work
+          # that never reaches an advert, which in Aberdeen energy is most of
+          # it. Only to firms already written to - cold, it is a bigger ask.
+          if [[ "${GITHUB_REF_NAME}" == fire-meet/* ]]; then
+            echo "fire-meet branch: asking the agencies for a meeting"
+            python agency_outreach.py --send --meet
             exit 0
           fi
           # The offshore-tickets question, to the agencies flagged for it.

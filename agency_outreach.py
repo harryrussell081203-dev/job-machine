@@ -330,6 +330,134 @@ def tickets_letter(agency, contact=None):
     return "Offshore tickets - would you ever sponsor them?", body
 
 
+# ======================================================================
+# ASKING TO COME IN
+# ======================================================================
+# Harry asked for this: an in-person meeting at the local recruitment offices.
+#
+# It is the right instinct and it is a different letter. An email gets a
+# consultant to put a CV on a database; twenty minutes across a desk gets them
+# to remember a face, and a consultant who has met somebody puts them forward
+# for things that never reach an advert. In Aberdeen energy recruitment that
+# is most of the work.
+#
+# THREE THINGS THIS LETTER HAS TO GET RIGHT, and all three are about him
+# rather than about them:
+#
+#   HE DOES NOT DRIVE. An office at Westhill or Dyce is a bus and an
+#   afternoon, and finding that out on the day is how a meeting gets missed.
+#   So the letter says it plainly and offers to meet in town instead. Better
+#   an honest sentence now than a no-show later.
+#
+#   HE IS WORKING FULL TIME. A consultant offering 2pm on a Tuesday is
+#   offering something he would have to take leave for, and most people in
+#   his position say yes and then cancel. The letter gives the windows that
+#   are genuinely free and offers to take leave with notice, which is true.
+#
+#   IT NEVER NAMES THEIR OFFICE. Nothing in this project knows where any of
+#   these firms actually sit, and a letter that guesses an address tells the
+#   reader immediately that it was not written for them. It asks.
+MEETING_ASKED = "agency_meeting_asked"
+# When he can actually go, without inventing anything about his week. These
+# are the windows almost any full-time job leaves open, and the letter offers
+# leave with notice for anything else.
+AVAILABILITY = ("before 9am, over lunch, or after 5pm on a weekday, and I can "
+                "take time off with a bit of notice if a daytime slot is "
+                "easier for you")
+
+
+def meeting_due(state, agency):
+    """Only firms already written to, and only once.
+
+    Asking for a meeting cold is a bigger ask than asking to be registered,
+    and it lands better from somebody they have already heard from - the CV is
+    already with them, so the meeting is the next step rather than the first."""
+    key = jm.company_key(agency["name"])
+    if key in state.setdefault(MEETING_ASKED, {}):
+        return False, "already asked for a meeting"
+    if key not in register(state):
+        return False, "not registered with them yet - meeting comes after"
+    return True, ""
+
+
+def meeting_letter(agency, contact=None):
+    """Twenty minutes, in their office or in town, and he will fit round them."""
+    subject = "Could I come in and see you? - Harry Russell, Aberdeen"
+    body = (
+        f"{greeting(contact)}\n\n"
+        f"Harry Russell - I sent my CV over recently. Aberdeen electronics "
+        f"and instrumentation technician: three years at Sonardyne on subsea "
+        f"acoustic positioning systems, two years Royal Navy communications "
+        f"before that, DV cleared.\n\n"
+        f"Rather than being one more CV on a database, I would rather come in "
+        f"and meet you properly - twenty minutes, whenever suits. I am "
+        f"looking for offshore rotational work as a first choice, and "
+        f"electrical or instrumentation work onshore otherwise. I would get "
+        f"more out of ten minutes of your read on that market than out of "
+        f"another dozen applications.\n\n"
+        f"Two practical things so we do not waste each other's time. I do "
+        f"not drive, so if your office is out of the city I am happy to meet "
+        f"somewhere central instead, or come by bus if that is "
+        f"straightforward - just let me know where you are. And I am working "
+        f"full time, so I am free {AVAILABILITY}.\n\n"
+        f"If a phone call is easier than a meeting, that works too.\n\n"
+        f"Harry Russell\n"
+        f"07398 530978\n"
+    )
+    return subject, body
+
+
+def record_meeting_ask(state, agency, address):
+    state.setdefault(MEETING_ASKED, {})[jm.company_key(agency["name"])] = {
+        "at": jm.now(), "name": agency["name"], "email": address}
+
+
+def run_meetings(state, send=False, limit=None):
+    """Ask the agencies he is already registered with for twenty minutes."""
+    queue = []
+    for agency in load_agencies():
+        ok, reason = meeting_due(state, agency)
+        if ok:
+            queue.append(agency)
+        else:
+            print(f"[meet] {agency['name']}: {reason}")
+    if not queue:
+        print("[meet] nobody to ask - register with them first")
+        return 0
+    print(f"[meet] {len(queue)} agency(s) to ask for a meeting")
+    asked = 0
+    for agency in queue[:(limit or REGISTER_PER_RUN)]:
+        address, contact = find_address(agency)
+        if not address:
+            print(f"[meet] {agency['name']}: no real address, by hand")
+            continue
+        subject, body = meeting_letter(agency, contact)
+        to_addr = jm.GMAIL_ADDRESS if jm.TEST_MODE else address
+        if jm.TEST_MODE:
+            subject = f"[TEST -> {address}] {subject}"
+        if not send:
+            print(f"\n--- would ask {agency['name']} <{address}> for a meeting")
+            print(f"    subject: {subject}")
+            print("    " + body.replace("\n", "\n    "))
+            asked += 1
+            continue
+        try:
+            # No CV. They already have it - that is why they are on this list,
+            # and sending it again says he has forgotten he wrote before.
+            jm.send_email(to_addr, subject, body, attach_cv=False)
+            if not jm.TEST_MODE:
+                record_meeting_ask(state, agency, address)
+            jm.record_send(state)
+            asked += 1
+            print(f"[meet] {'TEST' if jm.TEST_MODE else 'LIVE'} asked "
+                  f"{agency['name']} -> {to_addr}")
+            jm.save(state)
+            time.sleep(REGISTER_INTERVAL_SECONDS)
+        except Exception as e:
+            print(f"[meet] failed {agency['name']}: {e}")
+    return asked
+
+
 def record_tickets_ask(state, agency, address):
     state.setdefault(TICKETS_ASKED, {})[jm.company_key(agency["name"])] = {
         "at": jm.now(), "name": agency["name"], "email": address}
@@ -488,6 +616,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="the default")
     ap.add_argument("--list", action="store_true",
                     help="show who has been written to and when")
+    ap.add_argument("--meet", action="store_true",
+                    help="ask the agencies you are registered with for twenty "
+                         "minutes in person")
     ap.add_argument("--tickets", action="store_true",
                     help="ask the flagged agencies whether they would ever "
                          "sponsor the OPITO offshore tickets")
@@ -497,6 +628,10 @@ def main(argv=None):
     if args.list:
         return show(state)
     send = args.send and not args.dry_run
+    if args.meet:
+        run_meetings(state, send=send, limit=args.limit)
+        jm.save(state)
+        return 0
     if args.tickets:
         run_tickets(state, send=send, limit=args.limit)
         jm.save(state)
