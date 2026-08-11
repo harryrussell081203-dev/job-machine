@@ -1403,6 +1403,267 @@
   }
  },
  "handoff_emailed_on": "2026-08-06",
+ "inbox": {
+  "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
+   "address": "hello@gojiberry-news.com",
+   "at": "2026-08-10T17:26:03+00:00",
+   "seen_at": "2026-08-11T20:18:58.325709+00:00",
+   "subject": "New August Demo Slots Open for Gojiberry AI",
+   "tracked": false,
+   "who": "Rom\u00e0n @Gojiberry"
+  },
+  "<0100019fee5d1821-6710d1be-a29b-4a4a-a45a-6f01e0ebb6a7-000000@email.amazonses.com>": {
+   "address": "support@httpsms.com",
+   "at": "2026-08-11T01:08:26+00:00",
+   "seen_at": "2026-08-11T20:18:58.325702+00:00",
+   "subject": "\u26a0\ufe0f No heartbeat from android phone [+44 7398 530978]",
+   "tracked": false,
+   "who": "httpSMS Support"
+  },
+  "<0110019febe18be1-c3470672-a7c3-460c-b374-b0132d058a55-000000@eu-north-1.amazonses.com>": {
+   "address": "arnold@httpsms.com",
+   "at": "2026-08-10T13:34:15+00:00",
+   "seen_at": "2026-08-11T20:18:58.325719+00:00",
+   "subject": "Show httpSMS some love on GitHub",
+   "tracked": false,
+   "who": "Arnold from httpSMS"
+  },
+  "<1F.38.57883.617EA7A6@i-0f26e26039cf50ae4.mta1vrest.sd.prd.sparkpost>": {
+   "address": "contact@napkin.ai",
+   "at": "2026-08-11T09:10:46+00:00",
+   "seen_at": "2026-08-11T20:18:58.325694+00:00",
+   "subject": "Introducing Napkin Slides \ud83d\ude80",
+   "tracked": false,
+   "who": "Napkin AI"
+  },
+  "<36934fb2b84c450488d5fe2581a170c0@LO8P265MB7892.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "ckeith@tmmrecruitment.com",
+   "at": "2026-08-11T13:04:19+00:00",
+   "seen_at": "2026-08-11T20:18:58.325682+00:00",
+   "subject": "Automatic reply: Hydro Group - Meeting Confirmation",
+   "tracked": false,
+   "who": "Cammy Keith"
+  },
+  "<4ec6129123da4f829d06f539149da381@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T08:06:11+00:00",
+   "seen_at": "2026-08-11T20:18:58.325752+00:00",
+   "subject": "RE: Sonardyne-trained tech for your Electrician role",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  },
+  "<75072490ad1f482091d062851685814b@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T08:58:16+00:00",
+   "seen_at": "2026-08-11T20:18:58.325745+00:00",
+   "subject": "Helklo from Steven at Blueprint Recruitment Ltd",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  },
+  "<8c73b18bfbdb4aff9b45bf29a0710346@LOAP265MB8506.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "alistair.haigh@rullion.co.uk",
+   "at": "2026-08-11T12:13:19+00:00",
+   "seen_at": "2026-08-11T20:18:58.325689+00:00",
+   "subject": "Automatic reply: Could I come in and see you? - Harry Russell,\r\n Aberdeen",
+   "tracked": false,
+   "who": "Alistair Haigh"
+  },
+  "<8e2b18533c8847709117b627f88b59ad@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T12:08:07+00:00",
+   "seen_at": "2026-08-11T20:18:58.325731+00:00",
+   "subject": "RE: Helklo from Steven at Blueprint Recruitment",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  },
+  "<920748aa70244e9d94654e94377350a3@LO0SPRMB0035.GBRP123.PROD.OUTLOOK.COM>": {
+   "address": "rachel.d@live-recruitment.co.uk",
+   "at": "2026-08-10T09:31:51+00:00",
+   "seen_at": "2026-08-11T20:18:58.325743+00:00",
+   "subject": "Automatic reply: LED Technical Operations Manager for live sport",
+   "tracked": false,
+   "who": "Rachel Duncan"
+  },
+  "<AM6PR06MB63281705B9E3F7691AB8E441E0DE2@AM6PR06MB6328.eurprd06.prod.outlook.com>": {
+   "address": "support@hrconsultancy.onmicrosoft.com",
+   "at": "2026-08-10T09:59:03+00:00",
+   "seen_at": "2026-08-11T20:18:58.325738+00:00",
+   "subject": "RE: Electrical Engineer - Harry Russell, available now",
+   "tracked": false,
+   "who": "support"
+  },
+  "<AM7PR06MB63601FB449E76685A8894352EADE2@AM7PR06MB6360.eurprd06.prod.outlook.com>": {
+   "address": "skazmi@hrcrecruitment.co.uk",
+   "at": "2026-08-10T13:09:07+00:00",
+   "seen_at": "2026-08-11T20:18:58.325726+00:00",
+   "subject": "Engineering - details ",
+   "tracked": false,
+   "who": "Saher Kazmi"
+  },
+  "<AM7PR06MB63609CFB9F054CC5B4A026D9EADE2@AM7PR06MB6360.eurprd06.prod.outlook.com>": {
+   "address": "skazmi@hrcrecruitment.co.uk",
+   "at": "2026-08-10T13:10:02+00:00",
+   "category": "interview",
+   "do": "Join Teams meeting",
+   "seen_at": "2026-08-11T20:18:58.325722+00:00",
+   "subject": "CV Chat ",
+   "texted_at": "2026-08-11T20:18:58.588071+00:00",
+   "tracked": false,
+   "who": "Saher Kazmi"
+  },
+  "<AM9PR03MB75061E6B9937D435B72CD24B96DD2@AM9PR03MB7506.eurprd03.prod.outlook.com>": {
+   "address": "info@murrayrecruitment.co.uk",
+   "at": "2026-08-11T12:24:04+00:00",
+   "seen_at": "2026-08-11T20:18:58.325687+00:00",
+   "subject": "RE: Could I come in and see you? - Harry Russell, Aberdeen",
+   "tracked": false,
+   "who": "Murray Recruitment"
+  },
+  "<CW1P265MB79260F2EACA90B07605D5C46CCDD2@CW1P265MB7926.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "pduthie@tmmrecruitment.com",
+   "at": "2026-08-11T13:08:51+00:00",
+   "seen_at": "2026-08-11T20:18:58.325679+00:00",
+   "subject": "RE: Hydro Group - Meeting Confirmation",
+   "tracked": false,
+   "who": "Paul Duthie"
+  },
+  "<CWXP123MB5020B37E02161DAFC2B6560791DD2@CWXP123MB5020.GBRP123.PROD.OUTLOOK.COM>": {
+   "address": "l.young@wearecammach.com",
+   "at": "2026-08-11T09:14:43+00:00",
+   "seen_at": "2026-08-11T20:18:58.325692+00:00",
+   "subject": "RE: Offshore tickets - would you ever sponsor them?",
+   "tracked": false,
+   "who": "Louise Young"
+  },
+  "<CWXP265MB54208E30F2BA6C8ABB9FEB60CCDE2@CWXP265MB5420.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "shared.enquiries@staffline.co.uk",
+   "at": "2026-08-10T12:22:17+00:00",
+   "seen_at": "2026-08-11T20:18:58.325728+00:00",
+   "subject": "RE: Shift Maintenance Engineer, Harry Russell",
+   "tracked": false,
+   "who": "Enquiries Shared"
+  },
+  "<DN9f-000000000000000000000000000000000000000000000TJJZ0800ZHVTSZMzQuqrZ_oPV344og@sfdc.net>": {
+   "address": "portal.support@motorolasolutions.com",
+   "at": "2026-08-10T12:07:21+00:00",
+   "seen_at": "2026-08-11T20:18:58.325733+00:00",
+   "subject": "Case #06725569 has been created - Customer Technical Support\r\n Engineer at Motorola Solutions - application",
+   "tracked": false,
+   "who": "NA Customer Care Customer Online"
+  },
+  "<JM6Jt000000000000000000000000000000000000000000000TJK9VP00ja_KrtHCQUSXQDme79oChg@sfdc.net>": {
+   "address": "annie.thompson@forcesemployment.org.uk",
+   "at": "2026-08-10T16:02:14+00:00",
+   "seen_at": "2026-08-11T20:18:58.325711+00:00",
+   "subject": "Forces Employment Charity.",
+   "tracked": false,
+   "who": "Annie Thompson"
+  },
+  "<LNXP123MB367597F7AD219EDB165CF8B2C6DD2@LNXP123MB3675.GBRP123.PROD.OUTLOOK.COM>": {
+   "address": "recruitment@thistle.org.uk",
+   "at": "2026-08-11T13:14:46+00:00",
+   "seen_at": "2026-08-11T20:18:58.325674+00:00",
+   "subject": "RE: [ext]Re: Communications Specialist at Thistle Foundation -\r\n application",
+   "tracked": false,
+   "who": "Recruitment"
+  },
+  "<LO2P265MB3803E857FE1225F13DBE36BFAADE2@LO2P265MB3803.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "brian@realise-recruitment.co.uk",
+   "at": "2026-08-10T09:44:28+00:00",
+   "seen_at": "2026-08-11T20:18:58.325741+00:00",
+   "subject": "RE: Fire & Security Engineer - available now",
+   "tracked": false,
+   "who": "Brian McCue"
+  },
+  "<LO4P123MB5059B0497A3F2E59BE45C8BBB3DD2@LO4P123MB5059.GBRP123.PROD.OUTLOOK.COM>": {
+   "address": "matt@hsbtechnical.com",
+   "at": "2026-08-11T05:15:28+00:00",
+   "seen_at": "2026-08-11T20:18:58.325699+00:00",
+   "subject": "RE: Mechanic at HSB Technical - application",
+   "tracked": false,
+   "who": "Matthew Smith"
+  },
+  "<LO7P265MB7923F3306523D828543D9F84ECDD2@LO7P265MB7923.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "complaints@gattacaplc.com",
+   "at": "2026-08-11T17:12:56+00:00",
+   "seen_at": "2026-08-11T20:18:58.325659+00:00",
+   "subject": "Re: Aberdeen electronics technician - for your database",
+   "tracked": false,
+   "who": "Complaints"
+  },
+  "<LO7P265MB846261E5B2120FCDA4604C0BDFDE2@LO7P265MB8462.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "annie.thompson@forcesemployment.org.uk",
+   "at": "2026-08-10T21:29:08+00:00",
+   "seen_at": "2026-08-11T20:18:58.325704+00:00",
+   "subject": "Apologies for wrong name. ",
+   "tracked": false,
+   "who": "Annie Thompson"
+  },
+  "<LOAP265MB84526D354845DEBDFBFC808BDFDD2@LOAP265MB8452.GBRP265.PROD.OUTLOOK.COM>": {
+   "address": "annie.thompson@forcesemployment.org.uk",
+   "at": "2026-08-11T12:56:00+00:00",
+   "seen_at": "2026-08-11T20:18:58.325684+00:00",
+   "subject": "Training information offshore in the UK 11.8.26",
+   "tracked": false,
+   "who": "Annie Thompson"
+  },
+  "<LOYP123MB356834E236FED7E221E391B5A3DD2@LOYP123MB3568.GBRP123.PROD.OUTLOOK.COM>": {
+   "address": "amber.clark@spencer-ogden.com",
+   "at": "2026-08-11T08:08:26+00:00",
+   "seen_at": "2026-08-11T20:18:58.325697+00:00",
+   "subject": "Re: Aberdeen electronics technician - for your database",
+   "tracked": false,
+   "who": "Amber Clark"
+  },
+  "<NM673A6232211003567dixonsr_mkt_prod1@email.currys.co.uk>": {
+   "address": "specialoffers@email.currys.co.uk",
+   "at": "2026-08-10T21:00:40+00:00",
+   "seen_at": "2026-08-11T20:18:58.325707+00:00",
+   "subject": "Ready for a bigger screen for less?",
+   "tracked": false,
+   "who": "Currys"
+  },
+  "<b4ee156a-563b-4f28-98d6-1d374b18fce8@firefishsoftware.com>": {
+   "address": "skazmi@hrcrecruitment.co.uk",
+   "at": "2026-08-10T15:07:28+00:00",
+   "seen_at": "2026-08-11T20:18:58.325714+00:00",
+   "subject": "Electrical Engineer - CV Submitted",
+   "tracked": false,
+   "who": "Saher Kazmi"
+  },
+  "<c9f4f0015b764e7ea843344132569107@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T08:55:40+00:00",
+   "seen_at": "2026-08-11T20:18:58.325748+00:00",
+   "subject": "Privacy Notice DP5A Blueprint Recruitment ",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  },
+  "<ced53ef0cde64ea1a4a011961d551155@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T10:49:23+00:00",
+   "seen_at": "2026-08-11T20:18:58.325736+00:00",
+   "subject": "RE: Helklo from Steven at Blueprint Recruitment",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  },
+  "<ee346ddd-45b8-41ad-bcaf-03dc2f5acd3a@firefishsoftware.com>": {
+   "address": "skazmi@hrcrecruitment.co.uk",
+   "at": "2026-08-10T15:07:28+00:00",
+   "seen_at": "2026-08-11T20:18:58.325717+00:00",
+   "subject": "Harry - Welcome to HRC Recruitment!",
+   "tracked": false,
+   "who": "Saher Kazmi"
+  },
+  "<f150137b525448fea4a10e48ff4dab3f@blueprint-recruitment.co.uk>": {
+   "address": "smitchell@blueprint-recruitment.co.uk",
+   "at": "2026-08-10T08:55:24+00:00",
+   "seen_at": "2026-08-11T20:18:58.325750+00:00",
+   "subject": "Key Information Document",
+   "tracked": false,
+   "who": "Steven Mitchell"
+  }
+ },
  "jobs": {
   "adzuna_5818273600": {
    "company": "Bayne's the Family Bakers",
