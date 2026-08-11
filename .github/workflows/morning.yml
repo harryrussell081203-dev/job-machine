@@ -39,6 +39,11 @@ jobs:
           PYTHONUNBUFFERED: "1"
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The brief tops up the inbox register before it reads it, so it can
+          # see mail that arrived overnight after the last two-hourly watch.
+          # Without a key that triage falls back to a regex, which is worse -
+          # it names the sender but cannot say what they actually want.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
           SMS_FROM: ${{ vars.SMS_FROM }}
           MORNING_HOUR_UK: ${{ vars.MORNING_HOUR_UK }}

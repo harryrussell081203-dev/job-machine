@@ -51,6 +51,10 @@ jobs:
           PYTHONUNBUFFERED: "1"
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          # The digest covers the whole inbox now, not just the replies, and
+          # the triage that turns a message into "what needs done" is a model
+          # call. See inbox_watch.py.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           HTTPSMS_API_KEY: ${{ secrets.HTTPSMS_API_KEY }}
           SMS_FROM: ${{ vars.SMS_FROM }}
         run: |
@@ -61,10 +65,16 @@ jobs:
           # the same moment so they arrive together and agree with each other.
           # Anything he has already cleared comes off before we count.
           python tools/applied.py --scan || true
+          # Top up the inbox register first. The two-hourly watcher last ran at
+          # 17:15 UTC, so without this the digest would miss anything that
+          # arrived in the last hour - which is exactly the mail that is still
+          # unread when he picks up the phone.
+          python inbox_watch.py --send || true
           # What came in today and what to do about it. His words: "a lot of
           # people just call me randomly as a result of the system working and
           # I have to figure out on the fly who's calling". One text at six,
-          # and tomorrow's callers are people he is expecting.
+          # and tomorrow's callers are people he is expecting. Covers the
+          # replies AND the rest of the mail - "for all of my emails".
           if [[ "${GITHUB_REF_NAME}" == fire-nudge/* ]]; then
             python evening.py --send --force || true
           else

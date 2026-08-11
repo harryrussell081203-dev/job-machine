@@ -109,20 +109,65 @@ def line_for(job):
     return f"{company}{role} - {action_for(job)}"
 
 
+# ======================================================================
+# THE REST OF THE MAIL
+# ======================================================================
+# The first version of this covered replies only - mail from a company the
+# machine had itself written to. That is not what he asked for. His words were
+# "text me every evening about the emails I've received that day and what
+# actions need taken FOR ALL OF MY EMAILS", and in a live job hunt a good half
+# of the useful mail is from somebody who found him rather than the other way
+# round: a consultant off a job board, the Job Centre, the Forces Employment
+# Charity. None of it appeared here.
+#
+# inbox_watch keeps the register of that mail and what each message wants. This
+# reads it. Anything from an address the reply watcher already covers is left
+# out, because the reply line above already names that company and the role -
+# which is more than the inbox alone can say.
+def other_mail(state):
+    """[(key, entry)] - today's mail from people the job records do not cover."""
+    try:
+        import inbox_watch
+        return [(k, e) for k, e in inbox_watch.arrived_today(state)
+                if not e.get("tracked")
+                and not NOT_WORTH_A_LINE.search(
+                    f"{e.get('subject', '')} {e.get('address', '')}")]
+    except Exception as e:
+        # This reads the register, not the mailbox - the workflow tops it up
+        # just before this runs. Wrapped anyway: a problem in the newer half
+        # must never cost him the reply digest, which needs no network at all.
+        print(f"[evening] inbox register unavailable, carrying on: {e}")
+        return []
+
+
+def line_for_mail(entry):
+    return f"{entry['who']} - {entry.get('do') or entry.get('subject', '')}"
+
+
 def compose(state):
     """The whole text, or None if there is nothing worth sending."""
     replies = [j for j in replies_today(state)
                if not NOT_WORTH_A_LINE.search(job_subject(j))]
-    if not replies:
+    mail = other_mail(state)
+    if not replies and not mail:
         return None
     replies.sort(key=rank)
     lines = [line_for(j) for j in replies[:MAX_LINES]]
-    more = len(replies) - len(lines)
+    # Whatever room is left goes to the rest of the inbox, urgent first.
+    room = max(0, MAX_LINES - len(lines))
+    mail_lines = [line_for_mail(e) for _, e in mail[:room]]
+    more = (len(replies) - len(lines)) + (len(mail) - len(mail_lines))
     urgent = sum(1 for j in replies if rank(j) == 0)
-    head = (f"{len(replies)} repl{'y' if len(replies) == 1 else 'ies'} today")
+    urgent += sum(1 for _, e in mail if e.get("category") == "interview")
+    counts = []
+    if replies:
+        counts.append(f"{len(replies)} repl{'y' if len(replies) == 1 else 'ies'}")
+    if mail:
+        counts.append(f"{len(mail)} other")
+    head = " and ".join(counts) + " today"
     if urgent:
         head += f" - {urgent} wants to interview you"
-    body = head + ":\n" + "\n".join(f"- {l}" for l in lines)
+    body = head + ":\n" + "\n".join(f"- {l}" for l in lines + mail_lines)
     if more > 0:
         body += f"\n- and {more} more in your inbox"
     # The point of the whole thing: he should recognise tomorrow's caller.

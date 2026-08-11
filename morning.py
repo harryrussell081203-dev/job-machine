@@ -49,15 +49,11 @@ most it ever repeats back.
     python morning.py --dry-run --no-inbox   # state file and goals only
 """
 import argparse
-import email as email_mod
-import imaplib
 import json
 import os
-import re
 import sys
-from datetime import datetime, timedelta, timezone
-from email.header import decode_header, make_header
 
+import inbox_watch
 import job_machine as jm
 import sms
 
@@ -165,134 +161,43 @@ def waiting_on_harry(state):
 # ======================================================================
 # THE INBOX
 # ======================================================================
-INBOX_DAYS = jm.env_int("MORNING_INBOX_DAYS", 3)
-MAX_MESSAGES = jm.env_int("MORNING_INBOX_MAX", 40)
-
-# Mail nobody is waiting on an answer to. Job boards, newsletters, receipts,
-# and anything that announces itself as unattended.
-NOT_A_PERSON = re.compile(
-    r"no-?reply|do-?not-?reply|notification|newsletter|mailer|automated|"
-    r"donotreply|bounce|postmaster|mailer-daemon|updates?@|info@jobs|"
-    r"cv-?library|totaljobs|reed\.co\.uk|indeed|s1jobs|jobsite|linkedin|"
-    r"glassdoor|adzuna|monster|jobserve|wowcher|beehiiv|alibabacloud|"
-    r"villagegym|creation\.co\.uk|usebouncer|secure\.", re.I)
-
-# What somebody wanting something from you writes. Used as the fallback when
-# there is no Gemini key, and as the filter on what is worth asking about.
-AN_ASK = re.compile(
-    r"\?|can you|could you|please (send|complete|fill|confirm|let|call|reply)|"
-    r"let me know|get back to me|we need|you need to|by (friday|monday|tuesday|"
-    r"wednesday|thursday|the \d)|deadline|as soon as|waiting (on|for) you|"
-    r"give me a (call|ring)|complete the (form|below)|send (me|us|a|your)|"
-    r"when are you|what time|confirm", re.I)
-
-
-def header_text(raw):
-    try:
-        return str(make_header(decode_header(raw or "")))
-    except Exception:
-        return raw or ""
+# The reading, the filtering and the triage all moved into inbox_watch.py.
+#
+# They started here, because the morning text was the first thing that wanted
+# them. That was the wrong home: this module runs ONCE A DAY, so a message that
+# arrived at nine in the morning and asked for a phone call was seen at a
+# quarter to eight the NEXT morning, if it beat two other items to the text.
+# And nothing was recorded, so the same mail was re-judged from scratch every
+# day and could never be marked as dealt with.
+#
+# inbox_watch runs every two hours, keeps a register of what each message wants
+# and whether it is still outstanding, and texts the urgent ones as they land.
+# The morning brief now reads that register instead of the mailbox, which means
+# the two can no longer disagree about what is waiting, and one message costs
+# one model call for its whole life rather than one a day forever.
+#
+# These names are kept as aliases because they are what the rest of this file
+# and its tests call. Same objects, one definition.
+NOT_A_PERSON = inbox_watch.NOT_A_PERSON
+AN_ASK = inbox_watch.AN_ASK
+header_text = inbox_watch.header_text
+asks_something = inbox_watch.asks_something
 
 
-def recent_inbound(days=None, limit=None):
-    """[(who, address, subject, body)] - real mail from real people.
-
-    Everything automated is dropped before anything reads a word of it, which
-    is most of the volume in a job hunt."""
-    if not (jm.GMAIL_ADDRESS and jm.GMAIL_APP_PASSWORD):
-        return []
-    since = datetime.now(timezone.utc) - timedelta(days=days or INBOX_DAYS)
-    out = []
-    try:
-        conn = imaplib.IMAP4_SSL("imap.gmail.com", timeout=jm.IMAP_TIMEOUT)
-        conn.login(jm.GMAIL_ADDRESS, jm.GMAIL_APP_PASSWORD)
-        conn.select("INBOX")
-    except Exception as e:
-        print(f"[morning] could not open the inbox: {e}")
-        return []
-    try:
-        status, data = conn.search(None, "SINCE", since.strftime("%d-%b-%Y"))
-        if status != "OK" or not data or not data[0].split():
-            return []
-        for num in reversed(data[0].split()[-200:]):
-            if len(out) >= (limit or MAX_MESSAGES):
-                break
-            try:
-                status, msgdata = conn.fetch(num, "(RFC822)")
-                if status != "OK":
-                    continue
-                msg = email_mod.message_from_bytes(msgdata[0][1])
-            except Exception:
-                continue
-            sender = header_text(msg.get("From", ""))
-            if NOT_A_PERSON.search(sender):
-                continue
-            address = (re.findall(r"[\w.+-]+@[\w.-]+", sender) or [""])[0]
-            if address.lower() == (jm.GMAIL_ADDRESS or "").lower():
-                continue
-            subject = header_text(msg.get("Subject", ""))
-            body = jm._message_text(msg)[:1200]
-            name = re.sub(r"<.*", "", sender).strip().strip('"') or address
-            out.append((name, address, subject, body))
-    finally:
-        try:
-            conn.logout()
-        except Exception:
-            pass
-    return out
-
-
-def asks_something(subject, body):
-    """Does this read like somebody waiting on Harry?"""
-    return bool(AN_ASK.search(f"{subject}\n{sms.own_words(body)}"))
-
-
-def inbox_actions(messages=None):
+def inbox_actions(state=None, messages=None):
     """[{text, weight}] - what the inbox says he owes somebody.
 
-    Gemini reads it when a key is available, because 'what is this person
-    waiting for' is a judgement, not a regex. It is told to quote the ask and
-    to return nothing rather than invent one, and everything it produces is
-    tied to a sender that really wrote in. Without a key the regex above still
-    catches the obvious ones, which is most of them."""
-    messages = recent_inbound() if messages is None else messages
-    candidates = [m for m in messages if asks_something(m[2], m[3])]
-    if not candidates:
-        return []
-    if not jm.GEMINI_API_KEY:
-        return [{"text": f"{who} is waiting on you: {subject[:60]}",
-                 "weight": 1.5} for who, _, subject, _ in candidates[:2]]
+    Reads inbox_watch's register, and tops it up from the mailbox first so a
+    morning after a quiet night still sees last night's mail. Everything in
+    there is already grounded in a message that really arrived, from a sender
+    who really wrote it - see inbox_watch.triage.
 
-    blob = "\n\n".join(
-        f"FROM: {who}\nSUBJECT: {subject}\nMESSAGE: {sms.own_words(body)[:500]}"
-        for who, _, subject, body in candidates[:8])
-    result = jm.gemini_json(
-        "You are triaging one person's inbox to find what he owes other "
-        "people. He is job hunting in Aberdeen and also runs a small "
-        "business.\n\n"
-        "Return ONLY JSON: {\"actions\": [{\"who\": \"<the sender's name>\", "
-        "\"do\": \"<the single concrete thing he must do, max 12 words, "
-        "imperative>\"}]}\n\n"
-        "RULES:\n"
-        "- Only include a message where somebody is genuinely waiting on HIM. "
-        "Ignore anything already handled, informational, or automated.\n"
-        "- The action must be something he does, not something he waits for.\n"
-        "- Quote what they asked for. Never invent a deadline or a detail "
-        "that is not in the message.\n"
-        "- At most 3. If nobody is waiting on him, return an empty list.\n\n"
-        f"{blob}", max_tokens=400, temperature=0.1)
-    actions = (result or {}).get("actions") or []
-    senders = {who.lower() for who, _, _, _ in candidates}
-    out = []
-    for action in actions[:3]:
-        who = str(action.get("who", "")).strip()
-        do = str(action.get("do", "")).strip().rstrip(".")
-        # Grounding: the model may only speak about somebody who really wrote.
-        if not do or not any(who.lower() in s or s in who.lower()
-                             for s in senders):
-            continue
-        out.append({"text": f"{do} ({who})", "weight": 1.5})
-    return out
+    `messages` is for the tests and for a one-off read: pass the raw mail and
+    it is triaged without touching the mailbox."""
+    state = {} if state is None else state
+    inbox_watch.scan(state, messages=messages)
+    return [{"text": inbox_watch.line_for(entry), "weight": 1.5}
+            for _, entry in inbox_watch.outstanding(state)]
 
 
 def todays_goal(state, goals, when=None):
@@ -329,7 +234,7 @@ def compose(state, goals, when=None, inbox=True):
     live = waiting_on_harry(state)
     if inbox:
         try:
-            live = sorted(live + inbox_actions(), key=lambda i: i["weight"])
+            live = sorted(live + inbox_actions(state), key=lambda i: i["weight"])
         except Exception as e:
             print(f"[morning] inbox unavailable, carrying on: {e}")
     seen, deduped = set(), []

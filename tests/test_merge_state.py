@@ -436,3 +436,56 @@ class TestARerunCanActuallyUpdateARecord(unittest.TestCase):
 
     def test_a_non_string_stamp_does_not_crash_the_merge(self):
         self.assertEqual(ms.last_touched({"scored_at": None, "x_at": 12}), "")
+
+
+class TestTheInboxRegister(unittest.TestCase):
+    """Every email that has been read, what it wants, and whether it has been
+    texted about or dealt with.
+
+    This needed a rule of its own, and the reason is the class of bug that has
+    now bitten this file four separate times: without one, carry_unknown()
+    unions the two dicts and lets THEIRS win a clash, which throws away every
+    mark the runner just wrote. For this register that means Harry gets texted
+    about the same email again on the next run, and the one after that."""
+
+    def test_both_sides_messages_survive(self):
+        out = ms.merge({"inbox": {"a": {"who": "A"}}},
+                       {"inbox": {"b": {"who": "B"}}})
+        self.assertEqual(set(out["inbox"]), {"a", "b"})
+
+    def test_the_runners_texted_mark_is_not_thrown_away(self):
+        """The bug this whole rule exists for. Main has the message from an
+        earlier run with no mark; the runner just texted him about it."""
+        out = ms.merge({"inbox": {"a": {"who": "A", "category": "interview"}}},
+                       {"inbox": {"a": {"who": "A", "category": "interview",
+                                        "texted_at": "2026-08-11T10:00:00"}}})
+        self.assertEqual(out["inbox"]["a"]["texted_at"], "2026-08-11T10:00:00")
+
+    def test_him_marking_it_done_survives_a_later_run(self):
+        out = ms.merge({"inbox": {"a": {"who": "A", "category": "question"}}},
+                       {"inbox": {"a": {"who": "A", "category": "question",
+                                        "done_at": "2026-08-11T10:00:00"}}})
+        self.assertEqual(out["inbox"]["a"]["done_at"], "2026-08-11T10:00:00")
+
+    def test_the_first_time_he_was_told_is_the_true_one(self):
+        out = ms.merge({"inbox": {"a": {"who": "A", "texted_at": "2026-08-11T12:00:00"}}},
+                       {"inbox": {"a": {"who": "A", "texted_at": "2026-08-11T09:00:00"}}})
+        self.assertEqual(out["inbox"]["a"]["texted_at"], "2026-08-11T09:00:00")
+
+    def test_the_side_that_actually_read_the_message_wins(self):
+        """Triage costs a model call. Losing it means paying for it twice and
+        the message sitting unlisted in between."""
+        out = ms.merge({"inbox": {"a": {"who": "A"}}},
+                       {"inbox": {"a": {"who": "A", "category": "call",
+                                        "do": "Ring Cammy back"}}})
+        self.assertEqual(out["inbox"]["a"]["category"], "call")
+        self.assertEqual(out["inbox"]["a"]["do"], "Ring Cammy back")
+
+    def test_a_read_message_is_not_overwritten_by_an_unread_copy(self):
+        out = ms.merge({"inbox": {"a": {"who": "A", "category": "call",
+                                        "do": "Ring Cammy back"}}},
+                       {"inbox": {"a": {"who": "A"}}})
+        self.assertEqual(out["inbox"]["a"]["category"], "call")
+
+    def test_the_register_has_a_rule_so_it_never_falls_to_carry_unknown(self):
+        self.assertIn("inbox", ms.KNOWN)
