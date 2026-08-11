@@ -7,8 +7,18 @@ name: job-machine replies
 on:
   schedule:
     - cron: "15 7-17/2 * * 1-5"   # 07:15..17:15 UTC, weekdays
+    # The weekend used to be silent, which was right when this only watched
+    # for replies to letters the machine had sent - nobody in recruitment
+    # answers one on a Sunday. It is not right now that it watches the whole
+    # inbox: the Job Centre, a charity caseworker, and anyone who found Harry
+    # himself all write at odd hours, and an interview invitation sitting
+    # unseen from Friday evening to Monday morning is the single most
+    # expensive thing this system could do. Twice a day is enough.
+    - cron: "15 10,16 * * 6,0"    # Saturday and Sunday
   push:
-    branches: ["fire-reply/**"]
+    branches:
+      - "fire-reply/**"     # check the mail now
+      - "fire-inbox/**"     # the same, and say out loud what the register holds
   workflow_dispatch: {}
 
 permissions:
@@ -51,7 +61,26 @@ jobs:
           DAILY_SMS_CAP: ${{ vars.DAILY_SMS_CAP }}
           TEST_MODE: ${{ vars.TEST_MODE }}
           REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
-        run: python job_machine.py --replies
+        run: |
+          # Mail from companies the machine wrote to: classified, answered if
+          # it is an interview invitation, phone number harvested out of the
+          # signature.
+          python job_machine.py --replies
+          # And everybody else. The reply watcher above walks state["jobs"] and
+          # searches the inbox FROM each known contact, so a consultant who
+          # found Harry on a job board and wrote to him cold was invisible to
+          # it - which is a good half of the useful mail a live job hunt
+          # produces. This reads the whole inbox, records what each message
+          # wants, and puts an interview or a call-me on his phone now rather
+          # than at six o'clock. Never allowed to fail the run: the reply
+          # handling above is the part that must not be lost.
+          python inbox_watch.py --send || true
+          # On a fire-inbox branch, print everything still outstanding as well,
+          # so the run log answers "what needs done" without opening the state
+          # file. The scan above has already saved, so this reads, not writes.
+          if [[ "${GITHUB_REF_NAME}" == fire-inbox/* ]]; then
+            python inbox_watch.py --list || true
+          fi
 
       - name: Commit state
         if: always()

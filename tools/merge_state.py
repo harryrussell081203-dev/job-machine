@@ -186,12 +186,49 @@ def union_latest(theirs, ours):
     return out
 
 
+def merge_inbox(theirs, ours):
+    """The inbox register: one entry per message, marks kept from both sides.
+
+    This needs a rule of its own, and the reason is the bug that has now bitten
+    this file four separate times: carry_unknown() unions the two dicts and lets
+    THEIRS win a clash, which for this register means a runner's marks are
+    thrown away. The runner reads the mailbox, classifies a message and records
+    texted_at; main already has that message from an earlier run without the
+    mark; theirs wins; the mark is gone; and Harry gets texted about the same
+    email again on the next run, and the one after that.
+
+    So the marks are merged rather than the entries. texted_at and done_at are
+    'has this ever happened' facts, and the earliest answer is the true one. A
+    triaged entry beats an untriaged one because triage costs a model call and
+    losing it means paying for it twice."""
+    out = dict(theirs)
+    for key, entry in ours.items():
+        existing = out.get(key)
+        if not isinstance(existing, dict) or not isinstance(entry, dict):
+            if existing is None:
+                out[key] = entry
+            continue
+        # Whichever side actually read the message is the better base.
+        base, other = ((entry, existing) if entry.get("category")
+                       and not existing.get("category") else (existing, entry))
+        merged = dict(base)
+        for mark in ("texted_at", "done_at"):
+            stamps = [str(e[mark]) for e in (entry, existing) if e.get(mark)]
+            if stamps:
+                merged[mark] = min(stamps)
+        if not merged.get("category") and other.get("category"):
+            merged["category"] = other["category"]
+            merged["do"] = other.get("do")
+        out[key] = merged
+    return out
+
+
 # Keys with a rule of their own below. Everything else is carried across by
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "portal_counts", "spec_counts", "spec_done", "ats_boards",
          "agency_registered", "sms_sent", "contact_numbers",
-         "portal_answer_cache", "last_summary_at"}
+         "portal_answer_cache", "last_summary_at", "inbox"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -308,6 +345,12 @@ def merge(theirs, ours):
             boards[key] = entry
     if boards:
         out["ats_boards"] = boards
+
+    # Every email that has been read, what it wants, and whether it has been
+    # texted about or dealt with. See merge_inbox for why theirs-wins is wrong.
+    seen = merge_inbox(theirs.get("inbox", {}), ours.get("inbox", {}))
+    if seen:
+        out["inbox"] = seen
 
     for stamp in ("last_summary_at",):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]

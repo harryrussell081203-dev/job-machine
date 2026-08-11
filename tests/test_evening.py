@@ -120,3 +120,64 @@ class TestWhenItGoes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheRestOfHisMail(unittest.TestCase):
+    """His words: "text me every evening about the emails I've received that
+    day and what actions need taken FOR ALL OF MY EMAILS".
+
+    The first version of this covered replies only - mail from a company the
+    machine had itself written to. In a live job hunt a good half of the useful
+    mail is from somebody who found HIM: a consultant off a job board, the Job
+    Centre, the Forces Employment Charity. None of it appeared here."""
+
+    def state(self, **entry):
+        base = {"who": "Cammy Keith", "address": "ckeith@tmm.com",
+                "subject": "Re: your CV", "category": "question",
+                "do": "Send your Thursday availability", "at": jm.now(),
+                "tracked": False}
+        base.update(entry)
+        return {"jobs": {}, "inbox": {"k": base}}
+
+    def test_a_stranger_who_wrote_in_gets_a_line(self):
+        body = evening.compose(self.state())
+        self.assertIn("Cammy Keith", body)
+        self.assertIn("Thursday availability", body)
+
+    def test_it_says_what_he_has_to_do_not_just_that_mail_arrived(self):
+        body = evening.compose(self.state(do="Ring Graham before Friday",
+                                          who="Graham Brown"))
+        self.assertIn("Ring Graham before Friday", body)
+
+    def test_a_company_the_reply_digest_already_names_is_not_listed_twice(self):
+        """The reply line above already gives the company AND the role, which
+        is more than the inbox alone can say."""
+        self.assertIsNone(evening.compose(self.state(tracked=True)))
+
+    def test_a_newsletter_that_slipped_through_is_still_left_out(self):
+        self.assertIsNone(evening.compose(
+            self.state(subject="Your weekly newsletter")))
+
+    def test_mail_nobody_is_waiting_on_is_not_a_line(self):
+        state = self.state()
+        del state["inbox"]["k"]["category"]
+        self.assertIsNone(evening.compose(state))
+
+    def test_replies_and_other_mail_are_counted_separately(self):
+        state = self.state()
+        state["jobs"] = {"j": {"company": "Hydrasun", "title": "Tech",
+                               "replied_at": jm.now(),
+                               "reply_category": "rejection"}}
+        body = evening.compose(state)
+        self.assertIn("1 reply", body)
+        self.assertIn("1 other", body)
+
+    def test_a_broken_register_does_not_cost_him_the_reply_digest(self):
+        state = {"jobs": {"j": {"company": "Hydrasun", "title": "Tech",
+                                "replied_at": jm.now(),
+                                "reply_category": "interview"}}}
+        import inbox_watch
+        with mock.patch.object(inbox_watch, "arrived_today",
+                               side_effect=RuntimeError("no register")):
+            body = evening.compose(state)
+        self.assertIn("Hydrasun", body)
