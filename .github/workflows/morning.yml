@@ -34,6 +34,22 @@ jobs:
 
       - run: pip install requests dnspython
 
+      # A fire-* branch carries whatever data/state.json looked like when the
+      # branch was cut, and this list is read straight out of it. Without this
+      # a forced run sends an empty CAPTCHA list while five are really waiting
+      # - which is exactly what it did. See the long note in run.yml.
+      - name: Start from the live state, not the branch's copy
+        if: startsWith(github.ref_name, 'fire-')
+        run: |
+          DEFAULT="${{ github.event.repository.default_branch }}"
+          git fetch origin "$DEFAULT" --depth=1
+          if git cat-file -e "origin/$DEFAULT:data/state.json" 2>/dev/null; then
+            git checkout "origin/$DEFAULT" -- data/state.json
+            echo "[state] working the live queue from $DEFAULT"
+          else
+            echo "[state] no state on $DEFAULT, using the branch's copy"
+          fi
+
       - name: Text this morning's actions
         env:
           PYTHONUNBUFFERED: "1"

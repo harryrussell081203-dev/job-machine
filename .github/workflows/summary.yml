@@ -17,7 +17,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: job-machine-summary
+  # Per branch. A group holds exactly one pending run and the next push into it
+  # deletes that run rather than queueing behind it - see the long note in
+  # run.yml. Main's scheduled runs still serialise against each other, which is
+  # the only place serialising was ever wanted.
+  group: job-machine-summary-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
