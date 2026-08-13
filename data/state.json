@@ -29071,13 +29071,6 @@
      "value": "United Kingdom"
     },
     {
-     "label": "Cover letter (Optional)",
-     "name": "cover_letter",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
-    },
-    {
      "label": "* Expected salary",
      "name": "CA_44509",
      "source": "bank:salary_expectation",
@@ -29108,7 +29101,8 @@
    ],
    "captcha_banked_at": "2026-08-06T09:53:17.264059+00:00",
    "captcha_flags": [
-    "unrecognised required field '* Do you have a car that you can use for work purposes?'"
+    "unrecognised required field '* Do you have a car that you can use for work purposes?'",
+    "cover letter left blank on purpose - the bot's draft was malformed and has been removed; write it yourself or leave it"
    ],
    "company": "T-Tech",
    "description": "Job Title: IT Field Engineer Location: Glasgow & Edinburgh Are you ready to take your IT support career to the next level? Do you thrive on tackling complex challenges and providing top-notch service? Look no further! We are seeking a highly skilled and passionate Service Desk Specialist to join our dynamic team and support a key clients. What will your day to day look like? 1. 2nd Line Support: Serve as the go-to problem-solver and hero of the Service Desk, providing exceptional support to our\u2026",
@@ -81056,13 +81050,6 @@
      "value": "07398 530978"
     },
     {
-     "label": "Cover letter (Optional)",
-     "name": "cover_letter",
-     "source": "grounded",
-     "type": "textarea",
-     "value": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}"
-    },
-    {
      "label": "* Do you have the 'Right to Work' in the UK?",
      "name": "QA_10874469",
      "source": "bank:right_to_work_uk",
@@ -81099,7 +81086,9 @@
     }
    ],
    "captcha_banked_at": "2026-08-06T09:56:09.537663+00:00",
-   "captcha_flags": [],
+   "captcha_flags": [
+    "cover letter left blank on purpose - the bot's draft was malformed and has been removed; write it yourself or leave it"
+   ],
    "company": "EnerMech",
    "company_domain": "enermech.com",
    "contact_email": "africa.recruitment@enermech.com",
