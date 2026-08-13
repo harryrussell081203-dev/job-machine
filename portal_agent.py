@@ -278,11 +278,40 @@ def ground_free_text(field, job, answers):
     if not result:
         return None
     answer, fact = result.get("answer"), result.get("fact_used")
-    if not answer or not fact or str(answer).strip().lower() in ("null", "none", "n/a"):
+    # The model is asked for a string and does not always send one. When it
+    # replied with a JSON object instead, str() turned it into
+    #   {'notice_period': 'None, available immediately', 'salary_expectation': ...}
+    # and that went into the cover letter box of two real Workable forms,
+    # where it sat waiting to be submitted to T-Tech and EnerMech. A dict here
+    # means the question was misread, so there is no answer worth salvaging -
+    # refuse it and let the field be flagged for Harry.
+    if not isinstance(answer, str):
+        print(f"[portal] model answered {type(answer).__name__}, not text - refusing")
         return None
-    if jm.slop_check(str(answer)):
+    answer = answer.strip()
+    if not answer or not fact or answer.lower() in ("null", "none", "n/a"):
         return None
-    return str(answer).strip()
+    if jm.slop_check(answer):
+        return None
+    return answer
+
+
+def typed_value(value):
+    """The text form of a planned answer, or a marker if it is not text.
+
+    A last stop before an answer is written down for a human to paste into a
+    real employer's form. str() is happy to render a dict or a list, and what
+    comes out looks like debugging output rather than a job application - a
+    Gemini reply that was an object instead of a string put
+    '{'notice_period': ..., 'salary_expectation': ...}' into the cover letter
+    of two live Workable applications. Anything structural is refused here,
+    loudly, rather than quietly stringified."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    print(f"[portal] refusing a {type(value).__name__} answer: {str(value)[:80]}")
+    return ""
 
 
 def plan_answers(fields, job, answers):
@@ -611,11 +640,13 @@ def bank_for_captcha(page, job, plan, flags):
     job.update({
         "status": "portal_awaiting_captcha",
         "portal_reason": "form filled, blocked by a bot check - needs you",
+        # str() on the value, so anything that is not already text has to be
+        # caught before it gets here rather than after - see typed_value().
         "captcha_answers": [{"label": p["field"].get("label")
                                       or p["field"].get("name") or "",
                              "name": p["field"].get("name") or "",
                              "type": p["field"].get("type"),
-                             "value": str(p["value"]),
+                             "value": typed_value(p["value"]),
                              "source": p["source"]}
                             for p in plan if p["kind"] != "file"],
         "captcha_flags": flags,
