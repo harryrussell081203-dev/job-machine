@@ -986,3 +986,44 @@ class TestTellingBotChecksApart(unittest.TestCase):
             'style="display:none;width:300px;height:80px"></iframe>'
             '<div class="grecaptcha-badge" style="width:70px;height:60px"></div>')
         self.assertEqual(pa.captcha_kind(page), "scored")
+
+
+class TestAnAnswerMustBeText(unittest.TestCase):
+    """Gemini is asked for a string answer and does not always send one. When
+    it replied with a JSON object, str() rendered it as
+
+        {'notice_period': 'None, available immediately', 'salary_expectation': ...}
+
+    and that went into the cover letter box of two live Workable applications,
+    to T-Tech and EnerMech, where it sat waiting to be submitted. It reads as
+    debugging output, not a job application."""
+
+    def test_a_structural_answer_is_refused_not_stringified(self):
+        for value in ({"notice_period": "immediately"}, ["a", "b"], {"x": 1}):
+            with self.subTest(value=value):
+                self.assertEqual(pa.typed_value(value), "")
+
+    def test_ordinary_answers_survive(self):
+        self.assertEqual(pa.typed_value("35000"), "35000")
+        self.assertEqual(pa.typed_value(35000), "35000")
+        self.assertEqual(pa.typed_value(True), "true")
+        self.assertEqual(pa.typed_value(False), "false")
+
+    def test_the_composer_refuses_a_non_string_answer(self):
+        with mock.patch.object(pa.jm, "gemini_json",
+                               return_value={"answer": {"a": 1},
+                                             "fact_used": "profile"}):
+            self.assertIsNone(pa.ground_free_text(
+                {"label": "Cover letter", "type": "textarea"}, {}, {}))
+
+    def test_the_composer_still_accepts_a_real_answer(self):
+        with mock.patch.object(pa.jm, "gemini_json",
+                               return_value={"answer": "Three years at Sonardyne.",
+                                             "fact_used": "profile line 2"}):
+            self.assertEqual(
+                pa.ground_free_text({"label": "Why you?", "type": "textarea"}, {}, {}),
+                "Three years at Sonardyne.")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
