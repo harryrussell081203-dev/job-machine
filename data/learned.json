@@ -1,0 +1,142 @@
+{
+  "_README": [
+    "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
+    "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
+  ],
+  "updated_at": "2026-08-11T08:43:12.664524+00:00",
+  "emails": {
+    "sent": 54,
+    "human_replies": 6
+  },
+  "verdicts": [],
+  "not_yet": [
+    {
+      "dimension": "template",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "contact",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "recipient",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "hour",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    },
+    {
+      "dimension": "score",
+      "why": "the intervals still overlap - no real difference yet",
+      "sends_needed": 8
+    }
+  ],
+  "platform_order": {},
+  "answer_gaps": [
+    {
+      "question": "'' has no option matching '35000'",
+      "times": 5,
+      "first_seen_at": "Staffline"
+    },
+    {
+      "question": "could not answer '* Cover letter' from Harry's own information",
+      "times": 4,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "'Masters Degree' has no option matching 'BEng (Hons) Engineering: Instrumentation, Measure",
+      "times": 3,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "'Pays' has no option matching 'United Kingdom'",
+      "times": 1,
+      "first_seen_at": "Speedy Services"
+    },
+    {
+      "question": "'ctl02$ctl00$ctl00$mainContentArea$mainContentArea$mainContentArea$CandidateAdvertApplicat",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Please review our Candidate Privacy Agreement and confirm your acceptance.: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like email alerts about relevant jobs?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like to keep up-to-date with what's happening in your industry?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "Would you like to receive SMS alerts?: Error",
+      "times": 1,
+      "first_seen_at": "Maintech Recruitment"
+    },
+    {
+      "question": "unrecognised required field 'Organisation'",
+      "times": 1,
+      "first_seen_at": "Staffline"
+    },
+    {
+      "question": "unrecognised required field '* Do you have a car that you can use for work purposes?'",
+      "times": 1,
+      "first_seen_at": "T-Tech"
+    },
+    {
+      "question": "unrecognised required field 'Full Name *'",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
+    },
+    {
+      "question": "could not answer 'Bio *' from Harry's own information",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
+    },
+    {
+      "question": "answer bank has no 'website' and 'By using this form you agree with the storage and handli",
+      "times": 1,
+      "first_seen_at": "Allstaff Recruitment"
+    },
+    {
+      "question": "unrecognised required field '* Do you have a permanent residency in the UK?'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Address'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Place of Permanent Residence'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Industry Experience (Years)'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field '* Role Experience (Years)'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    },
+    {
+      "question": "unrecognised required field 'I am an Australian Citizen/Permanent Resident'",
+      "times": 1,
+      "first_seen_at": "DOF"
+    }
+  ]
+}
