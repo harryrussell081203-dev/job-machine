@@ -75,6 +75,8 @@ jobs:
           PORTAL_MAX_AGE_DAYS: ${{ vars.PORTAL_MAX_AGE_DAYS }}
           PORTAL_PER_RUN_CAP: ${{ vars.PORTAL_PER_RUN_CAP }}
           PORTAL_DAILY_CAP: ${{ vars.PORTAL_DAILY_CAP }}
+          # How many real submissions a fire-submit/** run makes.
+          SUBMIT_LIMIT: ${{ vars.SUBMIT_LIMIT }}
         run: |
           if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
             # The MoD register of Covenant signatories. Every name on it is an
@@ -112,8 +114,12 @@ jobs:
           ARGS="--harvest --run"
           # a fire-submit/* branch means: really apply, and only to one job
           if [[ "${GITHUB_REF_NAME}" == fire-submit/* ]]; then
-            ARGS="$ARGS --submit --limit 1"
-            echo "fire-submit branch: submitting ONE real application"
+            # Was --limit 1, from when this had never once submitted anything
+            # and one real application was the most that should be risked on
+            # it. It has since submitted three to DOF, so the limit is now the
+            # ordinary per-run cap and can be overridden per fire.
+            ARGS="$ARGS --submit --limit ${SUBMIT_LIMIT:-6}"
+            echo "fire-submit branch: submitting up to ${SUBMIT_LIMIT:-6} real applications"
           elif [ -n "${{ github.event.inputs.limit }}" ]; then
             ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"
           fi
