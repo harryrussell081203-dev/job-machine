@@ -2635,6 +2635,58 @@ def next_stakeholder(job):
     return None
 
 
+SITUATION_PATH = os.path.join(ROOT, "data", "situation.json")
+
+
+def load_situation():
+    try:
+        with open(SITUATION_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def timeline_sentence(situation=None, today_str=None):
+    """One true sentence about where he stands, or "" if there is nothing to say.
+
+    An offer in hand is the strongest thing a candidate can say to a live
+    conversation, and the easiest thing to overstate. So it comes from facts on
+    disk with an expiry rather than from a model, and the rules are enforced
+    here rather than requested in a prompt:
+
+      - the offering employer is never named. In a market the size of
+        Aberdeen's that gets back to the recruiter who placed him.
+      - it says an offer exists. Never what it is worth, never a competing bid,
+        never a hint that somebody else has offered more.
+      - decide_by is a hard expiry, because 'I have an offer' stops being true
+        the moment he accepts or declines, and a stale claim is a lie he did
+        not choose to tell.
+    """
+    situation = load_situation() if situation is None else situation
+    today_str = today_str or today()
+    offer = situation.get("offer") or {}
+    decide_by = str(offer.get("decide_by") or "")
+    live_offer = bool(offer) and decide_by >= today_str
+
+    interview = situation.get("interview_booked") or {}
+    on = str(interview.get("on") or "")
+    live_interview = bool(interview) and on >= today_str
+
+    if live_offer and live_interview:
+        return ("I should be straight with you: I have had an offer this week and "
+                "another interview booked, so I am working to a timeline. If this "
+                "role is live I would rather not miss it.")
+    if live_offer:
+        return ("I should be straight with you: I have had an offer this week, so "
+                "I am working to a timeline. If this role is live I would rather "
+                "not miss it.")
+    if live_interview:
+        return ("For context, I have another interview booked this week, so I am "
+                "moving fairly quickly.")
+    return ""
+
+
 def run_followups(state):
     if TEST_MODE:
         print("[followup] disabled in TEST_MODE")
@@ -2686,12 +2738,18 @@ def run_followups(state):
             target, target_name = other["email"], other.get("name")
 
         greeting = f"Hi {target_name}," if target_name else "Hi,"
+        # Only ever on a follow-up. Leading with leverage to somebody who has
+        # not met him reads as arrogance; saying it to a conversation that has
+        # already gone quiet is just useful information for them.
+        timeline = timeline_sentence()
+        pressure = f"{timeline}\n\n" if timeline else ""
         if which == 1:
             body = (
                 f"{greeting}\n\n"
                 f"Following up on the note I sent {sent_at.strftime('%A')} about the "
                 f"{job['title']} role. Still interested, and happy to come in for a chat "
                 f"or do a short call whenever suits.\n\n"
+                f"{pressure}"
                 f"Is it worth me sending anything else over?\n\n"
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
             )
@@ -2702,6 +2760,7 @@ def run_followups(state):
                 f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
                 f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
                 f"based and free to start now.\n\n"
+                f"{pressure}"
                 f"Is that role still open, or is there someone better placed for me "
                 f"to speak to?\n\n"
                 f"Harry\n{SIGNOFF}"
@@ -2712,6 +2771,7 @@ def run_followups(state):
                 f"Last note from me on the {job['title']} role - I know inboxes get "
                 f"buried. Still interested and available immediately if it is live. "
                 f"If the timing is wrong, no bother at all.\n\n"
+                f"{pressure}"
                 f"Worth keeping my CV on file for the next opening?\n\n"
                 f"Harry\n{SIGNOFF.replace(' / CV attached', '')}"
             )
