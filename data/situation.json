@@ -1,0 +1,32 @@
+{
+  "_README": [
+    "Where Harry actually stands right now. Used by the follow-up nudges to add",
+    "ONE true sentence about his timeline - nothing else reads this file.",
+    "",
+    "Why it exists: an offer in hand is the strongest thing a candidate can say",
+    "to a live conversation, and it is also the easiest thing in the world to",
+    "overstate. So it is written down as facts with an expiry rather than left",
+    "to a model to phrase, and every rule below is enforced in code:",
+    "",
+    "  - The offering employer is NEVER named. It is nobody else's business, and",
+    "    in a small market it would get back to the recruiter who placed him.",
+    "  - It says an offer exists. It never says what it is worth, never invents a",
+    "    competing bid, and never implies another employer has offered more.",
+    "  - decide_by is a hard expiry. Past that date the sentence disappears on its",
+    "    own, because 'I have an offer' stops being true the moment he accepts or",
+    "    declines one and a stale claim is a lie he did not choose to tell.",
+    "  - It is only ever added to a FOLLOW-UP, never to a first approach. Leading",
+    "    with leverage to somebody who has not met you reads as arrogance.",
+    "",
+    "Set offer to null the moment it is accepted or declined."
+  ],
+  "offer": {
+    "received_at": "2026-08-17",
+    "decide_by": "2026-08-24",
+    "note": "Offer received via a recruiter for a technician role in Aberdeen. Employer deliberately not recorded - it is never named in an email."
+  },
+  "interview_booked": {
+    "on": "2026-08-21",
+    "note": "Second interview booked with another Aberdeen employer for Friday 21 August."
+  }
+}

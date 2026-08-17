@@ -2194,3 +2194,97 @@ class TestNoLetterEverClaimsAClearance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestSayingHeHasAnOffer(unittest.TestCase):
+    """An offer in hand is the strongest thing a candidate can say to a live
+    conversation, and the easiest thing in the world to overstate.
+
+    So it comes from facts on disk with an expiry rather than from a model, and
+    every rule is enforced in code rather than requested in a prompt."""
+
+    OFFER = {"offer": {"received_at": "2026-08-17", "decide_by": "2026-08-24"}}
+    BOTH = {"offer": {"decide_by": "2026-08-24"},
+            "interview_booked": {"on": "2026-08-21"}}
+
+    def test_it_says_an_offer_exists(self):
+        said = jm.timeline_sentence(self.OFFER, today_str="2026-08-18")
+        self.assertIn("offer", said.lower())
+
+    def test_it_never_names_the_employer(self):
+        """In a market the size of Aberdeen's that gets straight back to the
+        recruiter who placed him."""
+        situation = {"offer": {"decide_by": "2026-08-24",
+                               "employer": "Hydro Group"}}
+        said = jm.timeline_sentence(situation, today_str="2026-08-18")
+        self.assertNotIn("hydro", said.lower())
+
+    def test_it_never_says_what_the_offer_is_worth(self):
+        situation = {"offer": {"decide_by": "2026-08-24", "salary": "30420",
+                               "hourly": "15.00"}}
+        said = jm.timeline_sentence(situation, today_str="2026-08-18")
+        for leak in ("30420", "30,420", "15.00", "£"):
+            with self.subTest(leak=leak):
+                self.assertNotIn(leak, said)
+
+    def test_it_never_invents_a_competing_bid(self):
+        said = jm.timeline_sentence(self.BOTH, today_str="2026-08-18")
+        for invented in ("better offer", "higher", "more than", "beat",
+                         "competing", "another offer"):
+            with self.subTest(invented=invented):
+                self.assertNotIn(invented, said.lower())
+
+    def test_it_expires_on_its_own(self):
+        """'I have an offer' stops being true the moment he accepts or declines
+        one, and a stale claim is a lie he did not choose to tell."""
+        self.assertEqual(jm.timeline_sentence(self.OFFER, today_str="2026-08-25"), "")
+        self.assertEqual(jm.timeline_sentence(self.BOTH, today_str="2026-09-01"), "")
+
+    def test_nothing_is_said_when_there_is_nothing_to_say(self):
+        self.assertEqual(jm.timeline_sentence({}, today_str="2026-08-18"), "")
+        self.assertEqual(jm.timeline_sentence({"offer": None}, today_str="2026-08-18"), "")
+
+    def test_an_interview_alone_is_stated_more_softly(self):
+        said = jm.timeline_sentence({"interview_booked": {"on": "2026-08-21"}},
+                                    today_str="2026-08-18")
+        self.assertIn("interview", said.lower())
+        self.assertNotIn("offer", said.lower())
+
+    def test_it_is_never_added_to_a_first_approach(self):
+        """Leading with leverage to somebody who has not met him reads as
+        arrogance. Only a follow-up carries it."""
+        job = {"title": "Workshop Technician", "company": "Oceaneering",
+               "location": "Aberdeen", "description": "", "source": "adzuna"}
+        self.assertNotIn("offer", jm.plain_email(job)["body"].lower())
+
+    def test_a_followup_carries_it(self):
+        job = {"external_id": "x", "company": "Vickerstock", "status": "sent",
+               "title": "Maintenance Electrician", "contact_name": "Leah",
+               "contact_email": "l.irwin@vickerstock.com",
+               "sent_at": (datetime.now(timezone.utc)
+                           - timedelta(days=5)).isoformat(),
+               "sent_subject": "x", "message_id": "<a@b>"}
+        state = {"jobs": {"x": job}, "send_counts": {}, "companies_contacted": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@g.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "has_reply_from", return_value=False), \
+             mock.patch.object(jm, "timeline_sentence",
+                               return_value="I have had an offer this week."), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send, \
+             mock.patch.object(jm, "save"):
+            jm.run_followups(state)
+        self.assertIn("offer", send.call_args[0][2].lower())
+
+    def test_the_shipped_file_is_valid_and_carries_an_expiry(self):
+        situation = jm.load_situation()
+        offer = situation.get("offer")
+        if offer:
+            self.assertTrue(offer.get("decide_by"),
+                            "an offer with no decide_by can never expire")
+            self.assertNotIn("employer", offer,
+                             "the offering employer must not be recorded")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
