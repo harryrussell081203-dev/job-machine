@@ -72,6 +72,27 @@ JOB_LINK = re.compile(
 JUNK_LINK = re.compile(
     r"unsubscribe|/login|/signin|/register|/account|/settings|/preferences|"
     r"privacy|/help|/support|manage-alerts|email-preferences", re.I)
+# An alert is mostly pictures, and some of them are filed under paths with the
+# word 'job' in them. One harvested advert was glassdoor's jobMatch.png.
+ASSET_LINK = re.compile(
+    r"\.(png|jpe?g|gif|webp|svg|css|js|ico|woff2?|ttf)(\?|$)", re.I)
+
+# What an alert says about a job, in the alert itself. LinkedIn, Glassdoor,
+# Totaljobs and s1jobs all write the role and the employer in plain text
+# beside the link - which matters, because fetching the advert to read it does
+# not work: LinkedIn and Glassdoor serve a login wall to anything without a
+# browser, so 226 of the first 333 adverts harvested this way were thrown away
+# for 'did not name the role and employer' when the email had said both.
+ALERT_TITLE = re.compile(
+    r"([A-Z][\w&/(),.'+-]*(?:\s+[\w&/(),.'+-]+){0,7}?)\s+(?:at|@|-|\u2013)\s+"
+    r"([A-Z][\w&.,'()/+-]*(?:\s+[\w&.,'()/+-]+){0,5})")
+
+# Places that turn up glued to the end of an employer name in an alert.
+LOCATION_TAIL = re.compile(
+    r"[\s,]+(aberdeen(shire)?|dundee|edinburgh|glasgow|inverness|montrose|"
+    r"peterhead|fraserburgh|elgin|perth|stirling|dyce|westhill|portlethen|"
+    r"scotland|england|wales|united kingdom|uk|remote|hybrid|on-?site)"
+    r"([\s,]+\w+)?\s*$", re.I)
 
 MAX_ALERTS_PER_RUN = jm.env_int("ALERT_MAX_PER_RUN", 40)
 MAX_LINKS_PER_ALERT = jm.env_int("ALERT_MAX_LINKS", 25)
@@ -88,7 +109,7 @@ def job_links(text):
     seen, out = set(), []
     for url in JOB_LINK.findall(text or ""):
         url = url.rstrip(".,);'\"")
-        if JUNK_LINK.search(url):
+        if JUNK_LINK.search(url) or ASSET_LINK.search(url):
             continue
         # alert links carry tracking junk; the path is what identifies the job
         key = re.sub(r"[?&](utm_|src|from|token|sig|hl|mid|eid)[^&]*", "", url)
@@ -100,6 +121,58 @@ def job_links(text):
         if len(out) >= MAX_LINKS_PER_ALERT:
             break
     return out
+
+
+def facts_from_alert(text, url, subject=""):
+    """(title, company) as the ALERT itself states them, or ("", "").
+
+    Cheaper and far more reliable than opening the advert. LinkedIn and
+    Glassdoor answer a bare fetch with a login wall, so the page route learns
+    nothing from exactly the boards that send the most alerts - and the email
+    has already said 'Assembly Technician at CRE Marine' in its own subject
+    line.
+
+    Looks at the anchor text around this link first, because an alert lists
+    several jobs and the subject only names one of them. Falls back to the
+    subject, which is right for the single-job alerts."""
+    around = ""
+    if url:
+        at = (text or "").find(url)
+        if at != -1:
+            # Start after the tag closes, or the href itself lands in the
+            # title: 'https://x.com/jobs/1">Rope Access Technician'.
+            close = (text or "").find(">", at)
+            start = close + 1 if 0 <= close < at + 300 else at + len(url)
+            around = jm.strip_html((text or "")[start:start + 600])
+    for candidate in (around, jm.strip_html(subject or "")):
+        candidate = re.sub(r"\s+", " ", candidate or "").strip()
+        # 'New jobs similar to Trainee Technician' is the board describing its
+        # own alert, not a vacancy anybody is advertising.
+        candidate = re.sub(r"^(new )?jobs? (similar to|like|you may be a fit for)\s+",
+                           "", candidate, flags=re.I).strip()
+        if not candidate:
+            continue
+        # Split on the LAST ' at ', not the first. 'EOI - Electrical
+        # Technician at Wood' is one job at Wood, and taking the first
+        # separator makes the role 'EOI' and the employer 'Electrical
+        # Technician at Wood'.
+        parts = re.split(r"\s+(?:at|@)\s+", candidate)
+        if len(parts) < 2:
+            continue
+        title = " at ".join(parts[:-1]).strip(" .,-|")
+        company = parts[-1].strip(" .,-|")
+        if BOARD_NAMES.search(company) or BOARD_NAMES.search(title):
+            continue
+        company = re.sub(r"\s+(and \d+ more.*|in [A-Z].*)$", "", company)
+        # An alert prints the place right after the employer, so the match runs
+        # on into it: 'CRE Marine, An Amphenol Company Aberdeen'. A location is
+        # not part of anybody's name.
+        company = LOCATION_TAIL.sub("", company).strip(" .,-|")
+        title = re.sub(r"\s*[-\u2013|]\s*$", "", title).strip()
+        if len(title) < 3 or len(company) < 2 or len(company) > 80:
+            continue
+        return title[:120], company[:80]
+    return "", ""
 
 
 def board_of(url):
@@ -188,10 +261,14 @@ def harvest_alerts(state, days=None):
                 if eid in state["jobs"]:
                     continue
                 board = board_of(url)
+                # What the alert itself says, before anything is fetched. The
+                # boards that send the most alerts answer a bare fetch with a
+                # login wall, so this is usually the only chance to learn it.
+                title, company = facts_from_alert(text, url, subject)
                 state["jobs"][eid] = {
                     "external_id": eid,
-                    "title": "",              # read from the advert at discovery
-                    "company": "",
+                    "title": title,
+                    "company": company,
                     "location": "",
                     "description": "",
                     "url": url,

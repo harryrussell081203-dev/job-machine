@@ -259,3 +259,77 @@ class TestHarvesting(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestReadingTheAlertInsteadOfTheAdvert(unittest.TestCase):
+    """333 adverts were harvested out of Harry's alerts and not one produced an
+    application. 226 of them were binned for 'did not name the role and
+    employer'.
+
+    The enrichment fetches each advert to read its title, and LinkedIn and
+    Glassdoor answer a bare fetch with a login wall - so the route learned
+    nothing from precisely the boards that send the most alerts. The email had
+    already said it: 'Assembly Technician at CRE Marine'."""
+
+    def test_the_role_and_employer_come_out_of_the_alert(self):
+        for subject, title, company in (
+                ("Assembly Technician at CRE Marine, An Amphenol Company",
+                 "Assembly Technician", "CRE Marine, An Amphenol Company"),
+                ("Senior Workshop Technician at Underwater Contracting Ltd (UCO)",
+                 "Senior Workshop Technician", "Underwater Contracting Ltd (UCO)"),
+                ("Service Technician at Owen Daniels",
+                 "Service Technician", "Owen Daniels")):
+            with self.subTest(subject=subject):
+                self.assertEqual(ah.facts_from_alert("", "", subject),
+                                 (title, company))
+
+    def test_a_location_is_not_part_of_the_employers_name(self):
+        """An alert prints the place straight after the employer, so the match
+        runs on into it."""
+        _, company = ah.facts_from_alert(
+            "", "", "Refrigeration Engineer at GSS Contracts, Aberdeen, Scotland")
+        self.assertEqual(company, "GSS Contracts")
+
+    def test_the_boards_own_furniture_is_not_a_job(self):
+        for subject in ("8 new Workshop Technician jobs in Aberdeen",
+                        "7 new \"Electrical\" jobs in Aberdeen",
+                        "Jobs you may be a fit for"):
+            with self.subTest(subject=subject):
+                self.assertEqual(ah.facts_from_alert("", "", subject), ("", ""))
+
+    def test_the_link_text_beats_the_subject(self):
+        """An alert lists several jobs and the subject names only one, so the
+        words around each link are what identify that link's job."""
+        text = ('<a href="https://x.com/jobs/1">Rope Access Technician at Acme '
+                'Subsea</a>')
+        title, company = ah.facts_from_alert(
+            text, "https://x.com/jobs/1",
+            "Service Technician at Owen Daniels")
+        self.assertEqual((title, company), ("Rope Access Technician", "Acme Subsea"))
+
+    def test_an_image_is_not_a_vacancy(self):
+        """One harvested 'advert' was glassdoor's jobMatch.png."""
+        body = ('<a href="https://www.glassdoor.com/assets/email/job-alert-images/'
+                'jobMatch.png">x</a>'
+                '<a href="https://www.glassdoor.com/job-listing/12345">real</a>')
+        links = ah.job_links(body)
+        self.assertEqual(links, ["https://www.glassdoor.com/job-listing/12345"])
+
+    def test_harvested_jobs_arrive_already_named(self):
+        alerts = [("jobalerts-noreply@linkedin.com",
+                   "Assembly Technician at CRE Marine",
+                   '<a href="https://www.linkedin.com/comm/jobs/view/4452200380/">'
+                   'Assembly Technician at CRE Marine</a>', None)]
+        state = {"jobs": {}}
+        with mock.patch.object(ah, "fetch_alerts", return_value=alerts), \
+             mock.patch.object(ah.imaplib, "IMAP4_SSL"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "h@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"):
+            ah.harvest_alerts(state)
+        job = next(iter(state["jobs"].values()))
+        self.assertEqual(job["title"], "Assembly Technician")
+        self.assertEqual(job["company"], "CRE Marine")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
