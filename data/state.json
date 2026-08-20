@@ -2345,8 +2345,10 @@
    "listing_text_len": 6298,
    "location": "Lochee, Dundee",
    "portal_attempted_at": "2026-08-06T07:56:09.624697+00:00",
-   "portal_reason": "Error: Page.goto: Navigation to \"https://www.adzuna.co.uk/jobs/details/5818737670?utm_medium=api&utm_source=afe77721\" is interrupted by another navigation to \"https://www.adzuna.co.uk/jobs/details/5818737670",
+   "portal_fallback_at": "2026-08-20T08:29:27.675456+00:00",
+   "portal_reason": "portal agent retired - handed to the email route",
    "portal_reopened_at": "2026-08-06T07:50:44.681929+00:00",
+   "portal_retired_from": "portal_failed",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/innserve-ltd-adzuna_5818737670-noform.png",
    "posted_at": "2026-07-28T20:40:57+00:00",
    "rescored_at": "2026-08-04T14:37:20.981625+00:00",
@@ -2357,7 +2359,7 @@
    "search_location": "Dundee",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "portal_failed",
+   "status": "scored",
    "title": "Maintenance Technician",
    "url": "https://www.adzuna.co.uk/jobs/details/5818737670?utm_medium=api&utm_source=afe77721"
   },
@@ -12053,8 +12055,10 @@
    "listing_text_len": 7056,
    "location": "Livingston, West Lothian",
    "portal_attempted_at": "2026-08-06T09:03:39.183093+00:00",
-   "portal_reason": "Error: Page.goto: Navigation to \"https://www.adzuna.co.uk/jobs/details/5824009884?utm_medium=api&utm_source=afe77721\" is interrupted by another navigation to \"https://www.adzuna.co.uk/jobs/details/5824009884",
+   "portal_fallback_at": "2026-08-20T08:29:27.675720+00:00",
+   "portal_reason": "portal agent retired - handed to the email route",
    "portal_reopened_at": "2026-08-06T07:50:44.682252+00:00",
+   "portal_retired_from": "portal_failed",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/orion-electrotech-adzuna_5824009884-noform.png",
    "posted_at": "2026-08-01T15:04:41+00:00",
    "salary_max": 42000,
@@ -12064,7 +12068,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no real address found",
    "source": "adzuna",
-   "status": "portal_failed",
+   "status": "scored",
    "title": "Workshop Technician",
    "url": "https://www.adzuna.co.uk/jobs/details/5824009884?utm_medium=api&utm_source=afe77721"
   },
@@ -29391,6 +29395,7 @@
    "location": "Edinburgh, Scotland",
    "portal_attempted_at": "2026-08-06T09:53:07.080846+00:00",
    "portal_bot_check": "challenge",
+   "portal_fallback_at": "2026-08-20T08:29:27.676121+00:00",
    "portal_fields_seen": 15,
    "portal_filled": [
     {
@@ -29468,7 +29473,8 @@
     "unrecognised required field '* Do you have a car that you can use for work purposes?'"
    ],
    "portal_pages": 1,
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "portal agent retired - handed to the email route",
+   "portal_retired_from": "portal_awaiting_captcha",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/t-tech-adzuna_5828137735-captcha.png",
    "posted_at": "2026-08-04T19:44:27+00:00",
    "salary_max": 38000,
@@ -29478,7 +29484,7 @@
    "search_location": "Edinburgh",
    "skip_reason": "no domain found",
    "source": "adzuna",
-   "status": "portal_awaiting_captcha",
+   "status": "scored",
    "title": "IT Field Engineer - Scotland",
    "url": "https://www.adzuna.co.uk/jobs/details/5828137735?utm_medium=api&utm_source=afe77721"
   },
@@ -81041,6 +81047,7 @@
    "found_at": "2026-08-14T12:04:17.519611+00:00",
    "location": "Glasgow, Scotland",
    "portal_attempted_at": "2026-08-14T14:37:11.368520+00:00",
+   "portal_fallback_at": "2026-08-20T08:29:27.677418+00:00",
    "portal_fields_seen": 23,
    "portal_filled": [
     {
@@ -81055,7 +81062,8 @@
     "email: TimeoutError",
     "By submitting this form, you agree to our Cookie Policy, Privacy Policy & Terms & Conditions.: TimeoutError"
    ],
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "portal agent retired - handed to the email route",
+   "portal_retired_from": "portal_awaiting_captcha",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/mane-contract-services-adzuna_5841766769-captcha.png",
    "posted_at": "2026-08-14T12:14:26+00:00",
    "salary_max": 40016,
@@ -81064,7 +81072,7 @@
    "score_reason": "This is a strong match for an electrician in a defence setting, aligning with his apprenticeship and Royal Navy experience.",
    "search_location": "Glasgow",
    "source": "adzuna",
-   "status": "portal_awaiting_captcha",
+   "status": "scored",
    "title": "Electrician",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5841766769?se=3i4NN9iX8RGiSrydP-Pvhg&utm_medium=api&utm_source=afe77721&v=F06437A80EAE47B65FEAEF7F73EAADB085531BAD"
   },
@@ -112339,6 +112347,7 @@
    ],
    "portal_attempted_at": "2026-08-06T09:53:42.184493+00:00",
    "portal_bot_check": "challenge",
+   "portal_fallback_at": "2026-08-20T08:29:27.678130+00:00",
    "portal_fields_seen": 11,
    "portal_filled": [
     {
@@ -112399,7 +112408,8 @@
    ],
    "portal_flags": [],
    "portal_pages": 1,
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "portal agent retired - handed to the email route",
+   "portal_retired_from": "portal_awaiting_captcha",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/enermech-board-workable-8b9987fa4971-captcha.png",
    "posted_at": null,
    "rescored_at": "2026-08-04T14:37:20.981983+00:00",
@@ -112407,7 +112417,7 @@
    "score_reason": "The candidate's electrical engineering apprenticeship and workshop experience make him suitable for the electrician aspect of this role, despite lacking crane operator experience.",
    "skip_reason": "company already contacted",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "scored",
    "title": "Crane Operator Electrician 3/3",
    "url": "https://apply.workable.com/j/05C4475483/apply"
   },
@@ -113338,6 +113348,7 @@
    "found_at": "2026-08-17T14:03:30.187882+00:00",
    "location": "Aberdeen",
    "portal_attempted_at": "2026-08-17T14:10:04.743471+00:00",
+   "portal_fallback_at": "2026-08-20T08:29:27.678150+00:00",
    "portal_fields_seen": 11,
    "portal_filled": [
     {
@@ -113385,13 +113396,14 @@
     "unrecognised required field 'YES'",
     "I have read, understand and accept the content of the Privacy Notice and consent to the processing of my data as part of this application.: TimeoutError"
    ],
-   "portal_reason": "form filled, blocked by a bot check - needs you",
+   "portal_reason": "portal agent retired - handed to the email route",
+   "portal_retired_from": "portal_awaiting_captcha",
    "portal_screenshot": "/home/runner/work/job-machine/job-machine/screenshots/enermech-board-workable-dcd83ccda7ce-captcha.png",
    "posted_at": null,
    "score": 80,
    "score_reason": "This Aberdeen-based role in a relevant industry (energy) aligns with his engineering technician background and target sector.",
    "source": "board:workable",
-   "status": "portal_awaiting_captcha",
+   "status": "scored",
    "title": "Contract Support Engineer",
    "url": "https://apply.workable.com/j/D5F4A7826B/apply"
   },
