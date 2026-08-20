@@ -20,6 +20,7 @@ on:
       - "fire-run/**"           # force an ordinary run
       - "fire-rescore/**"       # re-judge listings scored under an old profile
       - "fire-support/**"       # write to the charities and training bodies
+      - "fire-covenant/**"      # rebuild the Armed Forces Covenant list
   workflow_dispatch:
     inputs:
       test_mode:
@@ -35,35 +36,21 @@ permissions:
   contents: write
 
 concurrency:
-  # This used to be shared with portal.yml, to keep two scoring stages from
-  # hitting Gemini at once. It cost far more than it saved.
+  # Keyed on the branch, and that is the whole point.
   #
-  # A GitHub concurrency group holds exactly ONE pending run. When a second
-  # run queues behind an in-progress one, the first pending run is CANCELLED,
-  # not queued after it - 'cancel-in-progress: false' only protects the run
-  # that is already going. So every time portal.yml started while a run.yml
-  # run was waiting, that run.yml run was silently dropped.
+  # A GitHub concurrency group holds exactly ONE pending run. When a second run
+  # queues behind an in-progress one, the earlier PENDING run is cancelled, not
+  # queued after it - 'cancel-in-progress: false' only protects the run that is
+  # already going. Runs here sit pending for twenty minutes or more waiting for
+  # a hosted runner, so that window is most of a run's life.
   #
-  # On one day the scheduled 10:28, 11:14 and 13:13 sends were all cancelled
-  # this way, along with every fire-rescore ever pushed. The pipeline looked
-  # like it was running five times a day and was really sending on two.
+  # This cost a whole day of sends. fire-run/5 was cancelled at 17:31:05 by a
+  # branch pushed at 17:31:03, having been queued since 17:11 without executing
+  # a line, and the scheduled 10:28, 11:14 and 13:13 runs went the same way.
   #
-  # The 429s it was meant to prevent are already handled: the scorer backs off
-  # on the retryDelay Gemini sends. Losing a send window is not recoverable.
-  #
-  # Per branch, and that is the whole point. Splitting run.yml away from
-  # portal.yml was not enough: runs sit PENDING for twenty minutes or more
-  # waiting for a hosted runner, and a group only ever holds one pending run,
-  # so the next push into the same group deletes the one already waiting.
-  #
-  # fire-run/5 was cancelled at 17:31:05 by a fire-support branch pushed at
-  # 17:31:03. It had been queued since 17:11 and had not executed a single
-  # line. Every fire-* branch pushed today died exactly that way, including
-  # several I killed myself by firing the next one.
-  #
-  # Keying on the ref means a fire-* branch can never cancel another branch's
-  # run, and main's scheduled runs still serialise against each other, which
-  # is the only place serialising was ever wanted.
+  # Keying on the ref means one fire-* branch can never cancel another's run,
+  # while main's scheduled runs still serialise against each other - the only
+  # place serialising was ever wanted.
   group: job-machine-run-${{ github.ref }}
   cancel-in-progress: false
 
@@ -109,6 +96,17 @@ jobs:
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
           SUPPORT_PER_RUN: ${{ vars.SUPPORT_PER_RUN }}
         run: |
+          # The MoD register of Covenant signatories. Every name on it is an
+          # employer where being ex-forces moves Harry from the pile to the
+          # shortlist. This used to live in portal.yml, which has been deleted
+          # along with the portal agent - the list has nothing to do with
+          # filling in forms and should not have gone with it.
+          if [[ "${GITHUB_REF_NAME}" == fire-covenant/* ]]; then
+            echo "fire-covenant branch: rebuilding the Covenant list"
+            python tools/covenant_list.py --inspect || true
+            python tools/covenant_list.py --write
+            exit 0
+          fi
           # The charities and training bodies that may fund the offshore
           # tickets and the driving licence. One approach each, ever.
           if [[ "${GITHUB_REF_NAME}" == fire-support/* ]]; then

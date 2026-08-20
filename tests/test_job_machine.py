@@ -804,27 +804,6 @@ class TestDailySummary(unittest.TestCase):
         self.assertIn("No emails went out", text)
         self.assertIn("No applications went out", html)
 
-    def test_portal_activity_is_reported(self):
-        recent = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
-        state = self.state(
-            make_job(external_id="p1", status="portal_submitted",
-                     company="Greenhouse Co", portal_attempted_at=recent,
-                     portal_reason="", apply_url="https://boards.greenhouse.io/x"),
-            make_job(external_id="p2", status="portal_review", company="Flagged Ltd",
-                     portal_attempted_at=recent, portal_reason="1 question(s) need Harry",
-                     portal_flags=["convictions: only Harry can answer it"]),
-            make_job(external_id="p3", status="portal_manual", company="Workday Co",
-                     portal_attempted_at=recent,
-                     portal_reason="workday portal - needs an account"))
-        _, text, html = jm.summary_bodies(
-            jm.collect_summary(state, jm.summary_window(state)))
-        self.assertIn("APPLICATION PORTALS", text)
-        self.assertIn("Submitted in full", text)
-        self.assertIn("Greenhouse Co", text)
-        self.assertIn("needs you: convictions", text)
-        self.assertIn("Workday Co", text)
-        self.assertIn("Application portals", html)
-
     def test_test_sends_are_flagged_as_tests(self):
         state = self.state(self.sent_job(status="test_sent"))
         subject, text, _ = jm.summary_bodies(
@@ -1099,34 +1078,6 @@ class TestSecondFollowup(unittest.TestCase):
                                followup2_sent_at=jm.now())
         with mock.patch.object(jm, "send_email") as send:
             jm.run_followups(state)
-        send.assert_not_called()
-
-
-class TestAppliedNotes(unittest.TestCase):
-    def test_note_goes_to_the_named_person_after_a_portal_submit(self):
-        job = make_job(status="portal_submitted", email_tier=3)
-        state = {"jobs": {"j": job}, "companies_contacted": {}, "send_counts": {}}
-        with mock.patch.object(jm, "TEST_MODE", False), \
-             mock.patch.object(jm, "save"), mock.patch.object(jm.time, "sleep"), \
-             mock.patch.object(jm, "cv_for", return_value="/tmp/cv.pdf"), \
-             mock.patch.object(jm, "send_email", return_value="<n>") as send:
-            jm.run_applied_notes(state)
-        to, subject, body = send.call_args.args[:3]
-        self.assertEqual(to, "jane.smith@acme.com")
-        self.assertIn("Just applied", subject)
-        self.assertIn("through the online portal", body)
-        self.assertEqual(jm.slop_check(body), [])
-        self.assertIn("applied_note_sent_at", job)
-
-    def test_no_note_to_generic_inboxes_and_never_twice(self):
-        a = make_job(external_id="a", status="portal_submitted", email_tier=2)
-        b = make_job(external_id="b", status="portal_submitted", email_tier=3,
-                     applied_note_sent_at=jm.now())
-        state = {"jobs": {"a": a, "b": b}, "companies_contacted": {},
-                 "send_counts": {}}
-        with mock.patch.object(jm, "TEST_MODE", False), \
-             mock.patch.object(jm, "send_email") as send:
-            jm.run_applied_notes(state)
         send.assert_not_called()
 
 
@@ -1665,75 +1616,6 @@ class TestTheSendStageRunningTwice(unittest.TestCase):
     def test_a_stage_that_fails_does_not_destroy_the_count(self):
         self.assertIsNone(jm.stage("boom", lambda: 1 / 0))
         self.assertEqual(jm.stage("fine", lambda: 5), 5)
-
-
-class TestPortalFallback(unittest.TestCase):
-    """A form we cannot drive is not a job we cannot apply for.
-
-    'portal_manual' was terminal in every direction: the email route only
-    reads 'scored', and the portal agent skips anything already parked so it
-    does not retry it. Sixty-eight listings had collected there - Oceaneering,
-    Survitec, Trescal, Dron & Dickson, scoring 88 to 90 in exactly Harry's
-    trade - found, judged, matched, and then silently dropped, most of them
-    because the portal wanted an account or ran a bot check.
-    """
-    def state(self, **over):
-        job = make_job(external_id="p1", status="portal_manual", score=90,
-                       portal_reason="unknown portal - needs an account")
-        job.update(over)
-        return {"jobs": {job["external_id"]: job}}
-
-    def test_a_blocked_portal_goes_back_on_the_email_route(self):
-        state = self.state()
-        jm.portal_fallback(state)
-        self.assertEqual(state["jobs"]["p1"]["status"], "scored")
-
-    def test_a_job_awaiting_review_is_included_too(self):
-        state = self.state(status="portal_review")
-        jm.portal_fallback(state)
-        self.assertEqual(state["jobs"]["p1"]["status"], "scored")
-
-    def test_it_happens_once_and_cannot_loop(self):
-        state = self.state()
-        self.assertEqual(jm.portal_fallback(state), 1)
-        state["jobs"]["p1"]["status"] = "portal_manual"
-        self.assertEqual(jm.portal_fallback(state), 0)
-        self.assertEqual(state["jobs"]["p1"]["status"], "portal_manual")
-
-    def test_a_stale_advert_is_not_revived(self):
-        old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-        state = self.state(posted_at=old, found_at=old)
-        jm.portal_fallback(state)
-        self.assertEqual(state["jobs"]["p1"]["status"], "portal_manual")
-
-    def test_an_application_already_submitted_is_never_disturbed(self):
-        for status in ("portal_submitted", "sent", "replied"):
-            with self.subTest(status=status):
-                state = self.state(status=status)
-                jm.portal_fallback(state)
-                self.assertEqual(state["jobs"]["p1"]["status"], status)
-
-    def test_a_job_that_has_already_waited_is_not_held_again(self):
-        """The off-peak hold trades a few hours for a better open rate. That is
-        a good trade once, for a listing that will still be there this
-        afternoon - not twice, for one that was parked days ago. Without this,
-        eighty-six of the best-matched roles in the file go out at three a
-        run."""
-        state = self.state()
-        jm.portal_fallback(state)
-        self.assertTrue(jm.already_waited(state["jobs"]["p1"]))
-
-    def test_an_ordinary_listing_still_waits_for_the_window(self):
-        self.assertFalse(jm.already_waited(make_job(external_id="ordinary")))
-
-    def test_the_score_is_kept_because_it_was_never_in_doubt(self):
-        """Unlike a rescore, nothing here says the judgement was wrong - only
-        that the way in was blocked. Dropping the score would send it back
-        through the scorer and spend a Gemini call re-deciding a settled
-        question."""
-        state = self.state()
-        jm.portal_fallback(state)
-        self.assertEqual(state["jobs"]["p1"]["score"], 90)
 
 
 class TestWhereHarryCanWork(unittest.TestCase):
