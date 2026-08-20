@@ -31,8 +31,8 @@ import sys
 # an unmerged branch could be overwritten by a bare 'new'.
 PROGRESS = ["new", "scored", "skipped", "no_email", "compose_failed",
             "send_failed", "portal_manual", "portal_review", "portal_ready",
-            "ready", "portal_submitted", "test_sent", "spec_sent", "sent",
-            "replied"]
+            "ready", "do_not_contact", "portal_submitted", "test_sent",
+            "spec_sent", "sent", "replied"]
 
 
 def rank(job):
