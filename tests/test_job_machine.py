@@ -2170,3 +2170,198 @@ class TestSayingHeHasAnOffer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheDoNotContactList(unittest.TestCase):
+    """Allstaff Recruitment phoned Harry on 20 August to say he was asking the
+    same questions again. Three messages had gone to their jobs@ inbox: the
+    application, a nudge four days later, and the last of the sequence at 08:35
+    that morning.
+
+    The machine had no way to be told to stop. Every register it kept answered
+    'have we written to this company yet', and the answer being 'yes' is what
+    schedules the next one - so the harder somebody tried to make it stop, the
+    more certain the follow-up became. This is that missing register, and it is
+    enforced in send_email() rather than in the stages, because a stage added
+    next month cannot be relied on to remember."""
+
+    BLOCK = [{"name": "Allstaff Recruitment",
+              "domain": "allstaffrecruitment.co.uk",
+              "emails": ["jobs@allstaffrecruitment.co.uk"],
+              "reason": "asked us to stop"}]
+
+    def test_the_exact_address_is_blocked(self):
+        self.assertTrue(jm.do_not_contact(
+            email="jobs@allstaffrecruitment.co.uk", entries=self.BLOCK))
+
+    def test_any_other_address_at_that_company_is_blocked(self):
+        """The reason a company asked us to stop does not expire when the
+        discovery stage finds a different inbox there next week."""
+        self.assertTrue(jm.do_not_contact(
+            email="sarah.mcleod@allstaffrecruitment.co.uk", entries=self.BLOCK))
+
+    def test_a_subdomain_is_blocked(self):
+        self.assertTrue(jm.do_not_contact(
+            email="reply@mail.allstaffrecruitment.co.uk", entries=self.BLOCK))
+
+    def test_the_company_name_is_blocked_before_an_address_is_known(self):
+        """Blocking has to work at the front of the pipeline too, on a listing
+        whose address has not been discovered yet."""
+        self.assertTrue(jm.do_not_contact(
+            company="Allstaff Recruitment Ltd", entries=self.BLOCK))
+
+    def test_the_spelling_they_did_not_give_us_is_blocked(self):
+        """They said it on the phone. Nobody spelled it."""
+        self.assertTrue(jm.do_not_contact(
+            company="All Staff Recruitment", entries=self.BLOCK))
+
+    def test_an_unrelated_company_is_not_blocked(self):
+        for name in ("Staffline", "All Star Staffing", "Orion Group"):
+            self.assertFalse(jm.do_not_contact(company=name, entries=self.BLOCK), name)
+
+    def test_an_unrelated_address_is_not_blocked(self):
+        self.assertFalse(jm.do_not_contact(
+            email="jobs@allstaffrecruitment.com.example.org", entries=self.BLOCK))
+
+    def test_send_email_refuses_whatever_asked_it_to_send(self):
+        """The guarantee. Not 'the send stage checks' - nothing gets out."""
+        with mock.patch.object(jm, "load_do_not_contact", return_value=self.BLOCK), \
+             mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp:
+            with self.assertRaises(ValueError) as caught:
+                jm.send_email("jobs@allstaffrecruitment.co.uk",
+                              "Field Service Engineer", "Hi, following up.")
+            self.assertIn("asked not to be contacted", str(caught.exception))
+            smtp.assert_not_called()
+
+    def test_the_reason_they_gave_is_in_the_refusal(self):
+        with mock.patch.object(jm, "load_do_not_contact", return_value=self.BLOCK):
+            with self.assertRaises(ValueError) as caught:
+                jm.send_email("jobs@allstaffrecruitment.co.uk", "x", "y")
+            self.assertIn("asked us to stop", str(caught.exception))
+
+    def test_everyone_else_still_gets_their_email(self):
+        with mock.patch.object(jm, "load_do_not_contact", return_value=self.BLOCK), \
+             mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp, \
+             mock.patch.object(jm, "cv_path", return_value=None):
+            jm.send_email("careers@oriongroup.com", "Technician", "Hi there.")
+            self.assertTrue(smtp.called)
+
+    def test_the_followup_stage_leaves_a_blocked_company_alone(self):
+        """The specific thing that made the phone ring: a job sitting at 'sent'
+        with its second nudge due."""
+        state = {"jobs": {"a": {
+            "status": "sent", "company": "Allstaff Recruitment",
+            "sent_to": "jobs@allstaffrecruitment.co.uk",
+            "contact_email": "jobs@allstaffrecruitment.co.uk",
+            "title": "Field Service Engineer",
+            "sent_at": "2026-08-01T09:00:00+00:00"}}}
+        with mock.patch.object(jm, "load_do_not_contact", return_value=self.BLOCK), \
+             mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "x@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+            send.assert_not_called()
+        self.assertIsNone(state["jobs"]["a"].get("followup_sent_at"))
+
+    def test_a_blocked_company_is_dropped_from_the_send_queue(self):
+        state = {"jobs": {"a": {
+            "status": "ready", "company": "Allstaff Recruitment",
+            "contact_email": "jobs@allstaffrecruitment.co.uk",
+            "company_domain": "allstaffrecruitment.co.uk",
+            "title": "Field Service Engineer", "score": 75}},
+            "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "load_do_not_contact", return_value=self.BLOCK), \
+             mock.patch.object(jm, "cv_path", return_value="cv.pdf"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "x@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_sends(state)
+            send.assert_not_called()
+        self.assertEqual(state["jobs"]["a"]["status"], "do_not_contact")
+
+    def test_the_real_list_on_disk_blocks_allstaff(self):
+        """The file, not a fixture - so a typo in it fails a test rather than
+        being discovered by a second phone call."""
+        self.assertTrue(jm.do_not_contact(email="jobs@allstaffrecruitment.co.uk"))
+
+    def test_a_short_company_name_is_not_swallowed(self):
+        """Matching on substrings read a company called 'A' as Allstaff,
+        because 'a' is inside 'allstaff'. The first unrelated employer with a
+        short name would have been dropped from the queue and nobody would
+        have known why."""
+        for name in ("A", "B", "C", "PSN", "Bam Nuttall"):
+            self.assertFalse(jm.do_not_contact(company=name, entries=self.BLOCK), name)
+
+    def test_a_more_specific_name_at_the_same_agency_is_blocked(self):
+        self.assertTrue(jm.do_not_contact(
+            company="Allstaff Recruitment Aberdeen", entries=self.BLOCK))
+
+
+class TestOneInboxOnlyGetsSoMuch(unittest.TestCase):
+    """Nothing counted how many messages one address had received.
+
+    The two rules that decide sending both reason about a single vacancy. An
+    agency may be approached about four roles, and each approach carries an
+    application plus two nudges - so twelve messages to one consultant broke no
+    rule, and one consultant at Connect Appointments got exactly twelve. The
+    inbox at Canmore got eleven. Allstaff phoned after three."""
+
+    def state(self, **counts):
+        jobs = {}
+        for i, (addr, n) in enumerate(counts.items()):
+            addr = addr.replace("_at_", "@").replace("_dot_", ".")
+            for k in range(n):
+                jobs[f"{i}-{k}"] = {
+                    "status": "sent", "sent_to": addr, "contact_email": addr,
+                    "company": "Agency", "title": "Technician",
+                    "sent_at": "2026-08-01T09:00:00+00:00",
+                    "followup_sent_at": "2026-08-05T09:00:00+00:00",
+                    "followup2_sent_at": "2026-08-10T09:00:00+00:00"}
+        return {"jobs": jobs, "companies_contacted": {}, "send_counts": {}}
+
+    def test_it_counts_every_message_not_every_vacancy(self):
+        s = self.state(gary_at_a_dot_com=2)          # 2 vacancies x 3 messages
+        self.assertEqual(jm.messages_to(s, "gary@a.com"), 6)
+
+    def test_a_quiet_inbox_is_not_capped(self):
+        s = {"jobs": {"a": {"status": "sent", "sent_to": "gary@a.com",
+                            "sent_at": "2026-08-01T09:00:00+00:00"}}}
+        self.assertFalse(jm.inbox_full(s, "gary@a.com"))
+
+    def test_the_third_vacancy_at_a_worked_inbox_is_not_sent(self):
+        s = self.state(gary_at_a_dot_com=2)
+        s["jobs"]["new"] = {"status": "ready", "company": "Agency",
+                            "contact_email": "gary@a.com",
+                            "company_domain": "a.com",
+                            "title": "Maintenance Electrician", "score": 80}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "cv_path", return_value="cv.pdf"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "x@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_sends(s)
+            send.assert_not_called()
+        self.assertIn("messages", s["jobs"]["new"]["skip_reason"])
+
+    def test_no_further_nudges_to_a_worked_inbox(self):
+        s = self.state(gary_at_a_dot_com=2)
+        due = next(iter(s["jobs"].values()))
+        due.pop("followup2_sent_at")     # a second nudge is now due on this one
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "x@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(s)
+            send.assert_not_called()
+
+    def test_a_different_address_at_the_same_agency_is_unaffected(self):
+        """The cap is about one person's patience, not the company's."""
+        s = self.state(gary_at_a_dot_com=2)
+        self.assertFalse(jm.inbox_full(s, "sarah@a.com"))
+
+    def test_the_cap_counts_only_messages_that_were_really_sent(self):
+        s = {"jobs": {"a": {"status": "skipped", "contact_email": "gary@a.com"},
+                      "b": {"status": "no_email", "contact_email": "gary@a.com"},
+                      "c": {"status": "ready", "contact_email": "gary@a.com"}}}
+        self.assertEqual(jm.messages_to(s, "gary@a.com"), 0)

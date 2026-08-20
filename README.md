@@ -151,6 +151,53 @@ fill one in yourself.
 > month and this uses roughly a third of that.
 
 
+## When somebody asks you to stop (`data/do_not_contact.json`)
+
+Allstaff Recruitment phoned on 20 August 2026 to say Harry was asking the same
+questions again. Three messages had gone to their `jobs@` inbox - the
+application, a nudge four days later, and the last of the sequence at 08:35
+that morning.
+
+The machine had no way of being told to stop. Every register it kept answered
+"have we written to this company yet", and the answer being *yes* is what
+schedules the next message - so the harder somebody tried to make it stop, the
+more certain the follow-up became.
+
+Add them to `data/do_not_contact.json` and nothing in this repo writes to them
+again:
+
+```json
+{"name": "Allstaff Recruitment",
+ "domain": "allstaffrecruitment.co.uk",
+ "emails": ["jobs@allstaffrecruitment.co.uk"],
+ "reason": "phoned to ask us to stop",
+ "added": "2026-08-20"}
+```
+
+`domain` is the strongest entry - it covers addresses nobody has discovered
+yet, because the reason a company asked us to stop does not expire when the
+discovery stage finds a different inbox there next week. The name is matched on
+whole words, loosely enough that "All Staff Recruitment Ltd" is the same
+company and strictly enough that an employer called "A" is not.
+
+The check lives in `send_email()`, which every outgoing message goes through -
+applications, follow-ups, speculative notes, replies - so a stage added later
+cannot forget it. It is kept on disk rather than in `state.json` because it has
+to survive a prune, a state reset and a merge that goes wrong.
+
+### The cap nobody had written
+
+Allstaff phoned after three messages. One consultant at Connect Appointments
+had received **twelve**, and the inbox at Canmore eleven, without any rule
+being broken - because both rules that decide sending reason about a single
+vacancy. An agency may be approached about four roles, and each approach
+carries an application plus two nudges.
+
+`MAX_MESSAGES_PER_INBOX` (default 5) counts everything ever sent to one
+address, across every vacancy, and stops there. It is per address, not per
+company: it is about one person's patience, so a different consultant at the
+same agency starts fresh.
+
 ## The inbox is the widest source of jobs (`alert_harvest.py`)
 
 Adzuna and Reed have APIs and between them yield a median of **four** in-trade
@@ -315,10 +362,13 @@ and are never emailed twice.
 | `no_email` | no real address found; nothing was sent |
 | `compose_failed` | three drafts failed the style rules |
 | `send_failed` | SMTP error; the company is still free to try again |
-| `skipped` | below threshold, excluded title, or company already contacted |
+| `skipped` | below threshold, excluded title, company already contacted, or the inbox has had `MAX_MESSAGES_PER_INBOX` already |
+| `do_not_contact` | they asked us to stop; nothing will ever be sent to them again |
 
 Dead listings (`skipped`, `no_email`, `compose_failed`, `send_failed`) are pruned
-after 45 days. Sent history and `companies_contacted` are kept forever.
+after 45 days. Sent history and `companies_contacted` are kept forever, and
+`data/do_not_contact.json` is not in `state.json` at all so that no prune,
+reset or bad merge can lose it.
 
 ---
 
