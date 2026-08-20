@@ -89,7 +89,7 @@ SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
 SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 
 # --- fixed tuning ---
-# MAX_AGE_HOURS and HARVEST_PAGES are module-level on purpose: portal_agent.py
+# MAX_AGE_HOURS and HARVEST_PAGES are module-level on purpose: other modules
 # widens them to sweep a month of listings without disturbing the email path.
 MAX_AGE_HOURS = 48
 HARVEST_PAGES = 1
@@ -132,10 +132,6 @@ MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
 # for discovery and sending.
 SCORE_BUDGET_SECONDS = env_int("SCORE_BUDGET_SECONDS", 900)
 MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
-# How old a listing can be and still be worth emailing after its application
-# portal defeated us. Matches the portal agent's own window: if it was fresh
-# enough to try to apply through, it is fresh enough to write to.
-PORTAL_FALLBACK_MAX_AGE_DAYS = env_int("PORTAL_FALLBACK_MAX_AGE_DAYS", 30)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -540,9 +536,9 @@ def company_key(name):
 # An employer has the one job they advertised, and a second unsolicited email
 # about a different role reads as pestering. An agency is *paid* to place
 # people, holds dozens of roles at once, and expects to hear from candidates
-# more than once - six of the fourteen firms in the last portal run were
-# agencies, and under the one-email-ever rule each of them was worth exactly
-# one approach forever.
+# more than once. Six of the fourteen firms in one early batch were agencies,
+# and under the one-email-ever rule each of them was worth exactly one
+# approach forever.
 AGENCY_NAME = re.compile(
     r"\brecruit|resourcing|staffing|personnel|manpower|talent|search "
     r"(and|&) selection|employment agency|\bagency\b|consultancy|"
@@ -1904,44 +1900,6 @@ def run_sends(state, dry_run=False, already_sent=0):
     return sent
 
 
-def run_applied_notes(state):
-    """The double-tap: after the portal agent submits an application, the named
-    person we found gets a short heads-up so it does not sit unread in an ATS.
-    Deterministic copy - no model in the loop for these."""
-    todo = [j for j in state["jobs"].values()
-            if j.get("status") == "portal_submitted"
-            and j.get("contact_email") and (j.get("email_tier") or 0) >= 3
-            and not j.get("applied_note_sent_at")]
-    for job in todo:
-        if sends_today(state) >= DAILY_SEND_CAP:
-            break
-        name = job.get("contact_name")
-        body = (
-            f"Hi {name}," if name else "Hi,") + (
-            f"\n\nI have just applied for your {job['title']} role through the "
-            f"online portal and wanted to reach out directly as well. Quick "
-            f"background: 3 years testing and fault-finding subsea electronics at "
-            f"Sonardyne to IPC-A-610 Class 3, Royal Navy communications before "
-            f"that, and available immediately.\n\n"
-            f"If the application is worth a closer look, when suits a quick call?"
-            f"\n\nHarry\n{SIGNOFF}")
-        real_to = job["contact_email"]
-        to_addr = GMAIL_ADDRESS if TEST_MODE else real_to
-        subject = f"Just applied - {job['title']}"
-        if TEST_MODE:
-            subject = f"[TEST -> {real_to}] {subject}"
-        try:
-            message_id = send_email(to_addr, subject, body, cv_file=cv_for(job))
-            job.update({"applied_note_sent_at": now(), "message_id": message_id,
-                        "sent_at": job.get("sent_at") or now(),
-                        "sent_subject": subject, "sent_body": body})
-            record_send(state)
-            print(f"[note] applied-note -> {to_addr} ({job['company']})")
-            save(state)
-            time.sleep(SEND_INTERVAL_SECONDS)
-        except Exception as e:
-            print(f"[note] failed {job['company']}: {e}")
-
 
 # ======================================================================
 # SPECULATIVE - the hidden market: employers with no advert up
@@ -2343,11 +2301,11 @@ def already_waited(job):
 
     The off-peak hold trades a few hours for a better open rate, and that is a
     good trade for a listing that will still be there this afternoon. It is not
-    a good trade twice. A job that reached the queue through the portal
-    fallback has been sitting for days - it was found, judged, matched, and
-    then parked because its application form could not be driven. Holding it
-    again for a timing window is how eighty-six of the best-matched roles in
-    the file would go out at three a run."""
+    a good trade twice. A job carrying portal_fallback_at was parked for days
+    before it reached the email queue - the application-portal agent that
+    stranded it has since been deleted, but the records it left behind are
+    still owed their turn, and holding them again for a timing window is how
+    the best-matched roles in the file would go out at three a run."""
     return bool(job.get("portal_fallback_at"))
 
 
@@ -2382,13 +2340,8 @@ def collect_summary(state, since):
     applications = sorted(
         [j for j in jobs if after(j.get("sent_at"))],
         key=lambda j: -(j.get("score") or 0))
-    portal = [j for j in jobs if after(j.get("portal_attempted_at"))]
     return {
         "applications": applications,
-        "portal_submitted": [j for j in portal if j.get("status") == "portal_submitted"],
-        "portal_review": [j for j in portal if j.get("status") in
-                          ("portal_review", "portal_ready")],
-        "portal_manual": [j for j in portal if j.get("status") == "portal_manual"],
         "followups": [j for j in jobs if after(j.get("followup_sent_at"))],
         "replies": [j for j in jobs if after(j.get("replied_at"))],
         "found": [j for j in jobs if after(j.get("found_at"))],
@@ -2504,37 +2457,6 @@ def summary_bodies(data):
     if inbound_text:
         lines += ["", "INBOUND - 10 MINUTES, ONCE A WEEK", "-" * 33] + inbound_text
 
-    portal_html = ""
-    if data.get("portal_submitted") or data.get("portal_review") or \
-            data.get("portal_manual"):
-        lines += ["", "APPLICATION PORTALS", "-" * 19]
-        blocks = [
-            ("Submitted in full", data.get("portal_submitted", [])),
-            ("Filled in, waiting on you", data.get("portal_review", [])),
-            ("Portal needs doing by hand", data.get("portal_manual", [])),
-        ]
-        html_blocks = []
-        for heading, jobs_in_block in blocks:
-            if not jobs_in_block:
-                continue
-            lines.append(f"{heading}:")
-            items = []
-            for job in jobs_in_block:
-                why = job.get("portal_reason", "")
-                lines.append(f"  {job.get('title')} - {job.get('company')}"
-                             f"{' (' + why + ')' if why else ''}")
-                if job.get("portal_flags"):
-                    for flag in job["portal_flags"][:3]:
-                        lines.append(f"      needs you: {flag}")
-                link = job.get("apply_url") or job.get("url") or ""
-                items.append(
-                    f"<li><b>{esc(job.get('title'))}</b> - {esc(job.get('company'))}"
-                    + (f'<br><span class=m>{esc(why)}</span>' if why else "")
-                    + (f'<br><a href="{esc(link)}">open the form</a>' if link else "")
-                    + "</li>")
-            html_blocks.append(f"<h3>{esc(heading)}</h3><ul>{''.join(items)}</ul>")
-        portal_html = "<h2>Application portals</h2>" + "".join(html_blocks)
-
     extras = []
     if data["replies"]:
         extras.append("Replies received: " + ", ".join(
@@ -2569,7 +2491,6 @@ ul{{font-size:14px;padding-left:18px}}
 <h2 style="margin:0 0 4px">{esc(subject)}</h2>
 <p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
 {table}
-{portal_html}
 {inbound_html or ''}
 <ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
 </body></html>"""
@@ -2821,48 +2742,6 @@ def harvest_from_inbox(state):
         alert_harvest.enrich(state)
 
 
-def portal_fallback(state, max_age_days=PORTAL_FALLBACK_MAX_AGE_DAYS):
-    """Put jobs whose application form defeated us back on the email route.
-
-    'portal_manual' is a terminal status. The email route only looks at
-    'scored', and the portal agent explicitly excludes anything already marked
-    portal_manual so it does not retry it. Nothing else reads it. So a listing
-    that reached it was found, judged, matched - and then quietly dropped.
-
-    Sixty-eight had collected there, and they were not the dregs: Oceaneering,
-    Survitec, Trescal, Dron & Dickson, Konecranes, scoring 88 to 90 in exactly
-    Harry's trade in Aberdeen. Two thirds of them were parked for a reason that
-    has nothing to do with the job - the portal wanted an account, or ran a bot
-    check, or rendered its form in a way the agent could not read.
-
-    Being unable to drive somebody's web form is not a reason not to apply to
-    them. This puts those listings back on the ordinary route: find a real,
-    MX-checked address at the employer and write to a human. That route is not
-    speculative - it is the one every application that has actually gone out
-    used.
-
-    Once each, marked so it cannot loop. A job that comes back from that route
-    with no real address has genuinely run out of options and stays where it
-    lands. The send caps, the company-dedupe and the agency limits all still
-    apply, because this only re-enters the queue - it does not send anything."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-    woken = 0
-    for job in state["jobs"].values():
-        if job.get("status") not in ("portal_manual", "portal_review"):
-            continue
-        if job.get("portal_fallback_at"):
-            continue
-        # A form we could not fill is worth an email. A stale advert is not.
-        found = parse_ts(job.get("posted_at")) or parse_ts(job.get("found_at"))
-        if found and found < cutoff:
-            continue
-        job.update({"status": "scored", "portal_fallback_at": now()})
-        woken += 1
-    print(f"[fallback] {woken} listing(s) whose portal we could not drive "
-          f"put back on the email route")
-    return woken
-
-
 def rescore(state, floor=55):
     """Re-open listings that were judged under an out-of-date profile.
 
@@ -2943,13 +2822,6 @@ def main(argv=None):
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
         save(state)
-    # Before anything that touches the network. This stage needs nothing but
-    # the state file, and it is what puts the best-matched listings in the file
-    # back in the queue - so it must not sit behind a stage that can hang. It
-    # did, once, and a run died in advert-reading with eighty-six of them still
-    # parked.
-    stage("fallback", portal_fallback, state)
-    save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)
         # Job-alert email from Harry's own inbox. The boards that carry most of
@@ -2974,8 +2846,6 @@ def main(argv=None):
     stage("send", run_sends, state, args.dry_run, sent)
     save(state)
     if not args.dry_run:
-        stage("notes", run_applied_notes, state)
-        save(state)
         # Grow the target list from employers this run has just seen, before
         # writing to any of them. Every company that advertised a role the
         # scorer rated in-trade is an employer of that trade in this market -

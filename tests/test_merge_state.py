@@ -43,29 +43,6 @@ class TestMergingCounters(unittest.TestCase):
         self.assertEqual(out["companies_contacted"]["acme"]["at"], "2026-07-20")
 
 
-class TestMergingTheBoardCache(unittest.TestCase):
-    """Which ATS a company uses, remembered so it is not rediscovered on every
-    run. Without a rule here, one run's findings are simply dropped."""
-    def test_both_runs_discoveries_are_kept(self):
-        out = ms.merge(
-            {"ats_boards": {"acme": {"ats": "lever", "checked_at": "2026-08-01"}}},
-            {"ats_boards": {"beta": {"ats": None, "checked_at": "2026-08-01"}}})
-        self.assertEqual(set(out["ats_boards"]), {"acme", "beta"})
-
-    def test_the_fresher_answer_wins(self):
-        out = ms.merge(
-            {"ats_boards": {"acme": {"ats": "lever", "checked_at": "2026-07-01"}}},
-            {"ats_boards": {"acme": {"ats": None, "checked_at": "2026-08-01"}}})
-        self.assertIsNone(out["ats_boards"]["acme"]["ats"])
-
-    def test_a_found_board_beats_a_miss_of_the_same_age(self):
-        out = ms.merge(
-            {"ats_boards": {"acme": {"ats": None, "checked_at": "2026-08-01"}}},
-            {"ats_boards": {"acme": {"ats": "lever", "slug": "acme",
-                                     "checked_at": "2026-08-01"}}})
-        self.assertEqual(out["ats_boards"]["acme"]["ats"], "lever")
-
-
 class TestReopenedListings(unittest.TestCase):
     """A rescore sets a listing back to 'new' on purpose, and 'new' ranks below
     'skipped'. The ordinary more-advanced-wins rule therefore reverted every
@@ -102,7 +79,11 @@ class TestReopenedListings(unittest.TestCase):
 
 
 class TestTheParkedJobsBeingReleased(unittest.TestCase):
-    """The portal fallback moves a listing from 'portal_manual' (rank 7) back
+    """The portal agent has since been retired, but its records have not: the
+    listings it released still carry portal_fallback_at and still have to beat
+    the parked status they came from, so this rule stays under test.
+
+    The portal fallback moves a listing from 'portal_manual' (rank 7) back
     to 'scored' (rank 1) on purpose, because its application form could not be
     driven and an email is the way in instead.
 
@@ -190,11 +171,18 @@ class TestKeysNobodyHasWrittenARuleFor(unittest.TestCase):
 
     def test_the_known_keys_keep_their_own_rules(self):
         """The catch-all must not reach a key that has a real rule, or it would
-        quietly undo it - here, by letting a stale board answer win."""
+        quietly undo it.
+
+        The catch-all resolves a clash in favour of `theirs`, because without
+        knowing what a key means that is the choice that cannot lose a record.
+        The support register's rule is the opposite - the EARLIEST approach is
+        the true answer to 'has this ever been done' - so if the catch-all ever
+        reached it, a second letter would go to somebody who has already had
+        one."""
         out = ms.merge(
-            {"ats_boards": {"acme": {"ats": "lever", "checked_at": "2026-07-01"}}},
-            {"ats_boards": {"acme": {"ats": None, "checked_at": "2026-08-01"}}})
-        self.assertIsNone(out["ats_boards"]["acme"]["ats"])
+            {"support_asked": {"ssafa": {"at": "2026-08-03"}}},
+            {"support_asked": {"ssafa": {"at": "2026-07-01"}}})
+        self.assertEqual(out["support_asked"]["ssafa"]["at"], "2026-07-01")
 
 
 if __name__ == "__main__":

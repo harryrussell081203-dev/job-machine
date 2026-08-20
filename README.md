@@ -22,7 +22,7 @@ marked as contacted, and follow-ups are off.
 
 | Stage | What happens |
 | --- | --- |
-| 0. Schedule | `run.yml` five times a weekday, two of them landing inside the Tue-Thu 9-11am UK window that replies best; `portal.yml` at 09:30 UTC weekdays; `summary.yml` sends the digest at 22:00 UK time every day. |
+| 0. Schedule | `run.yml` five times a weekday, two of them landing inside the Tue-Thu 9-11am UK window that replies best; `summary.yml` sends the digest at 22:00 UK time every day. |
 | 1. Harvest | Adzuna + Reed + **job-alert email in Harry's own inbox** (`alert_harvest.py`, which is where most boards come from), listings **<=48h old**, every location in `SEARCH_LOCATIONS`, engineering/technician/electronics/instrumentation/comms keywords. Duplicates across the two boards are collapsed; obviously wrong titles (chartered, HGV, chef...) are dropped before they cost an AI call. |
 | 2. Score | Gemini 2.5 Flash scores 0-100 against the candidate profile. **>=70 proceeds**, below is skipped with the reason recorded. |
 | 3. Discover | Real addresses only. (a) addresses printed in the advert itself, (b) scraped from the company's own site - domain via Clearbit autocomplete, then `/`, `/contact`, `/careers`, `/jobs`, `/about`, `/team`. Ranked **named person > hiring inbox (careers@, hr@) > generic (info@)**. Domain must have an MX record. Nothing real found means `no_email` and nothing is sent. **Addresses are never guessed or pattern-generated.** |
@@ -114,142 +114,42 @@ python job_machine.py                     # LIVE - real employers
 python job_machine.py --summary --force   # send tonight's digest right now
 ```
 
-Tests (no network, nothing is sent, no real portal is touched):
+Tests (no network, nothing is sent, no employer is contacted):
 
 ```bash
-python -m unittest discover -s tests -v          # 270 tests
-PORTAL_BROWSER_TESTS=1 python -m unittest discover -s tests   # + drives Chromium
+python -m unittest discover -s tests -v          # 322 tests
 ```
-
-The browser tests run against `tests/fixtures/fake_ats.html`, a local replica of
-a Greenhouse/Lever style form, so the form-filling is proven end to end without
-sending junk to a real employer.
 
 ---
 
-## The portal agent (`portal_agent.py`)
+## Why there is no application-portal agent
 
-The email side finds a human and writes to them. This side does the opposite: it
-opens the employer's actual application form in a real Chromium, works down it
-like a person would, uploads the CV and submits.
+There used to be one: a real Chromium that opened the employer's application
+form, worked down it, uploaded the CV and submitted. It has been removed, along
+with `ats_finder.py`, `tools/handoff.py` and `portal.yml`.
 
-```bash
-python portal_agent.py                 # show the queue
-python portal_agent.py --harvest       # pull and score a month of listings
-python portal_agent.py --run           # fill forms in, stop before submitting
-python portal_agent.py --run --submit  # actually submit the clean ones
-python portal_agent.py --run --headed  # watch it work in a visible browser
-```
+It did not work as intended, and the reason is structural rather than a bug
+worth chasing. Of fourteen Aberdeen employers probed, exactly one used a hosted
+ATS and it needed an account. The rest take applications on a form of their own,
+and every form is different. What the agent actually produced was a queue of
+listings parked at `portal_manual` and `portal_review` waiting for a human -
+listings the email route would have written to that morning. It was not adding
+applications, it was delaying them.
 
-It runs from `.github/workflows/portal.yml` at 09:30 UTC on weekdays, and every
-form it touches is screenshotted and kept as a build artifact for 30 days.
+The listings it had parked have been released back into the email queue and
+carry `portal_fallback_at`, which exempts them from the off-peak hold: they have
+waited long enough. Three genuine applications it did submit are still at
+`portal_submitted` and are still watched for replies.
 
-### Where the answers come from
-
-Everything is answered from **`data/answers.json`** and nothing else. Anything
-still `null` in that file is treated as "I don't know" and gets the application
-flagged rather than guessed at, so it is worth filling in.
-
-Answers are shaped to fit the box they are going in: `"Immediately"` becomes
-tomorrow's date in a date picker, and `"35000"` loses its pound sign and comma in
-a number-only field. If a value cannot be made to fit, the field is flagged
-instead of forced.
+`data/answers.json` stays in the repo. Nothing reads it now, but it is the set
+of answers to the questions application forms ask, in one place, for when you
+fill one in yourself.
 
 > **This repository is public**, so `data/answers.json` and the CV in `cv/` are
-> readable by anyone. If you would rather your home address were not, set
-> repo **secrets** `ANSWER_ADDRESS_LINE_1` and `ANSWER_POSTCODE` and blank those
-> two entries in the file - any `ANSWER_<KEY>` environment variable overrides the
-> file. Making the repository private also works and stays free (private repos
-> get 2000 Actions minutes a month; this uses roughly a third of that).
+> readable by anyone - including your home address. Making the repository
+> private fixes that and stays free: private repos get 2000 Actions minutes a
+> month and this uses roughly a third of that.
 
-Free-text questions ("why do you want this role?") go to Gemini, which must
-answer from your profile *and name the fact it used*. If it cannot ground the
-answer, the field is left blank and the application is flagged. It never makes
-something up to fill a box.
-
-### What it refuses to do
-
-| It will not | Because |
-| --- | --- |
-| Answer convictions, DBS, health or certification declarations | Only you can answer those, and a wrong answer follows you |
-| Enter your NI number, passport, bank details or date of birth | A placeholder like `0000 0000` is false information submitted under your name. A real application form does not ask for bank details either - that is an onboarding step, so a form asking at this stage is a scam signal worth looking at yourself |
-| Tick "I certify the above is true and complete" | A machine cannot certify anything on your behalf |
-| Solve or work around a CAPTCHA | That is defeating bot protection, and it gets accounts banned |
-| Log into Workday, Taleo, LinkedIn, Indeed or Reed | They need an account and block automation; the digest links them for you |
-
-Hit any of those and the application is filled to the last safe field,
-screenshotted, and handed to you as `portal_review` rather than submitted.
-
-**Equal-opportunities monitoring is different.** Ethnicity, gender, disability
-and orientation questions nearly always offer "Prefer not to say" (in whatever
-wording), and the agent picks it. That is a real answer the form itself offers,
-so those questions stop blocking applications without anything being invented.
-If a monitoring question offers no opt-out, it is flagged like the rest.
-
-### How it finds the form
-
-The job boards are a dead end: Adzuna's outbound page renders blank to a
-headless browser, proven over five runs. So the form is looked for in cost
-order, and the first route that answers wins:
-
-| # | Route | Cost |
-| --- | --- | --- |
-| 0 | The listing URL is already a portal | free |
-| 1 | The advert text names the portal — employers paste their link into the description all the time | free, no network |
-| 2 | The employer's **board API** — Greenhouse, Lever, Ashby, SmartRecruiters, Workable and Recruitee each publish a free JSON board that 404s honestly | 6 requests, asked in parallel |
-| 3 | The employer's **own careers page**, walked through to the vacancy and its apply link | a few page loads |
-| 4 | Last resort: follow the job board's own interstitial | a browser hop |
-
-Route 2 replaced guessing at board *pages*. Every one of those platforms
-answers `200` for a company that is not on it — SmartRecruiters serves a
-generic search page, Workable serves a bot check — so a `200` proved nothing
-and once matched two Aberdeen firms to **AECOM's** adverts. The APIs 404
-properly, and hand back the real postings with their real application URLs.
-
-**Route 3 matters more than it sounds.** Of fourteen employers probed in
-Aberdeen, exactly one used a hosted ATS, and it needed an account. The rest
-take applications on a form of their own. Off the known platforms a page has
-to look like an application — a CV upload, or a name/email/phone set — before
-anything is typed into it, so a contact form or a newsletter signup is never
-mistaken for a vacancy.
-
-### Roles the job boards never advertised
-
-An employer's own board carries every role they have open, not just the ones
-they paid to advertise. Once a company's board is known, listing it costs a
-single request, so `--harvest` also sweeps the thirty curated employers in
-`data/targets.json` plus any company whose advert already scored 60+, and adds
-anything that fits and is somewhere you could actually work. Those arrive with
-their application URL already known.
-
-Which ATS a company uses is remembered in `data/state.json` for three weeks —
-finding a board costs up to eighteen requests, re-listing a known one costs
-one, and firms do not change ATS often. The open roles themselves are always
-fetched live.
-
-### Portals it works on
-
-Greenhouse, Lever, Workable, Ashby, SmartRecruiters, Recruitee, Teamtailor,
-JOIN and Personio — plus any employer's own form that has a CV upload and no
-bot check. Workday, Taleo, LinkedIn, Indeed and Reed need an account and are
-recorded as `portal_manual` with a direct link for you.
-
-### Checking it without waiting for a run
-
-Push any branch named `fire-probe/...` and the workflow reports, in about
-thirty seconds and with no browser, exactly what each platform answers for the
-companies currently in the queue. `fire-diagnose/...` opens the pages and
-reports what is on them without filling anything in. `fire-submit/...` really
-applies, to one job only.
-
-### Portal variables
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `PORTAL_SUBMIT` | `0` | `0` fills and screenshots but stops short of submitting. Set to `1` to actually apply. |
-| `PORTAL_MAX_AGE_DAYS` | `30` | How far back to look |
-| `PORTAL_PER_RUN_CAP` | `10` | Applications per run |
-| `PORTAL_DAILY_CAP` | `25` | Applications per day |
 
 ## The inbox is the widest source of jobs (`alert_harvest.py`)
 
@@ -356,10 +256,10 @@ Five levers run automatically on top of the basic apply loop:
    (`cv_tailor.py`): the summary leads with what that kind of job cares about
    and the key skills are reordered to match. Everything in it already exists in
    the master CV - tailoring reorders and emphasises, it never invents.
-3. **The double-tap.** When the portal agent submits an application and a named
-   person was discovered, they get a short "just applied through your portal"
-   note with the CV attached, so the application does not sit unread in an ATS
-   queue.
+3. **A second real address at the company.** If the first person has not
+   replied by day 16 and another genuine address there is known, one fresh
+   approach goes to them with the CV, so the application does not rest on one
+   inbox nobody reads.
 4. **Two follow-ups, then silence.** Day 4 and day 9. A reply at any point stops
    everything.
 5. **Speculative outreach** (`data/targets.json`). Two notes a day to a curated
