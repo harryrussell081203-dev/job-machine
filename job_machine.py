@@ -137,6 +137,7 @@ GEMINI_MODEL = "gemini-2.5-flash"
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(ROOT, "data", "state.json")
+DNC_PATH = os.path.join(ROOT, "data", "do_not_contact.json")
 CV_DIRS = [os.path.join(ROOT, "cv"), ROOT]
 
 SEARCH_KEYWORDS = [
@@ -562,6 +563,40 @@ AGENCY_BODY = re.compile(
 AGENCY_MAX_APPROACHES = env_int("AGENCY_MAX_APPROACHES", 4)
 AGENCY_GAP_DAYS = env_int("AGENCY_GAP_DAYS", 6)
 
+# How many messages one inbox may ever receive, counting applications and every
+# follow-up. Nothing counted this, and the two rules that decide sending both
+# reason about ONE vacancy: an agency may be approached about four roles, and
+# each approach carries an application plus two nudges. Four times three is
+# twelve, and one consultant at Connect Appointments received exactly that.
+# Allstaff phoned after three.
+MAX_MESSAGES_PER_INBOX = env_int("MAX_MESSAGES_PER_INBOX", 5)
+
+
+def recipient(job):
+    return (job.get("sent_to") or job.get("contact_email") or "").strip().lower()
+
+
+def messages_to(state, addr):
+    """Everything ever sent to one address, across every vacancy."""
+    addr = (addr or "").strip().lower()
+    if not addr:
+        return 0
+    total = 0
+    for job in state.get("jobs", {}).values():
+        if recipient(job) != addr:
+            continue
+        if job.get("status") not in ("sent", "replied", "spec_sent",
+                                     "portal_submitted"):
+            continue
+        total += 1 + sum(bool(job.get(f)) for f in
+                         ("followup_sent_at", "followup2_sent_at",
+                          "stakeholder_sent_at"))
+    return total
+
+
+def inbox_full(state, addr):
+    return messages_to(state, addr) >= MAX_MESSAGES_PER_INBOX
+
 
 def is_agency(job):
     """Is this a recruiter placing someone else's vacancy?
@@ -571,6 +606,67 @@ def is_agency(job):
     if AGENCY_NAME.search(job.get("company") or ""):
         return True
     return bool(AGENCY_BODY.search((job.get("description") or "")[:2000]))
+
+
+def load_do_not_contact():
+    """Companies that have asked not to be written to again.
+
+    Kept on disk rather than in state.json because it must survive a state
+    reset, a prune, and a merge that goes wrong. It is the one register where
+    losing a record is not a wasted email but a company being pestered after
+    they picked up the phone to ask us to stop."""
+    try:
+        with open(DNC_PATH) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    blocked = data.get("blocked") if isinstance(data, dict) else data
+    return [e for e in (blocked or []) if isinstance(e, dict)]
+
+
+def dnc_match(entry, company=None, email=None, domain=None):
+    """Does one do-not-contact entry cover this company or address?
+
+    An address is matched on its DOMAIN, not just the exact mailbox, because
+    the reason a company asked us to stop does not become void when we find a
+    different inbox there. Subdomains count for the same reason."""
+    addr = (email or "").strip().lower()
+    host = addr.split("@")[-1] if "@" in addr else ""
+    blocked_domain = (entry.get("domain") or "").strip().lower().lstrip(".")
+    if blocked_domain:
+        for candidate in (host, (domain or "").strip().lower()):
+            if candidate and (candidate == blocked_domain
+                              or candidate.endswith("." + blocked_domain)):
+                return True
+    if addr and addr in {str(e).strip().lower() for e in (entry.get("emails") or [])}:
+        return True
+    name = company_key(entry.get("name"))
+    if name and company:
+        theirs = company_key(company)
+        if theirs:
+            if theirs == name:
+                return True
+            # Whole tokens, never substrings. A plain 'in' test reads a
+            # company called 'A' as a match for 'Allstaff', because 'a' is
+            # inside 'allstaff' - so the first unrelated employer with a short
+            # name would have been silently dropped from the queue.
+            mine, yours = set(name.split()), set(theirs.split())
+            shorter = mine if len(mine) < len(yours) else yours
+            if (mine < yours or yours < mine) and min(map(len, shorter)) >= 3:
+                return True
+            # 'Allstaff' and 'All Staff' are the same agency, and the one that
+            # phoned did not spell it for us.
+            if theirs.replace(" ", "") == name.replace(" ", ""):
+                return True
+    return False
+
+
+def do_not_contact(company=None, email=None, domain=None, entries=None):
+    """The entry blocking this company or address, or None."""
+    for entry in (load_do_not_contact() if entries is None else entries):
+        if dnc_match(entry, company=company, email=email, domain=domain):
+            return entry
+    return None
 
 
 def contact_history(state, job):
@@ -1749,16 +1845,26 @@ def send_email(to_addr, subject, body, attach_cv=True, headers=None, cv_file=Non
 
     Every outgoing message goes through here - applications, speculative
     notes, follow-ups, charity letters, replies to interview invitations - so
-    this is the one place a false claim about his clearance can be stopped
-    whatever wrote it. Refusing to send is the right failure: an application
-    that never arrives costs one opportunity, and one that arrives claiming a
-    clearance he does not hold costs his credibility with that employer and
-    anyone they talk to."""
+    this is the one place a message can be stopped whatever wrote it. Two
+    things are stopped here rather than in the stages, so a stage added later
+    cannot forget to check: a false claim about his clearance, and anyone who
+    has asked not to be written to again.
+
+    Refusing to send is the right failure in both cases. An application that
+    never arrives costs one opportunity. One that claims a clearance he does
+    not hold costs his credibility with that employer and everyone they talk
+    to, and one that arrives after a company phoned to ask him to stop costs
+    him that company for good."""
     claim = claims_clearance(f"{subject}\n{body}")
     if claim:
         raise ValueError(
             f"refusing to send: text claims a security clearance ({claim!r}). "
             f"Harry's lapsed after discharge and must never be asserted.")
+    blocked = do_not_contact(email=to_addr)
+    if blocked:
+        raise ValueError(
+            f"refusing to send to {to_addr}: {blocked.get('name') or 'this company'} "
+            f"asked not to be contacted again ({blocked.get('reason', 'no reason recorded')})")
     msg = EmailMessage()
     msg["From"] = GMAIL_ADDRESS
     msg["To"] = to_addr
@@ -1795,6 +1901,8 @@ def run_sends(state, dry_run=False, already_sent=0):
         print("[send] no Gmail credentials - refusing to send")
         return already_sent
 
+    blocklist = load_do_not_contact()
+
     # freshest first within equal tier+score - being an early applicant on a new
     # listing is worth more than being late on a stale one
     ready = sorted([j for j in state["jobs"].values() if j["status"] == "ready"],
@@ -1828,8 +1936,26 @@ def run_sends(state, dry_run=False, already_sent=0):
         if sends_today(state) >= DAILY_SEND_CAP:
             print(f"[send] daily cap ({DAILY_SEND_CAP}) reached")
             break
+        stop = do_not_contact(company=job.get("company"),
+                              email=job.get("contact_email"),
+                              domain=job.get("company_domain"),
+                              entries=blocklist)
+        if stop:
+            job["status"] = "do_not_contact"
+            job["do_not_contact_at"] = now()
+            job["do_not_contact_reason"] = stop.get("reason", "")
+            print(f"[send] skipping {job.get('company')} - asked not to be "
+                  f"contacted again")
+            continue
         if not TEST_MODE and already_contacted(state, job):
             job.update({"status": "skipped", "skip_reason": "company already contacted"})
+            continue
+        if not TEST_MODE and inbox_full(state, job.get("contact_email")):
+            job.update({"status": "skipped",
+                        "skip_reason": f"inbox already had "
+                                       f"{MAX_MESSAGES_PER_INBOX}+ messages"})
+            print(f"[send] skipping {job.get('company')} - "
+                  f"{job.get('contact_email')} has had enough")
             continue
         # Last line of defence against a misdirected application. Records are
         # merged across runs, so one written before a matching bug was fixed
@@ -1995,6 +2121,9 @@ def speculative(state):
         company = target["company"]
         key = company_key(company)
         if key in done or key in state["companies_contacted"]:
+            continue
+        if do_not_contact(company=company):
+            print(f"[spec] skipping {company} - asked not to be contacted again")
             continue
 
         domain = find_domain(company)
@@ -2615,8 +2744,21 @@ def run_followups(state):
     if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
         return
     done = 0
+    blocklist = load_do_not_contact()
     for job in state["jobs"].values():
         if job.get("status") != "sent":
+            continue
+        stop = do_not_contact(company=job.get("company"),
+                              email=job.get("sent_to") or job.get("contact_email"),
+                              domain=job.get("company_domain"), entries=blocklist)
+        if stop:
+            # send_email would refuse anyway. Saying so here keeps it out of
+            # the log as an error, and out of the queue every single run.
+            job.setdefault("do_not_contact_at", now())
+            job["do_not_contact_reason"] = stop.get("reason", "")
+            continue
+        if inbox_full(state, recipient(job)):
+            job["followups_capped_at"] = now()
             continue
         sent_at = parse_ts(job.get("sent_at"))
         if not sent_at:

@@ -1,0 +1,24 @@
+{
+  "_README": [
+    "Companies that have asked not to be contacted again. Nothing in this repo",
+    "may write to them - not an application, not a follow-up, not a speculative",
+    "note, not a reply. Enforced in send_email(), which every outgoing message",
+    "goes through, so a new stage cannot forget to check.",
+    "",
+    "Match on any of: 'name' (loosely, against the company name on a listing),",
+    "'domain' (the address's domain and any subdomain), 'emails' (exact).",
+    "A domain is the strongest entry - it covers addresses nobody has seen yet.",
+    "",
+    "Add an entry the day somebody asks. Removing one needs them to say so."
+  ],
+  "blocked": [
+    {
+      "name": "Allstaff Recruitment",
+      "domain": "allstaffrecruitment.co.uk",
+      "emails": ["jobs@allstaffrecruitment.co.uk"],
+      "reason": "Phoned Harry on 20 Aug 2026 to say he was asking the same questions again. Three messages had gone to jobs@ - the application on 10 Aug, a nudge on 14 Aug and the last of the sequence at 08:35 that morning.",
+      "added": "2026-08-20",
+      "added_by": "Harry, after their call"
+    }
+  ]
+}
