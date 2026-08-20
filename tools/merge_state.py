@@ -14,14 +14,21 @@ unioned with the earliest contact kept.
 Anything this file does not have a rule for is still carried across, because it
 used to be silently dropped: the merge started from a copy of `theirs` and then
 copied over only the keys it recognised, so every new top-level key was thrown
-away the first time a run tried to save one. That cost the ATS board cache, and
-then the record of which charities had already been written to - which is worse
-than losing data, because a lost record of a letter means sending it twice.
+away the first time a run tried to save one. That cost the record of which
+charities had already been written to - which is worse than losing data,
+because a lost record of a letter means sending it twice.
 """
 import json
 import sys
 
 # Later in this list beats earlier when the two sides disagree about a job.
+#
+# The portal_* statuses are from the retired application-portal agent. They stay
+# here because live records still carry them - three real applications sit at
+# 'portal_submitted' and are watched for replies - and because a status missing
+# from this list ranks 0, i.e. loses to everything. Nothing new is written into
+# portal_manual/review/ready, but dropping them would mean any stale record on
+# an unmerged branch could be overwritten by a bare 'new'.
 PROGRESS = ["new", "scored", "skipped", "no_email", "compose_failed",
             "send_failed", "portal_manual", "portal_review", "portal_ready",
             "ready", "portal_submitted", "test_sent", "spec_sent", "sent",
@@ -45,7 +52,10 @@ def reopened(job):
       rescored_at        a profile change invalidated the score, so the
                          listing goes back to 'new' to be judged again
       portal_fallback_at the application portal could not be driven, so the
-                         listing goes back to 'scored' to be emailed instead
+                         listing goes back to 'scored' to be emailed instead.
+                         The portal agent is retired and nothing writes this
+                         field any more, but released records still carry it
+                         and it still has to beat their old parked status.
 
     Only the first was handled here. The second ranks 'scored' (1) below
     'portal_manual' (7), so every one of the eighty-six listings the fallback
@@ -91,8 +101,7 @@ def union_earliest(theirs, ours):
 # Keys with a rule of their own below. Everything else is carried across by
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
-         "portal_counts", "spec_counts", "spec_done", "ats_boards",
-         "agency_registered", "last_summary_at"}
+         "spec_counts", "spec_done", "agency_registered", "last_summary_at"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -159,7 +168,7 @@ def merge(theirs, ours):
     if agencies:
         out["agency_registered"] = agencies
 
-    for counter in ("send_counts", "portal_counts", "spec_counts"):
+    for counter in ("send_counts", "spec_counts"):
         merged = dict(theirs.get(counter, {}))
         for day, count in ours.get(counter, {}).items():
             merged[day] = max(merged.get(day, 0), count)
@@ -170,20 +179,6 @@ def merge(theirs, ours):
     spec_done.update(ours.get("spec_done", {}))
     if spec_done:
         out["spec_done"] = spec_done
-
-    # Which ATS a company uses, remembered so it is not re-discovered every
-    # run. The fresher answer wins; a found board beats a same-age miss.
-    boards = dict(theirs.get("ats_boards", {}))
-    for key, entry in ours.get("ats_boards", {}).items():
-        old = boards.get(key)
-        if not old:
-            boards[key] = entry
-            continue
-        newer = str(entry.get("checked_at", "")) > str(old.get("checked_at", ""))
-        if newer or (entry.get("ats") and not old.get("ats")):
-            boards[key] = entry
-    if boards:
-        out["ats_boards"] = boards
 
     for stamp in ("last_summary_at",):
         values = [s for s in (theirs.get(stamp), ours.get(stamp)) if s]
