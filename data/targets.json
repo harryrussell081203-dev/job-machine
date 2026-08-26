@@ -546,6 +546,14 @@
     {
       "company": "March",
       "note": "has advertised in Aberdeen for Electrician"
+    },
+    {
+      "company": "First Tech Group",
+      "note": "has advertised in Aberdeen for Workshop Technician"
+    },
+    {
+      "company": "SRG",
+      "note": "has advertised in Aberdeen for Manufacturing Technician"
     }
   ]
 }
