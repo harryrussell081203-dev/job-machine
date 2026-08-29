@@ -95,6 +95,7 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
           SUPPORT_PER_RUN: ${{ vars.SUPPORT_PER_RUN }}
+          RESCORE_FLOOR: ${{ vars.RESCORE_FLOOR }}
         run: |
           # The MoD register of Covenant signatories. Every name on it is an
           # employer where being ex-forces moves Harry from the pile to the
@@ -117,10 +118,22 @@ jobs:
           # A change to CANDIDATE_PROFILE invalidates every score already in
           # the file, so this re-opens the listings the scorer rejected and
           # judges them again before the run does anything else.
+          # The floor is the lowest OLD score worth re-judging, and 55 is only
+          # right when the profile got wider. When it changes what counts as a
+          # good job the old scores are wrong further down: lifting the
+          # seniority ceiling was meant to rescue Leonardo's listings, and every
+          # one of them had been marked 30-50 for being "above the candidate's
+          # target level", so a floor of 55 re-opened none of them. Set the repo
+          # variable RESCORE_FLOOR, or put the number in the branch name:
+          # fire-rescore/40.
           ARGS=""
           if [[ "${GITHUB_REF_NAME}" == fire-rescore/* ]]; then
-            echo "fire-rescore branch: re-judging against the current profile"
-            ARGS="--rescore 55"
+            FLOOR="${GITHUB_REF_NAME##*/}"
+            if ! [[ "${FLOOR}" =~ ^[0-9]+$ ]]; then
+              FLOOR="${RESCORE_FLOOR:-55}"
+            fi
+            echo "fire-rescore branch: re-judging everything scored >= ${FLOOR}"
+            ARGS="--rescore ${FLOOR}"
           fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             python job_machine.py --dry-run $ARGS
