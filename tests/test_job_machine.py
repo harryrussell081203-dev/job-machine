@@ -6,6 +6,9 @@ stubbed. Run with:  python -m unittest discover -s tests -v
 """
 import os
 import sys
+import json
+import shutil
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -1621,10 +1624,14 @@ class TestTheSendStageRunningTwice(unittest.TestCase):
 class TestWhereHarryCanWork(unittest.TestCase):
     def test_the_profile_no_longer_treats_aberdeen_as_a_requirement(self):
         """He can take work anywhere that comes with the arrangements to live
-        it, and the scorer was quietly costing him every rotational role."""
+        it, and the scorer was quietly costing him every rotational role.
+
+        Aberdeen has since gone further than 'not required': he took a job
+        there, so a local listing is no longer even a tie-breaker."""
         profile = jm.CANDIDATE_PROFILE.lower()
         self.assertNotIn("aberdeen strongly preferred", profile)
-        for expected in ("rotational", "fly-in", "accommodation", "not a requirement"):
+        for expected in ("rotational", "fly-in", "accommodation",
+                         "not a preference to score up", "relocate"):
             self.assertIn(expected, profile)
 
     def test_it_still_records_that_he_does_not_drive(self):
@@ -2365,3 +2372,297 @@ class TestOneInboxOnlyGetsSoMuch(unittest.TestCase):
                       "b": {"status": "no_email", "contact_email": "gary@a.com"},
                       "c": {"status": "ready", "contact_email": "gary@a.com"}}}
         self.assertEqual(jm.messages_to(s, "gary@a.com"), 0)
+
+
+class TestOnlyGoingUp(unittest.TestCase):
+    """Harry started as a Technician in Aberdeen on 24 August 2026 - GBP 30,000
+    a year on GBP 15 an hour - so "is this a job in his trade" stopped being
+    the question.
+
+    Nothing in this repo compared a listing's pay to anything at all. Salary
+    was handed to the scorer and never mentioned in its rules, and the guide's
+    own top line read "85+ strong direct match in or near Aberdeen" - so a
+    GBP 24,000 job round the corner outranked a GBP 45,000 one with a travel
+    budget. Left alone the machine would have spent its quota finding him
+    sideways moves out of a job he is happy in."""
+
+    def test_the_leonardo_rate_is_read_as_an_hourly_rate(self):
+        """The case that makes the units matter. GBP 30.81 an hour is the
+        contract he is interviewing for; read as a salary it is thirty-one
+        pounds a year, and the best-paid thing in the queue is thrown out as
+        the worst."""
+        self.assertEqual(jm.stated_pay({"salary_min": 30.81}), (30.81, "hour"))
+        self.assertTrue(jm.pays_enough({"salary_min": 30.81}))
+
+    def test_what_he_already_earns_does_not_pass(self):
+        self.assertFalse(jm.pays_enough({"salary_min": 15, "salary_max": 15}))
+        self.assertFalse(jm.pays_enough({"salary_min": 28000, "salary_max": 30000}))
+
+    def test_a_poor_day_rate_is_not_mistaken_for_a_fine_hourly_one(self):
+        """The hour/day band overlaps and the readings are not equally likely.
+        A day rate of GBP 120 is common and poor. An hourly rate of GBP 120
+        would be a quarter of a million a year and does not exist in this
+        trade, so guessing 'hour' up there passes every bad day rate going."""
+        self.assertEqual(jm.stated_pay({"salary_min": 120})[1], "day")
+        self.assertFalse(jm.pays_enough({"salary_min": 120}))
+        self.assertTrue(jm.pays_enough({"salary_min": 350}))
+
+    def test_the_top_of_a_range_is_what_counts(self):
+        """Only reject when even the best case is too little."""
+        self.assertTrue(jm.pays_enough({"salary_min": 30000, "salary_max": 42000}))
+
+    def test_silence_passes(self):
+        """Most adverts print no figure and the whole contract market quotes on
+        application. Treating unstated as too little would delete the
+        best-paid half of the market to save a few Gemini calls."""
+        for job in ({}, {"salary_min": None, "salary_max": None},
+                    {"salary_min": 0}, {"salary_min": "on application"}):
+            self.assertTrue(jm.pays_enough(job), job)
+
+    def test_an_underpaid_listing_never_reaches_the_scorer(self):
+        state = {"jobs": {
+            "cheap": {"status": "new", "title": "Electronics Technician",
+                      "description": "fault-finding", "salary_max": 26000},
+            "good": {"status": "new", "title": "Test Technician",
+                     "description": "test", "salary_min": 30.81}}}
+        with mock.patch.object(jm, "score_batch", return_value={}) as scored:
+            jm.score_jobs(state)
+            sent = [j for call in scored.call_args_list for j in call.args[0]]
+        self.assertEqual([j["title"] for j in sent], ["Test Technician"])
+        self.assertEqual(state["jobs"]["cheap"]["status"], "skipped")
+        self.assertIn("already earns", state["jobs"]["cheap"]["skip_reason"])
+
+    def test_aberdeen_is_no_longer_worth_points(self):
+        guide = jm.CANDIDATE_PROFILE.lower()
+        self.assertIn("not a preference to score up", guide)
+
+    def test_principal_technician_titles_are_back_in_range(self):
+        """Leonardo put thirteen listings into this queue and not one was
+        applied for, with the scorer's reason on one reading "above the
+        candidate's target level" - while Harry was that week interviewing for
+        a Principal Test Technician at Leonardo on GBP 40.36 an hour."""
+        self.assertNotIn("principal engineer", jm.TITLE_EXCLUSIONS)
+        for still_out in ("chartered", "head of", "director"):
+            self.assertIn(still_out, jm.TITLE_EXCLUSIONS)
+
+
+class TestAskingAboutTravel(unittest.TestCase):
+    """Being paid to work abroad is Harry's condition for leaving a job he is
+    happy in. There is no reliable way to read that off an advert - the
+    listings that involve heavy travel mostly never say so - so the machine
+    stops guessing and asks, in the one place a letter already has a question."""
+
+    def test_travel_is_spotted_in_a_listing(self):
+        for text in ("regular travel to client sites overseas",
+                     "field service role covering Europe",
+                     "3 weeks on / 3 weeks off rotation",
+                     "fly-in fly-out to the platform",
+                     "you will need a valid passport"):
+            self.assertTrue(jm.mentions_travel({"description": text}), text)
+
+    def test_a_bench_job_is_not_mistaken_for_a_travelling_one(self):
+        self.assertFalse(jm.mentions_travel(
+            {"title": "Workshop Technician",
+             "description": "Bench assembly and test in our Aberdeen facility."}))
+
+    def test_an_ordinary_letter_asks_the_travel_question(self):
+        job = {"title": "Service Technician", "company": "Acme",
+               "description": "Servicing pumps in the workshop."}
+        with mock.patch.object(jm, "veteran_friendly", return_value=False):
+            body = jm.plain_email(job)["body"]
+        self.assertIn("travel", body.lower())
+        self.assertEqual(body.count("?"), 1)
+
+    def test_it_does_not_ask_what_the_advert_already_answered(self):
+        """Asking whether a role involves travel, of an advert that opens by
+        saying it does, reads as though he never read it."""
+        job = {"title": "Field Service Engineer", "company": "Acme",
+               "description": "Regular overseas travel to client sites."}
+        with mock.patch.object(jm, "veteran_friendly", return_value=False):
+            body = jm.plain_email(job)["body"]
+        self.assertIn("How much travel", body)
+        self.assertEqual(body.count("?"), 1)
+
+    def test_the_covenant_question_still_wins(self):
+        """A guaranteed interview scheme converts better than anything else
+        the machine has, and the style rules allow exactly one question."""
+        job = {"title": "Technician", "company": "Babcock", "description": "x"}
+        with mock.patch.object(jm, "veteran_friendly", return_value=True):
+            body = jm.plain_email(job)["body"]
+        self.assertIn("guaranteed interview scheme", body)
+        self.assertEqual(body.count("?"), 1)
+
+    def test_the_composer_is_told_which_question_to_ask(self):
+        job = {"title": "Field Service Engineer", "company": "Acme",
+               "location": "Aberdeen", "description": "Servicing pumps."}
+        seen = {}
+
+        def capture(prompt, **kw):
+            seen["prompt"] = prompt
+            return None
+        with mock.patch.object(jm, "gemini_json", capture), \
+             mock.patch.object(jm, "veteran_friendly", return_value=False):
+            jm.build_email(job)
+        self.assertIn("must ask whether this role involves travel",
+                      seen["prompt"])
+        self.assertNotIn("guaranteed interview scheme", seen["prompt"])
+
+    def test_a_covenant_prompt_asks_for_travel_without_a_second_question(self):
+        job = {"title": "Technician", "company": "Babcock",
+               "location": "Rosyth", "description": "x"}
+        seen = {}
+
+        def capture(prompt, **kw):
+            seen["prompt"] = prompt
+            return None
+        with mock.patch.object(jm, "gemini_json", capture), \
+             mock.patch.object(jm, "veteran_friendly", return_value=True):
+            jm.build_email(job)
+        self.assertIn("guaranteed interview scheme", seen["prompt"])
+        self.assertIn("a statement, not a question", seen["prompt"])
+
+    def test_travelling_roles_go_out_before_the_cap_bites(self):
+        state = {"jobs": {
+            "bench": {"status": "ready", "company": "A", "title": "Technician",
+                      "contact_email": "a@a.com", "company_domain": "a.com",
+                      "score": 90, "email_tier": 3,
+                      "description": "Bench work in our facility."},
+            "travel": {"status": "ready", "company": "B", "title": "Technician",
+                       "contact_email": "b@b.com", "company_domain": "b.com",
+                       "score": 71, "email_tier": 1,
+                       "description": "Overseas travel to client sites."}},
+            "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "cv_path", return_value="cv.pdf"), \
+             mock.patch.object(jm, "GMAIL_ADDRESS", "x@gmail.com"), \
+             mock.patch.object(jm, "GMAIL_APP_PASSWORD", "pw"), \
+             mock.patch.object(jm, "veteran_friendly", return_value=False), \
+             mock.patch.object(jm, "build_email",
+                               return_value={"subject": "s", "body": "b",
+                                             "family": "plain"}), \
+             mock.patch.object(jm, "send_email", return_value="<id>") as send:
+            jm.run_sends(state)
+        self.assertEqual([c.args[0] for c in send.call_args_list][0], "b@b.com")
+
+
+class TestHisOwnEmployer(unittest.TestCase):
+    """The one email that must never be sent. He started at Hydro Group on
+    24 August 2026, and the machine holds his CV and writes to every engineering
+    firm in Aberdeen."""
+
+    def test_hydro_group_is_blocked(self):
+        for spelling in ("Hydro Group", "HYDRO GROUP LIMITED", "Hydro Group Ltd",
+                         "Hydro Group Aberdeen", "Hydro Group (Aberdeen) Ltd"):
+            self.assertTrue(jm.do_not_contact(company=spelling), spelling)
+
+    def test_send_email_refuses_them(self):
+        block = [{"name": "Hydro Group", "match": "exact",
+                  "domain": "hydrogroup.com", "reason": "his employer"}]
+        with mock.patch.object(jm, "load_do_not_contact", return_value=block), \
+             mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp:
+            with self.assertRaises(ValueError):
+                jm.send_email("jobs@hydrogroup.com", "Technician", "Hi.")
+            smtp.assert_not_called()
+
+    def test_an_unrelated_hydro_company_is_not_blocked(self):
+        """company_key() strips the word 'group', so 'Hydro Group' normalises
+        to 'hydro' - and without exact matching the block would swallow every
+        firm in the phone book with a river in its name."""
+        for other in ("Hydro Cleansing", "Hydro Systems", "Hydro Industries",
+                      "Hydro International", "Hydro Services", "Hydro Groupings",
+                      "Northern Hydro Group"):
+            self.assertFalse(jm.do_not_contact(company=other), other)
+
+    def test_the_profile_never_names_the_employer(self):
+        """CANDIDATE_PROFILE goes into the letter-writing prompt, so a name in
+        it can end up in a letter to another firm in the same city."""
+        self.assertNotIn("hydro", jm.CANDIDATE_PROFILE.lower())
+
+    def test_the_profile_still_records_that_he_is_in_work(self):
+        self.assertIn("in work", jm.CANDIDATE_PROFILE.lower())
+
+
+class TestWhatHeSaysAboutHimselfNow(unittest.TestCase):
+    def test_the_spent_offer_no_longer_speaks(self):
+        """He accepted the offer this file described, which is exactly what
+        decide_by is for."""
+        self.assertIsNone(jm.load_situation().get("offer"))
+
+    def test_being_in_work_is_the_sentence_now(self):
+        sentence = jm.timeline_sentence(
+            {"employed": {"since": "2026-08-24"}}, today_str="2027-01-01")
+        self.assertIn("in work", sentence)
+        self.assertNotIn("offer", sentence.lower())
+
+    def test_it_never_names_where_he_works(self):
+        sentence = jm.timeline_sentence(
+            {"employed": {"since": "2026-08-24", "note": "Hydro Group"}})
+        self.assertNotIn("hydro", sentence.lower())
+
+    def test_a_live_offer_still_outranks_it(self):
+        sentence = jm.timeline_sentence(
+            {"offer": {"decide_by": "2099-01-01"}, "employed": {"since": "x"}})
+        self.assertIn("offer", sentence)
+
+    def test_nothing_is_claimed_when_there_is_nothing_true_to_say(self):
+        self.assertEqual(jm.timeline_sentence({}), "")
+
+    def test_he_is_no_longer_advertised_as_available_immediately(self):
+        job = {"title": "Technician", "company": "Acme", "description": "x"}
+        with mock.patch.object(jm, "veteran_friendly", return_value=False):
+            body = jm.plain_email(job)["body"]
+        self.assertNotIn("available immediately", body.lower())
+        self.assertIn("in work", body.lower())
+
+
+class TestNotLosingTheStateFile(unittest.TestCase):
+    """data/state.json is the only record of who has been written to and when.
+    Losing it does not cost a run, it costs the history that stops the machine
+    writing to somebody twice - and it has gone missing three times already, by
+    three different routes, noticed days later each time.
+
+    During this change a --dry-run turned 8,038 listings into 2. It did not
+    reproduce, which is the whole argument for a guard: the next cause will be
+    a different one, and the file is worth more than the diagnosis."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "state.json")
+        self.patch = mock.patch.object(jm, "STATE_PATH", self.path)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        jm.save({"jobs": {str(i): {"status": "sent"} for i in range(1000)}})
+
+    def on_disk(self):
+        with open(self.path) as f:
+            return len(json.load(f)["jobs"])
+
+    def test_a_collapse_is_refused_and_the_file_survives(self):
+        self.assertFalse(jm.save({"jobs": {"a": {}}}))
+        self.assertEqual(self.on_disk(), 1000)
+
+    def test_what_the_run_was_holding_is_kept_for_inspection(self):
+        jm.save({"jobs": {"a": {}}})
+        with open(self.path + ".rejected") as f:
+            self.assertEqual(len(json.load(f)["jobs"]), 1)
+
+    def test_ordinary_growth_is_written(self):
+        self.assertTrue(jm.save({"jobs": {str(i): {} for i in range(1200)}}))
+        self.assertEqual(self.on_disk(), 1200)
+
+    def test_a_prune_sized_loss_is_still_written(self):
+        """The guard has to let real work through. Pruning dead listings, or a
+        rescore changing statuses, never halves the file."""
+        self.assertTrue(jm.save({"jobs": {str(i): {} for i in range(900)}}))
+        self.assertEqual(self.on_disk(), 900)
+
+    def test_a_deliberate_reset_is_still_possible(self):
+        self.assertTrue(jm.save({"jobs": {"a": {}}}, allow_shrink=True))
+        self.assertEqual(self.on_disk(), 1)
+
+    def test_a_small_file_is_not_guarded(self):
+        """Early runs and fresh checkouts legitimately go from nothing to a
+        handful and back."""
+        jm.save({"jobs": {str(i): {} for i in range(20)}}, allow_shrink=True)
+        self.assertTrue(jm.save({"jobs": {"a": {}}}))

@@ -3,10 +3,17 @@
 Automated job-application outreach for Harry Russell. One Python file, run by
 GitHub Actions three times a weekday, costing nothing.
 
-It finds fresh engineering/technician jobs in Scotland, scores them against
-Harry's profile, digs out a **real** email address for the employer, writes a
-short personalised email, sends it from Gmail with the CV attached, and chases
-once after four days if nobody replies.
+It finds fresh engineering/technician jobs, scores them against Harry's
+profile, digs out a **real** email address for the employer, writes a short
+personalised email, sends it from Gmail with the CV attached, and chases once
+after four days if nobody replies.
+
+**He is in work.** He started as a Technician in Aberdeen on 24 August 2026 on
+£30k, so the machine is not looking for him a job - it is looking for a better
+one. That single fact sets the rules: a pay floor of £35,000 a year or £18 an
+hour, every letter asking whether the role involves travel abroad, contract and
+day-rate work actively wanted, and Aberdeen worth no points at all. His
+employer is in `data/do_not_contact.json` and can never be written to.
 
 **This is live.** Emails go to real employers. Every night at 22:00 UK time it
 emails Harry a digest of everything that went out that day.
@@ -117,7 +124,7 @@ python job_machine.py --summary --force   # send tonight's digest right now
 Tests (no network, nothing is sent, no employer is contacted):
 
 ```bash
-python -m unittest discover -s tests -v          # 322 tests
+python -m unittest discover -s tests -v          # 376 tests
 ```
 
 ---
@@ -151,6 +158,59 @@ fill one in yourself.
 > month and this uses roughly a third of that.
 
 
+## Only going up (the pay floor and the travel question)
+
+Everything here was written for someone unemployed who wanted any job in his
+trade near home. He now has one, and that assumption was load-bearing in the
+wrong direction in four places at once:
+
+- the profile described a man at Sonardyne looking for "a hands-on technical role"
+- the scorer's guide opened **"85+ strong direct match in or near Aberdeen"**, so
+  a £24k job round the corner outranked a £45k one with a travel budget
+- **nothing anywhere compared a listing's pay to anything** - salary was handed
+  to Gemini and never mentioned in its rules
+- the letters said he was available immediately
+
+### The floor
+
+`MIN_SALARY_ANNUAL` (£35,000) and `MIN_RATE_HOURLY` (£18). `pays_enough()` runs
+before the scorer, so an underpaid listing never costs a Gemini call. Of the
+8,038 listings already harvested, 7,459 state a figure and **2,956 of those are
+at or below what he already earns**.
+
+Two rules keep it honest:
+
+- **Silence passes.** Most adverts print no figure and the whole contract market
+  quotes on application. Treating unstated as too little would delete the
+  best-paid half of the market to save a few API calls.
+- **Units are guessed from the size of the number**, because the boards do not
+  say which they mean and the same field carries all three. Under 100 is hourly,
+  100–2,000 is a day rate, above that is a salary. The contract Harry is
+  interviewing for pays **£30.81** - read as a salary that is thirty-one pounds
+  a year, and the best-paid thing in the queue gets thrown out as the worst.
+
+The seniority ceiling came down too. `principal engineer` used to be an excluded
+title, and Leonardo put **thirteen listings into this queue with not one applied
+for** - one skipped as *"above the candidate's target level"* in the same week
+Harry was interviewing for a **Principal** Test Technician at Leonardo on £40.36
+an hour. Of 692 senior and principal listings harvested, 682 were skipped.
+
+### The travel question
+
+Being paid to work abroad is his condition for moving at all, and there is no
+reliable way to read that off an advert - the listings that involve heavy travel
+mostly never say so. So the machine stops guessing and asks.
+
+The style rules allow **exactly one question** in a letter, which forces a
+choice. Ordinary employers get the travel question as the call to action. Armed
+Forces Covenant employers keep the guaranteed-interview question, which converts
+better than anything else here, and travel is stated as an interest instead. If
+the advert already mentions travel, the letter asks how much rather than
+whether - asking otherwise reads as though he never read it.
+
+Listings that mention travel also sort to the front of the send queue, ahead of
+tier and score, so what he actually wants is not the part the daily cap cuts.
+
 ## When somebody asks you to stop (`data/do_not_contact.json`)
 
 Allstaff Recruitment phoned on 20 August 2026 to say Harry was asking the same
@@ -163,8 +223,15 @@ The machine had no way of being told to stop. Every register it kept answered
 schedules the next message - so the harder somebody tried to make it stop, the
 more certain the follow-up became.
 
-Add them to `data/do_not_contact.json` and nothing in this repo writes to them
-again:
+Harry's own employer is in the same file for the same reason - an application
+from the machine landing in his own company's inbox is the one email that must
+never be sent. That entry carries `"match": "exact"`, because `company_key()`
+strips words like *group* and *international* and without it a block on "Hydro
+Group" would also have silently stopped the machine writing to Hydro Cleansing,
+Hydro Systems and Hydro International.
+
+Add an organisation to `data/do_not_contact.json` and nothing in this repo
+writes to them again:
 
 ```json
 {"name": "Allstaff Recruitment",
