@@ -1,0 +1,3 @@
+# The profile layer and wizard.
+PyYAML>=6.0
+requests>=2.28
