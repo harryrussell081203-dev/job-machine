@@ -28,8 +28,8 @@ W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 # opposite of the position he is negotiating from.
 SUMMARIES = {
     "communications": (
-        "Communications and electronics technician, ex-Royal Navy, currently working "
-        "as a technician in Aberdeen subsea engineering. Two years running "
+        "Communications and electronics technician, ex-Royal Navy, currently testing, "
+        "repairing and moulding subsea cables and connectors. Two years running "
         "secure and non-secure communications, networks and cryptographic material "
         "in the Royal Navy aboard a frontline Type 23 frigate, then three years "
         "building, testing and fault-finding precision subsea electronics at "
@@ -38,8 +38,10 @@ SUMMARIES = {
         "environments where a fault has to be found and fixed with nobody else to "
         "call."),
     "electronics_technician": (
-        "Engineering technician, currently in a technician role in Aberdeen subsea "
-        "engineering, with three years before that building, testing and "
+        "Engineering technician, currently testing, repairing and moulding subsea "
+        "cables and connectors - fault-finding to component and joint level, and "
+        "potting assemblies in epoxy resin and polyurethane to marine sealing "
+        "standards. Three years before that building, testing and "
         "fault-finding precision subsea electronics at Sonardyne to IPC-A-610 "
         "Class 3, including component-level diagnosis, repair and the test records "
         "to match. Before that, two years maintaining safety-critical "
@@ -48,8 +50,9 @@ SUMMARIES = {
         "(SCQF Level 7), with first-year BEng (Hons) study in Instrumentation, "
         "Measurement & Control."),
     "instrumentation_maintenance": (
-        "Time-served engineering technician, currently working as a technician in "
-        "Aberdeen subsea engineering: completed Engineering Modern "
+        "Time-served engineering technician, currently testing, repairing and "
+        "moulding subsea cables and connectors to marine sealing standards. "
+        "Completed Engineering Modern "
         "Apprenticeship (SCQF Level 7, asset lifecycle and maintenance) and "
         "first-year BEng (Hons) in Instrumentation, Measurement & Control, with "
         "three years of hands-on testing, fault-finding and maintenance of subsea "
