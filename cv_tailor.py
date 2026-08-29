@@ -21,9 +21,15 @@ OUT_DIR = os.path.join(ROOT, "cv", "tailored")
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 # Summary per family. Same facts as the master CV, led differently.
+#
+# Each one opens on the fact that he is in work. He started as a technician in
+# Aberdeen on 24 August 2026, and a CV that leads on a job he left reads like
+# somebody who has been out of work since - the opposite of true, and the
+# opposite of the position he is negotiating from.
 SUMMARIES = {
     "communications": (
-        "Communications and electronics technician, ex-Royal Navy. Two years running "
+        "Communications and electronics technician, ex-Royal Navy, currently working "
+        "as a technician in Aberdeen subsea engineering. Two years running "
         "secure and non-secure communications, networks and cryptographic material "
         "in the Royal Navy aboard a frontline Type 23 frigate, then three years "
         "building, testing and fault-finding precision subsea electronics at "
@@ -32,7 +38,8 @@ SUMMARIES = {
         "environments where a fault has to be found and fixed with nobody else to "
         "call."),
     "electronics_technician": (
-        "Engineering technician with three years building, testing and "
+        "Engineering technician, currently in a technician role in Aberdeen subsea "
+        "engineering, with three years before that building, testing and "
         "fault-finding precision subsea electronics at Sonardyne to IPC-A-610 "
         "Class 3, including component-level diagnosis, repair and the test records "
         "to match. Before that, two years maintaining safety-critical "
@@ -41,7 +48,8 @@ SUMMARIES = {
         "(SCQF Level 7), with first-year BEng (Hons) study in Instrumentation, "
         "Measurement & Control."),
     "instrumentation_maintenance": (
-        "Time-served engineering technician: completed Engineering Modern "
+        "Time-served engineering technician, currently working as a technician in "
+        "Aberdeen subsea engineering: completed Engineering Modern "
         "Apprenticeship (SCQF Level 7, asset lifecycle and maintenance) and "
         "first-year BEng (Hons) in Instrumentation, Measurement & Control, with "
         "three years of hands-on testing, fault-finding and maintenance of subsea "
@@ -49,7 +57,7 @@ SUMMARIES = {
         "Ex-Royal Navy, and used to shift work, hard deadlines and "
         "safety-critical equipment."),
     "events_production": (
-        "Technician with a rare mix for the events industry: military-grade "
+        "Working technician with a rare mix for the events industry: military-grade "
         "communications and electronics experience (two years Royal Navy, three "
         "years testing and fault-finding precision electronics at Sonardyne), and "
         "founder of Leads2Profit, a marketing systems business built exclusively "

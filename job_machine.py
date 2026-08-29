@@ -88,6 +88,15 @@ SEARCH_LOCATIONS = env_list(
 SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
 SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 
+# The floor. Harry is employed - Technician at Hydro Group from 24 August 2026,
+# £30k a year on £15 an hour - so "is this a job in his trade" stopped being the
+# question. The question is whether it is better than the one he has, and until
+# this existed nothing anywhere compared a listing's pay to anything at all:
+# salary was handed to the scorer and never mentioned in its rules.
+MIN_SALARY_ANNUAL = env_int("MIN_SALARY_ANNUAL", 35000)
+MIN_RATE_HOURLY = env_int("MIN_RATE_HOURLY", 18)
+CURRENT_SALARY = env_int("CURRENT_SALARY", 30000)
+
 # --- fixed tuning ---
 # MAX_AGE_HOURS and HARVEST_PAGES are module-level on purpose: other modules
 # widens them to sweep a month of listings without disturbing the email path.
@@ -145,7 +154,10 @@ SEARCH_KEYWORDS = [
 ]
 REED_KEYWORDS = ["engineering technician", "electronics technician",
                  "instrumentation technician", "maintenance technician",
-                 "communications technician"]
+                 "communications technician",
+                 # Where the money and the travel are.
+                 "field service engineer", "commissioning technician",
+                 "test technician"]
 
 # The rotational market does not live within twenty-five miles of anywhere.
 # An offshore or fly-in-fly-out posting is advertised against a base, a vessel
@@ -190,9 +202,43 @@ DEFENCE_KEYWORDS = [
 DEFENCE_WHERE = env_str("DEFENCE_WHERE", "United Kingdom")
 DEFENCE_RADIUS = env_int("DEFENCE_RADIUS", 500)
 
+# The travel-and-contract sweep.
+#
+# Harry's two conditions for leaving a job he is perfectly happy with are more
+# money and being paid to work abroad. Field service is where those two live:
+# it is the same trade he does now - fault-find it, fix it, sign it off - done
+# at the customer's site instead of a bench, and the customer's site is
+# routinely in another country. Commissioning is the same bargain.
+#
+# The contract half is here for the same reason. A day rate in this market runs
+# well above the salaried equivalent, the roles are advertised nationally
+# rather than locally, and he has said he wants them: the Leonardo contract he
+# is interviewing for pays GBP 30.81 an hour against the GBP 15 he earns.
+#
+# National, like the other two wide sweeps, because none of this is advertised
+# against Aberdeen.
+# Kept to ten. Every phrase here is one more Adzuna call on every one of five
+# runs a weekday, and the free tier is 250 a day - the sweep is worth having
+# and it is not worth losing the harvest to.
+TRAVEL_KEYWORDS = [
+    "field service engineer", "field service technician",
+    "commissioning engineer", "commissioning technician",
+    "installation and commissioning engineer",
+    "service engineer international travel", "service technician worldwide",
+    "test technician", "contract technician", "contract test technician",
+]
+TRAVEL_WHERE = env_str("TRAVEL_WHERE", "United Kingdom")
+TRAVEL_RADIUS = env_int("TRAVEL_RADIUS", 500)
+
 # Titles that are never worth a Gemini call.
+# 'principal engineer' used to be here. It was wrong twice over: Leonardo
+# advertised thirteen roles into this queue and not one was applied for, with
+# the scorer's reason on one of them reading "above the candidate's target
+# level" - while Harry was, that same week, interviewing for a PRINCIPAL Test
+# Technician at Leonardo on GBP 40.36 an hour. Seniority is where the money is
+# in his trade, and the ceiling was set below the roles worth having.
 TITLE_EXCLUSIONS = [
-    "chartered", "principal engineer", "head of", "director", "graduate scheme",
+    "chartered", "head of", "director", "graduate scheme",
     "sales executive", "sales manager", "business development", "care assistant",
     "support worker", "hgv", "lgv", "delivery driver", "van driver", "chef",
     "waiter", "waitress", "bartender", "cleaner", "warehouse operative",
@@ -216,8 +262,16 @@ def is_course_advert(job):
     return bool(NOT_A_VACANCY.search(blob))
 
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
-- Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
+- IN WORK. Technician with an Aberdeen engineering firm since 24 August 2026.
+  Monday to Friday, half-day Friday, no offshore, GBP 30,000 a year on GBP 15
+  an hour. NEVER NAME THIS EMPLOYER - not in a letter, not in a subject line,
+  not anywhere. It is nobody else's business, and in a city this size it gets
+  straight back to them that he is looking.
+  The fact of it matters to every judgement below: he is not looking for a job,
+  he is looking for a BETTER one, and a role that matches his trade but pays
+  the same or less is worth nothing to him however good the fit.
 - Workshop Technician at Sonardyne International 2023-2026: assembly, testing and fault diagnosis of subsea acoustic positioning systems (Ranger 2, Mini-Ranger, Solstice, USBL, Compatt) to IPC-A-610 Class 3.
+- Ex-Royal Navy Communications & Information Specialist 2021-2023 (HMS Westminster, Type 23 frigate): secure and non-secure comms, network engineering, cryptographic material, safety-critical equipment.
 - SECURITY CLEARANCE: HE HOLDS NONE. He was cleared during his Royal Navy
   service and it lapsed after discharge, which is the ordinary course of
   events. NEVER state, imply or hint that he is cleared, and never write
@@ -229,18 +283,37 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
 - Completed Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).
 - Year 1 BEng Instrumentation, Measurement & Control at RGU (paused).
 - Also founder of Leads2Profit, a marketing-automation business for nightlife/events venues.
-- TARGET: engineering technician, electronics, instrumentation, maintenance, comms/radio, workshop, offshore/O&G, defence, forces-friendly trades, or technical roles in events & nightlife.
-- WHERE HE CAN WORK: Aberdeen is home and a daily commute there is ideal, but it
-  is NOT a requirement and must not be scored as one. He will take work anywhere
-  in the world that comes with the arrangements to live it: offshore and
-  rotational postings (2/2, 3/3, 4/4, back-to-back), fly-in fly-out, residential
-  or camp accommodation, and roles that pay travel and lodging. A role that
-  matches his trade in Dundee, Inverness, Perth Australia, Norway or the Gulf is
-  worth as much as the same role in Aberdeen. Only mark a location down when the
+- WHAT HE IS AFTER, in his own order of priority:
+  1. MONEY. At least GBP 35,000 a year, or GBP 18 an hour on a contract. Below
+     that is a sideways move or a pay cut and is not of interest.
+  2. TRAVEL. He wants a job that pays him to work abroad - field service trips,
+     installation and commissioning overseas, client sites in other countries,
+     rotational or fly-in-fly-out. This is a requirement he has stated
+     explicitly, not a nice-to-have, and a role that involves regular paid
+     travel is worth more to him than a better-paid one that never leaves the
+     building.
+  3. CONTRACT WORK IS WANTED. Day rate, umbrella, fixed-term, 4-on-4-off shift
+     patterns, night shift - all actively of interest, not a compromise. Rates
+     in this market run well above the equivalent salary and he knows it.
+- TARGET ROLES: engineering technician, electronics, instrumentation, test,
+  field service, installation and commissioning, maintenance, comms/radio,
+  workshop, offshore/O&G, defence and aerospace manufacturing.
+- SENIORITY: he is time-served with five years in, so senior, lead and
+  PRINCIPAL technician / test / service titles are in range and are usually
+  where the money is. Only mark a role down for seniority when it genuinely
+  needs a completed degree plus years of design or chartered experience.
+- WHERE HE CAN WORK: Aberdeen is home, but it is where he already works and is
+  NOT a preference to score up. He will take work anywhere that comes with the
+  arrangements to live it: offshore and rotational postings (2/2, 3/3, 4/4,
+  back-to-back), fly-in fly-out, residential or camp accommodation, and roles
+  that pay travel and lodging. He would RELOCATE to Edinburgh or the Central
+  Belt for the right job, and will take UK-wide contract work with digs paid,
+  home at weekends. A role in Rosyth, Bristol, Norway or the Gulf is worth as
+  much as one in Aberdeen and often more. Only mark a location down when the
   job genuinely needs him to already live somewhere he cannot get to and offers
-  nothing towards it - and note that he does not drive, so a remote site with no
-  transport laid on is a real problem where a rotational one is not.
-- EXCLUDE: senior/chartered roles, unrelated sales/care/driving/hospitality."""
+  nothing towards it - and note that he does not drive, so a remote site with
+  no transport laid on is a real problem where a rotational one is not.
+- EXCLUDE: chartered and director-level roles, unrelated sales/care/driving/hospitality."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
 
@@ -258,6 +331,41 @@ minimum criteria, and Harry qualifies as a veteran. So:
   for veterans, or words to that effect. Ask - never state or assume that they
   do, and never mention awards, medals or scheme names.
 - Everything else about the rules is unchanged."""
+# Added to every ordinary letter. Harry's condition for leaving a job he is
+# happy with is being paid to work abroad, and there is no reliable way to read
+# that off an advert - most listings that involve heavy travel never mention it,
+# and the ones that do bury it in the last paragraph. So the machine stops
+# guessing and asks, in the one place a letter already has a question.
+#
+# It is a question and never a demand. Asking whether a role involves travel is
+# an ordinary thing a candidate wants to know; announcing that he requires it
+# would rule him out of a job he might well take, which is not what he asked
+# for - he asked for it to be raised.
+TRAVEL_INSTRUCTION = """
+
+WHAT HARRY IS LOOKING FOR IN A ROLE:
+The single question at the end must ask whether this role involves travel -
+overseas trips, work at client sites abroad, installation or commissioning away
+from base, or a rotational pattern. Phrase it as genuine interest, the way
+somebody asks about a thing they hope is true. For example: 'Does this one
+involve any travel to site or overseas work?'
+- If the listing ALREADY says the role involves travel, do not ask whether it
+  does - that reads as though he has not read it. Ask something that builds on
+  it instead, such as how often, or where.
+- Never say he requires travel, will only take a job with travel, or is not
+  interested without it.
+- This replaces the question the skeleton asks for. There is still exactly ONE
+  question in the whole email."""
+
+# The Covenant question outranks it. A guaranteed interview scheme is the
+# single highest-converting thing the machine has ever asked for, and the
+# style rules allow exactly one question, so travel gets stated as an interest
+# rather than asked about wherever the two collide.
+VETERAN_TRAVEL_NOTE = """
+- Harry is looking for work with travel in it. Mention that in the opening line
+  as something he is after - a statement, not a question. Do not add a second
+  question mark to this email; the scheme question is the only question."""
+
 PHONE = "07398 530978"
 
 
@@ -507,12 +615,51 @@ def load():
     return state
 
 
-def save(state):
+STATE_SHRINK_FLOOR = 0.5
+
+
+def save(state, allow_shrink=None):
+    """Write the state file, refusing a write that loses most of it.
+
+    This file is the only record of who has been written to and when. Losing it
+    does not cost a run, it costs the history that stops the machine writing to
+    somebody twice - and it has been quietly lost three times already, each
+    time by a different route, each time noticed days later.
+
+    A run that legitimately drops half the listings in one go does not exist.
+    Harvest only adds, prune takes a few dead ones at a time, and a rescore
+    changes statuses rather than removing records. So a collapse is a bug
+    somewhere upstream, and the useful thing to do about it is stop, keep what
+    is on disk, and say so - not overwrite months of history with whatever this
+    process happens to be holding.
+
+    Set STATE_ALLOW_SHRINK=1 to write anyway, for the one time it is deliberate."""
+    if allow_shrink is None:
+        allow_shrink = env_str("STATE_ALLOW_SHRINK", "") == "1"
+    incoming = len(state.get("jobs") or {})
+    existing = 0
+    if os.path.exists(STATE_PATH):
+        try:
+            with open(STATE_PATH) as f:
+                existing = len((json.load(f).get("jobs") or {}))
+        except (OSError, json.JSONDecodeError):
+            existing = 0
+    if (not allow_shrink and existing > 100
+            and incoming < existing * STATE_SHRINK_FLOOR):
+        rejected = STATE_PATH + ".rejected"
+        with open(rejected, "w") as f:
+            json.dump(state, f, indent=1, sort_keys=True)
+        print(f"[state] REFUSED to save: {incoming} jobs would replace "
+              f"{existing} on disk. The file on disk is untouched; what this "
+              f"run was holding is in {os.path.basename(rejected)}. "
+              f"Set STATE_ALLOW_SHRINK=1 if this really is intended.")
+        return False
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
     tmp = STATE_PATH + ".tmp"
     with open(tmp, "w") as f:
         json.dump(state, f, indent=1, sort_keys=True)
     os.replace(tmp, STATE_PATH)
+    return True
 
 
 def sends_today(state):
@@ -624,6 +771,21 @@ def load_do_not_contact():
     return [e for e in (blocked or []) if isinstance(e, dict)]
 
 
+def legal_key(name):
+    """Like company_key(), but it only strips the LEGAL suffix.
+
+    company_key() also strips descriptive words - group, international,
+    services, solutions - which is right for deciding whether two listings are
+    the same employer and wrong for a block that must not overreach. Under it
+    'Hydro Group', 'Hydro International' and 'Hydro Services' all reduce to
+    'hydro' and become the same company, which is how a block on Harry's
+    employer would have quietly stopped the machine writing to three others."""
+    text = (name or "").lower()
+    text = re.sub(r"[^a-z0-9 ]", " ", text)
+    text = re.sub(r"\b(ltd|limited|plc|llp|inc|co|the)\b", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def dnc_match(entry, company=None, email=None, domain=None):
     """Does one do-not-contact entry cover this company or address?
 
@@ -642,6 +804,18 @@ def dnc_match(entry, company=None, email=None, domain=None):
         return True
     name = company_key(entry.get("name"))
     if name and company:
+        # An exact entry decides on its own and never falls through to the
+        # looser rules below - including the plain company_key() equality,
+        # under which 'Hydro Group', 'Hydro International' and 'Hydro Services'
+        # are all simply 'hydro'.
+        if str(entry.get("match", "")).lower() == "exact":
+            # The blocked name as a leading run of whole words, so a board
+            # posting 'Hydro Group Aberdeen' is still caught while 'Hydro
+            # International' is not. Whole words, so 'Hydro Groupings' is a
+            # different company too.
+            mine = legal_key(entry.get("name")).split()
+            yours = legal_key(company).split()
+            return bool(mine) and yours[:len(mine)] == mine
         theirs = company_key(company)
         if theirs:
             if theirs == name:
@@ -782,6 +956,11 @@ def adzuna_searches():
     # the vetting themselves.
     for kw in DEFENCE_KEYWORDS:
         yield DEFENCE_WHERE, DEFENCE_RADIUS, kw
+    # And the market he actually wants: field service and commissioning, where
+    # paid travel abroad is the job rather than a perk, plus the contract work
+    # that pays multiples of what he earns now.
+    for kw in TRAVEL_KEYWORDS:
+        yield TRAVEL_WHERE, TRAVEL_RADIUS, kw
 
 
 def adzuna():
@@ -1054,6 +1233,67 @@ def worth_scoring(job):
     return bool(RELEVANT_BODY.search((job.get("description") or "")[:1500]))
 
 
+TRAVEL_WORDS = re.compile(
+    r"\btravel\b|\babroad\b|overseas|international travel|worldwide|"
+    r"client sites?|customer sites?|on site at|field service|field based|"
+    r"rotation(al)?|fly[- ]in fly[- ]out|\bfifo\b|back[- ]to[- ]back|"
+    r"\d+\s*(weeks?|/)\s*on\b|passport|willing to travel", re.I)
+
+
+def mentions_travel(job):
+    """Does this listing say the job involves going somewhere?
+
+    Used two ways: to rank these to the front of the send queue, and to stop
+    the letter asking whether a role involves travel when the advert has
+    already said it does - which reads as though he never read it."""
+    blob = f"{job.get('title') or ''} {(job.get('description') or '')[:2500]}"
+    return bool(TRAVEL_WORDS.search(blob))
+
+
+def stated_pay(job):
+    """(amount, unit) from a listing's salary fields, or (None, None).
+
+    The units are guessed from the size of the number, because the boards do
+    not say which one they mean and the same field carries all three. The
+    Leonardo contract Harry is interviewing for is the case that makes this
+    necessary: £30.81 is an hourly rate, and read as a salary it is thirty-one
+    pounds a year - the best-paid thing in the queue, thrown out as the worst."""
+    values = [v for v in (job.get("salary_max"), job.get("salary_min"))
+              if isinstance(v, (int, float)) and v > 0]
+    if not values:
+        return None, None
+    # The top of an advertised range, so a listing is only rejected when even
+    # its best case is too little.
+    amount = max(values)
+    # 100 rather than 200, because the hour/day band genuinely overlaps and the
+    # two readings are not equally likely. A technician day rate of £120 is
+    # common and poor; an hourly rate of £120 would be a quarter of a million a
+    # year and does not exist in this trade. Guessing 'hour' up there passes
+    # every bad day rate in the market.
+    if amount < 100:
+        return amount, "hour"
+    if amount <= 2000:
+        return amount, "day"
+    return amount, "year"
+
+
+def pays_enough(job):
+    """False only when a listing STATES pay and that pay is too low.
+
+    Silence has to pass. Most adverts never print a figure, the whole contract
+    market quotes on application, and a filter that treated 'unstated' as 'too
+    little' would delete the best-paid half of the market to spare a few
+    Gemini calls."""
+    amount, unit = stated_pay(job)
+    if amount is None:
+        return True
+    if unit == "hour":
+        return amount >= MIN_RATE_HOURLY
+    if unit == "day":
+        return amount >= MIN_RATE_HOURLY * 8
+    return amount >= MIN_SALARY_ANNUAL
+
+
 def score_batch(batch):
     """Score several listings in one call. Returns {index: (score, reason)}.
     Batching is what keeps this inside the Gemini free tier - one call per
@@ -1069,11 +1309,22 @@ def score_batch(batch):
         'with a JSON array, one object per listing, in the same order: '
         '[{"listing": <index>, "score": <0-100>, "reason": "<one short sentence>"}]\n\n'
         f"CANDIDATE:\n{CANDIDATE_PROFILE}\n\n"
-        "SCORE GUIDE: 85+ strong direct match in or near Aberdeen. "
-        "70-84 good match he could clearly do. 40-69 partial. "
-        "<40 poor, wrong field, or on his exclude list. "
-        "Penalise roles needing a completed degree plus years of design "
-        "experience, and roles outside his target list.\n\n"
+        "SCORE GUIDE. He is IN WORK on GBP 30,000 a year, so the question is "
+        "not 'could he do this' but 'is this better than what he has'.\n"
+        "85+  clearly better paid than GBP 30,000, AND/OR states overseas "
+        "travel, field service abroad, client sites in other countries, or a "
+        "rotational pattern. Contract day rates and shift allowances count - "
+        "read GBP 30 an hour as roughly GBP 60,000, not as GBP 30.\n"
+        "70-84 a clear step up in pay or responsibility in his trade.\n"
+        "40-69 partial match, or a step up he could not obviously make.\n"
+        "<40  pays at or below GBP 30,000 however well the trade fits, wrong "
+        "field, or on his exclude list.\n"
+        "Aberdeen is NEUTRAL - not a bonus and not a penalty. He lives there "
+        "and works there already, and he will relocate or travel for a better "
+        "job. Do not reward a listing for being local.\n"
+        "Penalise roles needing a completed degree plus years of design or "
+        "chartered experience. Do NOT penalise senior, lead or principal "
+        "technician, test or service titles - those are in range.\n\n"
         f"{listings}")
     result = gemini_json(prompt, max_tokens=180 * len(batch) + 200, temperature=0.2)
     if isinstance(result, dict):  # a lone object, or {"results": [...]}
@@ -1097,15 +1348,24 @@ def score_batch(batch):
 
 def score_jobs(state):
     # spend the AI budget only on listings that are in the right trade
-    pool, filtered = [], 0
+    pool, filtered, underpaid = [], 0, 0
     for job in state["jobs"].values():
         if job.get("status") != "new":
             continue
-        if worth_scoring(job):
-            pool.append(job)
-        else:
+        if not worth_scoring(job):
             job.update({"status": "skipped", "skip_reason": "off target (pre-filter)"})
             filtered += 1
+        elif not pays_enough(job):
+            amount, unit = stated_pay(job)
+            job.update({"status": "skipped",
+                        "skip_reason": f"pays {amount:g} per {unit} - "
+                                       f"at or below what he already earns"})
+            underpaid += 1
+        else:
+            pool.append(job)
+    if underpaid:
+        print(f"[score] {underpaid} listing(s) set aside on stated pay "
+              f"(floor: {MIN_SALARY_ANNUAL} a year / {MIN_RATE_HOURLY} an hour)")
     if filtered:
         print(f"[score] pre-filter set aside {filtered} off-target listing(s) "
               f"without spending a call")
@@ -1744,10 +2004,13 @@ def plain_email(job):
     title = (job.get("title") or "technician").strip()
     company = (job.get("company") or "").strip()
     where = f" at {company}" if company else ""
-    ask = ("Do you run a guaranteed interview scheme for veterans who meet the "
-           "criteria? If so I would like to be considered under it."
-           if veteran_friendly(job) else
-           "Would it be worth a short call?")
+    if veteran_friendly(job):
+        ask = ("Do you run a guaranteed interview scheme for veterans who meet "
+               "the criteria? If so I would like to be considered under it.")
+    elif mentions_travel(job):
+        ask = "How much travel does this one usually involve?"
+    else:
+        ask = "Does this role involve any travel to site or overseas work?"
     body = (
         f"{greeting}\n\n"
         f"I am applying for the {title} role{where}.\n\n"
@@ -1755,8 +2018,8 @@ def plain_email(job):
         f"subsea acoustic electronics to IPC-A-610 Class 3.\n"
         f"2. Two years Royal Navy Communications and Information Specialist "
         f"on a Type 23 frigate.\n"
-        f"3. SCQF Level 7 engineering apprenticeship, available immediately, "
-        f"and happy with rotational or offshore work.\n\n"
+        f"3. SCQF Level 7 engineering apprenticeship. In work at the moment "
+        f"and happy with travel, rotational or offshore.\n\n"
         f"{ask}\n\n"
         f"Harry\n{SIGNOFF}"
     )
@@ -1789,7 +2052,11 @@ def build_email(job, attempts=3):
         f"Location: {job['location']}\n"
         f"Recipient: {job.get('contact_name') or 'unknown, a shared hiring inbox'}\n"
         f"Listing: {job['description'][:2000]}"
-        + (VETERAN_INSTRUCTION if veteran_friendly(job) else "")
+        + (VETERAN_INSTRUCTION + VETERAN_TRAVEL_NOTE if veteran_friendly(job)
+           else TRAVEL_INSTRUCTION)
+        + ("\n- THIS LISTING ALREADY MENTIONS TRAVEL. Do not ask whether the "
+           "role involves any; ask how much, how often, or where."
+           if mentions_travel(job) and not veteran_friendly(job) else "")
     )
     prompt = base
     best = None
@@ -1910,8 +2177,12 @@ def run_sends(state, dry_run=False, already_sent=0):
                    reverse=True)
     # An employer running a guaranteed interview scheme converts an application
     # into an interview by policy rather than by persuasion, so they go first
-    # whatever else is in the queue.
+    # whatever else is in the queue. Then anything that says it involves
+    # travel, because that is the condition Harry has set for moving at all -
+    # the daily cap means the bottom of this list may not go out today, and
+    # what he actually wants should not be the part that gets cut.
     ready.sort(key=lambda j: (-int(veteran_friendly(j)),
+                              -int(mentions_travel(j)),
                               -(j.get("email_tier") or 0), -(j.get("score") or 0)))
 
     budget = PER_RUN_SEND_CAP if in_peak_window() else OFF_PEAK_SEND_CAP
@@ -2711,7 +2982,13 @@ def timeline_sentence(situation=None, today_str=None):
         never a hint that somebody else has offered more.
       - decide_by is a hard expiry, because 'I have an offer' stops being true
         the moment he accepts or declines, and a stale claim is a lie he did
-        not choose to tell.
+        not choose to tell. That expiry earned its keep: he accepted the offer
+        this file was describing, and without it every follow-up would still be
+        telling employers he was weighing one up.
+
+    Being in work is the quiet version of the same idea. It has no expiry
+    because it stays true until he leaves, and it says the useful half of what
+    an offer says - not 'hurry up', but 'I am not desperate'.
     """
     situation = load_situation() if situation is None else situation
     today_str = today_str or today()
@@ -2722,6 +2999,8 @@ def timeline_sentence(situation=None, today_str=None):
     interview = situation.get("interview_booked") or {}
     on = str(interview.get("on") or "")
     live_interview = bool(interview) and on >= today_str
+
+    employed = bool(situation.get("employed"))
 
     if live_offer and live_interview:
         return ("I should be straight with you: I have had an offer this week and "
@@ -2734,6 +3013,14 @@ def timeline_sentence(situation=None, today_str=None):
     if live_interview:
         return ("For context, I have another interview booked this week, so I am "
                 "moving fairly quickly.")
+    if employed:
+        # Weaker than an offer and true for as long as the job lasts, which is
+        # why it has no expiry date. It is doing a different job from the offer
+        # sentence: not 'hurry up', but 'I am not desperate' - the thing that
+        # stops a technician in work being read as somebody who will take
+        # anything. It never names the employer, same rule as the offer.
+        return ("For context, I am in work at the moment, so I am not in a rush - "
+                "I am only looking at moves that are a clear step up.")
     return ""
 
 

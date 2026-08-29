@@ -1,13 +1,18 @@
 {
   "_README": [
-    "Companies that have asked not to be contacted again. Nothing in this repo",
-    "may write to them - not an application, not a follow-up, not a speculative",
-    "note, not a reply. Enforced in send_email(), which every outgoing message",
-    "goes through, so a new stage cannot forget to check.",
+    "Companies that have asked not to be contacted again, plus Harry's own",
+    "employer. Nothing in this repo may write to them - not an application, not",
+    "a follow-up, not a speculative note, not a reply. Enforced in send_email(),",
+    "which every outgoing message goes through, so a new stage cannot forget to",
+    "check.",
     "",
-    "Match on any of: 'name' (loosely, against the company name on a listing),",
-    "'domain' (the address's domain and any subdomain), 'emails' (exact).",
-    "A domain is the strongest entry - it covers addresses nobody has seen yet.",
+    "Match on any of: 'name' (against the company name on a listing), 'domain'",
+    "(the address's domain and any subdomain), 'emails' (exact). A domain is the",
+    "strongest entry - it covers addresses nobody has seen yet.",
+    "",
+    "Set 'match' to 'exact' when the name is generic. company_key() strips words",
+    "like 'group' and 'limited', so 'Hydro Group' becomes 'hydro', and without",
+    "this it would also block Hydro Cleansing and Hydro Systems.",
     "",
     "Add an entry the day somebody asks. Removing one needs them to say so."
   ],
@@ -15,10 +20,22 @@
     {
       "name": "Allstaff Recruitment",
       "domain": "allstaffrecruitment.co.uk",
-      "emails": ["jobs@allstaffrecruitment.co.uk"],
+      "emails": [
+        "jobs@allstaffrecruitment.co.uk"
+      ],
       "reason": "Phoned Harry on 20 Aug 2026 to say he was asking the same questions again. Three messages had gone to jobs@ - the application on 10 Aug, a nudge on 14 Aug and the last of the sequence at 08:35 that morning.",
       "added": "2026-08-20",
       "added_by": "Harry, after their call"
+    },
+    {
+      "name": "Hydro Group",
+      "match": "exact",
+      "domain": null,
+      "emails": [],
+      "reason": "Harry's employer. He started as a Technician on 24 August 2026, and an application from the machine landing in his own company's inbox is the one email that must never be sent.",
+      "added": "2026-08-29",
+      "added_by": "Harry",
+      "_domain_note": "Domain not filled in: hydrogroup.com, hydro-group.com and hydrogroup.co.uk all resolve and the sandbox could not reach any of them to tell which is his. The name entry blocks every path the pipeline actually uses, since every listing carries a company name. Add the domain once Harry confirms his work email."
     }
   ]
 }
