@@ -3,30 +3,37 @@
     "Where Harry actually stands right now. Used by the follow-up nudges to add",
     "ONE true sentence about his timeline - nothing else reads this file.",
     "",
-    "Why it exists: an offer in hand is the strongest thing a candidate can say",
-    "to a live conversation, and it is also the easiest thing in the world to",
-    "overstate. So it is written down as facts with an expiry rather than left",
-    "to a model to phrase, and every rule below is enforced in code:",
+    "Why it exists: what a candidate says about his own position is the easiest",
+    "thing in the world to overstate, so it is written down as facts with an",
+    "expiry rather than left to a model to phrase, and every rule below is",
+    "enforced in code:",
     "",
-    "  - The offering employer is NEVER named. It is nobody else's business, and",
-    "    in a small market it would get back to the recruiter who placed him.",
-    "  - It says an offer exists. It never says what it is worth, never invents a",
-    "    competing bid, and never implies another employer has offered more.",
-    "  - decide_by is a hard expiry. Past that date the sentence disappears on its",
-    "    own, because 'I have an offer' stops being true the moment he accepts or",
-    "    declines one and a stale claim is a lie he did not choose to tell.",
-    "  - It is only ever added to a FOLLOW-UP, never to a first approach. Leading",
+    "  - The employer is NEVER named - not the one making an offer, not the one",
+    "    he works for. In a market the size of Aberdeen's it gets straight back.",
+    "  - It says a fact exists. It never says what it is worth, never invents a",
+    "    competing bid, and never implies somebody else has offered more.",
+    "  - decide_by is a hard expiry. Past that date the sentence disappears on",
+    "    its own, because 'I have an offer' stops being true the moment he",
+    "    accepts or declines one.",
+    "  - It is only ever added to a FOLLOW-UP, never a first approach. Leading",
     "    with leverage to somebody who has not met you reads as arrogance.",
     "",
-    "Set offer to null the moment it is accepted or declined."
+    "The offer this file used to describe was Hydro Group's, and he took it -",
+    "which is exactly what decide_by is for. 'employed' replaces it: weaker",
+    "than an offer, true for as long as the job lasts, and it does the useful",
+    "half of the same work by saying he is not desperate."
   ],
-  "offer": {
-    "received_at": "2026-08-17",
-    "decide_by": "2026-08-24",
-    "note": "Offer received via a recruiter for a technician role in Aberdeen. Employer deliberately not recorded - it is never named in an email."
+  "offer": null,
+  "employed": {
+    "since": "2026-08-24",
+    "note": "Technician, Aberdeen. Employer deliberately not recorded - it is never named in an email, and least of all to another employer in the same city."
   },
-  "interview_booked": {
-    "on": "2026-08-21",
-    "note": "Second interview booked with another Aberdeen employer for Friday 21 August."
-  }
+  "interview_booked": null,
+  "_interview_note": [
+    "Set interview_booked when a date is known, as {\"on\": \"YYYY-MM-DD\"}.",
+    "The Leonardo interview (Manufacturing Technician / Principal Test",
+    "Technician, Edinburgh, via an agency) has no date on the invitation Harry",
+    "forwarded, so nothing is claimed here. 'on' is a hard expiry like",
+    "decide_by: past it, the sentence stops being used."
+  ]
 }

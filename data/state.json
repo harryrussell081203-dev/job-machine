@@ -210,268 +210,6 @@
    "name": "Cammach"
   }
  },
- "ats_boards": {
-  "abertay university": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:36.438436+00:00",
-   "slug": null
-  },
-  "aker": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:15.211120+00:00",
-   "slug": null
-  },
-  "ashtead technology": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:17.347512+00:00",
-   "slug": null
-  },
-  "babcock": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:32.084047+00:00",
-   "slug": null
-  },
-  "bae systems naval ships": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:31.266432+00:00",
-   "slug": null
-  },
-  "baker hughes": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:08.486088+00:00",
-   "slug": null
-  },
-  "bes": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:26.986923+00:00",
-   "slug": null
-  },
-  "bilfinger": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:13.958772+00:00",
-   "slug": null
-  },
-  "boskalis": {
-   "ats": "smartrecruiters",
-   "checked_at": "2026-08-04T19:08:38.033713+00:00",
-   "slug": "boskalis"
-  },
-  "dof": {
-   "ats": "workable",
-   "checked_at": "2026-08-04T12:03:05.285467+00:00",
-   "slug": "dof"
-  },
-  "dover corporation": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:34.145203+00:00",
-   "slug": null
-  },
-  "dron dickson": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:46.519692+00:00",
-   "slug": null
-  },
-  "enermech": {
-   "ats": "workable",
-   "checked_at": "2026-08-04T12:03:00.620399+00:00",
-   "slug": "enermech"
-  },
-  "ernest gordon": {
-   "ats": null,
-   "checked_at": "2026-08-04T15:56:52.755592+00:00",
-   "slug": null
-  },
-  "escape serv": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:29.502643+00:00",
-   "slug": null
-  },
-  "experis": {
-   "ats": null,
-   "checked_at": "2026-08-04T15:56:50.689472+00:00",
-   "slug": null
-  },
-  "fugro": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:03.671091+00:00",
-   "slug": null
-  },
-  "halliburton": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:09.465057+00:00",
-   "slug": null
-  },
-  "hf": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:46.519778+00:00",
-   "slug": null
-  },
-  "hmh": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:38.284618+00:00",
-   "slug": null
-  },
-  "hydrasun": {
-   "ats": null,
-   "checked_at": "2026-08-04T15:56:49.840055+00:00",
-   "slug": null
-  },
-  "hydro": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:22.201753+00:00",
-   "slug": null
-  },
-  "impact subsea": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:27.461389+00:00",
-   "slug": null
-  },
-  "innserve": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:26.028163+00:00",
-   "slug": null
-  },
-  "konecranes demag": {
-   "ats": null,
-   "checked_at": "2026-08-14T18:26:08.585635+00:00",
-   "slug": null
-  },
-  "kongsberg maritime": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:02.876968+00:00",
-   "slug": null
-  },
-  "leonardo": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:28.530109+00:00",
-   "slug": null
-  },
-  "motive offshore": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:20.583301+00:00",
-   "slug": null
-  },
-  "nationwide platforms": {
-   "ats": null,
-   "checked_at": "2026-08-14T18:26:10.493665+00:00",
-   "slug": null
-  },
-  "nortek": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:25.261788+00:00",
-   "slug": null
-  },
-  "northern lighthouse board": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:50.237418+00:00",
-   "slug": null
-  },
-  "oceaneering": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:04.477120+00:00",
-   "slug": null
-  },
-  "petrofac": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:12.058038+00:00",
-   "slug": null
-  },
-  "pioneer selection": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:40.683161+00:00",
-   "slug": null
-  },
-  "qinetiq": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:33.750200+00:00",
-   "slug": null
-  },
-  "raytheon": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:32.947529+00:00",
-   "slug": null
-  },
-  "ross shire engineering": {
-   "ats": null,
-   "checked_at": "2026-08-04T12:03:31.785087+00:00",
-   "slug": null
-  },
-  "rovop": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:18.385418+00:00",
-   "slug": null
-  },
-  "score": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:21.365960+00:00",
-   "slug": null
-  },
-  "slb": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:10.248925+00:00",
-   "slug": null
-  },
-  "sparrows": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:13.174165+00:00",
-   "slug": null
-  },
-  "speedy": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:47.548764+00:00",
-   "slug": null
-  },
-  "speedy hire": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:47.273713+00:00",
-   "slug": null
-  },
-  "stork": {
-   "ats": "ashby",
-   "checked_at": "2026-08-04T12:03:03.420927+00:00",
-   "slug": "stork"
-  },
-  "subsea7": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:05.491596+00:00",
-   "slug": null
-  },
-  "survitec": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:34.607925+00:00",
-   "slug": null
-  },
-  "technipfmc": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:06.269067+00:00",
-   "slug": null
-  },
-  "thales": {
-   "ats": "smartrecruiters",
-   "checked_at": "2026-08-04T12:03:19.679590+00:00",
-   "slug": "thales"
-  },
-  "trescal": {
-   "ats": null,
-   "checked_at": "2026-08-17T10:06:33.584530+00:00",
-   "slug": null
-  },
-  "tsg": {
-   "ats": "greenhouse",
-   "checked_at": "2026-08-04T12:03:37.364296+00:00",
-   "slug": "tsg"
-  },
-  "viper innovations": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:24.337509+00:00",
-   "slug": null
-  },
-  "wood": {
-   "ats": null,
-   "checked_at": "2026-08-14T14:32:11.131511+00:00",
-   "slug": null
-  }
- },
  "companies_contacted": {
   "abertay university": {
    "at": "2026-08-11T08:26:05.937360+00:00",
@@ -1832,7 +1570,6 @@
    "source": "signature of ask@uws.ac.uk"
   }
  },
- "handoff_emailed_on": "2026-08-11",
  "inbox": {
   "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
    "address": "hello@gojiberry-news.com",
@@ -11984,8 +11721,8 @@
    "apply_url": null,
    "ats": "ashby",
    "company": "Sanctuary",
-   "company_domain": "sanctuaryclothing.com",
-   "contact_email": "alayna@sanctuaryclothing.com",
+   "company_domain": null,
+   "contact_email": null,
    "contact_name": null,
    "description": "Inclusion is one of our core values. Our goal is to be a diverse, inclusive organisation where our people thrive and meet our customers' needs with fairness and empathy. We know having a range of ideas and opinions makes a difference. We encourage and welcome applications from people from diverse backgrounds to support this mission. We will make adjustments throughout your application process, in line with Sanctuary's commitment to our Disability Confident employer status. Maintenance Caretaker\u2026",
    "email_method": "scraped",
@@ -12011,9 +11748,9 @@
    "score": 70,
    "score_reason": "This maintenance caretaker role is a good match for his engineering apprenticeship and general maintenance skills, and Dundee is a commutable location.",
    "search_location": "Dundee",
-   "skip_reason": null,
+   "skip_reason": "domain does not belong to this company",
    "source": "adzuna",
-   "status": "ready",
+   "status": "no_email",
    "title": "Maintenance Caretaker",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5823878318?se=AC4CpOuN8RGGgO_n0rmdiQ&utm_medium=api&utm_source=afe77721&v=125647E0296DC4EEA9F4D373CDC028E8FD384C37"
   },
@@ -12038,8 +11775,8 @@
    "apply_url": null,
    "ats": "ashby",
    "company": "Sanctuary",
-   "company_domain": "sanctuaryclothing.com",
-   "contact_email": "alayna@sanctuaryclothing.com",
+   "company_domain": null,
+   "contact_email": null,
    "contact_name": null,
    "description": "Inclusion is one of our core values. Our goal is to be a diverse, inclusive organisation where our people thrive and meet our customers' needs with fairness and empathy. We know having a range of ideas and opinions makes a difference. We encourage and welcome applications from people from diverse backgrounds to support this mission. We will make adjustments throughout your application process, in line with Sanctuary's commitment to our Disability Confident employer status. Estate Technician Cum\u2026",
    "email_method": "scraped",
@@ -12065,9 +11802,9 @@
    "score": 70,
    "score_reason": "The Estate Technician role aligns well with his engineering apprenticeship and maintenance experience, offering a good fit for his target roles.",
    "search_location": "Glasgow",
-   "skip_reason": null,
+   "skip_reason": "domain does not belong to this company",
    "source": "adzuna",
-   "status": "ready",
+   "status": "no_email",
    "title": "Estate Technician",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5823878328?se=kqCSpeuN8RGNzO_fQd9OLg&utm_medium=api&utm_source=afe77721&v=97584501B2D9289F57DA078786922725E64039B7"
   },
@@ -14179,7 +13916,7 @@
    "search_location": "Aberdeen",
    "skip_reason": "company already contacted",
    "source": "adzuna",
-   "status": "ready",
+   "status": "skipped",
    "title": "Services Senior Specialist - Training",
    "url": "https://www.adzuna.co.uk/jobs/details/5824915111?utm_medium=api&utm_source=afe77721"
   },
@@ -49352,8 +49089,9 @@
    "score": 70,
    "score_reason": "The candidate's electrical apprenticeship and maintenance experience make him a good fit for this multi-skilled engineer role with an electrical bias.",
    "search_location": "Edinburgh",
+   "skip_reason": "company already contacted",
    "source": "adzuna",
-   "status": "ready",
+   "status": "skipped",
    "title": "Mobile Multi-Skilled Engineer - Electrical Bias",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5832258588?se=umXhnIuS8RGgGfa7nA5SjQ&utm_medium=api&utm_source=afe77721&v=D27916DF7F6435AB8EA01702269D1471B3264B15"
   },
@@ -54974,8 +54712,9 @@
    "score": 70,
    "score_reason": "This multi-skilled engineer role with a gas bias aligns with his electrical and maintenance background, and he can acquire the gas qualification.",
    "search_location": "Glasgow",
+   "skip_reason": "company already contacted",
    "source": "adzuna",
-   "status": "ready",
+   "status": "skipped",
    "title": "Multi Skilled Engineer (Gas Bias)",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5834881315?se=EmBMRJ2U8RGiKPzAuxmgXQ&utm_medium=api&utm_source=afe77721&v=38F4574CC84AE4984D79BB762FC6E398600FF57D"
   },
@@ -58772,8 +58511,8 @@
    "apply_url": "https://stemrecsolutions.co.uk/jobs/",
    "ats": null,
    "company": "Stem Recruitment",
-   "company_domain": "stemrecsolutions.co.uk",
-   "contact_email": "admin@stemrecsolutions.co.uk",
+   "company_domain": null,
+   "contact_email": null,
    "contact_name": null,
    "description": "STEM Recruitment are working with a leading manufacturer in the electrical equipment manufacturing sector to recruit an Electrical Fitter for their growing team. As an Electrical Fitter this role offers the chance to work on a wide variety of projects, producing high-quality electrical systems used across multiple industries. The Role: * Panel wiring and control wiring to a high standard of safety and accuracy * PLC wiring and related electrical installation * Building and wiring of switchgear,\u2026",
    "email_method": "scraped",
@@ -58795,7 +58534,7 @@
    "search_location": "Glasgow",
    "skip_reason": "domain does not belong to this company",
    "source": "adzuna",
-   "status": "ready",
+   "status": "no_email",
    "title": "Electrical Fitter",
    "url": "https://www.adzuna.co.uk/jobs/details/5835873314?utm_medium=api&utm_source=afe77721"
   },
@@ -132614,9 +132353,9 @@
    "rescored_at": "2026-08-19T07:07:07.610135+00:00",
    "score": 75,
    "score_reason": "His diverse technical background makes him a strong candidate for a Trainee Technician role, especially in subsea.",
-   "skip_reason": null,
+   "skip_reason": "company already contacted",
    "source": "alert:linkedin.com",
-   "status": "ready",
+   "status": "skipped",
    "title": "Trainee Technician",
    "url": "https://www.linkedin.com/comm/jobs/view/4326601276/?trackingId=axdi3b1kfiCDyY3Dz5CJug%3D%3D&refId=z98aQOyxp%2FHY1rovUCrEWw%3D%3D&lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3B4g9y6R22TySacQufd7PpCw%3D%3D&midToken=AQHJzreENplLlQ&midSig=26DIQONPxlkco1&trk=eml-email_job_alert_digest_01-secondary_job_list_1-0-jobcard_body_text_ssid_8697449882_fmid_m1howr~msod18jc~51&trkEmail=eml-email_job_alert_digest_01-secondary_job_list_1-0-jobcard_body_text_ssid_8697449882_fmid_m1howr~msod18jc~51-null-m1howr~msod18jc~51-null-null&eid=m1howr-msod18jc-51&otpToken=YmEwYzljZDllYzRjZDM3YzFlNzcxY2YyNzJiNWM1YzI2ZjllMDQwZGFhZjM0NTEzNTBiYjUyMDg4NDhiZTdjNWUwNzI4MGJhY2YxN2ZiOGQ4ZGRlYzU2ZTc5NDhhMmViMTRiYTI3N2U1NDFmYjE5Nzc0Y2Y5NDg0ZGMxZDczNWYyZTA2MTI5ZjFiNTdmYmM1LDIsMQ%3D%3D"
   },
@@ -132705,9 +132444,9 @@
    "rescored_at": "2026-08-19T07:07:07.610165+00:00",
    "score": 75,
    "score_reason": "This 'Trainee Technician' role aligns with his target for technician roles, and his experience makes him a strong candidate.",
-   "skip_reason": null,
+   "skip_reason": "company already contacted",
    "source": "alert:linkedin.com",
-   "status": "ready",
+   "status": "skipped",
    "title": "Trainee Technician",
    "url": "https://www.linkedin.com/comm/jobs/view/4414743865/?trackingId=6PYHz4ta%2B0%2F557nF8y3O3g%3D%3D&refId=z98aQOyxp%2FHY1rovUCrEWw%3D%3D&lipi=urn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3B4g9y6R22TySacQufd7PpCw%3D%3D&midToken=AQHJzreENplLlQ&midSig=26DIQONPxlkco1&trk=eml-email_job_alert_digest_01-secondary_job_list_1-0-jobcard_body_text_ssid_8697449882_fmid_m1howr~msod18jc~51&trkEmail=eml-email_job_alert_digest_01-secondary_job_list_1-0-jobcard_body_text_ssid_8697449882_fmid_m1howr~msod18jc~51-null-m1howr~msod18jc~51-null-null&eid=m1howr-msod18jc-51&otpToken=YmEwYzljZDllYzRjZDM3YzFlNzcxY2YyNzJiNWM1YzI2ZjllMDQwZGFhZjM0NTEzNTBiYjUyMDg4NDhiZTdjNWUwNzI4MGJhY2YxN2ZiOGQ4ZGRlYzU2ZTc5NDhhMmViMTRiYTI3N2U1NDFmYjE5Nzc0Y2Y5NDg0ZGMxZDczNWYyZTA2MTI5ZjFiNTdmYmM1LDIsMQ%3D%3D"
   },
@@ -147392,23 +147131,6 @@
  "last_summary_at": "2026-08-25T21:35:40.322562+00:00",
  "morning_goal_rotation": 2,
  "morning_sent_on": "2026-08-11",
- "portal_answer_cache": {
-  "cover letter optional": {
-   "answer": "{'notice_period': 'None, available immediately', 'salary_expectation': '35000', 'current_salary': None}",
-   "at": "2026-08-06T09:06:21.840760+00:00",
-   "question": "Cover letter (Optional)"
-  },
-  "reference details optional": {
-   "answer": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian visa or work rights for Australia. I do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I hold an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).",
-   "at": "2026-08-06T07:52:11.592402+00:00",
-   "question": "Reference Details (Optional)"
-  },
-  "summary optional": {
-   "answer": "I am Harry Russell, from Aberdeen, Scotland, United Kingdom. I do not hold an Australian Visa or work rights for Australia. I also do not hold an Electro-Technical Officer (III/6) Certificate of Competency (COC). I am an ex-Royal Navy Communications & Information Specialist and a Workshop Technician with experience in assembly, testing, and fault diagnosis of subsea acoustic positioning systems. I have DV security clearance and an Engineering Modern Apprenticeship SCQF Level 7 (electrical / asset lifecycle & maintenance).",
-   "at": "2026-08-06T00:25:50.827761+00:00",
-   "question": "Summary (Optional)"
-  }
- },
  "send_counts": {
   "2026-08-02": 6,
   "2026-08-03": 4,
