@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Sign in</h1>
+{% if sent %}
+  <div class="note good">If <b>{{ sent }}</b> has an account, a sign-in link is
+  on its way. It works once and expires in fifteen minutes.</div>
+  <p class="muted">Nothing arriving? Check spam, then try again.</p>
+{% else %}
+  <p class="lede">No password. We email you a link.</p>
+  <form method="post" action="/login">
+    <label for="email">Your email address</label>
+    <input id="email" name="email" type="email" required autofocus
+           autocomplete="email" placeholder="you@example.com">
+    <p style="margin-top:14px"><button type="submit">Email me a link</button></p>
+  </form>
+  <p><small>We store no passwords, so there are none to lose.</small></p>
+{% endif %}
+{% endblock %}

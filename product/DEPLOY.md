@@ -1,0 +1,95 @@
+# Putting it online
+
+About an hour, most of it waiting for Stripe and DNS.
+
+## 1. Try it locally first
+
+```bash
+cd product
+pip install -r requirements.txt
+DEV_MODE=1 BILLING_ENABLED=0 SECRET_KEY=dev uvicorn app.main:app --reload
+```
+
+Open http://127.0.0.1:8000. Sign-in links print to the terminal instead of
+being emailed, and the paywall is open, so you can click through everything
+before spending a penny.
+
+## 2. Stripe
+
+1. Create a **product** with a **recurring monthly price**. Copy the price id
+   (`price_...`) into `STRIPE_PRICE_ID`.
+2. Copy your secret key (`sk_live_...`) into `STRIPE_SECRET_KEY`.
+3. Add a **webhook endpoint** pointing at `https://your-domain/webhooks/stripe`,
+   subscribed to:
+   - `checkout.session.completed`
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_failed`
+4. Copy the webhook's signing secret (`whsec_...`) into
+   `STRIPE_WEBHOOK_SECRET`.
+
+The webhook is not optional. Access is granted **only** when Stripe confirms
+payment on a signed webhook — never when a browser lands on the success page,
+because anyone can type that URL. Skip step 3 and nobody who pays will ever
+get in.
+
+Test it with Stripe's CLI before going live:
+
+```bash
+stripe listen --forward-to localhost:8000/webhooks/stripe
+stripe trigger checkout.session.completed
+```
+
+## 3. Somewhere to run it
+
+Any host that runs a Python process and gives you a persistent disk. The
+database is a single SQLite file, so **it needs a volume that survives
+restarts** — without one, every deploy wipes your customers.
+
+- **Railway / Render / Fly.io** — attach a volume, mount it at `/data`, set
+  `DB_PATH=/data/jobmachine.db`. Around $5/month.
+- The `Procfile` already has the right start command.
+
+Set every variable from `.env.example` in the host's environment panel. The
+app refuses to boot in production without `SECRET_KEY`, and refuses to boot
+with billing on but Stripe keys missing — both deliberately, because a paywall
+that silently defaults to open is not a thing you notice from the outside.
+
+## 4. Mail for sign-in links
+
+`APP_SMTP_*` is the app talking to its own customers, and is separate from
+anything a user sends about a job. A Gmail app password works to start. Move
+to a transactional provider when link delivery starts landing in spam.
+
+## 5. Before you charge anyone
+
+- Sign up as a real customer with a real card. Cancel it. Check both worked.
+- Confirm a cancelled subscription actually closes access.
+- Confirm the sign-in link email arrives and is not in spam.
+- Read ten generated letters end to end.
+
+## What you still owe your users
+
+Not optional if you are taking money in the UK:
+
+- **A privacy policy.** You are processing personal data — theirs, and the
+  contact details of people at employers.
+- **Terms**, saying plainly what the service does and does not promise. It
+  does not promise anybody a job.
+- **A way to delete an account and its data**, and to have it honoured.
+- **Working cancellation.** The account page opens Stripe's own portal, which
+  covers it, but check it works on your account.
+
+## Costs, honestly
+
+| | |
+| --- | --- |
+| Hosting + volume | ~$5/month |
+| Stripe | 1.5% + 20p per transaction |
+| Adzuna, Reed, Gemini | free tiers, but see below |
+| Domain | ~£10/year |
+
+Those free tiers are for personal use. Once paying customers depend on them
+you need commercial terms from each provider — check before you launch, not
+after. That is the single most likely thing to bite this.

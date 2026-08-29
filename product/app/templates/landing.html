@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Get your CV in front of a human</h1>
+<p class="lede">Most applications go into a system. This sends a short, specific
+email to the person who actually does the hiring, from your own address.</p>
+
+<div class="stats">
+  <div class="stat"><b>86</b><span>emails sent</span></div>
+  <div class="stat"><b>22</b><span>replies</span></div>
+  <div class="stat"><b>26%</b><span>reply rate</span></div>
+</div>
+<p><small>Real numbers from four weeks of the original running for one person
+in engineering and technician roles in Scotland. Cold email normally runs
+1&ndash;5%. Your trade and your CV will move these.</small></p>
+
+<h2>Who you reach decides everything</h2>
+<div class="panel scroll">
+<table>
+  <tr><th>Who was reached</th><th class="num">Sent</th><th class="num">Replied</th><th class="num">Rate</th></tr>
+  <tr><td>A named human</td><td class="num">34</td><td class="num">13</td><td class="num">38%</td></tr>
+  <tr><td>A hiring inbox</td><td class="num">10</td><td class="num">5</td><td class="num">50%</td></tr>
+  <tr><td>A generic <code>info@</code></td><td class="num">42</td><td class="num">4</td><td class="num">10%</td></tr>
+  <tr><td>Printed in the advert</td><td class="num">9</td><td class="num">6</td><td class="num">67%</td></tr>
+</table>
+</div>
+<p>Reaching a person instead of a generic inbox was worth roughly four times
+the reply rate. Finding that person is the hard part, and it is the part this
+does for you.</p>
+
+<h2>What it does</h2>
+<div class="panel">
+<p><b>Finds the jobs.</b> Fresh listings only, under 48 hours old, matched to
+your trade and your patch.</p>
+<p><b>Scores them against you.</b> Below your pay floor never reaches you.
+If you are in work, a sideways move counts for nothing.</p>
+<p><b>Digs out a real address.</b> From the advert itself, then the company's
+own site. Never guessed, never pattern-generated. No real address, no email.</p>
+<p><b>Writes the letter.</b> 60&ndash;90 words, one concrete detail from that
+advert, two or three proof points, exactly one question.</p>
+<p><b>You press send.</b> From your address, your signature, your reputation.
+One click each.</p>
+</div>
+
+<h2>What it will never do</h2>
+<div class="panel">
+<p>Guess an email address. Claim a qualification you do not hold. Write to the
+same employer twice. Name your current employer to anybody.</p>
+</div>
+
+<p style="margin-top:28px">
+  <a class="btn" href="/login">Start &mdash; {{ config.PRICE_LABEL }}</a>
+  <a class="btn ghost" href="/playbook">Read the method free</a>
+</p>
+<p><small>Cancel any time, in two clicks, from your account page.</small></p>
+{% endblock %}

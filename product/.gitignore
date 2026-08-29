@@ -4,3 +4,9 @@ profile.json
 .env
 __pycache__/
 *.pyc
+
+# the app
+*.db
+*.db-wal
+*.db-shm
+.env
