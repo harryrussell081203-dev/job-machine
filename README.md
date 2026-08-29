@@ -195,6 +195,21 @@ for** - one skipped as *"above the candidate's target level"* in the same week
 Harry was interviewing for a **Principal** Test Technician at Leonardo on £40.36
 an hour. Of 692 senior and principal listings harvested, 682 were skipped.
 
+### Re-judging what was scored under the old rules
+
+A score is a judgement against the profile at the moment it was made, so
+changing the profile invalidates every score in the file. Push a branch named
+`fire-rescore/<number>` and everything scored at or above that number is
+re-opened and judged again.
+
+**The number matters more than it looks.** The default of 55 is right when the
+profile got *wider* - it rescues near-misses. It is wrong when the profile
+changes what counts as a good job at all. Lifting the seniority ceiling was
+meant to rescue Leonardo's listings, and every one of them had been marked
+30-50 for being "above the candidate's target level", so a rescore at 55
+re-opened **none of them**. `fire-rescore/40` re-opens 792 listings, of which
+620 clear the pay floor and actually cost a Gemini call.
+
 ### The travel question
 
 Being paid to work abroad is his condition for moving at all, and there is no
