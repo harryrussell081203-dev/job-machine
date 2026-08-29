@@ -26,7 +26,7 @@ sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
-from . import auth, billing, config, db, delivery  # noqa: E402
+from . import auth, billing, config, db, delivery, ratelimit  # noqa: E402
 
 app = FastAPI(title="job machine", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -38,6 +38,7 @@ SESSION_COOKIE = "jm_session"
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init()
+    ratelimit.init()
     yield
 
 
@@ -91,12 +92,30 @@ def login_form(request: Request):
     return render(request, "login.html")
 
 
+# Deliberately generous for a real person and useless for a script. An honest
+# user asks once, twice if the first went to spam.
+LOGIN_PER_EMAIL = (5, 3600)      # 5 an hour to any one address
+LOGIN_PER_IP = (20, 3600)        # 20 an hour from any one machine
+
+
 @app.post("/login", response_class=HTMLResponse)
 def login_submit(request: Request, email: str = Form("")):
     if not auth.valid_email(email):
         return render(request, "login.html", error="That is not an email address.")
+
+    address = email.strip().lower()
+    limit, window = LOGIN_PER_EMAIL
+    ip_limit, ip_window = LOGIN_PER_IP
+    allowed = ratelimit.hit(f"login:email:{address}", limit=limit, window=window)
+    allowed &= ratelimit.hit(f"login:ip:{ratelimit.client_ip(request)}",
+                             limit=ip_limit, window=ip_window)
+    if not allowed:
+        # Same wording as success. Saying "rate limited" would confirm the
+        # address exists, and would tell an abuser exactly what they hit.
+        return render(request, "login.html", sent=email.strip())
+
     try:
-        auth.send_login_email(email.strip(), auth.make_login_link(email))
+        auth.send_login_email(address, auth.make_login_link(address))
     except Exception:
         return render(request, "login.html",
                       error="The sign-in email could not be sent. Try again shortly.")
