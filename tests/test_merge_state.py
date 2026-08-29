@@ -42,6 +42,15 @@ class TestMergingCounters(unittest.TestCase):
                        {"companies_contacted": {"acme": {"at": "2026-07-20"}}})
         self.assertEqual(out["companies_contacted"]["acme"]["at"], "2026-07-20")
 
+    def test_call_script_counts_merge_like_the_other_counters(self):
+        out = ms.merge({"call_script_counts": {"2026-08-29": 1}},
+                       {"call_script_counts": {"2026-08-29": 2, "2026-08-28": 1}})
+        self.assertEqual(out["call_script_counts"],
+                        {"2026-08-29": 2, "2026-08-28": 1})
+
+    def test_it_no_longer_warns_about_call_script_counts(self):
+        self.assertIn("call_script_counts", ms.KNOWN)
+
 
 class TestReopenedListings(unittest.TestCase):
     """A rescore sets a listing back to 'new' on purpose, and 'new' ranks below

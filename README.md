@@ -371,7 +371,7 @@ would be worse than not claiming one.
 
 ## Converting applications into interviews
 
-Five levers run automatically on top of the basic apply loop:
+Six levers run automatically on top of the basic apply loop:
 
 1. **Reply watcher** (`reply.yml`, every 2h on weekdays, plus every pipeline
    run). Scans the inbox for replies from anyone we contacted and classifies
@@ -397,6 +397,26 @@ Five levers run automatically on top of the basic apply loop:
    see"), real scraped addresses only, one per company ever, and the one
    concrete detail each email uses comes from the curated note, not from the
    model's imagination. `SPEC_PER_DAY=0` turns it off.
+6. **A call script for the strongest matches.** When a sent application scores
+   85+, the contact is a genuinely named person (not a generic inbox), and a
+   real phone number was found for that company - either printed directly in
+   the advert (highest confidence) or on their own site, and only when that
+   same site also produced the verified email address - a short script gets
+   texted to **your own phone** via the same SMS gateway used for interview
+   alerts. You make the call yourself, live, in your own voice, whenever suits
+   you. **Nothing automated is ever dialled and nothing pre-recorded goes out
+   to anyone** - an earlier version of this idea was an AI-cloned voicemail
+   drop, dropped because UK PECR requires the recipient's prior consent before
+   an automated system plays a recorded or synthetic message down the phone,
+   and a phone number on a job ad is an invitation for a human to call, not
+   consent to be autodialled. A phone number is never guessed or
+   pattern-generated, same rule as an email address - only ever one actually
+   found in real text. Most of this pipeline's volume comes through Adzuna,
+   which redacts phone numbers from listing text, so expect this to fire on
+   Reed, direct-ATS and board-alert listings more than on Adzuna adverts.
+   Capped at `CALL_SCRIPT_PER_DAY` (default 2) as a circuit breaker, separate
+   from the email send caps - it protects your own time and nerve, not
+   Gmail. `CALL_SCRIPT_PER_DAY=0` turns it off.
 
 Freshly posted listings are also applied to first within a tier - being an early
 applicant is itself a conversion lever.
@@ -451,6 +471,11 @@ Dead listings (`skipped`, `no_email`, `compose_failed`, `send_failed`) are prune
 after 45 days. Sent history and `companies_contacted` are kept forever, and
 `data/do_not_contact.json` is not in `state.json` at all so that no prune,
 reset or bad merge can lose it.
+
+A few things ride alongside `sent` as fields rather than statuses of their
+own, the same way `followup_sent_at` does: `contact_phone` and `phone_method`
+(set during discovery, whenever a real number turns up), and
+`call_script_texted_at` once a call script has gone out for that job.
 
 ---
 

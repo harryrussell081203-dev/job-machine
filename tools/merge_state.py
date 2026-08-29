@@ -101,7 +101,8 @@ def union_earliest(theirs, ours):
 # Keys with a rule of their own below. Everything else is carried across by
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
-         "spec_counts", "spec_done", "agency_registered", "last_summary_at"}
+         "spec_counts", "call_script_counts", "spec_done", "agency_registered",
+         "last_summary_at"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -168,7 +169,7 @@ def merge(theirs, ours):
     if agencies:
         out["agency_registered"] = agencies
 
-    for counter in ("send_counts", "spec_counts"):
+    for counter in ("send_counts", "spec_counts", "call_script_counts"):
         merged = dict(theirs.get(counter, {}))
         for day, count in ours.get(counter, {}).items():
             merged[day] = max(merged.get(day, 0), count)

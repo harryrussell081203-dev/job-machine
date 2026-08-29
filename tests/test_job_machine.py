@@ -458,7 +458,7 @@ class TestDiscover(unittest.TestCase):
         with mock.patch.object(jm, "fetch_listing_text", return_value=""), \
              mock.patch.object(jm, "find_domain", return_value="acme.com"), \
              mock.patch.object(jm, "scrape_site",
-                               return_value=["info@acme.com", "careers@acme.com"]), \
+                               return_value=(["info@acme.com", "careers@acme.com"], [])), \
              mock.patch.object(jm, "has_mx", return_value=True):
             jm.discover(state)
         self.assertEqual(job["status"], "ready")
@@ -471,7 +471,7 @@ class TestDiscover(unittest.TestCase):
         state = self._state(job)
         with mock.patch.object(jm, "fetch_listing_text", return_value=""), \
              mock.patch.object(jm, "find_domain", return_value="acme.com"), \
-             mock.patch.object(jm, "scrape_site", return_value=[]), \
+             mock.patch.object(jm, "scrape_site", return_value=([], [])), \
              mock.patch.object(jm, "has_mx", return_value=True):
             jm.discover(state)
         self.assertEqual(job["status"], "no_email")
@@ -1093,7 +1093,7 @@ class TestSpeculative(unittest.TestCase):
                    mock.patch.object(jm, "has_mx", return_value=True),
                    mock.patch.object(jm, "find_domain", return_value="acme.com"),
                    mock.patch.object(jm, "scrape_site",
-                                     return_value=["careers@acme.com"])]
+                                     return_value=(["careers@acme.com"], []))]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
@@ -1131,7 +1131,7 @@ class TestSpeculative(unittest.TestCase):
         self.assertNotIn(first, sent_to)
 
     def test_no_real_address_means_no_send_and_no_retry(self):
-        with mock.patch.object(jm, "scrape_site", return_value=[]), \
+        with mock.patch.object(jm, "scrape_site", return_value=([], [])), \
              mock.patch.object(jm, "SPEC_PER_DAY", 1), \
              mock.patch.object(jm, "send_email") as send:
             jm.speculative(self.state)
@@ -2684,3 +2684,330 @@ class TestWhatHeActuallyDoesAtHydro(unittest.TestCase):
 
     def test_it_still_never_names_the_employer(self):
         self.assertNotIn("hydro", jm.CANDIDATE_PROFILE.lower())
+
+
+class TestFindPhones(unittest.TestCase):
+    """No phone number is ever guessed or pattern-generated - the same rule
+    the email side already lives by. This is the regex that decides what
+    counts as a real one."""
+
+    def test_a_call_invitation_is_found(self):
+        found = jm.find_phones("Call Ben on 01224 372 000 to discuss.")
+        self.assertEqual([f["number"] for f in found], ["01224372000"])
+        self.assertTrue(found[0]["has_keyword"])
+
+    def test_an_international_format_is_found(self):
+        found = jm.find_phones("Contact us on +44 1224 372000 for more info.")
+        self.assertEqual([f["number"] for f in found], ["01224372000"])
+
+    def test_a_mobile_is_found(self):
+        found = jm.find_phones("Mobile: 07398 530978 is the best way.")
+        self.assertEqual([f["number"] for f in found], ["07398530978"])
+
+    def test_the_real_adzuna_redaction_yields_nothing(self):
+        """87% of everything this pipeline sees is Adzuna, and Adzuna redacts
+        phone numbers in listing text as this literal string."""
+        self.assertEqual(jm.find_phones(
+            "Salary range: (phone number removed) to discuss the role."), [])
+
+    def test_a_vat_number_is_not_a_phone_number(self):
+        self.assertEqual(jm.find_phones(
+            "VAT No: 123456789 Company Reg No: 09876543210"), [])
+
+    def test_a_reference_number_embedded_in_text_is_not_a_phone_number(self):
+        """The regex found a phone-shaped run of digits INSIDE a longer
+        reference number before the digit-boundary check was added -
+        'Ref: 20260829001' read as '0260829001', a plausible-looking UK
+        number that was never really there."""
+        self.assertEqual(jm.find_phones("Ref: 20260829001 for this application."), [])
+        self.assertEqual(jm.find_phones("Order number 5502260829001 was processed."), [])
+
+    def test_a_number_with_no_keyword_nearby_is_still_found(self):
+        """A bare number in a footer with no verb nearby is still real, just
+        lower priority - not invalid."""
+        found = jm.find_phones("Our office number is 01414204321, ask for Jean.")
+        self.assertEqual([f["number"] for f in found], ["01414204321"])
+        self.assertFalse(found[0]["has_keyword"])
+
+    def test_duplicates_on_one_page_are_not_repeated(self):
+        found = jm.find_phones("Call 01224 372000. Ring 01224 372000 anytime.")
+        self.assertEqual(len(found), 1)
+
+
+class TestBestPhone(unittest.TestCase):
+    def test_nothing_found_is_none(self):
+        self.assertIsNone(jm.best_phone([]))
+
+    def test_the_keyword_adjacent_number_wins(self):
+        """A team page can list several people's direct lines - the one
+        somebody actually invited a call on is the one worth using."""
+        candidates = [{"number": "01414204321", "has_keyword": False},
+                     {"number": "01224372000", "has_keyword": True}]
+        self.assertEqual(jm.best_phone(candidates), "01224372000")
+
+    def test_the_first_found_wins_when_nothing_has_a_keyword(self):
+        candidates = [{"number": "01414204321", "has_keyword": False},
+                     {"number": "01224372000", "has_keyword": False}]
+        self.assertEqual(jm.best_phone(candidates), "01414204321")
+
+
+class TestScrapeSitePhones(unittest.TestCase):
+    def test_it_returns_emails_and_phones(self):
+        # scrape_site tries every path in SCRAPE_PATHS - only the home page
+        # (an empty path) answers here, the rest look like a dead site, same
+        # as a real one where most of those paths 404.
+        hit = mock.Mock(status_code=200,
+                       text="Contact jane@acme.com or call 01224 372000.")
+        miss = mock.Mock(status_code=404, text="")
+
+        def fake_get(url, **kw):
+            return hit if url in ("https://acme.com", "http://acme.com") else miss
+        with mock.patch.object(jm.requests, "get", side_effect=fake_get), \
+             mock.patch.object(jm.time, "sleep"):
+            emails, phones = jm.scrape_site("acme.com")
+        self.assertIn("jane@acme.com", emails)
+        self.assertEqual([p["number"] for p in phones], ["01224372000"])
+
+    def test_a_non_200_response_yields_nothing(self):
+        with mock.patch.object(jm.requests, "get",
+                               return_value=mock.Mock(status_code=404, text="x")):
+            emails, phones = jm.scrape_site("acme.com")
+        self.assertEqual((emails, phones), ([], []))
+
+
+class TestDiscoverPhoneExtraction(unittest.TestCase):
+    def setUp(self):
+        self.state = {"jobs": {}}
+
+    def add(self, **over):
+        job = make_job(status="scored", **over)
+        self.state["jobs"][job["external_id"]] = job
+        return job
+
+    def test_a_listing_phone_is_captured(self):
+        self.add(description="Call Ben on 01224 372 000 to discuss the role.",
+                 contact_email=None)
+        with mock.patch.object(jm, "fetch_listing_text", return_value=""), \
+             mock.patch.object(jm, "find_domain", return_value=None):
+            jm.discover(self.state)
+        job = next(iter(self.state["jobs"].values()))
+        self.assertEqual(job["contact_phone"], "01224372000")
+        self.assertEqual(job["phone_method"], "listing")
+
+    def test_a_scraped_phone_only_fills_in_when_no_listing_phone_exists(self):
+        self.add(description="No phone here.", company="Acme Subsea Ltd")
+        with mock.patch.object(jm, "fetch_listing_text", return_value=""), \
+             mock.patch.object(jm, "find_domain", return_value="acme.com"), \
+             mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=(["jane@acme.com"],
+                                             [{"number": "01224372000",
+                                               "has_keyword": True}])):
+            jm.discover(self.state)
+        job = next(iter(self.state["jobs"].values()))
+        self.assertEqual(job["contact_phone"], "01224372000")
+        self.assertEqual(job["phone_method"], "scraped")
+
+    def test_a_listing_phone_beats_a_scraped_one(self):
+        self.add(description="Call Ben on 01224 372 000.", company="Acme Subsea Ltd")
+        with mock.patch.object(jm, "fetch_listing_text", return_value=""), \
+             mock.patch.object(jm, "find_domain", return_value="acme.com"), \
+             mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=(["jane@acme.com"],
+                                             [{"number": "01414204321",
+                                               "has_keyword": True}])):
+            jm.discover(self.state)
+        job = next(iter(self.state["jobs"].values()))
+        self.assertEqual(job["contact_phone"], "01224372000")
+        self.assertEqual(job["phone_method"], "listing")
+
+    def test_a_no_email_job_can_still_carry_a_captured_phone(self):
+        """Cheap to keep now even though nothing acts on it yet without a
+        working email - a currently-wasted lead, not a bug."""
+        self.add(description="Call Ben on 01224 372 000.", company="")
+        with mock.patch.object(jm, "fetch_listing_text", return_value=""):
+            jm.discover(self.state)
+        job = next(iter(self.state["jobs"].values()))
+        self.assertEqual(job["status"], "skipped")
+        self.assertEqual(job["contact_phone"], "01224372000")
+
+
+class TestStrongMatchForCall(unittest.TestCase):
+    def job(self, **over):
+        defaults = {"score": 90, "email_tier": 3, "contact_phone": "01224372000"}
+        defaults.update(over)
+        return make_job(**defaults)
+
+    def test_a_strong_match_qualifies(self):
+        self.assertTrue(jm.strong_match_for_call(self.job()))
+
+    def test_below_the_score_threshold_does_not_qualify(self):
+        self.assertFalse(jm.strong_match_for_call(self.job(score=84)))
+
+    def test_exactly_at_the_threshold_qualifies(self):
+        self.assertTrue(jm.strong_match_for_call(self.job(score=85)))
+
+    def test_a_generic_inbox_does_not_qualify(self):
+        """The gate needs a genuinely named contact, not a tier-1 or tier-2
+        inbox that happens to have a phone number on the same page."""
+        self.assertFalse(jm.strong_match_for_call(self.job(email_tier=1)))
+        self.assertFalse(jm.strong_match_for_call(self.job(email_tier=2)))
+
+    def test_no_phone_does_not_qualify(self):
+        self.assertFalse(jm.strong_match_for_call(self.job(contact_phone=None)))
+
+
+class TestBuildCallScript(unittest.TestCase):
+    def test_it_names_the_role_company_and_phone(self):
+        job = make_job(company="Acme Subsea Ltd", title="Electronics Technician",
+                       contact_phone="01224372000", contact_name="Jane")
+        script = jm.build_call_script(job)
+        self.assertIn("Acme Subsea Ltd", script)
+        self.assertIn("Electronics Technician", script)
+        self.assertIn("01224372000", script)
+        self.assertIn("ask for Jane", script)
+
+    def test_it_never_implies_the_number_is_their_direct_line(self):
+        """Discovery only ever verifies that a name and a number both turned
+        up for the same company, never that the one rings the other."""
+        job = make_job(contact_name=None, contact_phone="01224372000")
+        script = jm.build_call_script(job)
+        self.assertIn("ask about the role", script)
+
+    def test_it_stays_short_even_with_a_very_long_company_name(self):
+        job = make_job(
+            company="The Extraordinarily Long Winded International Subsea "
+                    "Offshore Engineering and Advanced Manufacturing "
+                    "Solutions Consultancy Partnership Group Worldwide Limited",
+            title="Senior Principal Lead Electronics and Instrumentation "
+                  "Test Technician",
+            contact_phone="01224372000", contact_name="Jane")
+        script = jm.build_call_script(job)
+        self.assertLess(len(script), 320)
+
+    def test_the_phone_number_is_never_the_part_that_gets_cut(self):
+        job = make_job(company="X" * 400, contact_phone="01224372000",
+                       contact_name="Jane")
+        script = jm.build_call_script(job)
+        self.assertIn("01224372000", script)
+        self.assertIn("ask for Jane", script)
+
+    def test_a_veteran_employer_gets_the_covenant_prompt(self):
+        job = make_job(company="Babcock International", contact_phone="01224372000")
+        with mock.patch.object(jm, "veteran_friendly", return_value=True):
+            script = jm.build_call_script(job)
+        self.assertIn("guaranteed interview scheme", script)
+
+
+class TestRunCallScripts(unittest.TestCase):
+    def setUp(self):
+        # A configured gateway and a harmless save() are the default for
+        # every test in this class - the handful that need no gateway or a
+        # real save() override them individually.
+        for patcher in (mock.patch.object(jm, "SMS_API_KEY", "k"),
+                       mock.patch.object(jm, "SMS_FROM", "+441234"),
+                       mock.patch.object(jm, "SMS_TO", "+445678"),
+                       mock.patch.object(jm, "save")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def strong_job(self, **over):
+        defaults = {"status": "sent", "score": 90, "email_tier": 3,
+                   "contact_phone": "01224372000", "contact_name": "Jane",
+                   "contact_email": "jane@acme.com", "company": "Acme Subsea Ltd"}
+        defaults.update(over)
+        return make_job(**defaults)
+
+    def test_without_a_gateway_it_does_nothing(self):
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "SMS_API_KEY", ""), \
+             mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+
+    def test_test_mode_is_a_no_op(self):
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "TEST_MODE", True), \
+             mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+
+    def test_a_strong_match_is_texted(self):
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "text_harry", return_value=True) as sms:
+            jm.run_call_scripts(state)
+        sms.assert_called_once()
+        self.assertIn("Acme Subsea Ltd", sms.call_args[0][0])
+        self.assertIsNotNone(state["jobs"]["a"].get("call_script_texted_at"))
+
+    def test_a_weak_match_is_not_texted(self):
+        state = {"jobs": {"a": self.strong_job(score=60)}}
+        with mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+
+    def test_a_blocked_company_is_skipped_without_touching_status(self):
+        block = [{"name": "Acme Subsea Ltd", "reason": "asked to stop"}]
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "load_do_not_contact", return_value=block), \
+             mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+        self.assertEqual(state["jobs"]["a"]["status"], "sent")
+        self.assertIsNotNone(state["jobs"]["a"].get("do_not_contact_at"))
+
+    def test_a_job_already_texted_is_never_texted_again(self):
+        state = {"jobs": {"a": self.strong_job(call_script_texted_at="2026-08-01")}}
+        with mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+
+    def test_the_daily_cap_stops_the_loop(self):
+        state = {"jobs": {"a": self.strong_job(external_id="a", company="A Ltd"),
+                          "b": self.strong_job(external_id="b", company="B Ltd"),
+                          "c": self.strong_job(external_id="c", company="C Ltd")}}
+        with mock.patch.object(jm, "CALL_SCRIPT_PER_DAY", 2), \
+             mock.patch.object(jm, "text_harry", return_value=True) as sms:
+            jm.run_call_scripts(state)
+        self.assertEqual(sms.call_count, 2)
+
+    def test_a_scraped_phone_at_the_wrong_domain_is_dropped(self):
+        """The phone-equivalent of run_sends' send-time domain re-check - a
+        wrong-company call is exactly as capable of embarrassing Harry as a
+        misdirected email."""
+        state = {"jobs": {"a": self.strong_job(
+            phone_method="scraped", company="Sanctuary", company_domain="sanctuaryclothing.com")}}
+        with mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+        self.assertIsNone(state["jobs"]["a"]["contact_phone"])
+
+    def test_a_listing_phone_is_not_re_checked_against_the_domain(self):
+        """A listing-tier phone came from the advert itself, not the
+        company's website, so the domain re-check does not apply to it."""
+        state = {"jobs": {"a": self.strong_job(
+            phone_method="listing", company="Sanctuary", company_domain="sanctuaryclothing.com")}}
+        with mock.patch.object(jm, "text_harry", return_value=True) as sms:
+            jm.run_call_scripts(state)
+        sms.assert_called_once()
+
+    def test_a_script_that_would_claim_clearance_is_skipped(self):
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "build_call_script",
+                               return_value="I hold SC clearance."), \
+             mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
+
+    def test_a_gateway_failure_leaves_the_job_for_a_retry(self):
+        state = {"jobs": {"a": self.strong_job()}}
+        with mock.patch.object(jm, "text_harry", return_value=False):
+            jm.run_call_scripts(state)
+        self.assertIsNone(state["jobs"]["a"].get("call_script_texted_at"))
+
+    def test_only_sent_jobs_are_considered(self):
+        state = {"jobs": {"a": self.strong_job(status="ready")}}
+        with mock.patch.object(jm, "text_harry") as sms:
+            jm.run_call_scripts(state)
+        sms.assert_not_called()
