@@ -132,6 +132,23 @@ SMS_API_KEY = env_str("SMS_API_KEY", "")
 SMS_FROM = env_str("SMS_FROM", "")
 SMS_TO = env_str("SMS_TO", "")
 
+# The floor for texting Harry a phone-call script instead of just emailing.
+# Stricter than SCORE_THRESHOLD - a call asks more of his time and nerve than
+# an email that goes out on its own, and the scorer's own prompt already uses
+# 85 as its language for "clearly better paid... and/or travel", so there is
+# a real line to reuse rather than a number picked at random.
+CALL_SCRIPT_SCORE_THRESHOLD = env_int("CALL_SCRIPT_SCORE_THRESHOLD", 85)
+# A genuine circuit breaker, not a throughput limit - the gate above is
+# already stricter than everything else in the pipeline, so most days will
+# see zero or one qualifying job. This exists for the day a matching bug
+# misfires and calls several jobs a strong match at once, the same failure
+# mode that once sent two real applications to the wrong Sanctuary. Kept
+# entirely separate from DAILY_SEND_CAP/PER_RUN_SEND_CAP: those protect
+# against exhausting Gmail, this protects Harry's own time, and folding them
+# together would let a busy sending day silently swallow the rarer, more
+# valuable action.
+CALL_SCRIPT_PER_DAY = env_int("CALL_SCRIPT_PER_DAY", 2)
+
 SEND_INTERVAL_SECONDS = 30
 FOLLOWUP_INTERVAL_SECONDS = 15
 IMAP_TIMEOUT = 30          # never let a stalled inbox hang a whole run
@@ -1409,6 +1426,83 @@ def score_jobs(state):
 # DISCOVER - real addresses only
 # ======================================================================
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+
+# UK phone numbers only - Harry's market. Loose on purpose: this only finds
+# CANDIDATES, and normalise_phone() below does the real validating. Matches
+# a leading +44 or 0, then 9-10 more digits with optional spaces/hyphens.
+# The lookbehind/lookahead stop it matching a run of digits that only LOOKS
+# like a phone number because a '0' happens to sit nine digits from the end
+# of something longer - a reference number 'Ref: 20260829001' contains
+# exactly that, and without the boundary check it reads as '0260829001'.
+UK_PHONE_RE = re.compile(r"(?<!\d)(?:\+44\s?|0)(?:[\s-]?\d){9,10}(?!\d)")
+
+# A candidate whose preceding text mentions one of these is a VAT number, a
+# company registration, an order reference or an account number, not a phone
+# number - and several of those really are 10-11 digits, which is exactly the
+# length a real UK number is. Checked on this text.
+PHONE_NEGATIVE_CONTEXT = re.compile(
+    r"\b(?:vat|company\s*no|reg(?:istration)?\s*no|ref(?:erence)?|"
+    r"account\s*no|invoice)\b\s*[:.]?\s*$", re.I)
+
+# A candidate near one of these is much more likely to actually be a phone
+# number somebody is inviting a call on, rather than a bare digit run that
+# happens to be the right length. This only breaks ties between several
+# candidates on one page - a number with no verb nearby is still real, just
+# lower priority.
+PHONE_KEYWORD_CONTEXT = re.compile(
+    r"\b(?:call|tel|telephone|phone|mobile|contact|ring|dial)\b", re.I)
+
+
+def normalise_phone(raw):
+    """A found string, or None if it is not really a UK phone number.
+
+    Length and leading digit are the whole test: strip everything but digits
+    and a leading +, then accept only 10-11 digits starting '0', or 12 digits
+    starting '44'. That alone rejects postcodes (they mix letters and digits,
+    never a clean digit run this long) and most dates and salary figures,
+    without needing to understand what kind of string it came from."""
+    digits = re.sub(r"[^\d+]", "", raw)
+    if digits.startswith("+44"):
+        digits = "0" + digits[3:]
+    elif digits.startswith("44") and len(digits) > 11:
+        digits = "0" + digits[2:]
+    if len(digits) not in (10, 11) or not digits.startswith("0"):
+        return None
+    return digits
+
+
+def find_phones(text):
+    """Every plausible UK phone number in this text, never guessed - only
+    ever a string that was actually there. Returns
+    [{"number": ..., "has_keyword": bool}, ...], deduplicated."""
+    seen, out = set(), []
+    for m in UK_PHONE_RE.finditer(text):
+        before = text[max(0, m.start() - 20):m.start()]
+        if PHONE_NEGATIVE_CONTEXT.search(before):
+            continue
+        number = normalise_phone(m.group(0))
+        if not number or number in seen:
+            continue
+        seen.add(number)
+        near = text[max(0, m.start() - 40):m.start()]
+        out.append({"number": number, "has_keyword": bool(PHONE_KEYWORD_CONTEXT.search(near))})
+    return out
+
+
+def best_phone(candidates):
+    """The number most likely to be an invitation to call, or None.
+
+    A number near 'call'/'tel'/'mobile' wins over one that is not, because
+    several genuine numbers can appear on one page (a team page can list five
+    people's direct lines) and the one somebody bothered to invite a call on
+    is the one worth using. Never invents a number - only ever picks among
+    ones actually found in real text, the same rule the email side lives by."""
+    if not candidates:
+        return None
+    with_keyword = [c for c in candidates if c["has_keyword"]]
+    return (with_keyword or candidates)[0]["number"]
+
+
 BAD_PREFIXES = ("noreply", "no-reply", "donotreply", "postmaster", "abuse",
                 "privacy", "unsubscribe", "webmaster", "marketing", "newsletter",
                 "example", "test", "email", "name", "your", "user", "someone",
@@ -1735,7 +1829,14 @@ SCRAPE_PATHS = ("", "/contact", "/contact-us", "/careers", "/jobs",
 
 
 def scrape_site(domain):
-    raw = []
+    """(emails, phones) found on the company's own site.
+
+    Phones ride along for free: the page is already fetched for the email
+    search, so finding a phone number too costs nothing extra. A phone found
+    here is only ever trusted by the caller when this same domain's email
+    search also succeeded - scrape_site itself does not know or care, it
+    just reports everything real it saw."""
+    raw, phones = [], []
     for path in SCRAPE_PATHS:
         for scheme in ("https", "http"):
             try:
@@ -1744,11 +1845,12 @@ def scrape_site(domain):
                     raw += EMAIL_RE.findall(r.text)
                     raw += [m.replace("%40", "@") for m in
                             re.findall(r"mailto:([^\"'?>\s]+)", r.text)]
+                    phones += find_phones(r.text)
                 break
             except Exception:
                 continue
         time.sleep(0.5)  # be polite to small company sites
-    return clean_emails(raw, domain)
+    return clean_emails(raw, domain), phones
 
 
 def fetch_listing_text(job):
@@ -1807,6 +1909,16 @@ def discover(state):
         # 1) addresses printed in the advert itself - directly tied to this job
         text = job.get("description", "") + " " + fetch_listing_text(job)
         job["listing_text_len"] = len(text)
+
+        # A phone found in the advert itself, same rule as an address: never
+        # guessed, only ever a number that was actually printed there. Runs
+        # unconditionally, before either branch below and whatever they do
+        # with the job's status, so it survives even a listing that ends up
+        # no_email - cheap to keep for later even though nothing acts on it
+        # yet if there is no email to go with it.
+        job["contact_phone"] = best_phone(find_phones(text))
+        job["phone_method"] = "listing" if job["contact_phone"] else None
+
         found_here = clean_emails(EMAIL_RE.findall(text))
         email_addr, name, tier = best_email(found_here)
         ranked = ranked_emails(found_here)
@@ -1826,10 +1938,18 @@ def discover(state):
             if not has_mx(domain):
                 job.update({"status": "no_email", "skip_reason": "domain has no MX"})
                 continue
-            scraped = scrape_site(domain)
-            email_addr, name, tier = best_email(scraped)
-            ranked = ranked_emails(scraped)
+            scraped_emails, scraped_phones = scrape_site(domain)
+            email_addr, name, tier = best_email(scraped_emails)
+            ranked = ranked_emails(scraped_emails)
             method = "scraped"
+            # Only trust a scraped phone once this same domain has also
+            # produced a verified email - a phone found here belongs to
+            # whoever's site this is, and this branch only runs once that is
+            # already believed to be the right company. A listing-text phone
+            # always wins if one was already found above.
+            if not job["contact_phone"]:
+                job["contact_phone"] = best_phone(scraped_phones)
+                job["phone_method"] = "scraped" if job["contact_phone"] else None
 
         # 3) nothing real found -> do not send. No guessing, ever.
         if not email_addr or tier < 1:
@@ -2299,6 +2419,131 @@ def run_sends(state, dry_run=False, already_sent=0):
     return sent
 
 
+# ======================================================================
+# CALL SCRIPTS - the strongest matches get a phone call, not just an email
+# ======================================================================
+def build_call_script(job):
+    """A short prompt texted to Harry's own phone, never anything read to
+    anyone else - text_harry sends this to his handset, nowhere else.
+
+    Built defensively short. text_harry truncates at a blunt 320-character
+    slice with no regard for word boundaries, so the parts that must never be
+    cut - the phone number and who to ask for - are fixed first and the
+    describing text around them absorbs any shortening needed.
+
+    Says 'ask for {name}' rather than implying the number is that person's
+    own direct line - discovery only ever verifies that a real name and a
+    real number both turned up for the same company, never that the one
+    rings the other."""
+    company = (job.get("company") or "this employer").strip()
+    title = (job.get("title") or "the role").strip()
+    phone = job.get("contact_phone") or ""
+    name = job.get("contact_name")
+    ask_for = f"ask for {name}" if name else "ask about the role"
+
+    if veteran_friendly(job):
+        prompt = ("Mention your Navy service and ask about their guaranteed "
+                  "interview scheme.")
+    elif mentions_travel(job):
+        prompt = "Ask how much travel it actually involves."
+    else:
+        prompt = "Ask if there's any travel involved."
+
+    tail = (f"{phone} - {ask_for}. Say you applied and are following up. "
+            f"{prompt}")
+    budget = 260 - len(tail)
+    lead = f"Worth calling {company} about the {title} role."
+    if len(lead) > budget > 20:
+        lead = lead[:budget - 1].rstrip() + "…"
+    return f"{lead}\n{tail}"
+
+
+def strong_match_for_call(job):
+    """A high enough score, a genuinely named contact, and a real number -
+    everything except do_not_contact and the daily cap, which the caller
+    checks explicitly, the same split run_sends keeps for do_not_contact."""
+    return (job.get("score", 0) >= CALL_SCRIPT_SCORE_THRESHOLD
+            and job.get("email_tier") == 3
+            and bool(job.get("contact_phone")))
+
+
+def call_scripts_today(state):
+    return state.setdefault("call_script_counts", {}).get(today(), 0)
+
+
+def record_call_script(state):
+    state["call_script_counts"][today()] = call_scripts_today(state) + 1
+
+
+def run_call_scripts(state):
+    """Text Harry a call script for today's strongest, best-contactable
+    matches, so he can make the call himself rather than the machine emailing
+    on his behalf being the only channel that exists.
+
+    Runs over jobs already at status=='sent' - by the time a job gets there
+    it has already cleared do_not_contact, the domain-matches-company guard
+    and every inbox cap run_sends enforces, so this only has to add its own
+    stricter gate and re-check the domain the same way run_sends re-checks it
+    at the point of every send, not just at discovery time."""
+    if TEST_MODE:
+        print("[call_script] disabled in TEST_MODE")
+        return
+    if not (SMS_API_KEY and SMS_FROM and SMS_TO):
+        return
+    state.setdefault("call_script_counts", {})
+    blocklist = load_do_not_contact()
+
+    candidates = [j for j in state["jobs"].values()
+                 if j.get("status") == "sent" and j.get("contact_phone")
+                 and not j.get("call_script_texted_at")]
+    candidates.sort(key=lambda j: (-int(veteran_friendly(j)),
+                                   -int(mentions_travel(j)),
+                                   -(j.get("score") or 0)))
+
+    texted = 0
+    for job in candidates:
+        if call_scripts_today(state) >= CALL_SCRIPT_PER_DAY:
+            print(f"[call_script] daily cap ({CALL_SCRIPT_PER_DAY}) reached")
+            break
+        stop = do_not_contact(company=job.get("company"),
+                              email=job.get("contact_email"),
+                              domain=job.get("company_domain"),
+                              entries=blocklist)
+        if stop:
+            job["do_not_contact_at"] = now()
+            job["do_not_contact_reason"] = stop.get("reason", "")
+            continue
+        if not strong_match_for_call(job):
+            continue
+        # The phone-equivalent of run_sends' send-time domain re-check: a
+        # record written before a matching bug was fixed can come back with a
+        # bad domain still on it, and a wrong-company call is exactly as
+        # capable of embarrassing Harry as a misdirected email. A
+        # listing-tier phone came from the advert itself, not the domain, so
+        # only a scraped one needs re-checking here.
+        if (job.get("phone_method") == "scraped"
+                and not domain_matches_company(job.get("company"),
+                                              job.get("company_domain"))):
+            job["contact_phone"] = None
+            job["phone_method"] = None
+            continue
+        script = build_call_script(job)
+        claim = claims_clearance(script)
+        if claim:
+            print(f"[call_script] refused for {job.get('company')}: script "
+                  f"claims a clearance ({claim!r})")
+            continue
+        if text_harry(script):
+            job["call_script_texted_at"] = now()
+            job["call_script_text"] = script
+            record_call_script(state)
+            texted += 1
+            print(f"[call_script] texted about {job.get('company')} - "
+                  f"{job.get('title')}")
+            save(state)
+    print(f"[call_script] {texted} script(s) texted, "
+          f"{call_scripts_today(state)} today")
+
 
 # ======================================================================
 # SPECULATIVE - the hidden market: employers with no advert up
@@ -2403,7 +2648,7 @@ def speculative(state):
         if not domain or not has_mx(domain):
             done[key] = "no domain or MX"
             continue
-        addr, name, tier = best_email(scrape_site(domain))
+        addr, name, tier = best_email(scrape_site(domain)[0])
         if not addr or tier < 1 or not has_mx(addr.split("@")[1]):
             done[key] = "no real address"
             continue
@@ -2549,10 +2794,15 @@ def text_harry(message):
     nobody happened to open an inbox is an interview lost to latency rather
     than to merit.
 
-    Only two things ever come through here - an invitation, and a question a
-    human is waiting on an answer to. Texting anybody about a rejection or an
-    automated acknowledgement would train him to ignore the phone, which
-    costs exactly the thing this exists to protect."""
+    Three things come through here, and the list is deliberately short - an
+    invitation, a question a human is waiting on an answer to, and a call
+    script for a match strong enough to be worth phoning about today rather
+    than whenever email next gets opened. All three share the same shape:
+    something time-sensitive that only he can act on. Texting anybody about a
+    rejection or an automated acknowledgement would train him to ignore the
+    phone, which costs exactly the thing this exists to protect - which is
+    also why the call-script sender caps itself at a couple a day rather than
+    relying on this function to do that policing."""
     if not (SMS_API_KEY and SMS_FROM and SMS_TO):
         return False
     try:
@@ -3275,6 +3525,13 @@ def main(argv=None):
     # And again for whatever discovery just found an address for, carrying the
     # count so the per-run cap stays a per-run cap.
     stage("send", run_sends, state, args.dry_run, sent)
+    save(state)
+    # Only jobs that just reached 'sent' can qualify - a phone found by
+    # discover() this run needs that second send above to actually land
+    # before this stage can see it. A dry run never produces a 'sent' job (it
+    # sets 'ready' instead), so this is naturally inert without needing its
+    # own dry-run check.
+    stage("call_scripts", run_call_scripts, state)
     save(state)
     if not args.dry_run:
         # Grow the target list from employers this run has just seen, before
