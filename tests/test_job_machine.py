@@ -2666,3 +2666,21 @@ class TestNotLosingTheStateFile(unittest.TestCase):
         handful and back."""
         jm.save({"jobs": {str(i): {} for i in range(20)}}, allow_shrink=True)
         self.assertTrue(jm.save({"jobs": {"a": {}}}))
+
+
+class TestWhatHeActuallyDoesAtHydro(unittest.TestCase):
+    """The CV entry for his current job was a placeholder - role, employer and
+    dates only - until Harry described the work: testing and repairing subsea
+    cables and connectors, and moulding assemblies in epoxy resin and
+    polyurethane. The profile that writes letters needed the same update,
+    without ever naming who he works for."""
+
+    def test_the_profile_names_the_real_work(self):
+        profile = jm.CANDIDATE_PROFILE.lower()
+        self.assertIn("cable", profile)
+        self.assertIn("connector", profile)
+        self.assertIn("epoxy", profile)
+        self.assertIn("polyurethane", profile)
+
+    def test_it_still_never_names_the_employer(self):
+        self.assertNotIn("hydro", jm.CANDIDATE_PROFILE.lower())
