@@ -51,6 +51,11 @@ restarts** — without one, every deploy wipes your customers.
   `DB_PATH=/data/jobmachine.db`. Around $5/month.
 - The `Procfile` already has the right start command.
 
+**Run one worker.** SQLite is a single file, and several worker processes
+writing to it will eventually give you `database is locked` under load. One
+worker will carry this app a very long way; when it genuinely will not, that
+is the moment to move to Postgres, not before. Do not add `--workers`.
+
 Set every variable from `.env.example` in the host's environment panel. The
 app refuses to boot in production without `SECRET_KEY`, and refuses to boot
 with billing on but Stripe keys missing — both deliberately, because a paywall
@@ -62,7 +67,21 @@ that silently defaults to open is not a thing you notice from the outside.
 anything a user sends about a job. A Gmail app password works to start. Move
 to a transactional provider when link delivery starts landing in spam.
 
-## 5. Before you charge anyone
+## 5. Rate limits are already on
+
+`/login` is capped at 5 emails an hour to any one address and 20 an hour from
+any one machine, because otherwise the app is a free email cannon anyone can
+point at any inbox — and the first casualty is your own sending account
+getting suspended, which locks out every real customer at once.
+
+Over-limit requests look identical to successful ones on purpose. Saying
+"rate limited" would confirm an address exists and tell an abuser exactly what
+they hit.
+
+If you sit behind a proxy that is *not* setting `X-Forwarded-For`, the per-IP
+limit collapses to one bucket for everybody. Check your host does set it.
+
+## 6. Before you charge anyone
 
 - Sign up as a real customer with a real card. Cancel it. Check both worked.
 - Confirm a cancelled subscription actually closes access.

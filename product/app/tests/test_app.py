@@ -321,5 +321,42 @@ class TestConfigRefusals(unittest.TestCase):
         importlib.reload(importlib.import_module("app.config"))
 
 
+
+
+class TestLoginRateLimit(AppTestCase):
+    """Without this, the app is a free email cannon pointed at any address."""
+
+    def test_repeated_requests_to_one_address_stop_sending(self):
+        sent = []
+        self.main.auth.send_login_email = lambda a, l: sent.append(a)
+
+        for _ in range(5):
+            r = self.client.post("/login", data={"email": "victim@example.com"})
+            self.assertIn("on its way", r.text)
+        self.assertEqual(len(sent), 5)
+
+        # Sixth is silently dropped - and looks identical, so an abuser
+        # learns nothing and a real user is not told their address exists.
+        r = self.client.post("/login", data={"email": "victim@example.com"})
+        self.assertIn("on its way", r.text)
+        self.assertEqual(len(sent), 5, "a 6th email escaped the limit")
+
+    def test_one_machine_cannot_walk_a_list_of_addresses(self):
+        sent = []
+        self.main.auth.send_login_email = lambda a, l: sent.append(a)
+
+        for i in range(25):
+            self.client.post("/login", data={"email": f"target{i}@example.com"})
+        # per-IP cap is 20/hour, and no single address hit its own cap
+        self.assertEqual(len(sent), 20)
+
+    def test_the_limiter_does_not_block_a_normal_person(self):
+        sent = []
+        self.main.auth.send_login_email = lambda a, l: sent.append(a)
+        for _ in range(3):
+            self.client.post("/login", data={"email": "sam@example.com"})
+        self.assertEqual(len(sent), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
