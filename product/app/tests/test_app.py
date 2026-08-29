@@ -1,0 +1,325 @@
+"""Route and paywall tests.
+
+The two that matter most are the ones about money and identity:
+
+  - a magic link must not work twice
+  - a user must not become paid without a *verified* Stripe webhook
+
+Both are the kind of bug that is invisible until it is expensive.
+"""
+
+import hashlib
+import hmac
+import importlib
+import json
+import os
+import sys
+import tempfile
+import time
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, ROOT)
+
+
+def build_app(**env):
+    """A fresh app with a fresh database, configured per test."""
+    defaults = {
+        "DEV_MODE": "1",
+        "SECRET_KEY": "test-secret-key-not-for-production",
+        "BILLING_ENABLED": "0",
+        "STRIPE_SECRET_KEY": "",
+        "STRIPE_PRICE_ID": "",
+        "STRIPE_WEBHOOK_SECRET": "",
+        "BASE_URL": "http://testserver",
+    }
+    defaults.update(env)
+    for k, v in defaults.items():
+        os.environ[k] = v
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.environ["DB_PATH"] = path
+
+    for mod in ("app.config", "app.db", "app.auth", "app.billing",
+                "app.delivery", "app.main"):
+        if mod in sys.modules:
+            importlib.reload(sys.modules[mod])
+        else:
+            importlib.import_module(mod)
+    main = sys.modules["app.main"]
+    return main, path
+
+
+class AppTestCase(unittest.TestCase):
+    env: dict = {}
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        self.main, self.db_path = build_app(**self.env)
+        self.addCleanup(lambda: os.path.exists(self.db_path)
+                        and os.unlink(self.db_path))
+        self.client = TestClient(self.main.app)
+        self.client.__enter__()               # fires startup, creates schema
+        self.addCleanup(self.client.__exit__, None, None, None)
+
+    def sign_in(self, email="sam@example.com"):
+        link = self.main.auth.make_login_link(email)
+        token = link.split("token=", 1)[1]
+        r = self.client.get(f"/auth/verify?token={token}", follow_redirects=False)
+        return r
+
+
+class TestPublicPages(AppTestCase):
+    def test_landing_renders_and_shows_the_evidence(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("26%", r.text)
+        self.assertIn("Get your CV in front of a human", r.text)
+
+    def test_playbook_is_free_and_needs_no_account(self):
+        r = self.client.get("/playbook")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("banned", r.text.lower())
+
+    def test_health(self):
+        self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
+
+
+class TestSignIn(AppTestCase):
+    def test_a_bad_address_is_rejected(self):
+        r = self.client.post("/login", data={"email": "not-an-email"})
+        self.assertIn("not an email address", r.text)
+
+    def test_the_reply_does_not_reveal_who_has_an_account(self):
+        # Same response either way, or the form becomes a customer-list oracle.
+        a = self.client.post("/login", data={"email": "stranger@example.com"})
+        self.sign_in("known@example.com")
+        b = self.client.post("/login", data={"email": "known@example.com"})
+        self.assertIn("on its way", a.text)
+        self.assertIn("on its way", b.text)
+
+    def test_a_valid_link_signs_you_in(self):
+        r = self.sign_in()
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/dashboard")
+        self.assertIn("jm_session", r.cookies)
+
+    def test_a_link_cannot_be_used_twice(self):
+        link = self.main.auth.make_login_link("sam@example.com")
+        token = link.split("token=", 1)[1]
+        first = self.client.get(f"/auth/verify?token={token}",
+                                follow_redirects=False)
+        self.assertEqual(first.status_code, 303)
+
+        self.client.cookies.clear()
+        second = self.client.get(f"/auth/verify?token={token}",
+                                 follow_redirects=False)
+        self.assertEqual(second.status_code, 200)
+        self.assertIn("expired or was already used", second.text)
+
+    def test_a_forged_token_is_refused(self):
+        r = self.client.get("/auth/verify?token=made.up.token",
+                            follow_redirects=False)
+        self.assertIn("expired or was already used", r.text)
+
+    def test_signed_out_users_are_sent_to_login(self):
+        for path in ("/dashboard", "/profile", "/drafts", "/account"):
+            r = self.client.get(path, follow_redirects=False)
+            self.assertEqual(r.status_code, 303, path)
+            self.assertEqual(r.headers["location"], "/login", path)
+
+
+class TestPaywall(AppTestCase):
+    env = {"BILLING_ENABLED": "1", "DEV_MODE": "1",
+           "STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_PRICE_ID": "price_x",
+           "STRIPE_WEBHOOK_SECRET": "whsec_test"}
+
+    def test_an_unpaid_user_hits_the_paywall(self):
+        self.sign_in()
+        r = self.client.get("/dashboard")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Subscribe to start", r.text)
+
+    def test_the_success_redirect_does_not_grant_access(self):
+        # Anyone can type this URL. It must not be worth anything.
+        self.sign_in()
+        self.client.get("/billing/done?ok=1")
+        r = self.client.get("/dashboard")
+        self.assertIn("Subscribe to start", r.text)
+
+    def test_a_verified_webhook_does_grant_access(self):
+        self.sign_in()
+        user = self.main.db.get_or_create_user("sam@example.com")
+        body = json.dumps({
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer": "cus_1", "subscription": "sub_1",
+                                "client_reference_id": str(user["id"]),
+                                "metadata": {"user_id": str(user["id"])}}},
+        }).encode()
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": self._sig(body)})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Dashboard", self.client.get("/dashboard").text)
+
+    def test_an_unsigned_webhook_is_refused(self):
+        body = b'{"type":"checkout.session.completed"}'
+        r = self.client.post("/webhooks/stripe", content=body)
+        self.assertEqual(r.status_code, 400)
+
+    def test_a_wrongly_signed_webhook_is_refused(self):
+        body = b'{"type":"checkout.session.completed"}'
+        bad = f"t={int(time.time())},v1=deadbeef"
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": bad})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("signature did not match", r.text)
+
+    def test_a_replayed_old_webhook_is_refused(self):
+        body = b'{"type":"checkout.session.completed"}'
+        old = int(time.time()) - 4000
+        sig = hmac.new(b"whsec_test", b"%d.%s" % (old, body),
+                       hashlib.sha256).hexdigest()
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": f"t={old},v1={sig}"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("outside tolerance", r.text)
+
+    def test_a_cancelled_subscription_closes_access_again(self):
+        self.sign_in()
+        user = self.main.db.get_or_create_user("sam@example.com")
+        self.main.db.set_billing(user["id"], status="active",
+                                 customer_id="cus_1")
+        self.assertIn("Dashboard", self.client.get("/dashboard").text)
+
+        body = json.dumps({
+            "type": "customer.subscription.deleted",
+            "data": {"object": {"customer": "cus_1", "id": "sub_1",
+                                "current_period_end": int(time.time()) - 10,
+                                "metadata": {"user_id": str(user["id"])}}},
+        }).encode()
+        self.client.post("/webhooks/stripe", content=body,
+                         headers={"stripe-signature": self._sig(body)})
+        self.assertIn("Subscribe to start", self.client.get("/dashboard").text)
+
+    def _sig(self, body: bytes) -> str:
+        ts = int(time.time())
+        mac = hmac.new(b"whsec_test", b"%d.%s" % (ts, body),
+                       hashlib.sha256).hexdigest()
+        return f"t={ts},v1={mac}"
+
+
+class TestProfileForm(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+
+    def _good_form(self, **over):
+        form = {
+            "name": "Sam Doherty", "location": "Sheffield",
+            "phone": "07700 900123", "email": "sam@example.com",
+            "situation": "employed", "current_salary": "32000",
+            "min_salary_annual": "38000", "min_rate_hourly": "20",
+            "priorities": ["money", "progression"],
+            "h_title": ["Maintenance Technician"], "h_org": ["Brightwater"],
+            "h_detail": ["fault finding on PLC lines"],
+            "qualifications": "Level 3 NVQ",
+            "never_claim": "that I hold a current 17th Edition",
+            "locations": "Sheffield\nRotherham",
+            "target_roles": "maintenance technician",
+            "radius_miles": "25",
+        }
+        form.update(over)
+        return form
+
+    def test_a_good_profile_saves(self):
+        r = self.client.post("/profile", data=self._good_form(),
+                             follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        saved = self.main.db.load_profile(1)
+        self.assertEqual(saved["name"], "Sam Doherty")
+        self.assertEqual(saved["never_claim"],
+                         ["that I hold a current 17th Edition"])
+        self.assertEqual(saved["locations"], ["Sheffield", "Rotherham"])
+
+    def test_a_floor_below_current_salary_is_refused_in_the_ui(self):
+        r = self.client.post("/profile",
+                             data=self._good_form(min_salary_annual="28000"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("pay cut", r.text)
+        self.assertIsNone(self.main.db.load_profile(1))
+
+    def test_the_form_and_the_engine_share_one_validator(self):
+        # A profile the web form accepts must be one the pipeline can load.
+        from jobseeker.profile import Profile
+        self.client.post("/profile", data=self._good_form())
+        Profile.from_dict(self.main.db.load_profile(1))
+
+
+class TestDrafts(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.draft_id = self.main.db.add_draft(
+            1, job_title="Shift Engineer", company="Kestrel Foods Ltd",
+            location="Rotherham", to_email="j.smith@kestrel.example",
+            to_name="Jo Smith", contact_tier=3, score=82,
+            subject="Shift engineer, nights covered",
+            body="Hi Jo,\n\nSaw the shift engineer role...")
+
+    def test_drafts_render_with_a_send_link(self):
+        r = self.client.get("/drafts")
+        self.assertIn("Shift Engineer", r.text)
+        self.assertIn("mailto:j.smith%40kestrel.example", r.text)
+        self.assertIn("named person", r.text)
+
+    def test_marking_sent_records_the_employer_as_contacted(self):
+        self.assertTrue(self.main.db.may_contact(1, "Kestrel Foods Ltd"))
+        self.client.post(f"/drafts/{self.draft_id}/sent", follow_redirects=False)
+        self.assertFalse(self.main.db.may_contact(1, "Kestrel Foods Ltd"))
+        # and the same employer under a slightly different name
+        self.assertFalse(self.main.db.may_contact(1, "Kestrel Foods"))
+
+    def test_blocking_an_employer_is_permanent_and_discards_the_draft(self):
+        self.client.post(f"/drafts/{self.draft_id}/block", follow_redirects=False)
+        self.assertTrue(self.main.db.is_blocked(1, "Kestrel Foods Ltd"))
+        self.assertFalse(self.main.db.may_contact(1, "KESTREL FOODS LIMITED"))
+
+    def test_one_user_cannot_touch_another_users_draft(self):
+        other = self.main.db.get_or_create_user("someone.else@example.com")
+        self.assertIsNone(self.main.db.get_draft(other["id"], self.draft_id))
+        self.client.cookies.clear()
+        self.sign_in("someone.else@example.com")
+        self.client.post(f"/drafts/{self.draft_id}/sent", follow_redirects=False)
+        row = self.main.db.get_draft(1, self.draft_id)
+        self.assertEqual(row["status"], "draft")   # untouched
+
+
+class TestConfigRefusals(unittest.TestCase):
+    def test_production_without_a_secret_key_refuses_to_start(self):
+        os.environ.pop("SECRET_KEY", None)
+        os.environ["DEV_MODE"] = "0"
+        os.environ["BILLING_ENABLED"] = "0"
+        with self.assertRaises(RuntimeError) as ctx:
+            importlib.reload(importlib.import_module("app.config"))
+        self.assertIn("SECRET_KEY", str(ctx.exception))
+
+    def test_billing_on_without_stripe_keys_refuses_to_start(self):
+        os.environ["SECRET_KEY"] = "x" * 40
+        os.environ["DEV_MODE"] = "0"
+        os.environ["BILLING_ENABLED"] = "1"
+        for k in ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET"):
+            os.environ.pop(k, None)
+        with self.assertRaises(RuntimeError) as ctx:
+            importlib.reload(importlib.import_module("app.config"))
+        self.assertIn("STRIPE_SECRET_KEY", str(ctx.exception))
+
+    def tearDown(self):
+        os.environ["DEV_MODE"] = "1"
+        os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
+        os.environ["BILLING_ENABLED"] = "0"
+        importlib.reload(importlib.import_module("app.config"))
+
+
+if __name__ == "__main__":
+    unittest.main()

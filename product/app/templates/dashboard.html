@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if not profile %}
+  <div class="note bad">Your profile is empty, so nothing can be searched for
+  or written yet. It takes about ten minutes.</div>
+  <p><a class="btn" href="/profile">Fill in your profile</a></p>
+{% else %}
+  <div class="stats">
+    <div class="stat"><b>{{ counts.get('draft', 0) }}</b><span>waiting to send</span></div>
+    <div class="stat"><b>{{ counts.get('sent', 0) }}</b><span>sent</span></div>
+    <div class="stat"><b>{{ counts.get('discarded', 0) }}</b><span>discarded</span></div>
+  </div>
+
+  {% if drafts %}
+    <h2>Ready to send</h2>
+    {% for d in drafts %}
+      <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
+        <h3>{{ d['job_title'] }}</h3>
+        <p class="meta">{{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
+          {% if d['to_name'] %} &middot; to {{ d['to_name'] }}{% endif %}</p>
+      </div>
+    {% endfor %}
+    <p><a class="btn" href="/drafts">Work through them</a></p>
+  {% else %}
+    <div class="panel">
+      <p>Nothing waiting. New listings are checked three times a weekday, and
+      anything that clears your floor and has a real address behind it will
+      appear here written and ready.</p>
+      <p class="muted">Quiet stretches are normal. A day with nothing worth
+      sending is better than a day spent on jobs that pay less than yours.</p>
+    </div>
+  {% endif %}
+
+  <h2>Your search</h2>
+  <div class="panel">
+    <p><b>{{ profile.get('name') }}</b> &middot; {{ profile.get('location') }}</p>
+    <p class="muted">
+      {% if profile.get('min_salary_annual') %}Floor £{{ '{:,}'.format(profile.get('min_salary_annual')) }}{% endif %}
+      {% if profile.get('min_rate_hourly') %} or £{{ profile.get('min_rate_hourly') }}/hr{% endif %}
+      &middot; {{ (profile.get('locations') or []) | join(', ') }}
+    </p>
+    <p><a class="btn ghost" href="/profile">Edit</a></p>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}job machine{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="bar">
+  <a class="brand" href="/">job<span>machine</span></a>
+  <nav>
+    {% if user %}
+      <a href="/dashboard">Dashboard</a>
+      <a href="/drafts">Drafts</a>
+      <a href="/profile">Profile</a>
+      <a href="/account">Account</a>
+      <form method="post" action="/logout"><button class="link">Sign out</button></form>
+    {% else %}
+      <a href="/playbook">Playbook</a>
+      <a class="cta" href="/login">Sign in</a>
+    {% endif %}
+  </nav>
+</header>
+
+<main>
+  {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+  <p>One email per employer. Never a guessed address. Never a claim you
+     cannot back.</p>
+  <p><a href="/playbook">The playbook</a> is free, and always will be.</p>
+</footer>
+
+</body>
+</html>

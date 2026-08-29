@@ -29,28 +29,45 @@ chases twice if nobody answers.
 
 ## Status — read this before you start
 
-Being straight about where this is, because half-finished is worse than honest.
+Being straight about where this is, because half-finished is worse than
+honest.
 
 **Working now:**
 
-- `jobseeker/profile.py` — your whole search described in one file, with
-  validation that refuses a profile which would send wrong letters
-- `jobseeker/wizard.py` — an interactive setup that writes that file for you
-  and then **calls every API to prove your keys work** before your first run
-- `profile.example.yaml` — a worked example to copy
-- `PLAYBOOK.md` — complete and standalone
+- **The app** (`app/`) — sign-in without passwords, a Stripe paywall, a
+  profile form, and a drafts screen you work through one click at a time.
+  Run it locally in one command; see [DEPLOY.md](DEPLOY.md) to put it online.
+- `jobseeker/profile.py` — your whole search in one file, with validation
+  that refuses a profile which would send wrong letters
+- `jobseeker/wizard.py` — a terminal setup that writes that file and
+  **calls every API to prove your keys work**
+- `PLAYBOOK.md` — complete, and free to everyone at `/playbook`
 
 **Not done yet:**
 
-- The engine at the repository root still has its original owner's details
-  compiled in. Pointing it at your `profile.yaml` is the next piece of work.
-  Until that lands, this directory gives you the profile format, the setup and
-  the method — not a turnkey run.
+- **The pipeline that fills the drafts screen.** Harvesting listings, scoring
+  them and discovering addresses is the original engine's 3,300 lines, and it
+  still has its author's details compiled in. Until it is ported, the app runs
+  end to end but the drafts table is filled by hand.
 
-So today this is the playbook plus the scaffolding. If you want the full
-automated version, that is the next step, not a promise already delivered.
+So: the product's shell is real and the money path works. The engine is the
+next piece.
 
----
+## How sending works, and why
+
+The app writes the letter. **You press send**, from your own mail client, in
+one click.
+
+That is a deliberate choice, not a missing feature. Sending as you would need
+either Gmail OAuth — `gmail.send` is a Google restricted scope needing an
+annual five-figure security assessment — or your mail password kept on our
+server. The first is closed to a small operator and the second is one breach
+away from disaster.
+
+Hand-off keeps the letter coming from your address, with your signature and
+your reputation, which is also the reason these get answered at all. Automatic
+sending is implemented (`app/delivery.py`) for anyone who decides the
+trade-off differently.
 
 ## Setting up
 
@@ -59,6 +76,12 @@ You need Python 3.9 or newer.
 ```bash
 cd product
 pip install -r requirements.txt
+
+# run the app
+DEV_MODE=1 BILLING_ENABLED=0 SECRET_KEY=dev uvicorn app.main:app --reload
+# -> http://127.0.0.1:8000, sign-in links printed to the terminal
+
+# or set up a profile in the terminal instead
 python -m jobseeker.wizard
 ```
 
@@ -119,20 +142,26 @@ at vetting, and it is the one mistake here that follows you. Fill this in.
 
 ```bash
 cd product
-python -m unittest discover -s tests
+python -m unittest discover -s tests        # 22, the profile layer
+python -m unittest app.tests.test_app       # 25, the app
 ```
 
-22 tests, all about refusing bad profiles rather than accepting good ones. A
-profile that loads but is subtly wrong does not crash — it sends confident,
-inaccurate mail to real employers.
+47 tests. The profile ones are almost all about *refusing* bad profiles rather
+than accepting good ones, because a profile that loads but is subtly wrong does
+not crash — it sends confident, inaccurate mail to real employers.
+
+The app ones concentrate on the two things that are expensive to get wrong: a
+sign-in link must not work twice, and nobody becomes a paying customer without
+a cryptographically verified Stripe webhook.
 
 ---
 
 ## Before you send anything to a real employer
 
-- **Dry run first.** Read the drafts. All of them.
-- **Then `TEST_MODE=1`**, which sends properly but only to your own inbox.
-- **Then live**, with the caps low for the first week.
+- **Read the drafts.** All of them, for the first week.
+- **Check the address** each one is going to before you press send.
+- **Open the original advert** — the link is on every draft — and check the
+  letter's first line actually refers to *that* job.
 
 You are responsible for what goes out under your name. Read the first ten before
 you trust it with the eleventh.
