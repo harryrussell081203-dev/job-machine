@@ -262,11 +262,13 @@ def is_course_advert(job):
     return bool(NOT_A_VACANCY.search(blob))
 
 CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
-- IN WORK. Technician with an Aberdeen engineering firm since 24 August 2026.
-  Monday to Friday, half-day Friday, no offshore, GBP 30,000 a year on GBP 15
-  an hour. NEVER NAME THIS EMPLOYER - not in a letter, not in a subject line,
-  not anywhere. It is nobody else's business, and in a city this size it gets
-  straight back to them that he is looking.
+- IN WORK. Technician with an Aberdeen engineering firm since 24 August 2026,
+  testing and repairing subsea cables, connectors and terminations, and
+  moulding/potting cable assemblies in epoxy resin and polyurethane to marine
+  sealing standards. Monday to Friday, half-day Friday, no offshore, GBP 30,000
+  a year on GBP 15 an hour. NEVER NAME THIS EMPLOYER - not in a letter, not in
+  a subject line, not anywhere. It is nobody else's business, and in a city
+  this size it gets straight back to them that he is looking.
   The fact of it matters to every judgement below: he is not looking for a job,
   he is looking for a BETTER one, and a role that matches his trade but pays
   the same or less is worth nothing to him however good the fit.
