@@ -1,0 +1,46 @@
+# One-click deploy on Render: New > Blueprint > point at this repo.
+services:
+  - type: web
+    name: job-machine
+    runtime: python
+    plan: starter                 # needs to be a paid plan for the disk
+    rootDir: product
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    disk:
+      name: data
+      mountPath: /data            # SQLite lives here and survives deploys
+      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /data/jobmachine.db
+      - key: SECRET_KEY
+        generateValue: true       # Render generates and stores it
+      - key: BILLING_ENABLED
+        value: "1"
+      - key: DELIVERY_MODE
+        value: handoff
+      - key: PRICE_LABEL
+        value: "£9 a month"
+      # Set these in the dashboard - never in this file.
+      - key: BASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: APP_SMTP_ADDRESS
+        sync: false
+      - key: APP_SMTP_PASSWORD
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: REED_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
