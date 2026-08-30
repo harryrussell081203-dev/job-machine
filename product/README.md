@@ -69,6 +69,27 @@ your reputation, which is also the reason these get answered at all. Automatic
 sending is implemented (`app/delivery.py`) for anyone who decides the
 trade-off differently.
 
+## Two ways to run it
+
+**Free, on GitHub Actions.** No server, no domain, no database, no card. Fork
+the repo, add your keys as repository secrets, fill in `profile.yaml`, and the
+included workflow runs it three times a weekday on GitHub's hardware. Drafts
+arrive as an email with a send button beside each letter. This is how the
+original has run for months and it costs nothing.
+
+```bash
+python -m jobseeker.cli --profile profile.yaml --dry-run   # see the letters
+python -m jobseeker.cli --profile profile.yaml             # email them to yourself
+```
+
+**As a web app**, if you want accounts and a paywall to charge other people.
+That needs hosting with a persistent disk, around £5 a month. See
+[DEPLOY.md](DEPLOY.md).
+
+The pipeline is identical either way.
+
+---
+
 ## Setting up
 
 You need Python 3.9 or newer.

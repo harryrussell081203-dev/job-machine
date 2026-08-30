@@ -1,0 +1,72 @@
+# Runs the machine on GitHub's own hardware, free.
+#
+# Public repos get unlimited Actions minutes; private repos get 2,000 a month
+# and this uses about three a day. There is no server, no domain and no
+# database - state is one JSON file this workflow commits back to the repo.
+name: job machine
+
+on:
+  schedule:
+    # Cold outreach replies best Tuesday to Thursday, 9-11am in the reader's
+    # time zone. GitHub cron is UTC and does not shift with British Summer
+    # Time, so both 8 and 9 are scheduled: one of them lands in the window
+    # whatever the season.
+    - cron: "0 8 * * 2-4"
+    - cron: "0 9 * * 2-4"
+    # Monday and Friday still get a look, because being an early applicant
+    # beats being a well-timed one.
+    - cron: "0 8 * * 1,5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the letters instead of emailing them"
+        type: boolean
+        default: false
+
+# Needed so the run can commit state.json back.
+permissions:
+  contents: write
+
+concurrency:
+  group: job-machine
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Look for work
+        env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}
+        run: |
+          python -m jobseeker.cli \
+            --profile profile.yaml \
+            --state data/state.json \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Remember what was seen
+        if: ${{ !inputs.dry_run }}
+        run: |
+          # Nothing to commit is the normal outcome on a quiet day, and must
+          # not fail the run.
+          git config user.name "job machine"
+          git config user.email "actions@github.com"
+          git add data/state.json
+          git diff --staged --quiet || git commit -m "state $(date -u +%Y-%m-%d_%H%M)"
+          git push
