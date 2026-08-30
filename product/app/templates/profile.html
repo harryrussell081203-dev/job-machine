@@ -4,6 +4,21 @@
 <p class="lede">Everything written on your behalf comes from this page. Vague
 in, vague out.</p>
 
+{% if from_cv %}
+  <div class="note good">
+    <p><b>Filled in from your CV.</b> Read every line before you save it &mdash;
+       these are a machine's reading of your document, and they are about to be
+       used to write to real employers under your name.</p>
+    <p>Two things were deliberately left blank, because they are yours to
+       state and a guess at either is worse than nothing: <b>the least you will
+       work for</b>, and <b>anything you must never be described as holding</b>.</p>
+  </div>
+{% elif request.query_params.get('e') == 'cv' %}
+  <div class="note">Your CV is saved and will be attached to every letter, but
+    I could not read enough from it to fill this in &mdash; often it is a scan
+    rather than text. Please fill it in by hand; it takes about ten minutes.</div>
+{% endif %}
+
 <form method="post" action="/profile">
 
   <div class="panel">

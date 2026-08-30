@@ -3,9 +3,9 @@
 <h1>Dashboard</h1>
 
 {% if not profile %}
-  <div class="note bad">Your profile is empty, so nothing can be searched for
-  or written yet. It takes about ten minutes.</div>
-  <p><a class="btn" href="/profile">Fill in your profile</a></p>
+  <div class="note bad">Nothing can be searched for or written until you have
+  set up. It takes about ten minutes.</div>
+  <p><a class="btn" href="/setup">Set it up</a></p>
 {% else %}
   <div class="stats">
     <div class="stat"><b>{{ counts.get('draft', 0) }}</b><span>waiting to send</span></div>

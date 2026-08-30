@@ -27,47 +27,83 @@ chases twice if nobody answers.
 
 ---
 
-## Status — read this before you start
-
-Being straight about where this is, because half-finished is worse than
-honest.
+## What it does
 
 **Working now:**
 
-- **The app** (`app/`) — sign-in without passwords, a Stripe paywall, a
-  profile form, and a drafts screen you work through one click at a time.
-  Run it locally in one command; see [DEPLOY.md](DEPLOY.md) to put it online.
-- `jobseeker/profile.py` — your whole search in one file, with validation
-  that refuses a profile which would send wrong letters
-- `jobseeker/wizard.py` — a terminal setup that writes that file and
-  **calls every API to prove your keys work**
-- `PLAYBOOK.md` — complete, and free to everyone at `/playbook`
+- **The app** (`app/`) — sign in without a password, a Stripe paywall, upload
+  your CV, answer the questions, and a drafts screen you work through one
+  click at a time. Installs to a phone home screen; see below.
+- **The whole pipeline** — harvest, score, find a real named address, write
+  the letter. `jobseeker/pipeline/`.
+- **Automatic sending**, if you want it: connect your own email once and
+  letters go out on their own, with your CV attached, from your address.
+- **Scheduled runs** for every subscriber, on free GitHub Actions hardware.
+- `PLAYBOOK.md` — the method, complete, free to everyone at `/playbook`.
 
-**Not done yet:**
+**Not done:**
 
-- **The pipeline that fills the drafts screen.** Harvesting listings, scoring
-  them and discovering addresses is the original engine's 3,300 lines, and it
-  still has its author's details compiled in. Until it is ported, the app runs
-  end to end but the drafts table is filled by hand.
+- A privacy policy and terms. Required before charging anyone in the UK.
+- Commercial API terms from Adzuna, Reed and Google. Their free tiers are for
+  personal use, and this is the thing most likely to change the shape of the
+  product.
 
-So: the product's shell is real and the money path works. The engine is the
-next piece.
+Nothing here has yet made a live API call to Adzuna, Reed, Gemini or Stripe —
+they are unreachable from the build container, so every test uses an injected
+fake. The logic is exercised; the credentials and response shapes are not.
 
-## How sending works, and why
+## Two ways letters go out
 
-The app writes the letter. **You press send**, from your own mail client, in
-one click.
+**By hand (the default).** The app writes the letter and you press send from
+your own mail client, one click each. Nothing of yours is stored.
 
-That is a deliberate choice, not a missing feature. Sending as you would need
-either Gmail OAuth — `gmail.send` is a Google restricted scope needing an
-annual five-figure security assessment — or your mail password kept on our
-server. The first is closed to a small operator and the second is one breach
-away from disaster.
+**Automatically.** You connect your own email once and letters go out without
+being asked. This is what most people want, and it is off until you turn it
+on.
 
-Hand-off keeps the letter coming from your address, with your signature and
-your reputation, which is also the reason these get answered at all. Automatic
-sending is implemented (`app/delivery.py`) for anyone who decides the
-trade-off differently.
+Automatic sending needs your mail password, because there is no way to send
+as somebody without something that authorises it. Be clear about the
+trade-off before you turn it on:
+
+- Use an **app password**, not your account password. It is revocable on its
+  own, without changing your password or touching another device.
+- It is stored **encrypted**, with a key held in the environment and never in
+  the database — so a leaked database dump, the most likely breach by a
+  distance, yields ciphertext.
+- It is still **access to your mailbox**. An app password can read that
+  mailbox as well as send from it. That is the honest summary, and it is why
+  the by-hand route exists and always will.
+
+Three guard rails apply whichever you choose, and two more only to automatic:
+
+| Rule | Why |
+| --- | --- |
+| One employer, one letter, ever | The method stops working the moment it is abused |
+| Never a guessed address | A guessed address bounces and costs you the next thirty |
+| Never a claim you do not hold | The one mistake that follows you to vetting |
+| A holding window before sending | Automatic does not have to mean unrecallable |
+| A daily ceiling | Broad search terms must not become four hundred letters |
+
+The holding window is the important one. A draft waits — an hour by default —
+before it goes, so anything that reads wrong can be stopped. No employer reads
+their email in that hour, so the window costs nothing.
+
+## Installing it on a phone
+
+The app installs to a home screen from a plain link: no app store, no review,
+no developer fee. On Android and desktop Chrome it offers an Install button;
+on iPhone it is Share → Add to Home Screen.
+
+If you want it in the actual stores later, the honest costs:
+
+| | Fee | The catch |
+| --- | --- | --- |
+| Install from a link | £0 | Works today, on every platform |
+| Google Play | $25 once | Play Billing takes 15% of subscriptions |
+| App Store | $99/year | Guideline 4.2 rejects thin web wrappers, and in-app purchase takes 15–30% |
+
+The install-from-a-link route keeps 100% of the subscription and needs
+nobody's permission, which is why it is the one that is built.
 
 ## Two ways to run it
 
@@ -163,17 +199,24 @@ at vetting, and it is the one mistake here that follows you. Fill this in.
 
 ```bash
 cd product
-python -m unittest discover -s tests        # 22, the profile layer
-python -m unittest app.tests.test_app       # 25, the app
+python -m unittest discover -s tests          # 189, the profile and pipeline
+python -m unittest discover -s app/tests -t . # 108, the app
 ```
 
-47 tests. The profile ones are almost all about *refusing* bad profiles rather
+297 tests. The pipeline ones are largely about *refusing* bad profiles rather
 than accepting good ones, because a profile that loads but is subtly wrong does
 not crash — it sends confident, inaccurate mail to real employers.
 
-The app ones concentrate on the two things that are expensive to get wrong: a
-sign-in link must not work twice, and nobody becomes a paying customer without
-a cryptographically verified Stripe webhook.
+The app ones concentrate on what is expensive to get wrong:
+
+- a sign-in link must not work twice
+- nobody becomes a paying customer without a verified Stripe webhook
+- a mail password must not be readable from a database row
+- one employer must get one letter, even when two drafts arrive together
+- a rejected password must stop, not retry until the account locks
+- an uploaded file must not be trusted because of what it is called
+- the service worker must never cache a page, because a cached dashboard on a
+  shared phone is one person's job search shown to the next one
 
 ---
 

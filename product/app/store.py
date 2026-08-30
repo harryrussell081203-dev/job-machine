@@ -46,6 +46,9 @@ def _sql(query: str) -> str:
 def _schema() -> str:
     key = ("INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY" if IS_POSTGRES
            else "INTEGER PRIMARY KEY AUTOINCREMENT")
+    # Postgres spells a byte string BYTEA; SQLite calls it BLOB and would
+    # otherwise store it with TEXT affinity, which mangles a PDF.
+    blob = "BYTEA" if IS_POSTGRES else "BLOB"
     return f"""
 CREATE TABLE IF NOT EXISTS users (
     id              {key},
@@ -112,6 +115,64 @@ CREATE TABLE IF NOT EXISTS seen_listings (
     seen_at     BIGINT  NOT NULL,
     PRIMARY KEY (user_id, external_id)
 );
+
+-- The user's own mail account, so letters can be sent as them rather than
+-- as this service. The password is always ciphertext; see vault.py. It is a
+-- separate table from users so that a dump of the user list - the thing most
+-- likely to be shared around for support or analytics - carries no secrets.
+CREATE TABLE IF NOT EXISTS mail_accounts (
+    user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    address      TEXT    NOT NULL,
+    host         TEXT    NOT NULL,
+    port         INTEGER NOT NULL,
+    secret       TEXT    NOT NULL,
+    verified_at  BIGINT,
+    last_error   TEXT,
+    updated_at   BIGINT  NOT NULL
+);
+
+-- The CV lives in the database rather than on disk, for the same reason
+-- everything else does: the app process is disposable and free hosts have no
+-- persistent disk. A CV is a couple of hundred kilobytes, which a database
+-- carries without complaint.
+CREATE TABLE IF NOT EXISTS cvs (
+    user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    filename     TEXT    NOT NULL,
+    content_type TEXT    NOT NULL,
+    blob         {blob}  NOT NULL,
+    extracted    TEXT,
+    uploaded_at  BIGINT  NOT NULL
+);
+
+-- How this user wants letters to go out. Separate row per user because it is
+-- the setting most likely to differ between two people paying the same money.
+CREATE TABLE IF NOT EXISTS send_settings (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    auto_send      INTEGER NOT NULL DEFAULT 0,
+    -- Minutes a draft waits before it goes. Automatic still means automatic;
+    -- this is the window in which a letter that should not go out can be
+    -- stopped, and it costs nothing because employers do not read email in
+    -- the ninety seconds after it is written.
+    hold_minutes   INTEGER NOT NULL DEFAULT 60,
+    daily_cap      INTEGER NOT NULL DEFAULT 20,
+    paused_until   BIGINT,
+    updated_at     BIGINT  NOT NULL
+);
+
+-- One row per letter that actually left. Kept even when the draft is deleted,
+-- because "did we already write to this person" must outlive tidying up.
+CREATE TABLE IF NOT EXISTS sent_log (
+    id         {key},
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    draft_id   INTEGER,
+    to_email   TEXT NOT NULL,
+    company    TEXT,
+    sent_at    BIGINT NOT NULL,
+    ok         INTEGER NOT NULL DEFAULT 1,
+    error      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS sent_by_user ON sent_log(user_id, sent_at DESC);
 
 CREATE TABLE IF NOT EXISTS login_tokens (
     jti        TEXT PRIMARY KEY,

@@ -145,6 +145,14 @@ button.link:hover { color: var(--ink); text-decoration: underline; }
 }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .actions form { margin: 0; }
+/* On a narrow screen every action goes full width rather than leaving one
+   button stranded on a line of its own, which is what wrapping a row of
+   mixed buttons and links looks like at 390px. */
+@media (max-width: 460px) {
+  .actions { gap: 10px; }
+  .actions > *, .actions form, .actions .btn, .actions button { width: 100%; }
+  .actions .btn, .actions button { text-align: center; }
+}
 
 .tag {
   display: inline-block; font-size: 12px; padding: 2px 8px;
@@ -177,3 +185,45 @@ pre.playbook {
   white-space: pre-wrap; font: 14px/1.65 ui-monospace, SFMono-Regular,
   Menlo, Consolas, monospace;
 }
+
+/* ---- setup steps ---------------------------------------------------- */
+.step h2 { display: flex; align-items: center; gap: .6rem; margin-top: 0; }
+.step .num {
+  display: inline-grid; place-items: center;
+  width: 1.7rem; height: 1.7rem; border-radius: 50%;
+  background: #e8e8e3; color: #444; font-size: .95rem; flex: none;
+}
+.step.done .num { background: #1c5d3f; color: #fff; }
+.step.done .num::before { content: "\2713"; }
+.step.done .num { font-size: 0; }
+.step.done .num::before { font-size: 1rem; }
+.ok { color: #1c5d3f; }
+.hint { color: #666; font-size: .9rem; }
+.lede { color: #555; font-size: 1.05rem; margin-top: -.5rem; }
+
+form.inline { display: inline; }
+.btn.small { padding: .35rem .7rem; font-size: .9rem; }
+.link.danger { color: #9c3f18; }
+
+label.check { display: flex; gap: .6rem; align-items: flex-start;
+  margin: 1rem 0; cursor: pointer; }
+label.check input { margin-top: .25rem; flex: none; }
+label.check input:disabled + span { color: #888; }
+
+.row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.row label { flex: 1 1 12rem; }
+form.stack label { display: block; margin-bottom: 1rem; }
+form.stack input, form.stack select { width: 100%; }
+details summary { cursor: pointer; margin-bottom: .5rem; }
+
+/* ---- install prompt -------------------------------------------------- */
+.installbar {
+  display: flex; flex-wrap: wrap; gap: .75rem 1rem;
+  align-items: center; justify-content: space-between;
+  background: #1c5d3f; color: #fff;
+  padding: .7rem 1rem; font-size: .95rem;
+}
+.installbar[hidden] { display: none; }
+.installbar .link { color: #cfe3d8; }
+.installbtns { display: flex; gap: .5rem; align-items: center; }
+.installbar .btn.small { background: #fff; color: #1c5d3f; border-color: #fff; }

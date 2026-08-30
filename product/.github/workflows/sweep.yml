@@ -1,0 +1,70 @@
+name: Run the machine for every subscriber
+
+# This is what makes it a product rather than a page somebody has to visit.
+# Three times a weekday it looks for work for every paying user and sends
+# whatever is due, so a subscriber who never signs in still gets letters out.
+#
+# It runs on GitHub's hardware, which is free for public repositories, so the
+# scheduled compute costs nothing.
+
+on:
+  schedule:
+    # 07:10, 11:10 and 15:10 UTC, weekdays. Deliberately not on the hour:
+    # GitHub delays jobs scheduled at popular times, sometimes by a lot.
+    - cron: "10 7,11,15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be sent, without sending"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never two sweeps at once. Two overlapping runs could each read the same
+  # draft as unsent and send it twice, which is the one mistake this whole
+  # product is built to avoid.
+  group: sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: product
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Sweep
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CREDENTIAL_KEY: ${{ secrets.CREDENTIAL_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          STRIPE_PAYMENT_LINK: ${{ secrets.STRIPE_PAYMENT_LINK }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Without a database this would run against an empty SQLite file on
+          # a throwaway runner: no users, no drafts, and a green tick saying
+          # everything is fine. Refuse instead.
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL is not set, so there are no users to"\
+                 "sweep. Add it as a repository secret."
+            exit 1
+          fi
+          python -m app.sweep ${{ inputs.dry_run && '--dry-run' || '' }}

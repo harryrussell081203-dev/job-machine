@@ -1,0 +1,27 @@
+{
+  "name": "Job Machine",
+  "short_name": "Job Machine",
+  "description": "Writes to the people who do the hiring, and sends it for you.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf9f5",
+  "theme_color": "#1c5d3f",
+  "orientation": "any",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "/static/icons/icon-48.png",  "sizes": "48x48",  "type": "image/png" },
+    { "src": "/static/icons/icon-72.png",  "sizes": "72x72",  "type": "image/png" },
+    { "src": "/static/icons/icon-96.png",  "sizes": "96x96",  "type": "image/png" },
+    { "src": "/static/icons/icon-144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icons/maskable-512.png", "sizes": "512x512",
+      "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Drafts", "url": "/drafts" },
+    { "name": "Set up", "url": "/setup" }
+  ]
+}

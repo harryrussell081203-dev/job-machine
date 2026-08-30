@@ -131,6 +131,41 @@ with billing on but Stripe settings missing — both deliberately, because a
 paywall that silently defaults to open is not a thing you notice from the
 outside.
 
+## 3b. Two keys the new features need
+
+**`CREDENTIAL_KEY`** — required for automatic sending. It encrypts each user's
+mail password, and it lives in the environment, never in the database, so a
+leaked backup yields ciphertext.
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set it in Render **and** in GitHub Secrets — the scheduled sweep sends mail
+too, so it needs to read the same credentials.
+
+Two things about it worth knowing before you lose it:
+
+- **Changing it makes every stored mail password unreadable.** Users are told
+  to reconnect rather than being left wondering why nothing sends, but they do
+  all have to reconnect. Keep it somewhere safe.
+- **Without it the app still runs.** Letters are still written, and users send
+  them by hand in one click. The setup screen says automatic sending is
+  unavailable rather than quietly storing passwords in the clear.
+
+**The scheduled sweep.** `.github/workflows/sweep.yml` runs the machine for
+every subscriber three times a weekday on GitHub's free hardware. It needs the
+same secrets as the app: `DATABASE_URL`, `CREDENTIAL_KEY`, `SECRET_KEY`,
+`BASE_URL`, the Stripe pair, and the three job-search API keys. It refuses to
+run without `DATABASE_URL`, because a sweep against an empty throwaway
+database would find no users and report success.
+
+Check it before trusting it:
+
+```bash
+python -m app.sweep --dry-run    # who would be written to, and from where
+```
+
 ## 4. Mail for sign-in links
 
 `APP_SMTP_*` is the app talking to its own customers, and is separate from
@@ -156,6 +191,10 @@ limit collapses to one bucket for everybody. Check your host does set it.
 - Sign up as a real customer with a real card. Cancel it. Check both worked.
 - Confirm a cancelled subscription actually closes access.
 - Confirm the sign-in link email arrives and is not in spam.
+- **Connect your own mail account and send one real letter to yourself.**
+  Check it arrives, the CV is attached, and the From line has your name on it.
+- **Turn on automatic sending and watch one full cycle** with the holding
+  window set long, so you can see the letter before it goes.
 - Read ten generated letters end to end.
 
 ## What you still owe your users

@@ -13,3 +13,12 @@ httpx>=0.26
 # Only needed when DATABASE_URL points at Postgres (Supabase). The app runs on
 # SQLite without it.
 psycopg[binary]>=3.1
+
+# Encrypting the one secret this app has to hold: the user's own mail
+# password, needed to send letters as them. See app/vault.py.
+cryptography>=41.0
+
+# Reading an uploaded CV so the profile questions can be prefilled. Optional
+# in spirit - a CV that cannot be parsed is still a fine attachment - but
+# pinned here because onboarding is much worse without it.
+pypdf>=4.0
