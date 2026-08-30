@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Set up &middot; job machine{% endblock %}
+{% block content %}
+
+<h1>Get it running</h1>
+<p class="lede">Four things. Ten minutes. Then it works on its own.</p>
+
+{% if request.query_params.get('e') == 'nofile' %}
+  <div class="note bad">Choose a file first.</div>
+{% endif %}
+
+<!-- 1 ---------------------------------------------------------------- -->
+<div class="panel step {% if cv %}done{% endif %}">
+  <h2><span class="num">1</span> Your CV</h2>
+  {% if cv %}
+    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB
+       &mdash; attached to every letter that goes out.</p>
+    <div class="actions">
+      <a class="btn small" href="/cv">Download it</a>
+      <form method="post" action="/cv/delete">
+        <button class="link danger">Remove</button>
+      </form>
+    </div>
+  {% else %}
+    <p>It gets attached to every letter. Upload it first and I will read it to
+       fill in as much of the next step as I can.</p>
+    <form method="post" action="/setup/cv" enctype="multipart/form-data">
+      <input type="file" name="cv" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
+      <button class="btn">Upload</button>
+    </form>
+    <p class="hint">PDF is safest &mdash; it looks the same on the employer's
+       screen as it does on yours. 5MB limit.</p>
+  {% endif %}
+</div>
+
+<!-- 2 ---------------------------------------------------------------- -->
+<div class="panel step {% if profile %}done{% endif %}">
+  <h2><span class="num">2</span> Your search</h2>
+  {% if profile %}
+    <p class="ok">Set up for
+       {% if profile.target_roles %}{{ profile.target_roles | join(', ') }}{% else %}your roles{% endif %}
+       {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}.</p>
+    <p><a class="btn small" href="/profile">Change it</a></p>
+  {% else %}
+    <p>What you do, where you will travel, and the least you will work for.
+       The pay floor is the one that matters: without it you will be written
+       to employers paying less than you already earn.</p>
+    <div class="actions">
+      {% if cv %}<a class="btn" href="/setup/from-cv">Fill it in from my CV</a>{% endif %}
+      <a class="{% if cv %}link{% else %}btn{% endif %}" href="/profile">
+        {% if cv %}or do it by hand{% else %}Fill in your search{% endif %}</a>
+    </div>
+  {% endif %}
+</div>
+
+<!-- 3 ---------------------------------------------------------------- -->
+<div class="panel step {% if mail %}done{% endif %}">
+  <h2><span class="num">3</span> How letters go out</h2>
+
+  {% if not vault_ready %}
+    <div class="note bad">This deployment cannot store mail credentials, so
+      automatic sending is unavailable. Letters still get written, and you
+      send them in one click each. (Operator: set <code>CREDENTIAL_KEY</code>.)</div>
+  {% elif mail %}
+    <p class="ok">Connected as {{ mail.address }}.</p>
+    {% if mail.last_error %}
+      <div class="note bad">Last send failed: {{ mail.last_error }}</div>
+    {% endif %}
+    <form method="post" action="/setup/mail/forget" class="inline">
+      <button class="link danger">Disconnect</button>
+    </form>
+  {% else %}
+    <p>Connect your own email and letters go out by themselves, from your
+       address. Without it the app writes them and you press send.</p>
+    <p><a class="btn" href="/setup/mail">Connect my email</a></p>
+  {% endif %}
+</div>
+
+<!-- 4 ---------------------------------------------------------------- -->
+<div class="panel step">
+  <h2><span class="num">4</span> Sending rules</h2>
+  <form method="post" action="/setup/sending">
+    <label class="check">
+      <input type="checkbox" name="auto_send" value="1"
+             {% if settings.auto_send %}checked{% endif %}
+             {% if not mail %}disabled{% endif %}>
+      <span><b>Send automatically</b> &mdash; letters go out without asking
+        me{% if not mail %} <i>(connect your email first)</i>{% endif %}</span>
+    </label>
+
+    <div class="row">
+      <label>Wait before sending
+        <select name="hold_minutes">
+          {% for m, label in [(0, 'Send straight away'), (30, '30 minutes'),
+                              (60, '1 hour'), (180, '3 hours'),
+                              (720, '12 hours'), (1440, '1 day')] %}
+            <option value="{{ m }}" {% if settings.hold_minutes == m %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Most per day
+        <input type="number" name="daily_cap" min="1" max="50"
+               value="{{ settings.daily_cap }}">
+      </label>
+    </div>
+
+    <p class="hint">The wait is your undo. A letter sits for that long before
+      it goes, so anything that reads wrong can be stopped from the drafts
+      screen &mdash; and no employer reads their email in the next hour
+      anyway.</p>
+
+    <button class="btn">Save</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>What happens then</h2>
+  <p>Adzuna and Reed are searched three times a weekday for your roles in your
+     towns. Anything under 48 hours old that clears your pay floor gets a real
+     named address dug out of the advert or the company's own site &mdash;
+     never guessed &mdash; and a letter written to it with your CV attached.</p>
+  <p>One employer, one letter, ever. Nothing claimed that you did not say you
+     hold.</p>
+  <p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
+</div>
+
+{% endblock %}

@@ -26,7 +26,7 @@ sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
-from . import auth, billing, config, db, delivery, ratelimit  # noqa: E402
+from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
 
 app = FastAPI(title="job machine", docs_url=None, redoc_url=None)
@@ -416,6 +416,281 @@ async def stripe_webhook(request: Request):
     return PlainTextResponse(billing.apply_event(event), status_code=200)
 
 
+@app.get("/sw.js")
+def service_worker():
+    """Served from the root, not from /static/.
+
+    A service worker only controls URLs at or below its own path, so one
+    living at /static/sw.js could never control /dashboard - it would register
+    without error and then do nothing, which is the most annoying kind of
+    broken.
+    """
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        HERE / "static" / "sw.js", media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/",
+                 "Cache-Control": "no-cache"})
+
+
+@app.get("/favicon.ico")
+def favicon():
+    from fastapi.responses import FileResponse
+    return FileResponse(HERE / "static" / "icons" / "favicon.ico",
+                        media_type="image/x-icon")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    from fastapi.responses import FileResponse
+    return FileResponse(HERE / "static" / "manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+# ----------------------------------------------------------------------
+# getting started: CV, then the questions, then how it sends
+# ----------------------------------------------------------------------
+def _gate(request: Request):
+    """Signed in and paid, or the response that says otherwise.
+
+    Returns (user, None) when they may proceed, (None, response) when not.
+    Every screen below is behind the paywall, so this is written once.
+    """
+    user = current_user(request)
+    if not user:
+        return None, needs_login()
+    if not db.is_paid(user):
+        return None, render(request, "paywall.html", user=user)
+    return user, None
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def setup(request: Request):
+    """Where somebody lands after paying. Shows what is done and what is not,
+    rather than dropping them on an empty dashboard."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    return render(request, "setup.html", user=user,
+                  cv=db.cv_summary(user["id"]),
+                  profile=db.load_profile(user["id"]),
+                  mail=db.get_mail_account(user["id"]),
+                  settings=db.get_send_settings(user["id"]),
+                  vault_ready=vault.available())
+
+
+@app.post("/setup/cv")
+async def upload_cv(request: Request):
+    """Take the CV, and use it to answer as many questions as it can."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    form = await request.form()
+    upload = form.get("cv")
+    if upload is None or not getattr(upload, "filename", ""):
+        return RedirectResponse("/setup?e=nofile", status_code=303)
+
+    # Read with a ceiling rather than trusting the declared length: the only
+    # size that means anything is the number of bytes that actually arrived.
+    # Reading in chunks and stopping matters - `await upload.read()` with no
+    # argument will happily pull a 500MB upload into memory before anything
+    # gets a chance to reject it, which is a way to take the server down from
+    # a signed-in account.
+    blob = b""
+    while len(blob) <= cvlib.MAX_BYTES:
+        chunk = await upload.read(64 * 1024)
+        if not chunk:
+            break
+        blob += chunk
+    try:
+        cvlib.check(upload.filename, blob)
+    except cvlib.CVError as exc:
+        return render(request, "setup.html", user=user, error=str(exc),
+                      cv=db.cv_summary(user["id"]),
+                      profile=db.load_profile(user["id"]),
+                      mail=db.get_mail_account(user["id"]),
+                      settings=db.get_send_settings(user["id"]),
+                      vault_ready=vault.available())
+
+    text = cvlib.extract_text(upload.filename, blob)
+    db.save_cv(user["id"], filename=upload.filename,
+               content_type=upload.content_type or "application/octet-stream",
+               blob=blob, extracted=text)
+
+    # Only offer to prefill an empty profile. Overwriting answers somebody
+    # already gave with a model's reading of their CV would be rude and wrong.
+    if text and not db.load_profile(user["id"]):
+        return RedirectResponse("/setup/from-cv", status_code=303)
+    return RedirectResponse("/setup", status_code=303)
+
+
+@app.get("/setup/from-cv", response_class=HTMLResponse)
+def profile_from_cv(request: Request):
+    """The profile form, prefilled from the CV, for the user to correct.
+
+    Never saved without them pressing save. A model reading a CV gets things
+    wrong, and the two fields it is never allowed to touch - the pay floor and
+    the never-claim list - are exactly the two that must be deliberate.
+    """
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    row = db.get_cv(user["id"])
+    if not row or not row["extracted"]:
+        return RedirectResponse("/profile", status_code=303)
+
+    from .ai import gemini
+    data = cvlib.suggest_profile(row["extracted"], gemini)
+    if not data:
+        return RedirectResponse("/profile?e=cv", status_code=303)
+    data.setdefault("email", user["email"])
+    return render(request, "profile.html", user=user, data=data,
+                  from_cv=True)
+
+
+@app.post("/setup/sending")
+async def save_sending(request: Request):
+    """Automatic or by hand, and the guard rails either way."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    form = await request.form()
+    auto = 1 if form.get("auto_send") else 0
+
+    if auto and not db.get_mail_account(user["id"]):
+        return RedirectResponse("/setup/mail?e=needed", status_code=303)
+
+    def clamp(name, default, low, high):
+        try:
+            return max(low, min(high, int(form.get(name) or default)))
+        except (TypeError, ValueError):
+            return default
+
+    db.save_send_settings(
+        user["id"], auto_send=auto,
+        # Ceilings, not suggestions. A user who types 500 into the daily cap
+        # is not making a considered decision about their own reputation.
+        hold_minutes=clamp("hold_minutes", 60, 0, 1440),
+        daily_cap=clamp("daily_cap", 20, 1, 50))
+    return RedirectResponse("/setup", status_code=303)
+
+
+@app.get("/setup/mail", response_class=HTMLResponse)
+def mail_form(request: Request):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    return render(request, "mail.html", user=user,
+                  mail=db.get_mail_account(user["id"]),
+                  vault_ready=vault.available(),
+                  profile=db.load_profile(user["id"]) or {})
+
+
+@app.post("/setup/mail", response_class=HTMLResponse)
+async def mail_save(request: Request):
+    """Connect a mail account, but only after proving it works.
+
+    The verification is not a nicety. Storing credentials that turn out to be
+    wrong means the user believes their letters are going out while nothing
+    is happening, which is the worst failure this product has.
+    """
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    if not vault.available():
+        return render(request, "mail.html", user=user, mail=None,
+                      vault_ready=False, profile=db.load_profile(user["id"]) or {},
+                      error="This deployment cannot store mail credentials "
+                            "yet, so automatic sending is unavailable. The "
+                            "operator needs to set CREDENTIAL_KEY.")
+
+    form = await request.form()
+    address = (form.get("address") or "").strip()
+    password = form.get("password") or ""
+    guessed = delivery.guess_host(address)
+    host = (form.get("host") or (guessed[0] if guessed else "")).strip()
+    try:
+        port = int(form.get("port") or (guessed[1] if guessed else 465))
+    except (TypeError, ValueError):
+        port = 465
+
+    def again(message):
+        return render(request, "mail.html", user=user, mail=None,
+                      vault_ready=True, error=message, address=address,
+                      host=host, port=port,
+                      profile=db.load_profile(user["id"]) or {})
+
+    if not address or "@" not in address:
+        return again("That does not look like an email address.")
+    if not password:
+        return again("The app password is missing.")
+    if not host:
+        return again("I do not know the mail server for that address - "
+                     "please fill in the server and port yourself.")
+
+    try:
+        delivery.verify(host=host, port=port, username=address,
+                        password=password)
+    except delivery.DeliveryError as exc:
+        return again(str(exc))
+
+    db.save_mail_account(user["id"], address=address, host=host, port=port,
+                         password=password)
+    return RedirectResponse("/setup", status_code=303)
+
+
+@app.post("/setup/mail/forget")
+def mail_forget(request: Request):
+    """Disconnect. Turns automatic sending off in the same breath, because
+    leaving it on with no way to send would silently do nothing."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    db.forget_mail_account(user["id"])
+    db.save_send_settings(user["id"], auto_send=0)
+    return RedirectResponse("/setup", status_code=303)
+
+
+@app.get("/cv")
+def download_cv(request: Request):
+    """Give the user back exactly what they uploaded."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    row = db.get_cv(user["id"])
+    if not row:
+        return RedirectResponse("/setup", status_code=303)
+    from fastapi.responses import Response
+    return Response(
+        bytes(row["blob"]),
+        media_type=delivery.guess_attachment_type(row["filename"]),
+        headers={"Content-Disposition":
+                 f'attachment; filename="{row["filename"]}"'})
+
+
+@app.post("/cv/delete")
+def remove_cv(request: Request):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    db.delete_cv(user["id"])
+    return RedirectResponse("/setup", status_code=303)
+
+
+@app.post("/send-now")
+def send_now(request: Request):
+    """Send everything due, without waiting for the next sweep."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    report = autosend.send_due_for_user(user["id"])
+    print(f"[send] user {user['id']}: {report.summary()}")
+    return RedirectResponse("/drafts", status_code=303)
