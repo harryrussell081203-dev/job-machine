@@ -59,21 +59,56 @@ STRIPE_SECRET_KEY = _env("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = _env("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = _env("STRIPE_WEBHOOK_SECRET")
 
+# A Stripe Payment Link (https://buy.stripe.com/...), configured in the Stripe
+# dashboard rather than in code. Setting this is the shortest route to taking
+# money: no secret key is needed, because the app never calls the Stripe API -
+# it just sends the customer to a page Stripe already hosts.
+#
+# The webhook secret is still required. Access is granted only by a verified
+# webhook, and that does not change because the checkout page came from a link.
+STRIPE_PAYMENT_LINK = _env("STRIPE_PAYMENT_LINK")
+
+# How long a ONE-OFF payment buys. Ignored for subscriptions, which carry
+# their own period end from Stripe.
+#
+# There is no right answer Stripe can tell us here: a single payment says
+# nothing about how long it was meant to last. Thirty days is the assumption,
+# and it is deliberately not "forever" - granting lifetime access to one
+# payment is the expensive way to discover the link was set up wrong.
+ONE_OFF_ACCESS_DAYS = int(_env("ONE_OFF_ACCESS_DAYS", "30"))
+
 # With billing switched off every signed-in account is treated as paid. It
 # exists so the app can be developed and demoed without Stripe, and it is
 # refused in production precisely because "the paywall was off" is not a
 # mistake anyone notices from the outside.
 BILLING_ENABLED = _flag("BILLING_ENABLED", True)
 if BILLING_ENABLED and not DEV:
-    missing = [n for n, v in (
-        ("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY),
-        ("STRIPE_PRICE_ID", STRIPE_PRICE_ID),
-        ("STRIPE_WEBHOOK_SECRET", STRIPE_WEBHOOK_SECRET),
-    ) if not v]
+    if STRIPE_PAYMENT_LINK:
+        # Link mode: no API calls, so no secret key. The webhook is still what
+        # opens the app, so it is still mandatory.
+        required = (("STRIPE_WEBHOOK_SECRET", STRIPE_WEBHOOK_SECRET),)
+    else:
+        required = (("STRIPE_SECRET_KEY", STRIPE_SECRET_KEY),
+                    ("STRIPE_PRICE_ID", STRIPE_PRICE_ID),
+                    ("STRIPE_WEBHOOK_SECRET", STRIPE_WEBHOOK_SECRET))
+    missing = [n for n, v in required if not v]
     if missing:
         raise RuntimeError(
-            f"billing is on but {', '.join(missing)} not set. Set them, or "
-            "set BILLING_ENABLED=0 to run without a paywall.")
+            f"billing is on but {', '.join(missing)} not set. Set them, or set "
+            "STRIPE_PAYMENT_LINK to use a Stripe Payment Link instead, or "
+            "BILLING_ENABLED=0 to run without a paywall.")
+
+
+def payment_link_for(user_id: int) -> str:
+    """The payment link with this user stamped on it.
+
+    client_reference_id is how a Payment Link payment gets tied back to an
+    account: Stripe echoes it on checkout.session.completed, which is the only
+    thing that opens the app. Without it a payment arrives from nobody in
+    particular and cannot be honoured.
+    """
+    join = "&" if "?" in STRIPE_PAYMENT_LINK else "?"
+    return f"{STRIPE_PAYMENT_LINK}{join}client_reference_id={user_id}"
 
 # --- the job search itself --------------------------------------------
 ADZUNA_APP_ID = _env("ADZUNA_APP_ID")

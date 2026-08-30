@@ -438,5 +438,140 @@ class TestDeletionWithBilling(AppTestCase):
                              "account was deleted despite a live subscription")
 
 
+class TestPaymentLink(AppTestCase):
+    """Taking money with a Stripe Payment Link and no secret key at all.
+
+    The link is public and hosted by Stripe; the only thing that opens the
+    app is still a verified webhook.
+    """
+    env = {"BILLING_ENABLED": "1", "DEV_MODE": "1",
+           "STRIPE_SECRET_KEY": "", "STRIPE_PRICE_ID": "",
+           "STRIPE_WEBHOOK_SECRET": "whsec_test",
+           "STRIPE_PAYMENT_LINK": "https://buy.stripe.com/test_abc123"}
+
+    def _sig(self, body: bytes) -> str:
+        ts = int(time.time())
+        mac = hmac.new(b"whsec_test", b"%d.%s" % (ts, body),
+                       hashlib.sha256).hexdigest()
+        return f"t={ts},v1={mac}"
+
+    def test_checkout_redirects_to_the_link_stamped_with_the_user(self):
+        self.sign_in()
+        r = self.client.get("/billing/checkout", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"],
+                         "https://buy.stripe.com/test_abc123?client_reference_id=1")
+
+    def test_an_existing_query_string_is_appended_to_not_broken(self):
+        self.assertEqual(
+            self.main.config.payment_link_for(7),
+            "https://buy.stripe.com/test_abc123?client_reference_id=7")
+        self.main.config.STRIPE_PAYMENT_LINK = "https://buy.stripe.com/x?locale=en"
+        self.assertEqual(self.main.config.payment_link_for(7),
+                         "https://buy.stripe.com/x?locale=en&client_reference_id=7")
+
+    def test_no_stripe_api_call_is_made(self):
+        # Link mode must not need a secret key. If it reached the API this
+        # would raise BillingError for the missing key.
+        self.sign_in()
+        r = self.client.get("/billing/checkout", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertIn("buy.stripe.com", r.headers["location"])
+
+    def test_a_subscription_payment_opens_the_app(self):
+        self.sign_in()
+        body = json.dumps({
+            "type": "checkout.session.completed",
+            "data": {"object": {"mode": "subscription", "customer": "cus_1",
+                                "subscription": "sub_1",
+                                "client_reference_id": "1"}},
+        }).encode()
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": self._sig(body)})
+        self.assertIn("subscription", r.text)
+        self.assertIn("Dashboard", self.client.get("/dashboard").text)
+
+    def test_a_one_off_payment_does_not_grant_lifetime_access(self):
+        # The expensive bug: one charge, access forever.
+        self.sign_in()
+        body = json.dumps({
+            "type": "checkout.session.completed",
+            "data": {"object": {"mode": "payment", "customer": "cus_1",
+                                "client_reference_id": "1"}},
+        }).encode()
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": self._sig(body)})
+        self.assertIn("one-off", r.text)
+
+        user = self.main.db.get_user(1)
+        self.assertIsNotNone(user["paid_until"], "one-off payment never expires")
+        self.assertGreater(user["paid_until"], time.time())
+        self.assertLess(user["paid_until"], time.time() + 31 * 86400)
+        self.assertIn("Dashboard", self.client.get("/dashboard").text)
+
+    def test_a_one_off_payment_expires(self):
+        self.sign_in()
+        self.main.db.set_billing(1, status="active",
+                                 paid_until=int(time.time()) - 10)
+        self.assertIn("Subscribe to start", self.client.get("/dashboard").text)
+
+    def test_a_session_with_no_mode_and_no_subscription_is_treated_as_one_off(self):
+        # Safer default: assume the payment was single unless Stripe says
+        # otherwise. Guessing "subscription" would grant forever.
+        self.sign_in()
+        body = json.dumps({
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer": "cus_1", "client_reference_id": "1"}},
+        }).encode()
+        self.client.post("/webhooks/stripe", content=body,
+                         headers={"stripe-signature": self._sig(body)})
+        self.assertIsNotNone(self.main.db.get_user(1)["paid_until"])
+
+    def test_a_payment_with_no_user_stamped_on_it_is_not_honoured(self):
+        # Without client_reference_id the payment belongs to nobody.
+        self.sign_in()
+        body = json.dumps({
+            "type": "checkout.session.completed",
+            "data": {"object": {"mode": "payment", "customer": "cus_unknown"}},
+        }).encode()
+        r = self.client.post("/webhooks/stripe", content=body,
+                             headers={"stripe-signature": self._sig(body)})
+        self.assertIn("no user could be identified", r.text)
+        self.assertIn("Subscribe to start", self.client.get("/dashboard").text)
+
+    def test_the_webhook_is_still_mandatory_in_link_mode(self):
+        self.sign_in()
+        body = b'{"type":"checkout.session.completed"}'
+        self.assertEqual(
+            self.client.post("/webhooks/stripe", content=body).status_code, 400)
+
+
+class TestLinkModeConfig(unittest.TestCase):
+    def test_link_mode_does_not_require_a_secret_key(self):
+        os.environ.update({"DEV_MODE": "0", "BILLING_ENABLED": "1",
+                           "SECRET_KEY": "x" * 40,
+                           "STRIPE_PAYMENT_LINK": "https://buy.stripe.com/x",
+                           "STRIPE_WEBHOOK_SECRET": "whsec_x"})
+        for k in ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID"):
+            os.environ.pop(k, None)
+        cfg = importlib.reload(importlib.import_module("app.config"))
+        self.assertEqual(cfg.STRIPE_PAYMENT_LINK, "https://buy.stripe.com/x")
+
+    def test_link_mode_still_requires_the_webhook_secret(self):
+        os.environ.update({"DEV_MODE": "0", "BILLING_ENABLED": "1",
+                           "SECRET_KEY": "x" * 40,
+                           "STRIPE_PAYMENT_LINK": "https://buy.stripe.com/x"})
+        os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+        with self.assertRaises(RuntimeError) as ctx:
+            importlib.reload(importlib.import_module("app.config"))
+        self.assertIn("STRIPE_WEBHOOK_SECRET", str(ctx.exception))
+
+    def tearDown(self):
+        os.environ.update({"DEV_MODE": "1", "BILLING_ENABLED": "0",
+                           "SECRET_KEY": "test-secret-key-not-for-production"})
+        os.environ.pop("STRIPE_PAYMENT_LINK", None)
+        importlib.reload(importlib.import_module("app.config"))
+
+
 if __name__ == "__main__":
     unittest.main()

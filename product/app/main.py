@@ -302,6 +302,14 @@ def checkout(request: Request):
     user = current_user(request)
     if not user:
         return needs_login()
+
+    # A Payment Link needs no API call at all - Stripe already hosts the page.
+    # The user id rides along as client_reference_id so the webhook can tell
+    # whose payment it was.
+    if config.STRIPE_PAYMENT_LINK:
+        return RedirectResponse(config.payment_link_for(user["id"]),
+                                status_code=303)
+
     try:
         url = billing.create_checkout_session(user["email"], user["id"])
     except billing.BillingError as exc:

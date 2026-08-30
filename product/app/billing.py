@@ -172,10 +172,22 @@ def apply_event(event: dict) -> str:
         return f"{kind}: no user could be identified"
 
     if kind == "checkout.session.completed":
+        # A one-off payment and a subscription arrive on the same event, and
+        # telling them apart matters: a subscription reports its own period
+        # end on the events that follow, but a single payment says nothing
+        # about how long it was meant to last. Treating one-off as an open
+        # subscription would hand out lifetime access for one charge.
+        one_off = obj.get("mode") == "payment" or (
+            obj.get("mode") is None and not obj.get("subscription"))
+        paid_until = None
+        if one_off:
+            paid_until = int(time.time()) + config.ONE_OFF_ACCESS_DAYS * 86400
+
         db.set_billing(user_id, customer_id=customer,
                        subscription_id=obj.get("subscription"),
-                       status="active")
-        return f"{kind}: user {user_id} active"
+                       status="active", paid_until=paid_until)
+        shape = f"one-off, {config.ONE_OFF_ACCESS_DAYS}d" if one_off else "subscription"
+        return f"{kind}: user {user_id} active ({shape})"
 
     if kind == "invoice.payment_failed":
         db.set_billing(user_id, status="past_due")

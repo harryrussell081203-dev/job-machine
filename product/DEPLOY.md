@@ -16,6 +16,27 @@ before spending a penny.
 
 ## 2. Stripe
 
+### The quick route: a Payment Link
+
+If you already have a Payment Link (`https://buy.stripe.com/...`), set
+`STRIPE_PAYMENT_LINK` to it and skip the secret key entirely. The app never
+calls the Stripe API in this mode - it just sends people to a page Stripe
+already hosts, with `?client_reference_id=<user id>` appended so the webhook
+knows whose payment it was.
+
+You still need the webhook (step 3 below). Access is granted only by a
+verified webhook, and that does not change because the page came from a link.
+
+**Check whether your link is recurring or one-off.** A subscription reports
+its own period end and renews. A one-off payment does not, so the app grants
+`ONE_OFF_ACCESS_DAYS` (30 by default) and then closes again - deliberately not
+forever, because lifetime access from a single charge is an expensive way to
+find out the link was set up wrong.
+
+### The API route
+
+Skip this if you are using a Payment Link.
+
 1. Create a **product** with a **recurring monthly price**. Copy the price id
    (`price_...`) into `STRIPE_PRICE_ID`.
 2. Copy your secret key (`sk_live_...`) into `STRIPE_SECRET_KEY`.
