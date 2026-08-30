@@ -64,23 +64,72 @@ stripe trigger checkout.session.completed
 
 ## 3. Somewhere to run it
 
-Any host that runs a Python process and gives you a persistent disk. The
-database is a single SQLite file, so **it needs a volume that survives
-restarts** — without one, every deploy wipes your customers.
+There are two routes. **The free one is the one to start with** — it costs
+nothing, has no card attached, and is a real deployment, not a demo.
+
+### The free route: Render + Supabase
+
+The catch with every free host is that it has **no disk that survives a
+deploy**. Put SQLite on one and your customer table is deleted the next time
+you push. So the app process goes on a free host and the data goes somewhere
+else that outlives it.
+
+**Supabase** for the database (free, 500MB, no card):
+
+1. supabase.com → new project. Pick the region nearest your users
+   (`eu-west-1` for the UK). Save the database password it shows you — it is
+   shown once.
+2. Project Settings → Database → Connection string → **URI**. It looks like
+   `postgresql://postgres:PASSWORD@db.xxxx.supabase.co:5432/postgres`.
+3. That whole string becomes `DATABASE_URL` in the app's environment.
+
+That is the entire integration. Set `DATABASE_URL` and the app uses Postgres;
+leave it unset and it uses the local SQLite file. Same code, same tests, same
+SQL — see `app/store.py`.
+
+**Render** for the app (free, no card):
+
+1. render.com → New → Web Service → connect this repository.
+2. Root directory `product`, build `pip install -r requirements.txt`,
+   start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+3. Add every variable from `.env.example`, plus `DATABASE_URL`.
+4. You get `your-app.onrender.com` free, with HTTPS. Use that as `BASE_URL`.
+
+Two things about the free tier, both real:
+
+- **It sleeps after 15 minutes idle**, and the next request takes about 50
+  seconds to wake it. Fine for early customers, embarrassing at scale. Note
+  that Stripe retries failed webhooks for 3 days, so a sleeping app does not
+  lose you a payment.
+- **A free Supabase project pauses itself after about a week with no
+  queries.** A paused database means nobody can sign in, and it fails
+  quietly. The `Keep the database awake` step in
+  `.github/workflows/run.yml` is there for exactly this: set `DATABASE_URL`
+  as a repository secret and the scheduled run touches the database three
+  times a weekday. Without a `DATABASE_URL` secret the step prints a line and
+  skips.
+
+### The paid route: one host with a volume
+
+Around $5/month, and worth it once people are paying you.
 
 - **Railway / Render / Fly.io** — attach a volume, mount it at `/data`, set
-  `DB_PATH=/data/jobmachine.db`. Around $5/month.
-- The `Procfile` already has the right start command.
+  `DB_PATH=/data/jobmachine.db` and leave `DATABASE_URL` unset. The
+  `Procfile` already has the right start command.
+- **Run one worker** on this route. SQLite is a single file, and several
+  worker processes writing to it will eventually give you
+  `database is locked` under load. Do not add `--workers`.
 
-**Run one worker.** SQLite is a single file, and several worker processes
-writing to it will eventually give you `database is locked` under load. One
-worker will carry this app a very long way; when it genuinely will not, that
-is the moment to move to Postgres, not before. Do not add `--workers`.
+On Postgres that caveat goes away — several workers are fine, because the
+database is doing the locking rather than a file.
+
+### Either way
 
 Set every variable from `.env.example` in the host's environment panel. The
 app refuses to boot in production without `SECRET_KEY`, and refuses to boot
-with billing on but Stripe keys missing — both deliberately, because a paywall
-that silently defaults to open is not a thing you notice from the outside.
+with billing on but Stripe settings missing — both deliberately, because a
+paywall that silently defaults to open is not a thing you notice from the
+outside.
 
 ## 4. Mail for sign-in links
 
@@ -123,12 +172,17 @@ Not optional if you are taking money in the UK:
 
 ## Costs, honestly
 
-| | |
-| --- | --- |
-| Hosting + volume | ~$5/month |
-| Stripe | 1.5% + 20p per transaction |
-| Adzuna, Reed, Gemini | free tiers, but see below |
-| Domain | ~£10/year |
+| | Free route | Paid route |
+| --- | --- | --- |
+| App hosting | £0 (Render free, sleeps) | ~$5/month |
+| Database | £0 (Supabase free, 500MB) | included in the volume |
+| Domain | £0 (`your-app.onrender.com`) | ~£10/year |
+| Stripe | 1.5% + 20p per transaction | same |
+| Adzuna, Reed, Gemini | free tiers, but see below | same |
+
+So the free column really is £0 until somebody pays you. Already own a
+domain? A subdomain of it costs nothing: point a CNAME at the Render app and
+set `BASE_URL` to match.
 
 Those free tiers are for personal use. Once paying customers depend on them
 you need commercial terms from each provider — check before you launch, not

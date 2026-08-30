@@ -25,19 +25,10 @@ import time
 
 from .db import connect
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS rate_hits (
-    bucket     TEXT    NOT NULL,
-    window_at  INTEGER NOT NULL,
-    hits       INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (bucket, window_at)
-);
-"""
-
 
 def init() -> None:
-    with connect() as c:
-        c.executescript(SCHEMA)
+    """The table is created with the rest of the schema in store.py, so that
+    one backend switch cannot leave this one behind."""
 
 
 def hit(bucket: str, *, limit: int, window: int) -> bool:
@@ -50,7 +41,11 @@ def hit(bucket: str, *, limit: int, window: int) -> bool:
     with connect() as c:
         c.execute(
             "INSERT INTO rate_hits (bucket, window_at, hits) VALUES (?, ?, 1) "
-            "ON CONFLICT(bucket, window_at) DO UPDATE SET hits = hits + 1",
+            # rate_hits.hits, not bare hits: Postgres calls the unqualified
+            # form ambiguous inside an upsert, SQLite accepts it, and the
+            # difference only shows up against a real Postgres.
+            "ON CONFLICT(bucket, window_at) DO UPDATE "
+            "SET hits = rate_hits.hits + 1",
             (bucket, slot))
         row = c.execute(
             "SELECT hits FROM rate_hits WHERE bucket = ? AND window_at = ?",

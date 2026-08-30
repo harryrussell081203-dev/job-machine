@@ -14,123 +14,21 @@ What is deliberately NOT stored:
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
-from contextlib import contextmanager
 
 from . import config
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    email           TEXT    NOT NULL UNIQUE,
-    created_at      INTEGER NOT NULL,
-    last_seen_at    INTEGER,
-    -- billing
-    stripe_customer_id     TEXT,
-    stripe_subscription_id TEXT,
-    -- 'none' until Stripe says otherwise. Never inferred from a redirect:
-    -- a user who lands on /success has not necessarily paid.
-    subscription_status    TEXT NOT NULL DEFAULT 'none',
-    paid_until      INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS profiles (
-    user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    data        TEXT    NOT NULL,          -- the Profile, as JSON
-    updated_at  INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS drafts (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    job_title    TEXT NOT NULL,
-    company      TEXT NOT NULL,
-    location     TEXT,
-    listing_url  TEXT,
-    salary_text  TEXT,
-    score        INTEGER,
-    -- who it is addressed to, and how good that address is
-    to_email     TEXT,
-    to_name      TEXT,
-    contact_tier INTEGER,                  -- 3 named, 2 hiring inbox, 1 generic
-    subject      TEXT,
-    body         TEXT,
-    -- 'draft' -> 'sent' (the user pressed send) | 'discarded'
-    status       TEXT NOT NULL DEFAULT 'draft',
-    created_at   INTEGER NOT NULL,
-    sent_at      INTEGER
-);
-
-CREATE INDEX IF NOT EXISTS drafts_by_user
-    ON drafts(user_id, status, created_at DESC);
-
--- One email per employer, ever. Enforced here rather than remembered in
--- application code, because the cost of getting it wrong is a real person
--- receiving the same pitch twice.
-CREATE TABLE IF NOT EXISTS contacted (
-    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    company_key TEXT    NOT NULL,          -- normalised company name
-    first_at    INTEGER NOT NULL,
-    PRIMARY KEY (user_id, company_key)
-);
-
--- A company that has asked to be left alone. Checked before anything is
--- drafted, and never removable through the UI.
-CREATE TABLE IF NOT EXISTS do_not_contact (
-    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    company_key TEXT    NOT NULL,
-    reason      TEXT,
-    added_at    INTEGER NOT NULL,
-    PRIMARY KEY (user_id, company_key)
-);
-
--- Listings this user has already been shown or judged. Without it every run
--- re-scores yesterday's jobs, which costs AI calls and quota for no gain.
-CREATE TABLE IF NOT EXISTS seen_listings (
-    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    external_id TEXT    NOT NULL,
-    outcome     TEXT,                      -- 'drafted' | why it was dropped
-    seen_at     INTEGER NOT NULL,
-    PRIMARY KEY (user_id, external_id)
-);
-
-CREATE TABLE IF NOT EXISTS login_tokens (
-    jti        TEXT PRIMARY KEY,
-    used_at    INTEGER
-);
-"""
+from .store import connect, describe, init, insert_returning_id, ping  # noqa: F401
 
 
 def now() -> int:
     return int(time.time())
 
 
-@contextmanager
-def connect():
-    conn = sqlite3.connect(config.DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def init() -> None:
-    with connect() as c:
-        c.executescript(SCHEMA)
-
-
 # ----------------------------------------------------------------------
 # users
 # ----------------------------------------------------------------------
-def get_or_create_user(email: str) -> sqlite3.Row:
+def get_or_create_user(email: str):
     email = email.strip().lower()
     with connect() as c:
         row = c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
@@ -211,12 +109,14 @@ def claim_token(jti: str) -> bool:
     working key for fifteen minutes.
     """
     with connect() as c:
-        try:
-            c.execute("INSERT INTO login_tokens (jti, used_at) VALUES (?, ?)",
-                      (jti, now()))
-            return True
-        except sqlite3.IntegrityError:
-            return False
+        # ON CONFLICT DO NOTHING ... RETURNING is understood by both backends,
+        # and says exactly what this needs: a row comes back only the first
+        # time this token id is seen.
+        row = c.execute(
+            "INSERT INTO login_tokens (jti, used_at) VALUES (?, ?) "
+            "ON CONFLICT (jti) DO NOTHING RETURNING jti", (jti, now())
+        ).fetchone()
+        return row is not None
 
 
 # ----------------------------------------------------------------------
@@ -244,12 +144,8 @@ def load_profile(user_id: int):
 def add_draft(user_id: int, **fields) -> int:
     cols = ["user_id", "created_at"] + list(fields)
     vals = [user_id, now()] + list(fields.values())
-    placeholders = ", ".join("?" * len(cols))
     with connect() as c:
-        cur = c.execute(
-            f"INSERT INTO drafts ({', '.join(cols)}) VALUES ({placeholders})",
-            vals)
-        return cur.lastrowid
+        return insert_returning_id(c, "drafts", cols, vals)
 
 
 def list_drafts(user_id: int, status: str = "draft", limit: int = 50):
@@ -282,8 +178,10 @@ def seen_ids(user_id: int) -> set:
 
 def mark_seen(user_id: int, external_id: str, outcome: str) -> None:
     with connect() as c:
-        c.execute("INSERT OR REPLACE INTO seen_listings "
-                  "(user_id, external_id, outcome, seen_at) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT INTO seen_listings "
+                  "(user_id, external_id, outcome, seen_at) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT (user_id, external_id) DO UPDATE SET "
+                  "outcome = excluded.outcome, seen_at = excluded.seen_at",
                   (user_id, external_id, outcome[:200], now()))
 
 
@@ -323,9 +221,11 @@ def already_contacted(user_id: int, company: str) -> bool:
 
 def record_contacted(user_id: int, company: str) -> None:
     with connect() as c:
-        c.execute("INSERT OR IGNORE INTO contacted (user_id, company_key, "
-                  "first_at) VALUES (?, ?, ?)",
-                  (user_id, company_key(company), now()))
+        # DO NOTHING, not DO UPDATE: first_at is when this employer was first
+        # written to, and a later run must not move that date.
+        c.execute("INSERT INTO contacted (user_id, company_key, first_at) "
+                  "VALUES (?, ?, ?) ON CONFLICT (user_id, company_key) "
+                  "DO NOTHING", (user_id, company_key(company), now()))
 
 
 def is_blocked(user_id: int, company: str) -> bool:
@@ -337,8 +237,9 @@ def is_blocked(user_id: int, company: str) -> bool:
 
 def block_company(user_id: int, company: str, reason: str = "") -> None:
     with connect() as c:
-        c.execute("INSERT OR IGNORE INTO do_not_contact (user_id, company_key, "
-                  "reason, added_at) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT INTO do_not_contact (user_id, company_key, reason, "
+                  "added_at) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT (user_id, company_key) DO NOTHING",
                   (user_id, company_key(company), reason, now()))
 
 
