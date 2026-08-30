@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Delete your account</h1>
+
+<div class="note bad">This cannot be undone.</div>
+
+<div class="panel">
+  <p>Deleting <b>{{ user["email"] }}</b> removes, permanently:</p>
+  <ul>
+    <li>your profile and everything in it</li>
+    <li>{{ (counts.get('draft', 0) + counts.get('sent', 0) + counts.get('discarded', 0)) }}
+        drafts, sent and discarded</li>
+    <li>the record of which employers you have already written to</li>
+    <li>your list of companies never to contact</li>
+  </ul>
+  <p class="muted">Nothing is kept back. Emails you have already sent are in
+  the employer's inbox and are not ours to withdraw.</p>
+</div>
+
+{% if user["stripe_subscription_id"] %}
+  <div class="panel">
+    <p><b>Your subscription is cancelled first.</b> If that fails, nothing is
+    deleted &mdash; we will not leave a live subscription attached to an account
+    that no longer exists.</p>
+  </div>
+{% endif %}
+
+<form method="post" action="/account/delete">
+  <label for="confirm">Type <b>delete</b> to confirm</label>
+  <input id="confirm" name="confirm" type="text" autocomplete="off" required>
+  <p style="margin-top:14px">
+    <button type="submit">Delete my account</button>
+    <a class="btn ghost" href="/account">Keep my account</a>
+  </p>
+</form>
+{% endblock %}

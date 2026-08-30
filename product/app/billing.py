@@ -75,6 +75,22 @@ def create_portal_session(customer_id: str) -> str:
     return r.json()["url"]
 
 
+def cancel_subscription(subscription_id: str) -> None:
+    """Stop billing somebody immediately.
+
+    Used when an account is deleted. Charging a customer whose account no
+    longer exists is the single worst bug this app could have, so this runs
+    before the delete and raises loudly if it fails.
+    """
+    r = httpx.delete(f"{API}/subscriptions/{subscription_id}", headers=_auth(),
+                     timeout=30)
+    # 404 means Stripe has no such subscription, which is the state we want.
+    if r.status_code not in (200, 404):
+        raise BillingError(
+            f"Stripe would not cancel {subscription_id} ({r.status_code}): "
+            f"{r.text[:200]}")
+
+
 # ----------------------------------------------------------------------
 # believing the money arrived
 # ----------------------------------------------------------------------

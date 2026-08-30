@@ -333,6 +333,50 @@ def account(request: Request):
     return render(request, "account.html", user=user, portal=portal)
 
 
+@app.get("/account/delete", response_class=HTMLResponse)
+def delete_form(request: Request):
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    return render(request, "delete.html", user=user,
+                  counts=db.counts(user["id"]))
+
+
+@app.post("/account/delete")
+def delete_account(request: Request, confirm: str = Form("")):
+    """Erase the account. Billing stops first, then the data goes.
+
+    Order matters and is not arbitrary: cancelling at Stripe after the delete
+    would leave a live subscription with nobody attached to it, quietly
+    charging someone whose account no longer exists.
+    """
+    user = current_user(request)
+    if not user:
+        return needs_login()
+
+    if confirm.strip().lower() != "delete":
+        return render(request, "delete.html", user=user,
+                      counts=db.counts(user["id"]),
+                      error='Type "delete" to confirm.')
+
+    if user["stripe_subscription_id"] and config.BILLING_ENABLED:
+        try:
+            billing.cancel_subscription(user["stripe_subscription_id"])
+        except billing.BillingError as exc:
+            # Refuse rather than delete: an orphaned live subscription is
+            # worse than an account that outlived its owner's patience.
+            return render(request, "delete.html", user=user,
+                          counts=db.counts(user["id"]),
+                          error="Your subscription could not be cancelled, so "
+                                "nothing was deleted. Nobody will be charged "
+                                f"for an account that no longer exists. ({exc})")
+
+    db.delete_user(user["id"])
+    response = RedirectResponse("/?deleted=1", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
 @app.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):
     payload = await request.body()

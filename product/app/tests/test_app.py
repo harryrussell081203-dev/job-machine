@@ -358,5 +358,85 @@ class TestLoginRateLimit(AppTestCase):
         self.assertEqual(len(sent), 3)
 
 
+class TestAccountDeletion(AppTestCase):
+    """A deletion that leaves a live subscription behind is the worst bug
+    this app could have: it charges somebody whose account is gone."""
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.main.db.save_profile(1, {"name": "Sam"})
+        self.draft_id = self.main.db.add_draft(
+            1, job_title="Fitter", company="Acme", subject="s", body="b")
+        self.main.db.record_contacted(1, "Acme")
+        self.main.db.block_company(1, "Bad Employer")
+
+    def test_the_form_needs_the_word_delete(self):
+        r = self.client.post("/account/delete", data={"confirm": "yes"})
+        self.assertIn("Type &#34;delete&#34; to confirm", r.text)
+        self.assertIsNotNone(self.main.db.get_user(1))
+
+    def test_deleting_takes_everything_with_it(self):
+        r = self.client.post("/account/delete", data={"confirm": "delete"},
+                             follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertIsNone(self.main.db.get_user(1))
+        self.assertIsNone(self.main.db.load_profile(1))
+        self.assertEqual(self.main.db.list_drafts(1), [])
+        # the cascade must reach the contacted and blocked lists too
+        self.assertFalse(self.main.db.already_contacted(1, "Acme"))
+        self.assertFalse(self.main.db.is_blocked(1, "Bad Employer"))
+
+    def test_deleting_signs_you_out(self):
+        self.client.post("/account/delete", data={"confirm": "delete"},
+                         follow_redirects=False)
+        r = self.client.get("/dashboard", follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/login")
+
+    def test_confirmation_is_case_and_space_insensitive(self):
+        self.client.post("/account/delete", data={"confirm": "  DELETE "},
+                         follow_redirects=False)
+        self.assertIsNone(self.main.db.get_user(1))
+
+    def test_the_page_says_what_will_be_lost(self):
+        r = self.client.get("/account/delete")
+        self.assertIn("cannot be undone", r.text)
+        self.assertIn("sam@example.com", r.text)
+
+
+class TestDeletionWithBilling(AppTestCase):
+    env = {"BILLING_ENABLED": "1", "DEV_MODE": "1",
+           "STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_PRICE_ID": "price_x",
+           "STRIPE_WEBHOOK_SECRET": "whsec_test"}
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.main.db.set_billing(1, status="active", customer_id="cus_1",
+                                 subscription_id="sub_1")
+
+    def test_the_subscription_is_cancelled_before_the_data_goes(self):
+        order = []
+        self.main.billing.cancel_subscription = lambda s: order.append(("cancel", s))
+        real_delete = self.main.db.delete_user
+        self.main.db.delete_user = lambda u: (order.append(("delete", u)),
+                                              real_delete(u))[1]
+
+        self.client.post("/account/delete", data={"confirm": "delete"},
+                         follow_redirects=False)
+        self.assertEqual([o[0] for o in order], ["cancel", "delete"])
+        self.assertIsNone(self.main.db.get_user(1))
+
+    def test_a_failed_cancellation_deletes_nothing(self):
+        def boom(_sub):
+            raise self.main.billing.BillingError("Stripe is down")
+        self.main.billing.cancel_subscription = boom
+
+        r = self.client.post("/account/delete", data={"confirm": "delete"})
+        self.assertIn("could not be cancelled", r.text)
+        self.assertIsNotNone(self.main.db.get_user(1),
+                             "account was deleted despite a live subscription")
+
+
 if __name__ == "__main__":
     unittest.main()
