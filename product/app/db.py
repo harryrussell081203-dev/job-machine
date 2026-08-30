@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS do_not_contact (
     PRIMARY KEY (user_id, company_key)
 );
 
+-- Listings this user has already been shown or judged. Without it every run
+-- re-scores yesterday's jobs, which costs AI calls and quota for no gain.
+CREATE TABLE IF NOT EXISTS seen_listings (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    external_id TEXT    NOT NULL,
+    outcome     TEXT,                      -- 'drafted' | why it was dropped
+    seen_at     INTEGER NOT NULL,
+    PRIMARY KEY (user_id, external_id)
+);
+
 CREATE TABLE IF NOT EXISTS login_tokens (
     jti        TEXT PRIMARY KEY,
     used_at    INTEGER
@@ -261,6 +271,29 @@ def mark_draft(user_id: int, draft_id: int, status: str) -> None:
         c.execute(
             "UPDATE drafts SET status = ?, sent_at = ? WHERE id = ? AND user_id = ?",
             (status, now() if status == "sent" else None, draft_id, user_id))
+
+
+def seen_ids(user_id: int) -> set:
+    with connect() as c:
+        return {r["external_id"] for r in c.execute(
+            "SELECT external_id FROM seen_listings WHERE user_id = ?",
+            (user_id,))}
+
+
+def mark_seen(user_id: int, external_id: str, outcome: str) -> None:
+    with connect() as c:
+        c.execute("INSERT OR REPLACE INTO seen_listings "
+                  "(user_id, external_id, outcome, seen_at) VALUES (?, ?, ?, ?)",
+                  (user_id, external_id, outcome[:200], now()))
+
+
+def recent_outcomes(user_id: int, limit: int = 40):
+    """Why listings did not become drafts. 'Nothing today' needs a reason."""
+    with connect() as c:
+        return c.execute(
+            "SELECT external_id, outcome, seen_at FROM seen_listings "
+            "WHERE user_id = ? AND outcome != 'drafted' "
+            "ORDER BY seen_at DESC LIMIT ?", (user_id, limit)).fetchall()
 
 
 def counts(user_id: int) -> dict:
