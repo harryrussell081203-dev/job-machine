@@ -103,6 +103,12 @@ class Profile:
     locations: list[str] = field(default_factory=list)
     radius_miles: int = 25
 
+    # Titles to bin unseen. Empty by default and deliberately so: the machine
+    # this came from excluded "sales executive" and "care assistant", which is
+    # right for one man's trade and actively wrong for anybody who works in
+    # either. A filter nobody asked for hides the job they wanted.
+    exclude_titles: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         self.validate()
 

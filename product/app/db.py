@@ -172,6 +172,18 @@ def set_billing(user_id: int, *, customer_id=None, subscription_id=None,
         c.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", args)
 
 
+def delete_user(user_id: int) -> None:
+    """Erase a person from this system.
+
+    Everything else about them hangs off users(id) with ON DELETE CASCADE, so
+    one row goes and the profile, drafts, contacted list and block list go with
+    it. Nothing is kept "for analytics" - a deletion request that leaves a
+    shadow copy is not a deletion.
+    """
+    with connect() as c:
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
 def user_by_stripe_customer(customer_id: str):
     with connect() as c:
         return c.execute("SELECT * FROM users WHERE stripe_customer_id = ?",
