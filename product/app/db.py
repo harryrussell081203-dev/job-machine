@@ -275,17 +275,10 @@ def counts(user_id: int) -> dict:
 # who must not be written to
 # ----------------------------------------------------------------------
 def company_key(name: str) -> str:
-    """Normalise a company name enough that 'ACME Ltd.' and 'Acme' collide.
-
-    Over-matching is the safe direction here: a false collision costs one
-    unsent email, a miss costs somebody a second unwanted one.
-    """
-    out = (name or "").lower().strip()
-    for suffix in (" limited", " ltd.", " ltd", " plc", " llp", " inc.",
-                   " inc", " group", " uk", " (uk)"):
-        if out.endswith(suffix):
-            out = out[: -len(suffix)]
-    return "".join(ch for ch in out if ch.isalnum())
+    """Shared with the pipeline, so a company blocked here is the same company
+    the harvester skips. See jobseeker/names.py for why it over-matches."""
+    from jobseeker.names import company_key as _key
+    return _key(name)
 
 
 def already_contacted(user_id: int, company: str) -> bool:
