@@ -27,6 +27,7 @@ sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
 from . import auth, billing, config, db, delivery, ratelimit  # noqa: E402
+from . import runner  # noqa: E402
 
 app = FastAPI(title="job machine", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -160,7 +161,25 @@ def dashboard(request: Request):
     return render(request, "dashboard.html", user=user,
                   profile=db.load_profile(user["id"]),
                   counts=db.counts(user["id"]),
-                  drafts=db.list_drafts(user["id"], limit=5))
+                  drafts=db.list_drafts(user["id"], limit=5),
+                  # Why nothing came through is as important as what did. A
+                  # quiet day with no explanation reads as a broken product.
+                  outcomes=db.recent_outcomes(user["id"], limit=8))
+
+
+@app.post("/run")
+def run_now(request: Request):
+    """Look for work now, rather than waiting for the next scheduled sweep."""
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    if not db.is_paid(user):
+        return render(request, "paywall.html", user=user)
+
+    report = runner.run_for_user(user["id"])
+    print(f"[run] user {user['id']}: {report.summary()}")
+    return RedirectResponse("/drafts" if report.drafted else "/dashboard",
+                            status_code=303)
 
 
 @app.get("/profile", response_class=HTMLResponse)

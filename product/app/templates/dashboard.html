@@ -30,6 +30,22 @@
       appear here written and ready.</p>
       <p class="muted">Quiet stretches are normal. A day with nothing worth
       sending is better than a day spent on jobs that pay less than yours.</p>
+      <form method="post" action="/run" style="margin-top:6px">
+        <button type="submit">Look for work now</button>
+      </form>
+    </div>
+  {% endif %}
+
+  {% if outcomes %}
+    <h2>What was looked at, and why it did not make the cut</h2>
+    <div class="panel">
+      <ul style="margin:0; padding-left:18px">
+        {% for o in outcomes %}
+          <li class="muted" style="margin-bottom:6px">{{ o["outcome"] }}</li>
+        {% endfor %}
+      </ul>
+      <p style="margin-top:12px"><small>Most listings end this way. No real
+      address means no letter, and nothing is ever guessed.</small></p>
     </div>
   {% endif %}
 
