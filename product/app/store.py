@@ -34,6 +34,24 @@ IS_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 _PLACEHOLDER = re.compile(r"\?")
 
+# psycopg prepares a statement automatically once it has seen it a few times,
+# which is a straight win against a real server and a bug against a
+# transaction pooler: the pooler hands the next query to a different backend
+# that has never heard of the prepared statement, and it fails with
+# "prepared statement does not exist" - intermittently, under load, which is
+# the worst way to find out.
+#
+# Supabase's transaction pooler listens on 6543 and its session pooler on
+# 5432. Only the former reassigns backends mid-session, so preparation is
+# disabled for that one alone rather than everywhere.
+def _prepare_threshold():
+    if ":6543" in DATABASE_URL:
+        return None
+    return 5
+
+
+_PREPARE_THRESHOLD = _prepare_threshold()
+
 
 def _sql(query: str) -> str:
     """`?` is the placeholder everywhere in this codebase; Postgres wants %s."""
@@ -206,7 +224,8 @@ def connect():
         import psycopg
         from psycopg.rows import dict_row
         conn = psycopg.connect(DATABASE_URL, row_factory=dict_row,
-                               connect_timeout=15)
+                               connect_timeout=15,
+                               prepare_threshold=_PREPARE_THRESHOLD)
         try:
             yield _PgWrapper(conn)
             conn.commit()
