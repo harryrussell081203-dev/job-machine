@@ -507,3 +507,86 @@ class TestInstallable(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStatusPage(unittest.TestCase):
+    """The page that answers "did I deploy this right".
+
+    It has to be readable signed out, because the failures it reports are the
+    ones that stop you signing in - and it must never print a value, because
+    anybody can read it.
+    """
+
+    def build(self, **env):
+        from fastapi.testclient import TestClient
+        main, path = build(**env)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        client = TestClient(main.app)
+        client.__enter__()
+        self.addCleanup(client.__exit__, None, None, None)
+        return client
+
+    def test_it_is_readable_without_signing_in(self):
+        self.assertEqual(self.build().get("/status").status_code, 200)
+
+    def test_a_misconfigured_deployment_is_reported_as_not_ok(self):
+        data = self.build().get("/status").json()
+        self.assertFalse(data["ok"])
+        self.assertTrue(data["problems"])
+
+    def test_it_catches_an_ephemeral_database(self):
+        data = self.build().get("/status").json()
+        self.assertEqual(data["storage"], "sqlite (not persistent)")
+        self.assertTrue(any("deleted by the next deploy" in p
+                            for p in data["problems"]))
+
+    def test_it_catches_an_open_paywall(self):
+        data = self.build(BILLING_ENABLED="0").get("/status").json()
+        self.assertEqual(data["billing"], "disabled")
+        self.assertTrue(any("Nobody has to pay you" in p
+                            for p in data["problems"]))
+
+    def test_it_catches_a_missing_webhook_secret(self):
+        data = self.build(BILLING_ENABLED="1", DEV_MODE="1",
+                          STRIPE_PAYMENT_LINK="https://buy.stripe.com/x",
+                          STRIPE_WEBHOOK_SECRET="").get("/status").json()
+        self.assertFalse(data["webhook_secret_set"])
+        self.assertTrue(any("locked out" in p for p in data["problems"]))
+
+    def test_it_catches_a_base_url_pointing_somewhere_else(self):
+        data = self.build(BASE_URL="https://not-this-app.example.com"
+                          ).get("/status").json()
+        self.assertFalse(data["base_url_matches_this_page"])
+        self.assertTrue(any("point somewhere else" in p
+                            for p in data["problems"]))
+
+    def test_a_correct_base_url_is_accepted(self):
+        data = self.build(BASE_URL="http://testserver").get("/status").json()
+        self.assertTrue(data["base_url_matches_this_page"])
+
+    def test_it_catches_dev_mode_left_on(self):
+        data = self.build(DEV_MODE="1").get("/status").json()
+        self.assertTrue(data["dev_mode"])
+        self.assertTrue(any("DEV_MODE" in p for p in data["problems"]))
+
+    def test_a_missing_credential_key_is_a_warning_not_a_failure(self):
+        # Automatic sending is a feature, not the product. Its absence must
+        # not read as a broken deployment.
+        data = self.build(CREDENTIAL_KEY="").get("/status").json()
+        self.assertEqual(data["automatic_sending"], "unavailable")
+        self.assertTrue(any("CREDENTIAL_KEY" in w for w in data["warnings"]))
+        self.assertFalse(any("CREDENTIAL_KEY" in p for p in data["problems"]))
+
+    def test_it_leaks_no_values(self):
+        secrets = {
+            "SECRET_KEY": "sk-secret-value-here",
+            "STRIPE_PAYMENT_LINK": "https://buy.stripe.com/leak-me",
+            "STRIPE_WEBHOOK_SECRET": "whsec_leak_me",
+            "APP_SMTP_ADDRESS": "operator@example.com",
+            "APP_SMTP_PASSWORD": "smtp-leak-me",
+            "ADZUNA_APP_KEY": "adzuna-leak-me",
+            "GEMINI_API_KEY": "gemini-leak-me",
+        }
+        body = self.build(**secrets).get("/status").text
+        for name, value in secrets.items():
+            self.assertNotIn(value, body, f"{name} leaked into /status")

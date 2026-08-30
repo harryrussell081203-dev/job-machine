@@ -446,6 +446,116 @@ def manifest():
                         media_type="application/manifest+json")
 
 
+@app.get("/status")
+def status(request: Request):
+    """Is this deployment actually configured correctly?
+
+    Exists because the most expensive mistakes here are silent. An app on a
+    free host with no DATABASE_URL runs perfectly and loses every customer on
+    the next deploy. A wrong BASE_URL sends sign-in links that go nowhere. A
+    missing webhook secret means everyone who pays is locked out. None of
+    those look like anything from the outside.
+
+    Deliberately readable without signing in, because the failures it
+    diagnoses are the ones that stop you signing in. So it reports **no
+    values** - no hostnames, no keys, no addresses. Only whether each thing is
+    set, and what is wrong.
+    """
+    from . import store, vault
+
+    problems, warnings = [], []
+
+    on_postgres = store.IS_POSTGRES
+    reachable = store.ping()
+    if not on_postgres:
+        problems.append(
+            "No DATABASE_URL, so this is running on a local SQLite file. On a "
+            "host without a persistent disk that file - and every customer in "
+            "it - is deleted by the next deploy. Set DATABASE_URL to a "
+            "Supabase connection string.")
+    if not reachable:
+        problems.append(
+            "The database cannot be reached. If this is Supabase, check the "
+            "connection string and that the project is not paused.")
+
+    if config.BILLING_ENABLED:
+        if config.STRIPE_PAYMENT_LINK:
+            billing = "payment link"
+        elif config.STRIPE_SECRET_KEY and config.STRIPE_PRICE_ID:
+            billing = "stripe api"
+        else:
+            billing = "misconfigured"
+            problems.append("Billing is on but no payment route is set.")
+        if not config.STRIPE_WEBHOOK_SECRET:
+            problems.append(
+                "No STRIPE_WEBHOOK_SECRET. Access is granted only by a "
+                "verified webhook, so without this everyone who pays you is "
+                "locked out.")
+    else:
+        billing = "disabled"
+        problems.append(
+            "BILLING_ENABLED is off, so every signed-in account is treated as "
+            "paid. Nobody has to pay you.")
+
+    if not config.SMTP_ADDRESS or not config.SMTP_PASSWORD:
+        problems.append(
+            "No APP_SMTP_ADDRESS/APP_SMTP_PASSWORD, so sign-in links cannot "
+            "be emailed and nobody can get in.")
+
+    # A wrong BASE_URL is invisible until a customer clicks a dead link.
+    base_ok = None
+    if config.BASE_URL:
+        here = str(request.base_url).rstrip("/")
+        base_ok = config.BASE_URL.rstrip("/") == here
+        if not base_ok:
+            problems.append(
+                "BASE_URL does not match the address this page was served "
+                "from, so sign-in links will point somewhere else. Set it to "
+                "this app's own URL and redeploy.")
+    else:
+        problems.append("BASE_URL is not set, so sign-in links will be wrong.")
+
+    if not vault.available():
+        warnings.append(
+            "No CREDENTIAL_KEY, so automatic sending is unavailable. Letters "
+            "are still written and users send them by hand.")
+
+    missing_apis = [name for name, value in (
+        ("ADZUNA_APP_ID", config.ADZUNA_APP_ID),
+        ("ADZUNA_APP_KEY", config.ADZUNA_APP_KEY),
+        ("REED_API_KEY", config.REED_API_KEY),
+        ("GEMINI_API_KEY", config.GEMINI_API_KEY)) if not value]
+    if missing_apis:
+        warnings.append(
+            f"Not set: {', '.join(missing_apis)}. Without Adzuna and Reed "
+            "there are no listings; without Gemini nothing is scored or "
+            "written.")
+
+    if config.DEV:
+        problems.append(
+            "DEV_MODE is on in a deployed app. Sign-in links print to the log "
+            "instead of being emailed, and a missing SECRET_KEY is generated "
+            "on each boot, which logs everyone out on every restart.")
+
+    return {
+        "ok": not problems,
+        "storage": "postgres" if on_postgres else "sqlite (not persistent)",
+        "database_reachable": reachable,
+        "billing": billing,
+        "webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
+        "sign_in_email_configured": bool(config.SMTP_ADDRESS
+                                         and config.SMTP_PASSWORD),
+        "automatic_sending": ("available" if vault.available()
+                              else "unavailable"),
+        "base_url_set": bool(config.BASE_URL),
+        "base_url_matches_this_page": base_ok,
+        "job_search_apis_missing": missing_apis,
+        "dev_mode": config.DEV,
+        "problems": problems,
+        "warnings": warnings,
+    }
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
