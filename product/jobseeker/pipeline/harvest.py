@@ -29,6 +29,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from ..names import company_key
+
 UA = {"User-Agent": "Mozilla/5.0 (compatible; job-machine/1.0; +job search)"}
 
 MAX_AGE_HOURS = 48
@@ -190,15 +192,6 @@ def not_worth_applying(listing: Listing, exclusions=()) -> str | None:
     if not listing.company.strip():
         return "no employer named"
     return None
-
-
-def company_key(name: str) -> str:
-    out = (name or "").lower().strip()
-    for suffix in (" limited", " ltd.", " ltd", " plc", " llp", " inc.",
-                   " inc", " group", " uk", " (uk)"):
-        if out.endswith(suffix):
-            out = out[: -len(suffix)]
-    return "".join(ch for ch in out if ch.isalnum())
 
 
 def dedupe_key(listing: Listing) -> str:
