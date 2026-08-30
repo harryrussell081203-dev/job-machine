@@ -81,6 +81,12 @@ class Listing:
     salary_min: float | None = None
     salary_max: float | None = None
     posted_at: str | None = None
+
+    # Filled in by later stages. Declared here rather than bolted on at
+    # runtime so as_dict() carries them and nothing has to guess whether a
+    # listing has been scored yet.
+    score: int | None = None
+    score_reason: str = ""
     skipped: str = ""          # why it was dropped, if it was
     raw_emails: list = field(default_factory=list)
 
