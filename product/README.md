@@ -83,8 +83,8 @@ python -m jobseeker.cli --profile profile.yaml             # email them to yours
 ```
 
 **As a web app**, if you want accounts and a paywall to charge other people.
-That needs hosting with a persistent disk, around £5 a month. See
-[DEPLOY.md](DEPLOY.md).
+This can also be free: the app on a free host, the database on Supabase, and
+a `.onrender.com` address. See [DEPLOY.md](DEPLOY.md).
 
 The pipeline is identical either way.
 

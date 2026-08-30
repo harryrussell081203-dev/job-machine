@@ -60,6 +60,33 @@ jobs:
             --state data/state.json \
             ${{ inputs.dry_run && '--dry-run' || '' }}
 
+      # A free Supabase project pauses itself after about a week idle, and a
+      # paused database means nobody can sign in - silently. This run happens
+      # three times a weekday anyway, so it is the cheapest possible heartbeat.
+      # Skipped entirely when no database is configured.
+      - name: Keep the database awake
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # The guard lives here rather than in `if:`, because a step's own
+          # `env:` block is not readable from its own `if:` - the condition
+          # would see an empty string every time and the step would never run.
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "no DATABASE_URL secret, so nothing to keep awake"
+            exit 0
+          fi
+          pip install "psycopg[binary]" >/dev/null
+          python - <<'PY'
+          import os, sys, psycopg
+          try:
+              with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=20) as c:
+                  c.execute("SELECT 1")
+              print("database awake")
+          except Exception as exc:
+              # Never fail the run for this - the letters matter more.
+              print(f"could not reach the database: {exc}", file=sys.stderr)
+          PY
+
       - name: Remember what was seen
         if: ${{ !inputs.dry_run }}
         run: |
