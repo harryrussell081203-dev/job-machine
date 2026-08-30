@@ -166,6 +166,33 @@ Check it before trusting it:
 python -m app.sweep --dry-run    # who would be written to, and from where
 ```
 
+## 3c. When the first deploy fails
+
+It usually does, and it is nearly always one of five things. Read the last
+twenty lines of the Render log and match:
+
+| The log says | What is wrong | Fix |
+| --- | --- | --- |
+| `Could not open requirements file` | Root Directory is not set | Settings &rarr; Root Directory = `product` |
+| `ModuleNotFoundError: No module named 'app'` | same | as above |
+| `gunicorn: not found`, or a `wsgi` error | Start Command is still the Django placeholder Render suggests | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| `RuntimeError: SECRET_KEY is not set` | missing env var | add it; Render can generate one |
+| `RuntimeError: billing is on but STRIPE_WEBHOOK_SECRET not set` | missing env var | add the `whsec_...` from Stripe |
+
+The last two are the app refusing to boot rather than starting misconfigured.
+That is deliberate: an app that quietly comes up with an open paywall or a
+guessable signing key is not something you notice from the outside.
+
+**Python version.** Nothing here pins one, so Render uses its own default.
+The code is developed and tested on 3.11. If the build fails while installing
+dependencies rather than while running the app, set `PYTHON_VERSION` in the
+environment panel to a 3.11 release and redeploy.
+
+**Region.** Put the web service near the database. Frankfurt against a
+Supabase project in `eu-west-1` (Ireland) works, but every request opens its
+own connection, so the round trip is paid each time. Same region is worth
+choosing when you create the service, and not worth rebuilding for later.
+
 ## 4. Mail for sign-in links
 
 `APP_SMTP_*` is the app talking to its own customers, and is separate from
