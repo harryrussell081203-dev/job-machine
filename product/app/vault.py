@@ -33,6 +33,11 @@ import os
 
 _KEY = (os.environ.get("CREDENTIAL_KEY") or "").strip()
 
+# Short enough to be a guessable passphrase rather than a random
+# value. Refused outright: a weak key here is worse than no feature,
+# because it looks like encryption and is not.
+MIN_KEY_LENGTH = 24
+
 
 class VaultError(RuntimeError):
     pass
@@ -64,15 +69,39 @@ def _fernet():
         return None
     try:
         from cryptography.fernet import Fernet
-        # Accept a raw urlsafe-base64 key, which is what Fernet.generate_key
-        # produces and what the setup instructions tell people to paste.
-        _cached = Fernet(_KEY.encode())
+        try:
+            # A real Fernet key, from Fernet.generate_key(). Used as-is.
+            _cached = Fernet(_KEY.encode())
+        except Exception:
+            # Anything else long enough gets stretched into one. This exists
+            # so a host's own "generate a random value" button works: those
+            # produce a long random string, not the 32 url-safe base64 bytes
+            # Fernet demands, and telling somebody to run Python to make a key
+            # is a step they may have no way to take.
+            #
+            # HKDF rather than a plain hash: it is built for turning one
+            # secret into a key of an exact length, and the fixed salt is fine
+            # because the input is expected to be random rather than a
+            # remembered password.
+            if len(_KEY) < MIN_KEY_LENGTH:
+                _cached = None
+            else:
+                _cached = Fernet(_derive(_KEY))
     except Exception:
         # A malformed key is a configuration mistake, not a runtime one. Fail
         # closed: the feature is unavailable, the app still boots, and the
         # settings screen explains it.
         _cached = None
     return _cached
+
+
+def _derive(secret: str) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    raw = HKDF(algorithm=hashes.SHA256(), length=32,
+               salt=b"job-machine/credential-key",
+               info=b"mail credentials v1").derive(secret.encode())
+    return base64.urlsafe_b64encode(raw)
 
 
 def encrypt(plaintext: str) -> str:

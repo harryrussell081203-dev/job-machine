@@ -15,7 +15,8 @@
     <p>This deployment cannot store mail credentials, so automatic sending is
        switched off.</p>
     <p>If you run this app, set <code>CREDENTIAL_KEY</code> in the environment
-       to a key from:</p>
+       to any long random value &mdash; your host's own "generate" button will
+       do, or:</p>
     <pre>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</pre>
   </div>
 {% else %}
