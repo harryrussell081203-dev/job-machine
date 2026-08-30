@@ -590,3 +590,55 @@ class TestStatusPage(unittest.TestCase):
         body = self.build(**secrets).get("/status").text
         for name, value in secrets.items():
             self.assertNotIn(value, body, f"{name} leaked into /status")
+
+
+class TestCredentialKeyForms(unittest.TestCase):
+    """A key has to be settable by somebody on a phone.
+
+    Telling a user to run Python to generate a Fernet key is a step they may
+    have no way to take, so a host's own "generate a random value" button has
+    to work. What must NOT work is a short guessable passphrase, because that
+    looks like encryption without being any.
+    """
+
+    def vault_with(self, key):
+        os.environ.update(DEV_MODE="1", BILLING_ENABLED="0", SECRET_KEY="t",
+                          CREDENTIAL_KEY=key)
+        for mod in ("app.config", "app.vault"):
+            if mod in sys.modules:
+                importlib.reload(sys.modules[mod])
+            else:
+                importlib.import_module(mod)
+        return sys.modules["app.vault"]
+
+    def test_a_real_fernet_key_is_used_as_is(self):
+        v = self.vault_with(Fernet.generate_key().decode())
+        self.assertTrue(v.available())
+        self.assertEqual(v.decrypt(v.encrypt("pw")), "pw")
+
+    def test_a_long_random_string_is_stretched_into_one(self):
+        v = self.vault_with("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu")
+        self.assertTrue(v.available())
+        self.assertEqual(v.decrypt(v.encrypt("pw")), "pw")
+
+    def test_the_same_string_always_gives_the_same_key(self):
+        # Or every restart would make stored credentials unreadable.
+        a = self.vault_with("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu")
+        token = a.encrypt("pw")
+        b = self.vault_with("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu")
+        self.assertEqual(b.decrypt(token), "pw")
+
+    def test_two_different_strings_give_different_keys(self):
+        a = self.vault_with("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu")
+        token = a.encrypt("pw")
+        b = self.vault_with("DIFFERENT2mWnR7bYcJ4hLd8Zs5FgA3e")
+        with self.assertRaises(b.VaultError):
+            b.decrypt(token)
+
+    def test_a_short_passphrase_is_refused(self):
+        for weak in ("aB3dE5", "password", "letmein123"):
+            v = self.vault_with(weak)
+            self.assertFalse(v.available(), f"{weak!r} was accepted")
+
+    def tearDown(self):
+        os.environ.pop("CREDENTIAL_KEY", None)

@@ -137,6 +137,10 @@ outside.
 mail password, and it lives in the environment, never in the database, so a
 leaked backup yields ciphertext.
 
+**Any long random value works**, so Render's own *Generate* button is enough.
+Anything shorter than 24 characters is refused outright: a guessable key looks
+like encryption without being any. If you would rather make one yourself:
+
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
