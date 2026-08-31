@@ -54,6 +54,27 @@ SMTP_PASSWORD = _env("APP_SMTP_PASSWORD")
 SMTP_HOST = _env("APP_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(_env("APP_SMTP_PORT", "465"))
 
+# Sending over HTTPS instead of SMTP, because a free host may not let the app
+# reach an SMTP port at all. Render blocks outbound 25, 465 and 587 on free
+# web services, and the failure is a silent thirty-second hang rather than a
+# refusal, so it reads as "email is broken" rather than "this plan cannot
+# send mail".
+#
+# Set this and sign-in links go over the Brevo API on 443. Leave it unset and
+# the app falls back to SMTP, which is right locally and on a paid instance.
+# APP_SMTP_ADDRESS is still required either way: it is the From address, and
+# it must be a sender you have verified with Brevo.
+BREVO_API_KEY = _env("BREVO_API_KEY")
+
+
+def mail_route() -> str:
+    """Which way sign-in email leaves the app, or "" if it cannot."""
+    if BREVO_API_KEY and SMTP_ADDRESS:
+        return "brevo"
+    if SMTP_ADDRESS and SMTP_PASSWORD:
+        return "smtp"
+    return ""
+
 # --- billing ----------------------------------------------------------
 STRIPE_SECRET_KEY = _env("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = _env("STRIPE_PRICE_ID")

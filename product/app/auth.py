@@ -20,6 +20,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+import httpx
+
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from . import config, db
@@ -82,30 +84,76 @@ def read_session(cookie: str | None) -> int | None:
 # ----------------------------------------------------------------------
 # sending the link
 # ----------------------------------------------------------------------
-def send_login_email(address: str, link: str) -> None:
-    """In development the link goes to the console, so no mail setup is
-    needed to work on the app. In production a missing mail configuration is
-    an error rather than a silently unsent link."""
-    if config.DEV or not (config.SMTP_ADDRESS and config.SMTP_PASSWORD):
-        if not config.DEV:
-            raise RuntimeError(
-                "APP_SMTP_ADDRESS / APP_SMTP_PASSWORD are not set, so no "
-                "sign-in link could be sent.")
-        print(f"\n  [dev] sign-in link for {address}:\n  {link}\n", flush=True)
-        return
+SUBJECT = "Your sign-in link"
 
+
+def _body(link: str) -> str:
+    return ("Here is your sign-in link. It works once and expires in fifteen "
+            f"minutes.\n\n{link}\n\n"
+            "If you did not ask for this, ignore it - nobody can sign in without "
+            "the link, and it will expire on its own.\n")
+
+
+def _send_over_https(address: str, body: str) -> None:
+    """Brevo's transactional endpoint, on 443.
+
+    Exists because a free host may block every SMTP port outright, and a
+    blocked port is indistinguishable from a broken mail server until you
+    know to look for it.
+    """
+    try:
+        r = httpx.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": config.BREVO_API_KEY,
+                     "accept": "application/json",
+                     "content-type": "application/json"},
+            json={"sender": {"email": config.SMTP_ADDRESS,
+                             "name": "Job Machine"},
+                  "to": [{"email": address}],
+                  "subject": SUBJECT,
+                  "textContent": body},
+            timeout=30)
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"could not reach Brevo: {exc}") from exc
+    if r.status_code not in (200, 201, 202):
+        # The body carries the actual reason - an unverified sender is the
+        # usual one, and it is worth seeing rather than guessing.
+        raise RuntimeError(
+            f"Brevo refused the message ({r.status_code}): {r.text[:300]}")
+
+
+def _send_over_smtp(address: str, body: str) -> None:
     msg = EmailMessage()
-    msg["Subject"] = "Your sign-in link"
+    msg["Subject"] = SUBJECT
     msg["From"] = config.SMTP_ADDRESS
     msg["To"] = address
-    msg.set_content(
-        "Here is your sign-in link. It works once and expires in fifteen "
-        f"minutes.\n\n{link}\n\n"
-        "If you did not ask for this, ignore it - nobody can sign in without "
-        "the link, and it will expire on its own.\n")
+    msg.set_content(body)
 
     context = ssl.create_default_context()
     with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT,
                           context=context, timeout=30) as s:
         s.login(config.SMTP_ADDRESS, config.SMTP_PASSWORD)
         s.send_message(msg)
+
+
+def send_login_email(address: str, link: str) -> None:
+    """In development the link goes to the console, so no mail setup is
+    needed to work on the app. In production a missing mail configuration is
+    an error rather than a silently unsent link."""
+    route = config.mail_route()
+
+    if config.DEV and not route:
+        print(f"\n  [dev] sign-in link for {address}:\n  {link}\n", flush=True)
+        return
+    if not route:
+        raise RuntimeError(
+            "No way to send mail is configured. Set BREVO_API_KEY with "
+            "APP_SMTP_ADDRESS to send over HTTPS, or APP_SMTP_ADDRESS with "
+            "APP_SMTP_PASSWORD to send over SMTP. Note that a free Render "
+            "web service cannot reach an SMTP port at all.")
+
+    body = _body(link)
+    if route == "brevo":
+        _send_over_https(address, body)
+    else:
+        _send_over_smtp(address, body)

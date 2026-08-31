@@ -12,6 +12,7 @@ configuration.
 
 from __future__ import annotations
 
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -28,6 +29,8 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
+
+log = logging.getLogger("jobmachine")
 
 app = FastAPI(title="job machine", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -118,6 +121,10 @@ def login_submit(request: Request, email: str = Form("")):
     try:
         auth.send_login_email(address, auth.make_login_link(address))
     except Exception:
+        # The user is told nothing useful on purpose, but the operator has to
+        # be able to tell a rejected password from a blocked port. Without
+        # this the only symptom is a red box and an empty log.
+        log.exception("sign-in email could not be sent")
         return render(request, "login.html",
                       error="The sign-in email could not be sent. Try again shortly.")
     # Always the same reply, whether or not the address has an account: the
@@ -497,10 +504,17 @@ def status(request: Request):
             "BILLING_ENABLED is off, so every signed-in account is treated as "
             "paid. Nobody has to pay you.")
 
-    if not config.SMTP_ADDRESS or not config.SMTP_PASSWORD:
+    mail_route = config.mail_route()
+    if not mail_route:
         problems.append(
-            "No APP_SMTP_ADDRESS/APP_SMTP_PASSWORD, so sign-in links cannot "
-            "be emailed and nobody can get in.")
+            "No way to send sign-in email is configured, so nobody can get "
+            "in. Set BREVO_API_KEY with APP_SMTP_ADDRESS to send over HTTPS, "
+            "or APP_SMTP_ADDRESS with APP_SMTP_PASSWORD for SMTP.")
+    elif mail_route == "smtp":
+        warnings.append(
+            "Sign-in email goes over SMTP. A free Render web service cannot "
+            "reach ports 25, 465 or 587, and the failure is a silent timeout. "
+            "Set BREVO_API_KEY to send over HTTPS instead.")
 
     # A wrong BASE_URL is invisible until a customer clicks a dead link.
     base_ok = None
@@ -543,8 +557,8 @@ def status(request: Request):
         "database_reachable": reachable,
         "billing": billing,
         "webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
-        "sign_in_email_configured": bool(config.SMTP_ADDRESS
-                                         and config.SMTP_PASSWORD),
+        "sign_in_email_configured": bool(mail_route),
+        "sign_in_email_route": mail_route or "none",
         "automatic_sending": ("available" if vault.available()
                               else "unavailable"),
         "base_url_set": bool(config.BASE_URL),
