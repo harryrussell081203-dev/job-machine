@@ -102,8 +102,25 @@ class TestSignIn(AppTestCase):
     def test_a_valid_link_signs_you_in(self):
         r = self.sign_in()
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/dashboard")
         self.assertIn("jm_session", r.cookies)
+
+    def test_a_new_account_lands_on_setup(self):
+        """With no profile the dashboard can only say so. Send them to the
+        work instead - the CV upload there fills in most of the next screen."""
+        r = self.sign_in()
+        self.assertEqual(r.headers["location"], "/setup")
+
+    def test_a_set_up_account_lands_on_the_dashboard(self):
+        r = self.sign_in()
+        user = self.main.db.get_or_create_user("sam@example.com")
+        self.main.db.save_profile(user["id"], {
+            "name": "Sam", "email": "sam@example.com", "phone": "07000000000",
+            "location": "Aberdeen", "target_roles": ["technician"],
+            "locations": ["Aberdeen"], "min_salary_annual": 30000,
+        })
+        self.client.cookies.clear()
+        r = self.sign_in()
+        self.assertEqual(r.headers["location"], "/dashboard")
 
     def test_a_link_cannot_be_used_twice(self):
         link = self.main.auth.make_login_link("sam@example.com")
