@@ -169,8 +169,14 @@ def suggest_profile(text: str, ai) -> dict:
     a convenience, and a failure here must not block somebody who has paid."""
     if not (text or "").strip():
         return {}
+    from .ai import AIError
     try:
         raw = ai(PROMPT % text[:12000])
+    except AIError:
+        # The model was rate limited or unreachable. That says nothing about
+        # the CV, and telling somebody their CV is unreadable sends them off
+        # to retype a profile by hand over a quota that resets on its own.
+        raise
     except Exception:
         return {}
     return parse_suggestion(raw)
