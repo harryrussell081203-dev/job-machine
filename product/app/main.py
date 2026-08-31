@@ -140,7 +140,11 @@ def verify(request: Request, token: str = ""):
                       error="That link has expired or was already used. "
                             "Here is a fresh one.")
     user = db.get_or_create_user(email)
-    response = RedirectResponse("/dashboard", status_code=303)
+    # Somebody with no profile has nothing to look at on the dashboard except
+    # a note telling them so. Send them to the thing that needs doing; the CV
+    # upload there fills in most of the next screen on its own.
+    landing = "/dashboard" if db.load_profile(user["id"]) else "/setup"
+    response = RedirectResponse(landing, status_code=303)
     response.set_cookie(
         SESSION_COOKIE, auth.make_session(user["id"]),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
