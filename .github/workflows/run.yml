@@ -27,6 +27,7 @@ on:
       - "fire-chase/**"         # the second letter, to whoever never answered
       - "fire-ask/**"           # ask one person how they got offshore
       - "fire-meet/**"          # ask the agencies for twenty minutes in person
+      - "fire-rescue/**"        # follow the board links on the no_email backlog
   workflow_dispatch:
     inputs:
       test_mode:
@@ -141,6 +142,15 @@ jobs:
           AGENCY_REGISTER_PER_RUN: ${{ vars.AGENCY_REGISTER_PER_RUN }}
           AGENCY_PIPELINE_PER_RUN: ${{ vars.AGENCY_PIPELINE_PER_RUN }}
         run: |
+          # 185 listings scored 70 or better and were never written to, because
+          # the address hunt was run against an Adzuna page rather than the
+          # employer's. This follows the link and puts them back in the queue.
+          if [[ "${GITHUB_REF_NAME}" == fire-rescue/* ]]; then
+            echo "fire-rescue branch: reading the real adverts behind the board links"
+            python listings.py --rescue
+            python job_machine.py --skip-harvest
+            exit 0
+          fi
           # The charities and training bodies that may fund the offshore
           # tickets and the driving licence. One approach each, ever.
           if [[ "${GITHUB_REF_NAME}" == fire-support/* ]]; then

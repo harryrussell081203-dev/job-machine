@@ -3006,6 +3006,21 @@ def harvest_from_inbox(state):
         alert_harvest.enrich(state)
 
 
+def read_the_real_adverts(state, backlog=False):
+    """Follow the board's link to the employer's own page.
+
+    Has to run BEFORE scoring. Adzuna's API caps a description at 500
+    characters and Reed's at about 450, so 3,452 of the adverts in this file
+    end in an ellipsis - and the parts that decide whether a job suits Harry
+    (the rotation, electrical against mechanical, which tickets are wanted) are
+    in the requirements list halfway down, not the first paragraph.
+
+    The same fetch is what gives the address hunt and the ATS detector a real
+    employer page instead of an Adzuna one. See listings.py."""
+    import listings
+    return listings.run(state, backlog=backlog)
+
+
 def portal_fallback(state, max_age_days=PORTAL_FALLBACK_MAX_AGE_DAYS):
     """Put jobs whose application form defeated us back on the email route.
 
@@ -3149,6 +3164,11 @@ def main(argv=None):
     # parked listings, found real addresses for six of them, and was killed
     # before it sent one, leaving them 'ready' with nothing to show.
     sent = stage("send", run_sends, state, args.dry_run) or 0
+    save(state)
+    # Before the scorer, deliberately. Everything it judges should be the whole
+    # advert rather than the board's first paragraph, and the same fetch hands
+    # the address hunt below a real employer page to work on.
+    stage("adverts", read_the_real_adverts, state)
     save(state)
     stage("score", score_jobs, state)
     save(state)
