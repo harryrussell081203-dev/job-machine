@@ -3,9 +3,9 @@
 <h1>Dashboard</h1>
 
 {% if not profile %}
-  <div class="note bad">Nothing can be searched for or written until you have
-  set up. It takes about ten minutes.</div>
-  <p><a class="btn" href="/setup">Set it up</a></p>
+  <div class="note">Upload your CV and it fills in most of the rest for you.
+  About ten minutes, and then it runs on its own.</div>
+  <p><a class="btn" href="/setup">Get started</a></p>
 {% else %}
   <div class="stats">
     <div class="stat"><b>{{ counts.get('draft', 0) }}</b><span>waiting to send</span></div>
