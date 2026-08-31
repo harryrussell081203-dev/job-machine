@@ -183,7 +183,8 @@ def run_now(request: Request):
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
 
-    report = runner.run_for_user(user["id"])
+    # A person is watching this page, so rate limits must not be waited out.
+    report = runner.run_for_user(user["id"], interactive=True)
     print(f"[run] user {user['id']}: {report.summary()}")
     return RedirectResponse("/drafts" if report.drafted else "/dashboard",
                             status_code=303)
@@ -669,8 +670,11 @@ def profile_from_cv(request: Request):
     if not row or not row["extracted"]:
         return RedirectResponse("/profile", status_code=303)
 
-    from .ai import gemini
-    data = cvlib.suggest_profile(row["extracted"], gemini)
+    from .ai import AIError, gemini_now
+    try:
+        data = cvlib.suggest_profile(row["extracted"], gemini_now)
+    except AIError:
+        return RedirectResponse("/profile?e=ai", status_code=303)
     if not data:
         return RedirectResponse("/profile?e=cv", status_code=303)
     data.setdefault("email", user["email"])
