@@ -13,7 +13,12 @@
  * message rather than a stale, possibly-someone-else's screen.
  */
 
-const VERSION = "jm-v1";
+// Bump this on any change to a file in SHELL. The fetch handler below is
+// cache-first for /static/, and activate only clears caches whose key is not
+// this one - so a stylesheet that changes without a bump here is never seen
+// again by anyone who has already loaded the app. The white-and-black redraw
+// was invisible to every returning visitor until this went to v2.
+const VERSION = "jm-v2";
 const SHELL = [
   "/static/style.css",
   "/static/icons/icon-192.png",
