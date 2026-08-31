@@ -200,8 +200,28 @@ choosing when you create the service, and not worth rebuilding for later.
 ## 4. Mail for sign-in links
 
 `APP_SMTP_*` is the app talking to its own customers, and is separate from
-anything a user sends about a job. A Gmail app password works to start. Move
-to a transactional provider when link delivery starts landing in spam.
+anything a user sends about a job.
+
+**On a free Render web service, SMTP cannot work at all.** Render blocks
+outbound traffic to ports 25, 465 and 587 on free instances. The failure mode
+is the expensive part: the connection is dropped rather than refused, so the
+app waits out its thirty-second timeout and reports that the email could not
+be sent. It reads as a broken mail server or a bad password, and neither is
+true.
+
+So on the free tier, send over HTTPS instead. Set `BREVO_API_KEY` (brevo.com,
+free tier, 300 a day) and `APP_SMTP_ADDRESS`, verify that address with Brevo
+as a sender, and sign-in links go out on 443. `/status` reports which route is
+in use as `sign_in_email_route`.
+
+`APP_SMTP_PASSWORD` and the SMTP path remain for local development and paid
+instances, where the ports are open. Setting `BREVO_API_KEY` always wins.
+
+**A note on the From address.** Sending as an `@gmail.com` address through
+another provider breaks SPF and DKIM alignment, and Gmail-to-Gmail will often
+land in spam. For a product whose entire login is an emailed link, that is
+users who cannot get in. A domain of your own is the fix, and it is the
+cheapest thing on this page.
 
 ## 5. Rate limits are already on
 
