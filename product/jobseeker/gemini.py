@@ -28,9 +28,10 @@ MODEL = "gemini-2.5-flash"
 ENDPOINT = ("https://generativelanguage.googleapis.com/v1beta/models/"
             f"{MODEL}:generateContent")
 
-# Roughly ten calls a minute on the free tier. Spacing them here is cheaper
-# than being told off and waiting longer.
-MIN_INTERVAL = 6.0
+# The free tier allows ten calls a minute. Six seconds apart sits exactly on
+# that ceiling, so any jitter tips over it; seven leaves a little room. Being
+# spaced out here is cheaper than being told off and waiting a minute.
+MIN_INTERVAL = 7.0
 _last_call = 0.0
 
 
@@ -55,8 +56,16 @@ def _retry_after(response, fallback: float) -> float:
 
 
 def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
-           as_json: bool = True, attempts: int = 3, sleep=time.sleep) -> str:
-    """One call. Returns the model's text, or raises."""
+           as_json: bool = True, attempts: int = 3, sleep=time.sleep,
+           budget: float | None = None) -> str:
+    """One call. Returns the model's text, or raises.
+
+    `budget` caps the total seconds this may spend waiting out rate limits.
+    None means wait as long as the model asks - right for the scheduled sweep,
+    which has nobody watching. Zero means give up the moment a 429 arrives -
+    right for anything inside a web request, because the server runs one
+    worker and a sleeping request holds up every other user's page.
+    """
     global _last_call
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
@@ -76,6 +85,7 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
         body["generationConfig"]["responseMimeType"] = "application/json"
 
     last: Exception | None = None
+    waited = 0.0
     for attempt in range(attempts):
         _last_call = time.monotonic()
         try:
@@ -93,8 +103,14 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
             if "quota" in r.text.lower() and "per day" in r.text.lower():
                 raise QuotaExhausted("daily model quota exhausted")
             delay = _retry_after(r, 15 * (attempt + 1))
+            if budget is not None and waited + delay > budget:
+                # Somebody is waiting on a page. Unscored is a better answer
+                # than a minute of blank screen, and the caller treats it so.
+                print(f"[ai] rate limited, giving up (budget {budget:.0f}s)")
+                raise AIError("rate limited")
             print(f"[ai] rate limited, waiting {delay:.0f}s")
             sleep(delay)
+            waited += delay
             last = AIError("rate limited")
             continue
 

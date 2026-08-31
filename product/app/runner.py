@@ -55,8 +55,14 @@ def credentials() -> harvest.Credentials:
 
 
 def run_for_user(user_id: int, *, ai=None, session=None,
-                 cap: int = DEFAULT_DRAFT_CAP, delay: float | None = None) -> RunReport:
-    """Produce drafts for one user. Never raises for one bad listing."""
+                 cap: int = DEFAULT_DRAFT_CAP, delay: float | None = None,
+                 interactive: bool = False) -> RunReport:
+    """Produce drafts for one user. Never raises for one bad listing.
+
+    `interactive` says a person is waiting on this. It picks the model caller
+    that refuses to sit out a rate limit, because the server has one worker
+    and a sleeping request blocks the whole app.
+    """
     report = RunReport()
 
     raw = db.load_profile(user_id)
@@ -70,8 +76,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         return report
 
     if ai is None:
-        from .ai import gemini
-        ai = gemini
+        from .ai import gemini, gemini_now
+        ai = gemini_now if interactive else gemini
     kwargs = {} if delay is None else {"delay": delay}
 
     seen = db.seen_ids(user_id)
