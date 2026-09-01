@@ -741,9 +741,9 @@ async def mail_save(request: Request):
     if not vault.available():
         return render(request, "mail.html", user=user, mail=None,
                       vault_ready=False, profile=db.load_profile(user["id"]) or {},
-                      error="This deployment cannot store mail credentials "
-                            "yet, so automatic sending is unavailable. The "
-                            "operator needs to set CREDENTIAL_KEY.")
+                      error="Automatic sending is switched off at the moment, "
+                            "so there is nothing to connect yet. Letters are "
+                            "still written for you to send.")
 
     form = await request.form()
     address = (form.get("address") or "").strip()
@@ -766,7 +766,7 @@ async def mail_save(request: Request):
     if not password:
         return again("The app password is missing.")
     if not host:
-        return again("I do not know the mail server for that address - "
+        return again("We do not know the mail server for that address - "
                      "please fill in the server and port yourself.")
 
     try:

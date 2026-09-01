@@ -22,8 +22,8 @@
       </form>
     </div>
   {% else %}
-    <p>It gets attached to every letter. Upload it first and I will read it to
-       fill in as much of the next step as I can.</p>
+    <p>It gets attached to every letter. Upload it first and we will read it
+       and fill in as much of the next step as we can.</p>
     <form method="post" action="/setup/cv" enctype="multipart/form-data">
       <input type="file" name="cv" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
       <button class="btn">Upload</button>
@@ -58,9 +58,9 @@
   <h2><span class="num">3</span> How letters go out</h2>
 
   {% if not vault_ready %}
-    <div class="note bad">This deployment cannot store mail credentials, so
-      automatic sending is unavailable. Letters still get written, and you
-      send them in one click each. (Operator: set <code>CREDENTIAL_KEY</code>.)</div>
+    <div class="note">Automatic sending is switched off at the moment, so
+      every letter waits for you. They are still written, still have your CV
+      attached, and you send them one click each from the drafts screen.</div>
   {% elif mail %}
     <p class="ok">Connected as {{ mail.address }}.</p>
     {% if mail.last_error %}
