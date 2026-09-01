@@ -1,27 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Your search</h1>
-<p class="lede">Everything written on your behalf comes from this page. Vague
-in, vague out.</p>
+<p class="lede">Everything written on your behalf comes from this page.</p>
 
 {% if from_cv %}
   <div class="note good">
-    <p><b>Filled in from your CV.</b> Read every line before you save it &mdash;
-       these are a machine's reading of your document, and they are about to be
-       used to write to real employers under your name.</p>
-    <p>Two things were deliberately left blank, because they are yours to
-       state and a guess at either is worse than nothing: <b>the least you will
-       work for</b>, and <b>anything you must never be described as holding</b>.</p>
+    <p><b>Filled in from your CV.</b> Check every line &mdash; this is a
+       machine's reading, and it is about to write to employers under your
+       name.</p>
+    <p>Your <b>pay floor</b> and your <b>never claim</b> list were left blank
+       on purpose. Both are yours to state.</p>
   </div>
 {% elif request.query_params.get('e') == 'ai' %}
-  <div class="note">Your CV is saved and will be attached to every letter. The
-    model that reads it is busy right now, so this is not filled in &mdash;
-    nothing is wrong with your CV. Try again in a few minutes, or fill it in
-    by hand if you would rather not wait.</div>
+  <div class="note">Your CV is saved and there is nothing wrong with it
+    &mdash; we just could not read it right now. Try again in a few minutes,
+    or fill this in by hand.</div>
 {% elif request.query_params.get('e') == 'cv' %}
-  <div class="note">Your CV is saved and will be attached to every letter, but
-    I could not read enough from it to fill this in &mdash; often it is a scan
-    rather than text. Please fill it in by hand; it takes about ten minutes.</div>
+  <div class="note">Your CV is saved, but we could not read enough from it
+    &mdash; usually that means a scan rather than text. Please fill this in by
+    hand.</div>
 {% endif %}
 
 <form method="post" action="/profile">
@@ -31,7 +28,7 @@ in, vague out.</p>
     <div class="row">
       <div>
         <label for="name">Full name</label>
-        <p class="hint">As it should sign a letter.</p>
+        <p class="hint">As it signs a letter.</p>
         <input id="name" name="name" type="text" required
                value="{{ data.get('name','') }}">
       </div>
@@ -62,8 +59,7 @@ in, vague out.</p>
     <div class="row">
       <div>
         <label for="situation">Situation</label>
-        <p class="hint">In work? A job paying the same as yours then counts
-        for nothing, which is the point.</p>
+        <p class="hint">In work? A job paying the same counts for nothing.</p>
         <select id="situation" name="situation">
           {% for opt in ["employed", "unemployed", "notice_period", "student"] %}
             <option value="{{ opt }}"
@@ -84,15 +80,12 @@ in, vague out.</p>
         {% if data.get('may_name_employer') %}checked{% endif %}>
         My current employer may be named in letters</label>
     </div>
-    <p class="hint">Leave that unticked unless you have a reason. In a small
-    city, naming them gets back to them.</p>
+    <p class="hint">Leave unticked unless you have a reason.</p>
   </div>
 
   <div class="panel">
     <h2 style="margin-top:0">Your floor</h2>
-    <p class="hint">Set at least one. Without a floor you will be written to
-    jobs paying less than you already earn. Below your current salary is
-    refused.</p>
+    <p class="hint">Set at least one. Anything below it is refused.</p>
     <div class="row">
       <div>
         <label for="min_salary_annual">Lowest yearly salary worth your time</label>
@@ -109,8 +102,7 @@ in, vague out.</p>
 
   <div class="panel">
     <h2 style="margin-top:0">What you want</h2>
-    <p class="hint">Tick what matters. The order they are listed here is the
-    order they are weighed.</p>
+    <p class="hint">Tick what matters. Weighed in the order shown.</p>
     <div class="checks">
       {% for p in ["money", "travel", "contract", "progression", "stability",
                    "hours", "location", "training"] %}
@@ -123,9 +115,8 @@ in, vague out.</p>
 
   <div class="panel">
     <h2 style="margin-top:0">Your history</h2>
-    <p class="hint">The detail line is what earns replies. Equipment,
-    standards, systems, numbers. &ldquo;Responsible for maintenance&rdquo; is
-    worth nothing.</p>
+    <p class="hint">Detail earns replies: equipment, standards, systems,
+    numbers. Not &ldquo;responsible for maintenance&rdquo;.</p>
     {% set hist = data.get('history') or [{}, {}, {}] %}
     {% for h in hist + [{}] %}
       <div class="row" style="margin-bottom:10px">
@@ -145,11 +136,9 @@ in, vague out.</p>
 
   <div class="panel">
     <h2 style="margin-top:0">What must never be said about you</h2>
-    <p class="hint">The most important box on this page. Asked to sell you, an
-    AI reaches for credentials you never mentioned &mdash; say &ldquo;Royal
-    Navy&rdquo; and it writes &ldquo;security cleared&rdquo; unprompted. It gets
-    found out at vetting. One per line, anything you do <b>not</b> currently
-    hold.</p>
+    <p class="hint">One per line, anything you do <b>not</b> hold. Asked to
+    sell you, an AI reaches for credentials you never mentioned, and that gets
+    found out at vetting.</p>
     <label for="never_claim">Never claim&hellip;</label>
     <textarea id="never_claim" name="never_claim"
       placeholder="that I hold a current 17th Edition certificate&#10;that I have finished my HNC">{{ (data.get('never_claim') or []) | join('\n') }}</textarea>

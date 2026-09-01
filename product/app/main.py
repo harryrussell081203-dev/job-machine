@@ -27,6 +27,7 @@ sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
+from . import admin as adminlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
 
@@ -63,7 +64,8 @@ def render(request: Request, template: str, **ctx):
         user = current_user(request)
     return templates.TemplateResponse(
         request, template,
-        {"user": user, "paid": db.is_paid(user), "config": config, **ctx})
+        {"user": user, "paid": db.is_paid(user), "config": config,
+         "is_admin": bool(user and config.is_admin(user["email"])), **ctx})
 
 
 def needs_login():
@@ -562,6 +564,8 @@ def status(request: Request):
         "database_reachable": reachable,
         "billing": billing,
         "webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
+        "free_accounts": len(config.FREE_ACCESS_EMAILS),
+        "admins": len(config.ADMIN_EMAILS),
         "sign_in_email_configured": bool(mail_route),
         "sign_in_email_route": mail_route or "none",
         "automatic_sending": ("available" if vault.available()
@@ -578,6 +582,23 @@ def status(request: Request):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin(request: Request):
+    """Every customer, and how far each of them actually got.
+
+    Not behind the paywall - it is behind ADMIN_EMAILS, which is a stricter
+    gate. A signed-in stranger gets the same 404 as a signed-out one, because
+    "403 Forbidden" on a URL is an answer: it confirms the page exists and is
+    worth attacking. There is nothing to gain from telling them.
+    """
+    user = current_user(request)
+    if not user or not config.is_admin(user["email"]):
+        return PlainTextResponse("Not found", status_code=404)
+    rows = db.overview()
+    return render(request, "admin.html", user=user, rows=rows,
+                  ago=adminlib.ago, **adminlib.summarise(rows))
 
 
 # ----------------------------------------------------------------------
@@ -740,9 +761,9 @@ async def mail_save(request: Request):
     if not vault.available():
         return render(request, "mail.html", user=user, mail=None,
                       vault_ready=False, profile=db.load_profile(user["id"]) or {},
-                      error="This deployment cannot store mail credentials "
-                            "yet, so automatic sending is unavailable. The "
-                            "operator needs to set CREDENTIAL_KEY.")
+                      error="Automatic sending is switched off at the moment, "
+                            "so there is nothing to connect yet. Letters are "
+                            "still written for you to send.")
 
     form = await request.form()
     address = (form.get("address") or "").strip()
@@ -765,7 +786,7 @@ async def mail_save(request: Request):
     if not password:
         return again("The app password is missing.")
     if not host:
-        return again("I do not know the mail server for that address - "
+        return again("We do not know the mail server for that address - "
                      "please fill in the server and port yourself.")
 
     try:

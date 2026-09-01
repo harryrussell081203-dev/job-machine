@@ -52,11 +52,18 @@ def is_paid(user) -> bool:
     Deliberately strict: an unknown status is unpaid, and an expired
     paid_until is unpaid even if the status still reads active, because a
     cancelled-then-expired subscription can leave the latter stale.
+
+    The one way in that is not Stripe is FREE_ACCESS_EMAILS - the people the
+    app was given to rather than sold to. It is checked before the status
+    columns so that a stale or cancelled Stripe record cannot shut out
+    somebody who was never a customer in the first place.
     """
     if not config.BILLING_ENABLED:
         return True
     if user is None:
         return False
+    if (user["email"] or "").strip().lower() in config.FREE_ACCESS_EMAILS:
+        return True
     if user["subscription_status"] not in ("active", "trialing"):
         return False
     until = user["paid_until"]
@@ -96,6 +103,41 @@ def user_by_stripe_customer(customer_id: str):
     with connect() as c:
         return c.execute("SELECT * FROM users WHERE stripe_customer_id = ?",
                          (customer_id,)).fetchone()
+
+
+# ----------------------------------------------------------------------
+# what everybody has actually done, for /admin
+# ----------------------------------------------------------------------
+#
+# One row per person, every milestone as the timestamp it happened at, so the
+# funnel and the per-user table are the same query read two ways.
+#
+# The aggregation is done in Python rather than SQL because this file has to
+# run on SQLite and Postgres both, and date bucketing is where those two
+# dialects diverge hardest. Correlated subqueries are the portable option and
+# the right one at this size: a few hundred customers is a few hundred index
+# lookups. If this ever gets slow it wants a rewrite, not an index.
+_OVERVIEW = """
+SELECT u.id, u.email, u.created_at, u.last_seen_at,
+       u.subscription_status, u.paid_until, u.stripe_subscription_id,
+       (SELECT uploaded_at FROM cvs      WHERE user_id = u.id) AS cv_at,
+       (SELECT updated_at  FROM profiles WHERE user_id = u.id) AS profile_at,
+       (SELECT verified_at FROM mail_accounts WHERE user_id = u.id) AS mail_at,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id) AS drafts,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id
+                                      AND status = 'sent') AS sent,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id
+                                      AND status = 'discarded') AS discarded,
+       (SELECT MAX(sent_at) FROM drafts WHERE user_id = u.id
+                                          AND status = 'sent') AS last_sent_at
+FROM users u
+ORDER BY u.created_at DESC
+"""
+
+
+def overview() -> list[dict]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(_OVERVIEW).fetchall()]
 
 
 # ----------------------------------------------------------------------
