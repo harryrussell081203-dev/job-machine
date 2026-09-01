@@ -86,21 +86,35 @@
     </label>
 
     <div class="row">
-      <label>Wait before sending
-        <select name="hold_minutes">
-          {% for m, label in [(0, 'Send straight away'), (30, '30 minutes'),
-                              (60, '1 hour'), (180, '3 hours'),
-                              (720, '12 hours'), (1440, '1 day')] %}
-            <option value="{{ m }}" {% if settings.hold_minutes == m %}selected{% endif %}>{{ label }}</option>
+      <label>Letters a day
+        <input type="number" name="daily_cap" min="1"
+               max="{{ config.MAX_DAILY_CAP }}"
+               value="{{ settings.daily_cap }}">
+      </label>
+      <label>How far back to look
+        <select name="search_days">
+          {% for days, label in config.SEARCH_WINDOWS %}
+            <option value="{{ days }}"
+              {% if settings.search_days == days %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>Most per day
-        <input type="number" name="daily_cap" min="1" max="50"
-               value="{{ settings.daily_cap }}">
-      </label>
     </div>
+    <p class="hint">Up to {{ config.MAX_DAILY_CAP }} a day. Past that a
+      personal address starts looking compromised, and everything you send
+      lands in spam &mdash; including the good ones.</p>
+    <p class="hint">A wider window fills a quiet queue, but a job posted three
+      weeks ago has already had three hundred applicants.</p>
 
+    <label>Wait before sending
+      <select name="hold_minutes">
+        {% for m, label in [(0, 'Send straight away'), (30, '30 minutes'),
+                            (60, '1 hour'), (180, '3 hours'),
+                            (720, '12 hours'), (1440, '1 day')] %}
+          <option value="{{ m }}" {% if settings.hold_minutes == m %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <p class="hint">The wait is your undo: a letter can be stopped from the
       drafts screen until it goes.</p>
 
@@ -110,11 +124,22 @@
 
 <div class="panel">
   <h2>What happens then</h2>
+  {# Reads back their own settings. A summary that says "48 hours" to
+     somebody who chose a week is the app telling them it ignored them. #}
   <p>Adzuna and Reed are searched three times a weekday for your roles in
-     your towns. Anything under 48 hours old that clears your floor gets a real
-     address found in the advert or on the company's own site &mdash; never
-     guessed &mdash; and a letter written to it with your CV attached.</p>
-  <p>One employer, one letter, ever.</p>
+     your towns. Anything
+     {%- if settings.search_days == 1 %} posted today or yesterday
+     {%- elif settings.search_days == 2 %} under 48 hours old
+     {%- elif settings.search_days == 7 %} posted in the last week
+     {%- elif settings.search_days == 30 %} posted in the last month
+     {%- else %} posted in the last {{ settings.search_days }} days{% endif %}
+     that clears your floor gets a real address found in the advert or on the
+     company's own site &mdash; never guessed &mdash; and a letter written to
+     it with your CV attached.</p>
+  <p>{% if settings.auto_send %}Up to <b>{{ settings.daily_cap }} a day</b> go
+     out on their own.{% else %}Up to <b>{{ settings.daily_cap }} a day</b>
+     land on your drafts screen for you to send.{% endif %}
+     One employer, one letter, ever.</p>
   <p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
 </div>
 
