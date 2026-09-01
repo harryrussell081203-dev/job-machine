@@ -138,6 +138,39 @@ ADMIN_EMAILS = frozenset(
 
 def is_admin(email: str) -> bool:
     return bool(email) and email.strip().lower() in ADMIN_EMAILS
+
+
+# --- how hard the machine is allowed to go ----------------------------
+# The most letters a day anybody may set. It is not a licence tier and it is
+# not meanness: it is the number above which the user's own mailbox starts to
+# look compromised. Gmail will accept five hundred; Gmail's spam scoring will
+# not forgive them. A personal address sending cold mail all day gets its
+# reputation shot, and the person who pays for that is the customer, whose
+# letters then land in spam for every employer including the good ones.
+#
+# It also never binds in practice. One trade, a handful of towns, listings
+# under a couple of days old - that is five to fifteen a day on a good day,
+# not twenty-five. Anybody who needs more than this is casting so wide that
+# the extra letters are going to generic inboxes, which the app's own numbers
+# say reply at 10% against 38% for a named human. Volume past this point
+# lowers the reply rate and the sender's reputation at the same time.
+MAX_DAILY_CAP = 25
+
+# The furthest back a search may reach. A month is already generous: a listing
+# that old is usually filled or buried, and the reply rate falls off with age
+# the same way it falls off with a generic inbox. It exists for the new
+# account with an empty queue that wants to catch up once.
+MAX_SEARCH_DAYS = 30
+
+# What the "how far back" control offers. Days, and the label beside each.
+SEARCH_WINDOWS = [
+    (1, "Today and yesterday"),
+    (2, "Last 2 days"),
+    (3, "Last 3 days"),
+    (7, "Last week"),
+    (14, "Last 2 weeks"),
+    (30, "Last month"),
+]
 if BILLING_ENABLED and not DEV:
     if STRIPE_PAYMENT_LINK:
         # Link mode: no API calls, so no secret key. The webhook is still what

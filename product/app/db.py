@@ -384,8 +384,8 @@ def delete_cv(user_id: int) -> None:
 # ----------------------------------------------------------------------
 # how letters go out
 # ----------------------------------------------------------------------
-DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 20,
-                         "paused_until": None}
+DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 12,
+                         "search_days": 2, "paused_until": None}
 
 
 def get_send_settings(user_id: int) -> dict:
@@ -397,6 +397,10 @@ def get_send_settings(user_id: int) -> dict:
     return {"auto_send": int(row["auto_send"] or 0),
             "hold_minutes": int(row["hold_minutes"] or 0),
             "daily_cap": int(row["daily_cap"] or 0),
+            # A row written before search_days existed has no such key, and a
+            # row written after a failed migration has NULL. Both mean "the
+            # default", not "look back zero days and find nothing".
+            "search_days": int(row["search_days"] or 0) or 2,
             "paused_until": row["paused_until"]}
 
 
@@ -406,15 +410,17 @@ def save_send_settings(user_id: int, **fields) -> None:
     with connect() as c:
         c.execute(
             "INSERT INTO send_settings (user_id, auto_send, hold_minutes, "
-            "daily_cap, paused_until, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
+            "daily_cap, search_days, paused_until, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET auto_send = excluded.auto_send, "
             "hold_minutes = excluded.hold_minutes, "
             "daily_cap = excluded.daily_cap, "
+            "search_days = excluded.search_days, "
             "paused_until = excluded.paused_until, "
             "updated_at = excluded.updated_at",
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
-             current["paused_until"], now()))
+             int(current["search_days"]), current["paused_until"], now()))
 
 
 def record_sent(user_id: int, *, draft_id, to_email: str, company: str,

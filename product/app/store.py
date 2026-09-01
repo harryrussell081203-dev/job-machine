@@ -172,7 +172,12 @@ CREATE TABLE IF NOT EXISTS send_settings (
     -- stopped, and it costs nothing because employers do not read email in
     -- the ninety seconds after it is written.
     hold_minutes   INTEGER NOT NULL DEFAULT 60,
-    daily_cap      INTEGER NOT NULL DEFAULT 20,
+    daily_cap      INTEGER NOT NULL DEFAULT 12,
+    -- How far back a sweep looks for listings. Two days is the default
+    -- because a job posted this morning has ten applicants and one posted
+    -- three weeks ago has three hundred, but a new account with an empty
+    -- queue has every reason to widen it once and catch up.
+    search_days    INTEGER NOT NULL DEFAULT 2,
     paused_until   BIGINT,
     updated_at     BIGINT  NOT NULL
 );
@@ -303,11 +308,35 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
         f"INSERT INTO {table} ({cols}) VALUES ({marks})", values).lastrowid
 
 
+# Columns added after a table already existed somewhere. CREATE TABLE IF NOT
+# EXISTS does nothing to a table that is already there, so a new column needs
+# its own ALTER - and SQLite has no ADD COLUMN IF NOT EXISTS, so the only
+# portable test for "is it there already" is to try it and see.
+#
+# Each attempt gets its own connection on purpose: Postgres aborts the whole
+# transaction on a failed statement, so sharing one would mean the first
+# already-applied migration silently killed every migration after it.
+_ADDED_COLUMNS = [
+    ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
+]
+
+
+def _add_missing_columns() -> None:
+    for table, column, spec in _ADDED_COLUMNS:
+        try:
+            with connect() as c:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
+        except Exception:
+            pass                      # already there, which is the normal case
+
+
 def init() -> None:
     """Create the schema if it is not there. Safe to call on every boot: every
-    statement in _schema() is IF NOT EXISTS."""
+    statement in _schema() is IF NOT EXISTS, and every migration is retried
+    until it fails as a duplicate."""
     with connect() as c:
         c.executescript(_schema())
+    _add_missing_columns()
 
 
 def describe() -> str:
