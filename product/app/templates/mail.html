@@ -13,32 +13,27 @@
 {% if not vault_ready %}
   <div class="note">
     <p><b>Automatic sending is switched off at the moment</b>, so there is
-       nothing to connect here yet. This is at our end, not yours, and there
-       is nothing you need to do about it.</p>
-    <p>Everything else carries on exactly as it is: the jobs are found, the
-       addresses are dug out, the letters are written with your CV attached,
+       nothing to connect here yet. Nothing for you to do.</p>
+    <p>Everything else runs as normal: we find the jobs, write the letters,
        and you send each one with a click from the drafts screen.</p>
   </div>
 {% else %}
 
 <div class="note">
-  <p><b>Use an app password, not your normal one.</b> Your real password will
-     be refused here even when it is correct, because Google and Microsoft
-     both block ordinary sign-ins from apps.</p>
+  <p><b>Use an app password, not your normal one.</b> Your real password is
+     refused even when it is correct.</p>
   <p><b>Gmail:</b> Google Account &rarr; Security &rarr; 2-Step Verification
      &rarr; App passwords. <b>Outlook:</b> Security &rarr; Advanced security
      options &rarr; App passwords.</p>
 </div>
 
 <div class="note bad">
-  <p><b>Be clear on what this gives us.</b> An app password lets this app send
-     mail as you, and it would also let anyone holding it read that mailbox.
-     It is stored encrypted, and the key is not in the database &mdash; but the
-     honest summary is that you are trusting this app with your mailbox.</p>
-  <p>You can revoke it at any moment from your email provider, without
-     changing your own password or touching any other device. If you would
-     rather not, skip this: the app still writes every letter and you send
-     them in one click each.</p>
+  <p><b>What this gives us.</b> An app password lets us send mail as you, and
+     would let anyone holding it read that mailbox. It is stored encrypted, but
+     the honest summary is that you are trusting us with your mailbox.</p>
+  <p>Revoke it any time from your email provider, without changing your own
+     password. Or skip this &mdash; we still write every letter and you press
+     send.</p>
 </div>
 
 <form method="post" action="/setup/mail" class="stack">
@@ -64,9 +59,7 @@
     </div>
   </details>
 
-  <p class="hint">These are checked by actually signing in before anything is
-     saved. If they are wrong you will find out now rather than by wondering
-     why no letters ever arrived.</p>
+  <p class="hint">Checked by signing in before anything is saved.</p>
 
   <button class="btn">Check and connect</button>
   <a class="link" href="/setup">Cancel</a>

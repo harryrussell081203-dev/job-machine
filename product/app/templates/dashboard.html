@@ -3,8 +3,8 @@
 <h1>Dashboard</h1>
 
 {% if not profile %}
-  <div class="note">Upload your CV and it fills in most of the rest for you.
-  About ten minutes, and then it runs on its own.</div>
+  <div class="note">Upload your CV and we fill in most of the rest. About
+  ten minutes.</div>
   <p><a class="btn" href="/setup">Get started</a></p>
 {% else %}
   <div class="stats">
@@ -25,11 +25,9 @@
     <p><a class="btn" href="/drafts">Work through them</a></p>
   {% else %}
     <div class="panel">
-      <p>Nothing waiting. New listings are checked three times a weekday, and
-      anything that clears your floor and has a real address behind it will
-      appear here written and ready.</p>
-      <p class="muted">Quiet stretches are normal. A day with nothing worth
-      sending is better than a day spent on jobs that pay less than yours.</p>
+      <p>Nothing waiting. Listings are checked three times a weekday;
+      anything that clears your floor and has a real address behind it appears
+      here written and ready.</p>
       <form method="post" action="/run" style="margin-top:6px">
         <button type="submit">Look for work now</button>
       </form>
@@ -44,8 +42,7 @@
           <li class="muted" style="margin-bottom:6px">{{ o["outcome"] }}</li>
         {% endfor %}
       </ul>
-      <p style="margin-top:12px"><small>Most listings end this way. No real
-      address means no letter, and nothing is ever guessed.</small></p>
+      <p style="margin-top:12px"><small>No real address, no letter.</small></p>
     </div>
   {% endif %}
 

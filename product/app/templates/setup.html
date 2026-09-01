@@ -3,7 +3,7 @@
 {% block content %}
 
 <h1>Get it running</h1>
-<p class="lede">Four things. Ten minutes. Then it works on its own.</p>
+<p class="lede">Four things, about ten minutes.</p>
 
 {% if request.query_params.get('e') == 'nofile' %}
   <div class="note bad">Choose a file first.</div>
@@ -14,7 +14,7 @@
   <h2><span class="num">1</span> Your CV</h2>
   {% if cv %}
     <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB
-       &mdash; attached to every letter that goes out.</p>
+       &mdash; attached to every letter.</p>
     <div class="actions">
       <a class="btn small" href="/cv">Download it</a>
       <form method="post" action="/cv/delete">
@@ -22,14 +22,12 @@
       </form>
     </div>
   {% else %}
-    <p>It gets attached to every letter. Upload it first and we will read it
-       and fill in as much of the next step as we can.</p>
+    <p>Attached to every letter. We read it to fill in the next step.</p>
     <form method="post" action="/setup/cv" enctype="multipart/form-data">
       <input type="file" name="cv" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
       <button class="btn">Upload</button>
     </form>
-    <p class="hint">PDF is safest &mdash; it looks the same on the employer's
-       screen as it does on yours. 5MB limit.</p>
+    <p class="hint">PDF or Word, 5MB limit.</p>
   {% endif %}
 </div>
 
@@ -42,9 +40,8 @@
        {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}.</p>
     <p><a class="btn small" href="/profile">Change it</a></p>
   {% else %}
-    <p>What you do, where you will travel, and the least you will work for.
-       The pay floor is the one that matters: without it you will be written
-       to employers paying less than you already earn.</p>
+    <p>Your trade, where you will travel, and the least you will work
+       for.</p>
     <div class="actions">
       {% if cv %}<a class="btn" href="/setup/from-cv">Fill it in from my CV</a>{% endif %}
       <a class="{% if cv %}link{% else %}btn{% endif %}" href="/profile">
@@ -70,8 +67,8 @@
       <button class="link danger">Disconnect</button>
     </form>
   {% else %}
-    <p>Connect your own email and letters go out by themselves, from your
-       address. Without it the app writes them and you press send.</p>
+    <p>Connected: letters send themselves from your address. Not connected:
+       we write them, you press send.</p>
     <p><a class="btn" href="/setup/mail">Connect my email</a></p>
   {% endif %}
 </div>
@@ -104,10 +101,8 @@
       </label>
     </div>
 
-    <p class="hint">The wait is your undo. A letter sits for that long before
-      it goes, so anything that reads wrong can be stopped from the drafts
-      screen &mdash; and no employer reads their email in the next hour
-      anyway.</p>
+    <p class="hint">The wait is your undo: a letter can be stopped from the
+      drafts screen until it goes.</p>
 
     <button class="btn">Save</button>
   </form>
@@ -115,12 +110,11 @@
 
 <div class="panel">
   <h2>What happens then</h2>
-  <p>Adzuna and Reed are searched three times a weekday for your roles in your
-     towns. Anything under 48 hours old that clears your pay floor gets a real
-     named address dug out of the advert or the company's own site &mdash;
-     never guessed &mdash; and a letter written to it with your CV attached.</p>
-  <p>One employer, one letter, ever. Nothing claimed that you did not say you
-     hold.</p>
+  <p>Adzuna and Reed are searched three times a weekday for your roles in
+     your towns. Anything under 48 hours old that clears your floor gets a real
+     address found in the advert or on the company's own site &mdash; never
+     guessed &mdash; and a letter written to it with your CV attached.</p>
+  <p>One employer, one letter, ever.</p>
   <p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
 </div>
 
