@@ -77,8 +77,20 @@ class TestPublicPages(AppTestCase):
     def test_landing_renders_and_shows_the_evidence(self):
         r = self.client.get("/")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("26%", r.text)
+        self.assertIn("27%", r.text)
         self.assertIn("Get your CV in front of a human", r.text)
+
+    def test_the_headline_number_says_replies_came_from_a_person(self):
+        """The claim is a human reply rate, not a reply rate.
+
+        Counting autoresponders is how every other cold-email tool gets to a
+        big number, and it is the first thing a sceptical reader will check.
+        If somebody ever quietly relabels this, the claim stops being the one
+        that was verified against a real mailbox.
+        """
+        page = self.client.get("/").text
+        self.assertIn("replies from a person", page)
+        self.assertIn("Autoresponders are not counted", page)
 
     def test_playbook_is_free_and_needs_no_account(self):
         r = self.client.get("/playbook")
