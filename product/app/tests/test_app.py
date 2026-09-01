@@ -31,6 +31,7 @@ def build_app(**env):
         "STRIPE_SECRET_KEY": "",
         "STRIPE_PRICE_ID": "",
         "STRIPE_WEBHOOK_SECRET": "",
+        "FREE_ACCESS_EMAILS": "",
         "BASE_URL": "http://testserver",
     }
     defaults.update(env)
@@ -419,6 +420,53 @@ class TestAccountDeletion(AppTestCase):
         r = self.client.get("/account/delete")
         self.assertIn("cannot be undone", r.text)
         self.assertIn("sam@example.com", r.text)
+
+
+class TestFreeAccessList(AppTestCase):
+    """The people the app was given to rather than sold to.
+
+    The whole point of putting this list in the environment is that Stripe
+    cannot reach it, so the tests that matter are the ones where the Stripe
+    columns say no and the answer is still yes.
+    """
+    env = {"BILLING_ENABLED": "1", "DEV_MODE": "1",
+           "STRIPE_SECRET_KEY": "sk_test_x", "STRIPE_PRICE_ID": "price_x",
+           "STRIPE_WEBHOOK_SECRET": "whsec_test",
+           "FREE_ACCESS_EMAILS": "friend@example.com, Second.Friend@Example.com"}
+
+    def test_a_listed_email_walks_past_the_paywall(self):
+        self.sign_in("friend@example.com")
+        r = self.client.get("/dashboard")
+        self.assertNotIn("Subscribe to start", r.text)
+
+    def test_the_list_is_not_case_sensitive(self):
+        # Nobody types their friends' addresses back exactly as they wrote
+        # them the first time, and an address is not case sensitive anyway.
+        self.sign_in("SECOND.FRIEND@example.com")
+        r = self.client.get("/dashboard")
+        self.assertNotIn("Subscribe to start", r.text)
+
+    def test_an_unlisted_email_still_has_to_pay(self):
+        self.sign_in("stranger@example.com")
+        self.assertIn("Subscribe to start", self.client.get("/dashboard").text)
+
+    def test_a_cancelled_subscription_cannot_shut_a_listed_person_out(self):
+        self.sign_in("friend@example.com")
+        user = self.main.db.get_or_create_user("friend@example.com")
+        self.main.db.set_billing(user["id"], status="canceled",
+                                 paid_until=int(time.time()) - 10)
+        r = self.client.get("/dashboard")
+        self.assertNotIn("Subscribe to start", r.text)
+
+    def test_an_empty_list_grants_nothing(self):
+        main, path = build_app(BILLING_ENABLED="1", DEV_MODE="1",
+                               STRIPE_WEBHOOK_SECRET="whsec_test",
+                               STRIPE_PAYMENT_LINK="https://buy.stripe.com/x",
+                               FREE_ACCESS_EMAILS="")
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        # The guard is a set membership test; an empty string must not become
+        # a one-element set containing "", which every blank email would match.
+        self.assertEqual(main.config.FREE_ACCESS_EMAILS, frozenset())
 
 
 class TestDeletionWithBilling(AppTestCase):

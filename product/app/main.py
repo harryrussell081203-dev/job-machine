@@ -562,6 +562,7 @@ def status(request: Request):
         "database_reachable": reachable,
         "billing": billing,
         "webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
+        "free_accounts": len(config.FREE_ACCESS_EMAILS),
         "sign_in_email_configured": bool(mail_route),
         "sign_in_email_route": mail_route or "none",
         "automatic_sending": ("available" if vault.available()
