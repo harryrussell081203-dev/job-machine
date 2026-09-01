@@ -57,6 +57,15 @@
     <span>send rate</span></div>
 </div>
 
+{% if config.FREE_SPOTS %}
+  <p class="muted" style="margin:-8px 0 20px">
+    {% if spots_left %}<b>{{ spots_left }}</b> of {{ config.FREE_SPOTS }} free
+      places left. The landing page is offering them.
+    {% else %}All {{ config.FREE_SPOTS }} free places are taken &mdash; the
+      landing page is asking for money again.{% endif %}
+  </p>
+{% endif %}
+
 <h2>How far people get</h2>
 <div class="panel">
   <div class="funnel">
@@ -122,6 +131,8 @@
         <td>
           {% if r.email | lower in config.FREE_ACCESS_EMAILS %}
             <span class="tag">free</span>
+          {% elif r.free_spot %}
+            <span class="tag">free place</span>
           {% elif r.subscription_status in ("active", "trialing") %}
             <span class="tag">paying</span>
           {% else %}

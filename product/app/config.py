@@ -140,6 +140,16 @@ def is_admin(email: str) -> bool:
     return bool(email) and email.strip().lower() in ADMIN_EMAILS
 
 
+# How many people may sign up free before the paywall applies to everybody
+# else. Unlike FREE_ACCESS_EMAILS, which names people you already know, these
+# are places rather than invitations: the first N accounts to exist take them,
+# whoever they turn out to be, and then they are gone.
+#
+# It exists so a launch can be opened and closed without anybody watching it.
+# Zero, the default, means the paywall applies from the first signup.
+FREE_SPOTS = int(_env("FREE_SPOTS", "0") or 0)
+
+
 # --- how hard the machine is allowed to go ----------------------------
 # The most letters a day the plain control offers. It is not a licence tier
 # and it is not meanness: it is the number above which the user's own mailbox
