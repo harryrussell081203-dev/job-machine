@@ -45,15 +45,14 @@
       </div>
       {% if d['listing_url'] %}
         <p style="margin-top:10px"><small><a href="{{ d['listing_url'] }}"
-          target="_blank" rel="noopener">Read the original advert</a> &mdash;
-          worth a glance before you send.</small></p>
+          target="_blank" rel="noopener">Read the original advert</a></small></p>
       {% endif %}
     {% endif %}
   </div>
 {% endfor %}
 
 {% if status == 'draft' and items %}
-  <p><small>Press <b>Mark sent</b> only once it has actually gone. That is what
-  stops this employer ever being written to again.</small></p>
+  <p><small><b>Mark sent</b> only once it has gone &mdash; that is what stops
+  this employer being written to twice.</small></p>
 {% endif %}
 {% endblock %}
