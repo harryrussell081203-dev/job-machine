@@ -11,13 +11,13 @@
 {% endif %}
 
 {% if not vault_ready %}
-  <div class="note bad">
-    <p>This deployment cannot store mail credentials, so automatic sending is
-       switched off.</p>
-    <p>If you run this app, set <code>CREDENTIAL_KEY</code> in the environment
-       to any long random value &mdash; your host's own "generate" button will
-       do, or:</p>
-    <pre>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</pre>
+  <div class="note">
+    <p><b>Automatic sending is switched off at the moment</b>, so there is
+       nothing to connect here yet. This is at our end, not yours, and there
+       is nothing you need to do about it.</p>
+    <p>Everything else carries on exactly as it is: the jobs are found, the
+       addresses are dug out, the letters are written with your CV attached,
+       and you send each one with a click from the drafts screen.</p>
   </div>
 {% else %}
 

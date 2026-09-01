@@ -458,6 +458,30 @@ class TestFreeAccessList(AppTestCase):
         r = self.client.get("/dashboard")
         self.assertNotIn("Subscribe to start", r.text)
 
+    def test_a_free_account_is_not_asked_to_subscribe(self):
+        # The account page used to decide by BILLING_ENABLED alone, so a
+        # comped person was shown "No subscription on this account yet" and a
+        # Subscribe button - an invitation to pay for what they already have.
+        self.sign_in("friend@example.com")
+        page = self.client.get("/account").text
+        self.assertNotIn("/billing/checkout", page)
+        self.assertIn("Free access", page)
+
+    def test_an_unlisted_account_is_still_asked_to_subscribe(self):
+        self.sign_in("stranger@example.com")
+        self.assertIn("/billing/checkout", self.client.get("/account").text)
+
+    def test_stripes_own_words_never_reach_the_account_page(self):
+        """subscription_status holds Stripe's vocabulary, not English."""
+        self.sign_in("stranger@example.com")
+        user = self.main.db.get_or_create_user("stranger@example.com")
+        for stripe_word in ("none", "canceled", "past_due", "incomplete"):
+            self.main.db.set_billing(user["id"], status=stripe_word)
+            page = self.client.get("/account").text
+            self.assertNotIn(stripe_word, page,
+                             f"the page printed Stripe's {stripe_word!r} at a "
+                             "person")
+
     def test_an_empty_list_grants_nothing(self):
         main, path = build_app(BILLING_ENABLED="1", DEV_MODE="1",
                                STRIPE_WEBHOOK_SECRET="whsec_test",
