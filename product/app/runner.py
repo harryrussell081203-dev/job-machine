@@ -81,9 +81,15 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     kwargs = {} if delay is None else {"delay": delay}
 
     seen = db.seen_ids(user_id)
+    # How far back to look is the user's call. Two days by default, because a
+    # listing posted this morning has ten applicants and one from three weeks
+    # ago has three hundred - but a new account with an empty queue has every
+    # reason to widen it once and catch up on what it missed.
+    settings = db.get_send_settings(user_id)
     found = harvest.harvest(profile, credentials(), session=session,
                             known_ids=seen,
-                            exclude_titles=profile.exclude_titles)
+                            exclude_titles=profile.exclude_titles,
+                            max_age_hours=settings["search_days"] * 24)
     report.harvested = len(found["keep"]) + len(found["dropped"])
     report.prefiltered = len(found["dropped"])
     for listing in found["dropped"]:

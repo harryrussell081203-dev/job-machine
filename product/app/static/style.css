@@ -418,6 +418,10 @@ label.check input:checked::after {
 }
 
 /* --- tables ----------------------------------------------------------- */
+/* Checkboxes and radios draw in the browser's own blue otherwise, which is
+   the one splash of colour in a design that has none. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
 th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }

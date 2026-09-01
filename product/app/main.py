@@ -729,9 +729,12 @@ async def save_sending(request: Request):
     db.save_send_settings(
         user["id"], auto_send=auto,
         # Ceilings, not suggestions. A user who types 500 into the daily cap
-        # is not making a considered decision about their own reputation.
+        # is not making a considered decision about their own reputation, and
+        # the form's own max attribute is a hint to a browser rather than a
+        # rule - anything can POST here.
         hold_minutes=clamp("hold_minutes", 60, 0, 1440),
-        daily_cap=clamp("daily_cap", 20, 1, 50))
+        daily_cap=clamp("daily_cap", 12, 1, config.MAX_DAILY_CAP),
+        search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS))
     return RedirectResponse("/setup", status_code=303)
 
 
@@ -795,8 +798,17 @@ async def mail_save(request: Request):
     except delivery.DeliveryError as exc:
         return again(str(exc))
 
+    first_time = not db.get_mail_account(user["id"])
     db.save_mail_account(user["id"], address=address, host=host, port=port,
                          password=password)
+    # Connecting a mailbox to a thing whose stated job is to send letters from
+    # it IS the decision to let it send. Leaving automatic sending off after
+    # that is a second, hidden step that people finish setup without ever
+    # finding, and then wonder why nothing goes out. The holding window and
+    # the daily cap are what make this safe to default on, and it is one
+    # checkbox to turn off.
+    if first_time:
+        db.save_send_settings(user["id"], auto_send=1)
     return RedirectResponse("/setup", status_code=303)
 
 
