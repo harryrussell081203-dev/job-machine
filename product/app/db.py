@@ -52,11 +52,18 @@ def is_paid(user) -> bool:
     Deliberately strict: an unknown status is unpaid, and an expired
     paid_until is unpaid even if the status still reads active, because a
     cancelled-then-expired subscription can leave the latter stale.
+
+    The one way in that is not Stripe is FREE_ACCESS_EMAILS - the people the
+    app was given to rather than sold to. It is checked before the status
+    columns so that a stale or cancelled Stripe record cannot shut out
+    somebody who was never a customer in the first place.
     """
     if not config.BILLING_ENABLED:
         return True
     if user is None:
         return False
+    if (user["email"] or "").strip().lower() in config.FREE_ACCESS_EMAILS:
+        return True
     if user["subscription_status"] not in ("active", "trialing"):
         return False
     until = user["paid_until"]

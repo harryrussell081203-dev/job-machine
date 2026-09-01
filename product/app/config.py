@@ -103,6 +103,22 @@ ONE_OFF_ACCESS_DAYS = int(_env("ONE_OFF_ACCESS_DAYS", "30"))
 # refused in production precisely because "the paywall was off" is not a
 # mistake anyone notices from the outside.
 BILLING_ENABLED = _flag("BILLING_ENABLED", True)
+
+# People you have simply given the app to: friends, testers, the first few
+# users who were never going to be charged. Their email addresses go here, in
+# one comma-separated list, and the paywall opens for them.
+#
+# It lives in the environment rather than the database on purpose. Stripe
+# owns every other route into subscription_status, so a comp written into
+# that column can be quietly overwritten by a later webhook for the same
+# person. Nothing writes here except a human, which is what "permanent"
+# has to mean. It is also one list you can read, so you can always answer
+# "who is not paying me" without a query.
+FREE_ACCESS_EMAILS = frozenset(
+    part.strip().lower()
+    for part in _env("FREE_ACCESS_EMAILS").split(",")
+    if part.strip()
+)
 if BILLING_ENABLED and not DEV:
     if STRIPE_PAYMENT_LINK:
         # Link mode: no API calls, so no secret key. The webhook is still what
