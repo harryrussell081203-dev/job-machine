@@ -79,7 +79,7 @@ def needs_login():
 def landing(request: Request):
     if current_user(request):
         return RedirectResponse("/dashboard", status_code=303)
-    return render(request, "landing.html")
+    return render(request, "landing.html", spots_left=db.free_spots_left())
 
 
 @app.get("/playbook", response_class=HTMLResponse)
@@ -141,7 +141,13 @@ def verify(request: Request, token: str = ""):
         return render(request, "login.html",
                       error="That link has expired or was already used. "
                             "Here is a fresh one.")
+    existed = db.get_user_by_email(email) is not None
     user = db.get_or_create_user(email)
+    # A free launch place is taken by a new account, not by anybody who signs
+    # in again. Claiming on every sign-in would hand a place to somebody who
+    # already decided not to pay, which is the opposite of what it is for.
+    if not existed:
+        db.claim_free_spot(user["id"])
     # Somebody with no profile has nothing to look at on the dashboard except
     # a note telling them so. Send them to the thing that needs doing; the CV
     # upload there fills in most of the next screen on its own.
@@ -565,6 +571,7 @@ def status(request: Request):
         "billing": billing,
         "webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
         "free_accounts": len(config.FREE_ACCESS_EMAILS),
+        "free_spots_left": db.free_spots_left(),
         "admins": len(config.ADMIN_EMAILS),
         "sign_in_email_configured": bool(mail_route),
         "sign_in_email_route": mail_route or "none",
@@ -598,7 +605,8 @@ def admin(request: Request):
         return PlainTextResponse("Not found", status_code=404)
     rows = db.overview()
     return render(request, "admin.html", user=user, rows=rows,
-                  ago=adminlib.ago, **adminlib.summarise(rows))
+                  ago=adminlib.ago, spots_left=db.free_spots_left(),
+                  **adminlib.summarise(rows))
 
 
 # ----------------------------------------------------------------------

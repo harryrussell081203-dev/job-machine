@@ -41,6 +41,12 @@ def get_or_create_user(email: str):
         return c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
 
 
+def get_user_by_email(email: str):
+    with connect() as c:
+        return c.execute("SELECT * FROM users WHERE email = ?",
+                         (email.strip().lower(),)).fetchone()
+
+
 def get_user(user_id: int):
     with connect() as c:
         return c.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -53,10 +59,11 @@ def is_paid(user) -> bool:
     paid_until is unpaid even if the status still reads active, because a
     cancelled-then-expired subscription can leave the latter stale.
 
-    The one way in that is not Stripe is FREE_ACCESS_EMAILS - the people the
-    app was given to rather than sold to. It is checked before the status
-    columns so that a stale or cancelled Stripe record cannot shut out
-    somebody who was never a customer in the first place.
+    Two ways in are not Stripe: FREE_ACCESS_EMAILS, the people the app was
+    given to rather than sold to, and a free launch place already claimed.
+    Both are checked before the status columns so that a stale or cancelled
+    Stripe record cannot shut out somebody who was never a customer in the
+    first place.
     """
     if not config.BILLING_ENABLED:
         return True
@@ -64,10 +71,55 @@ def is_paid(user) -> bool:
         return False
     if (user["email"] or "").strip().lower() in config.FREE_ACCESS_EMAILS:
         return True
+    # Claimed, not claimable. Somebody who has a place keeps it even after
+    # FREE_SPOTS is turned down to zero, because taking back what was given
+    # is not something a config change should be able to do quietly.
+    if _has_free_spot(user):
+        return True
     if user["subscription_status"] not in ("active", "trialing"):
         return False
     until = user["paid_until"]
     return until is None or until > now()
+
+
+def _has_free_spot(user) -> bool:
+    """Tolerant of a row read before the column existed."""
+    try:
+        return bool(user["free_spot"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def free_spots_taken() -> int:
+    with connect() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM users WHERE free_spot = 1").fetchone()
+    return int(row["n"] or 0)
+
+
+def free_spots_left() -> int:
+    return max(0, config.FREE_SPOTS - free_spots_taken())
+
+
+def claim_free_spot(user_id: int) -> bool:
+    """Take one of the launch places for this account, if any are left.
+
+    One statement, because the count and the write have to be the same
+    decision. Two signups arriving together against a pool of one would
+    otherwise both read "one left" and both take it, and the app would have
+    given away a place it does not have.
+    """
+    if config.FREE_SPOTS <= 0:
+        return False
+    with connect() as c:
+        c.execute(
+            "UPDATE users SET free_spot = 1 "
+            "WHERE id = ? AND free_spot = 0 "
+            "  AND (SELECT COUNT(*) FROM users u2 WHERE u2.free_spot = 1) < ?",
+            (user_id, config.FREE_SPOTS))
+        row = c.execute("SELECT free_spot FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+    return bool(row and row["free_spot"])
 
 
 def set_billing(user_id: int, *, customer_id=None, subscription_id=None,
@@ -120,6 +172,7 @@ def user_by_stripe_customer(customer_id: str):
 _OVERVIEW = """
 SELECT u.id, u.email, u.created_at, u.last_seen_at,
        u.subscription_status, u.paid_until, u.stripe_subscription_id,
+       u.free_spot,
        (SELECT uploaded_at FROM cvs      WHERE user_id = u.id) AS cv_at,
        (SELECT updated_at  FROM profiles WHERE user_id = u.id) AS profile_at,
        (SELECT verified_at FROM mail_accounts WHERE user_id = u.id) AS mail_at,

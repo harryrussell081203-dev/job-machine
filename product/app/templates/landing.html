@@ -45,9 +45,19 @@ advert, two or three proof points, exactly one question.</p>
 same employer twice. Name your current employer to anybody.</p>
 </div>
 
+{% if spots_left %}
+  <div class="note good" style="margin-top:28px">
+    <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left.</b>
+    The next {{ spots_left }} account{{ 's' if spots_left != 1 else '' }} to
+    sign up pay{{ 's' if spots_left == 1 else '' }} nothing, ever. After that
+    it is {{ config.PRICE_LABEL }}.
+  </div>
+{% endif %}
+
 <p style="margin-top:28px">
-  <a class="btn" href="/login">Start &mdash; {{ config.PRICE_LABEL }}</a>
+  <a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start &mdash; {{ config.PRICE_LABEL }}{% endif %}</a>
   <a class="btn ghost" href="/playbook">Read the method free</a>
 </p>
-<p><small>Cancel any time.</small></p>
+<p><small>{% if spots_left %}No card, nothing to cancel.{% else %}Cancel any
+time.{% endif %}</small></p>
 {% endblock %}
