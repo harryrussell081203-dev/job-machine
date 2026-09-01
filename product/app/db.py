@@ -106,6 +106,41 @@ def user_by_stripe_customer(customer_id: str):
 
 
 # ----------------------------------------------------------------------
+# what everybody has actually done, for /admin
+# ----------------------------------------------------------------------
+#
+# One row per person, every milestone as the timestamp it happened at, so the
+# funnel and the per-user table are the same query read two ways.
+#
+# The aggregation is done in Python rather than SQL because this file has to
+# run on SQLite and Postgres both, and date bucketing is where those two
+# dialects diverge hardest. Correlated subqueries are the portable option and
+# the right one at this size: a few hundred customers is a few hundred index
+# lookups. If this ever gets slow it wants a rewrite, not an index.
+_OVERVIEW = """
+SELECT u.id, u.email, u.created_at, u.last_seen_at,
+       u.subscription_status, u.paid_until, u.stripe_subscription_id,
+       (SELECT uploaded_at FROM cvs      WHERE user_id = u.id) AS cv_at,
+       (SELECT updated_at  FROM profiles WHERE user_id = u.id) AS profile_at,
+       (SELECT verified_at FROM mail_accounts WHERE user_id = u.id) AS mail_at,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id) AS drafts,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id
+                                      AND status = 'sent') AS sent,
+       (SELECT COUNT(*) FROM drafts WHERE user_id = u.id
+                                      AND status = 'discarded') AS discarded,
+       (SELECT MAX(sent_at) FROM drafts WHERE user_id = u.id
+                                          AND status = 'sent') AS last_sent_at
+FROM users u
+ORDER BY u.created_at DESC
+"""
+
+
+def overview() -> list[dict]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(_OVERVIEW).fetchall()]
+
+
+# ----------------------------------------------------------------------
 # magic-link replay protection
 # ----------------------------------------------------------------------
 def claim_token(jti: str) -> bool:

@@ -28,6 +28,7 @@
       <a href="/drafts">Drafts</a>
       <a href="/setup">Set up</a>
       <a href="/account">Account</a>
+      {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
       <form method="post" action="/logout"><button class="link">Sign out</button></form>
     {% else %}
       <a href="/playbook">Playbook</a>
