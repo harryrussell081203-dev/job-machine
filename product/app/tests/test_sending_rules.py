@@ -78,6 +78,41 @@ class SendingSettings(AppTestCase):
     def test_nonsense_falls_back_to_the_default(self):
         self.assertEqual(self.post(daily_cap="lots")["daily_cap"], 12)
 
+    # -- going above the recommended number ----------------------------
+    #
+    # It is their mailbox, so it is allowed. What it must not be is a number
+    # somebody reaches by mistyping, so it costs a deliberate tick.
+    def test_accepting_the_risk_raises_the_ceiling(self):
+        settings = self.post(daily_cap=60, accept_volume_risk=1)
+        self.assertEqual(settings["daily_cap"], 60)
+
+    def test_a_mistyped_number_without_the_tick_falls_back_to_the_safe_cap(self):
+        self.assertEqual(self.post(daily_cap=60)["daily_cap"],
+                         self.main.config.MAX_DAILY_CAP)
+
+    def test_there_is_still_a_ceiling_past_the_warning(self):
+        """Above a provider's own daily limit the sends simply fail, so
+        accepting the risk buys a higher number, not an unlimited one."""
+        top = self.main.config.ABSOLUTE_DAILY_CAP
+        self.assertEqual(
+            self.post(daily_cap=100000, accept_volume_risk=1)["daily_cap"], top)
+
+    def test_that_ceiling_stays_under_what_outlook_will_accept(self):
+        # Outlook stops at 300 a day and Gmail at 500. A ceiling above either
+        # would hand somebody a setting that locks them out of their own
+        # mailbox rather than one that merely costs them reputation.
+        self.assertLess(self.main.config.ABSOLUTE_DAILY_CAP, 300)
+
+    def test_unticking_it_brings_a_high_number_back_down(self):
+        self.assertEqual(self.post(daily_cap=60, accept_volume_risk=1)["daily_cap"], 60)
+        self.assertEqual(self.post(daily_cap=60)["daily_cap"],
+                         self.main.config.MAX_DAILY_CAP)
+
+    def test_the_tick_alone_does_not_raise_anybodys_number(self):
+        """Accepting the risk permits a higher number; it does not set one."""
+        self.assertEqual(self.post(daily_cap=8, accept_volume_risk=1)["daily_cap"], 8)
+
+
     # -- how far back --------------------------------------------------
     def test_the_search_window_is_saved(self):
         self.assertEqual(self.post(search_days=7)["search_days"], 7)
@@ -265,3 +300,39 @@ class AddingTheColumnToADatabaseThatAlreadyExists(unittest.TestCase):
         self.db.init()
         self.db.init()
         self.assertEqual(self.db.get_send_settings(1)["search_days"], 14)
+
+
+class TheWarningIsShownWhereTheChoiceIsMade(AppTestCase):
+    """A warning nobody is looking at when they decide is not a warning."""
+    env = dict(VAULT_ENV)
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.user = self.main.db.get_or_create_user("sam@example.com")
+
+    def page(self):
+        return self.client.get("/setup").text
+
+    def test_the_option_is_offered(self):
+        self.assertIn("accept_volume_risk", self.page())
+
+    def test_the_warning_is_on_the_page_hidden_until_it_is_wanted(self):
+        page = self.page()
+        self.assertIn("scored as a spammer", page)
+        self.assertIn('id="volumewarning"', page)
+        self.assertIn("hidden", page.split('id="volumewarning"')[1][:40])
+
+    def test_the_warning_is_open_for_somebody_already_above_the_line(self):
+        self.main.db.save_send_settings(self.user["id"], daily_cap=60)
+        after = self.page().split('id="volumewarning"')[1][:40]
+        self.assertNotIn("hidden", after)
+
+    def test_the_box_comes_back_ticked_so_their_number_is_not_reset(self):
+        # Otherwise somebody who set 60, came back and pressed Save on an
+        # untouched form would silently drop to 25.
+        self.main.db.save_send_settings(self.user["id"], daily_cap=60)
+        page = self.page()
+        checkbox = page.split('name="accept_volume_risk"')[1][:80]
+        self.assertIn("checked", checkbox)
+        self.assertIn('value="60"', page)

@@ -75,6 +75,10 @@ CREATE TABLE IF NOT EXISTS users (
     last_seen_at    BIGINT,
     stripe_customer_id     TEXT,
     stripe_subscription_id TEXT,
+    -- Took one of the free launch places. A column rather than a count of
+    -- early user ids, because "the first three" has to stay the same three
+    -- after somebody deletes their account.
+    free_spot       INTEGER NOT NULL DEFAULT 0,
     -- 'none' until Stripe says otherwise on a verified webhook. Never
     -- inferred from a redirect: anyone can arrive at a success page.
     subscription_status    TEXT NOT NULL DEFAULT 'none',
@@ -318,6 +322,7 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
 # already-applied migration silently killed every migration after it.
 _ADDED_COLUMNS = [
     ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
+    ("users", "free_spot", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
