@@ -726,6 +726,13 @@ async def save_sending(request: Request):
         except (TypeError, ValueError):
             return default
 
+    # Going past the recommended number is allowed, but only for somebody who
+    # ticked the box that carries the warning. Without that tick the ceiling
+    # is the recommended one, so a mistyped 60 becomes 25 rather than a month
+    # of a personal address being scored as a spammer.
+    ceiling = (config.ABSOLUTE_DAILY_CAP if form.get("accept_volume_risk")
+               else config.MAX_DAILY_CAP)
+
     db.save_send_settings(
         user["id"], auto_send=auto,
         # Ceilings, not suggestions. A user who types 500 into the daily cap
@@ -733,7 +740,7 @@ async def save_sending(request: Request):
         # the form's own max attribute is a hint to a browser rather than a
         # rule - anything can POST here.
         hold_minutes=clamp("hold_minutes", 60, 0, 1440),
-        daily_cap=clamp("daily_cap", 12, 1, config.MAX_DAILY_CAP),
+        daily_cap=clamp("daily_cap", 12, 1, ceiling),
         search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS))
     return RedirectResponse("/setup", status_code=303)
 

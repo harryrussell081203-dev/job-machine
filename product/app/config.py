@@ -141,12 +141,12 @@ def is_admin(email: str) -> bool:
 
 
 # --- how hard the machine is allowed to go ----------------------------
-# The most letters a day anybody may set. It is not a licence tier and it is
-# not meanness: it is the number above which the user's own mailbox starts to
-# look compromised. Gmail will accept five hundred; Gmail's spam scoring will
-# not forgive them. A personal address sending cold mail all day gets its
-# reputation shot, and the person who pays for that is the customer, whose
-# letters then land in spam for every employer including the good ones.
+# The most letters a day the plain control offers. It is not a licence tier
+# and it is not meanness: it is the number above which the user's own mailbox
+# starts to look compromised. Gmail will accept five hundred; Gmail's spam
+# scoring will not forgive them. A personal address sending cold mail all day
+# gets its reputation shot, and the person who pays for that is the customer,
+# whose letters then land in spam for every employer including the good ones.
 #
 # It also never binds in practice. One trade, a handful of towns, listings
 # under a couple of days old - that is five to fifteen a day on a good day,
@@ -155,6 +155,19 @@ def is_admin(email: str) -> bool:
 # say reply at 10% against 38% for a named human. Volume past this point
 # lowers the reply rate and the sender's reputation at the same time.
 MAX_DAILY_CAP = 25
+
+# Past the recommended number, but only for somebody who said so on purpose.
+# It is their mailbox and their call, and a product that refuses a considered
+# decision is being paternalistic rather than careful. What it must not be is
+# a number somebody reaches by mistyping, so it costs a deliberate tick and
+# carries the warning next to it.
+#
+# There is still a ceiling, because past a provider's own daily limit the
+# sends simply fail: Gmail cuts a free account off at 500 a day and locks it
+# for 24 hours, Outlook at 300. A hundred stays clear of both even alongside
+# the person's ordinary use of their own mailbox, so the worst case is a
+# reputation they chose to risk rather than an account they cannot get into.
+ABSOLUTE_DAILY_CAP = 100
 
 # The furthest back a search may reach. A month is already generous: a listing
 # that old is usually filled or buried, and the reply rate falls off with age

@@ -87,8 +87,9 @@
 
     <div class="row">
       <label>Letters a day
-        <input type="number" name="daily_cap" min="1"
-               max="{{ config.MAX_DAILY_CAP }}"
+        <input type="number" name="daily_cap" min="1" id="dailycap"
+               max="{{ settings.daily_cap > config.MAX_DAILY_CAP
+                       and config.ABSOLUTE_DAILY_CAP or config.MAX_DAILY_CAP }}"
                value="{{ settings.daily_cap }}">
       </label>
       <label>How far back to look
@@ -100,11 +101,35 @@
         </select>
       </label>
     </div>
-    <p class="hint">Up to {{ config.MAX_DAILY_CAP }} a day. Past that a
-      personal address starts looking compromised, and everything you send
-      lands in spam &mdash; including the good ones.</p>
+    <p class="hint">{{ config.MAX_DAILY_CAP }} a day is as high as we would
+      go. There are rarely more fresh jobs than that worth writing to anyway.</p>
     <p class="hint">A wider window fills a quiet queue, but a job posted three
       weeks ago has already had three hundred applicants.</p>
+
+    {# Ticked state is derived from the number itself rather than stored, so
+       somebody who set 60 comes back to a form that still says 60 instead of
+       one that quietly resets them. #}
+    {% set over = settings.daily_cap > config.MAX_DAILY_CAP %}
+    <label class="check">
+      <input type="checkbox" name="accept_volume_risk" value="1"
+             id="volume" {% if over %}checked{% endif %}>
+      <span>Let me go higher, up to {{ config.ABSOLUTE_DAILY_CAP }} a day</span>
+    </label>
+    <div class="note bad" id="volumewarning" {% if not over %}hidden{% endif %}>
+      <p><b>Read this first.</b> Sending more than
+        {{ config.MAX_DAILY_CAP }} cold emails a day from a personal address
+        is how that address gets scored as a spammer. It is not only these
+        letters that suffer: once your domain is marked, <b>everything</b> you
+        send starts landing in spam, including your reply to the employer who
+        did want to talk to you.</p>
+      <p>Gmail also cuts a free account off at 500 a day and locks it for 24
+        hours; Outlook at 300. And the extra letters go to generic inboxes,
+        which reply at about 10% against 38% for a named person &mdash; so
+        past this point you are trading your reputation for a worse reply
+        rate.</p>
+      <p>Your mailbox, your call. Untick this and anything above
+        {{ config.MAX_DAILY_CAP }} drops back to {{ config.MAX_DAILY_CAP }}.</p>
+    </div>
 
     <label>Wait before sending
       <select name="hold_minutes">
@@ -121,6 +146,25 @@
     <button class="btn">Save</button>
   </form>
 </div>
+
+<script>
+// Show the warning with the tick, and raise the input's own ceiling to match.
+// Without this the browser refuses the number the checkbox just permitted.
+// The server clamps on the checkbox regardless, so nothing here is a control -
+// with JavaScript off the rules are exactly the same, just less explained.
+(function () {
+  var box = document.getElementById("volume");
+  var warn = document.getElementById("volumewarning");
+  var cap = document.getElementById("dailycap");
+  if (!box || !warn || !cap) return;
+  var low = {{ config.MAX_DAILY_CAP }}, high = {{ config.ABSOLUTE_DAILY_CAP }};
+  box.addEventListener("change", function () {
+    warn.hidden = !box.checked;
+    cap.max = box.checked ? high : low;
+    if (!box.checked && Number(cap.value) > low) cap.value = low;
+  });
+})();
+</script>
 
 <div class="panel">
   <h2>What happens then</h2>
