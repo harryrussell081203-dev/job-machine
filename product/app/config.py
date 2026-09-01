@@ -119,6 +119,25 @@ FREE_ACCESS_EMAILS = frozenset(
     for part in _env("FREE_ACCESS_EMAILS").split(",")
     if part.strip()
 )
+
+# Who may see /admin, which lists every customer by email alongside what they
+# have and have not done. Same shape as the list above and for the same
+# reasons, but this one grants sight of other people rather than access for
+# oneself, so it is deliberately a separate setting: being given the app free
+# is not a reason to be shown everybody else's account.
+#
+# Empty means nobody, including the person who deployed it. A page that lists
+# your customers must fail closed - the failure mode of a default is that it
+# is never noticed until it is found by somebody else.
+ADMIN_EMAILS = frozenset(
+    part.strip().lower()
+    for part in _env("ADMIN_EMAILS").split(",")
+    if part.strip()
+)
+
+
+def is_admin(email: str) -> bool:
+    return bool(email) and email.strip().lower() in ADMIN_EMAILS
 if BILLING_ENABLED and not DEV:
     if STRIPE_PAYMENT_LINK:
         # Link mode: no API calls, so no secret key. The webhook is still what

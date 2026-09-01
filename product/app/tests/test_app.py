@@ -32,6 +32,7 @@ def build_app(**env):
         "STRIPE_PRICE_ID": "",
         "STRIPE_WEBHOOK_SECRET": "",
         "FREE_ACCESS_EMAILS": "",
+        "ADMIN_EMAILS": "",
         "BASE_URL": "http://testserver",
     }
     defaults.update(env)
