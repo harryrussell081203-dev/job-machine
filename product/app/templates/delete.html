@@ -13,15 +13,14 @@
     <li>the record of which employers you have already written to</li>
     <li>your list of companies never to contact</li>
   </ul>
-  <p class="muted">Nothing is kept back. Emails you have already sent are in
-  the employer's inbox and are not ours to withdraw.</p>
+  <p class="muted">Emails already sent are in the employer's inbox and are
+  not ours to withdraw.</p>
 </div>
 
 {% if user["stripe_subscription_id"] %}
   <div class="panel">
-    <p><b>Your subscription is cancelled first.</b> If that fails, nothing is
-    deleted &mdash; we will not leave a live subscription attached to an account
-    that no longer exists.</p>
+    <p><b>Your subscription is cancelled first.</b> If that fails, nothing
+    is deleted.</p>
   </div>
 {% endif %}
 

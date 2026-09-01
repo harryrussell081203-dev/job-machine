@@ -103,6 +103,41 @@ ONE_OFF_ACCESS_DAYS = int(_env("ONE_OFF_ACCESS_DAYS", "30"))
 # refused in production precisely because "the paywall was off" is not a
 # mistake anyone notices from the outside.
 BILLING_ENABLED = _flag("BILLING_ENABLED", True)
+
+# People you have simply given the app to: friends, testers, the first few
+# users who were never going to be charged. Their email addresses go here, in
+# one comma-separated list, and the paywall opens for them.
+#
+# It lives in the environment rather than the database on purpose. Stripe
+# owns every other route into subscription_status, so a comp written into
+# that column can be quietly overwritten by a later webhook for the same
+# person. Nothing writes here except a human, which is what "permanent"
+# has to mean. It is also one list you can read, so you can always answer
+# "who is not paying me" without a query.
+FREE_ACCESS_EMAILS = frozenset(
+    part.strip().lower()
+    for part in _env("FREE_ACCESS_EMAILS").split(",")
+    if part.strip()
+)
+
+# Who may see /admin, which lists every customer by email alongside what they
+# have and have not done. Same shape as the list above and for the same
+# reasons, but this one grants sight of other people rather than access for
+# oneself, so it is deliberately a separate setting: being given the app free
+# is not a reason to be shown everybody else's account.
+#
+# Empty means nobody, including the person who deployed it. A page that lists
+# your customers must fail closed - the failure mode of a default is that it
+# is never noticed until it is found by somebody else.
+ADMIN_EMAILS = frozenset(
+    part.strip().lower()
+    for part in _env("ADMIN_EMAILS").split(",")
+    if part.strip()
+)
+
+
+def is_admin(email: str) -> bool:
+    return bool(email) and email.strip().lower() in ADMIN_EMAILS
 if BILLING_ENABLED and not DEV:
     if STRIPE_PAYMENT_LINK:
         # Link mode: no API calls, so no secret key. The webhook is still what
