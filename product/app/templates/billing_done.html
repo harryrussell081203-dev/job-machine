@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+{% if ok %}
+  <h1>Thank you</h1>
+  <div class="note good">Stripe has your subscription. Access opens the moment
+  they confirm it to us, which is usually seconds.</div>
+  <p>If the dashboard still asks you to subscribe in a minute, reload it
+  once.</p>
+  <p><a class="btn" href="/setup">Set it up &mdash; about ten minutes</a></p>
+{% else %}
+  <h1>Nothing was charged</h1>
+  <p>The checkout was cancelled and your card was not touched.</p>
+  <p><a class="btn" href="/billing/checkout">Try again</a>
+     <a class="btn ghost" href="/playbook">Read the free playbook</a></p>
+{% endif %}
+{% endblock %}

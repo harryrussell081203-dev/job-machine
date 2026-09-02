@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Who to write to &middot; job machine{% endblock %}
+{% block content %}
+
+<h1>Is there a real person on this job advert?</h1>
+<p class="lede">Paste any job advert. We will tell you if there is an address
+in it worth writing to, and what kind. Free, no account.</p>
+
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+
+<form method="post" action="/find">
+  <label for="advert">The advert</label>
+  <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere, and
+    paste it in. We only read what you paste.</p>
+  <textarea id="advert" name="advert" rows="10" required
+            placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom &mdash; that is usually where the address is">{{ advert or '' }}</textarea>
+  <p style="margin-top:14px"><button type="submit">Find the contact</button></p>
+</form>
+
+{% if searched %}
+  {% if found %}
+    <h2>Found {{ found | length }}</h2>
+    <div class="panel scroll">
+      <table>
+        <tr><th>Address</th><th>What it is</th><th>Worth writing to</th></tr>
+        {% for c in found %}
+          <tr>
+            <td><b>{{ c.email }}</b></td>
+            <td>
+              {% if c.tier == 3 %}<span class="tag">named person</span>
+                {% if c.name %} &mdash; {{ c.name | title }}{% endif %}
+              {% elif c.tier == 2 %}<span class="tag">hiring inbox</span>
+              {% else %}<span class="tag">generic inbox</span>{% endif %}
+            </td>
+            <td class="muted">
+              {%- if c.tier == 3 %}Yes. This is the one.
+              {%- elif c.tier == 2 %}Yes.
+              {%- else %}Worth a try, but expect less.{% endif -%}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div class="note good">
+      <p><b>Write to the top one, not the Apply button.</b> In our own numbers
+      an address printed in the advert replied at 67% &mdash; the best of any
+      source, and almost nobody uses it because everybody clicks Apply.</p>
+      <p>Keep it to 60&ndash;90 words: one concrete detail from this advert,
+      two proof points, one question. <a href="/playbook">The full method is
+      here, free.</a></p>
+    </div>
+  {% else %}
+    <div class="note">
+      <p><b>Nothing in the advert itself.</b> That is the normal answer &mdash;
+      most adverts route you through a portal on purpose.</p>
+      <p>The next place to look is the company's own website: the contact,
+      careers and team pages. That is the part we do automatically, on every
+      fresh listing in your trade, three times a weekday. We never guess an
+      address &mdash; if there is no real one, no letter goes.</p>
+    </div>
+  {% endif %}
+
+  <p style="margin-top:24px">
+    <a class="btn" href="/">See what the full thing does</a>
+    <a class="btn ghost" href="/playbook">Read the method free</a>
+  </p>
+{% endif %}
+
+{% endblock %}

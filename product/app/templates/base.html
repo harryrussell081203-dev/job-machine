@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}job machine{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+
+<!-- Installable. No store, no review, no fee: this is what makes the app
+     appear on a home screen from a plain link. -->
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/static/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Job Machine">
+<meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+<header class="bar">
+  <a class="brand" href="/">job<span>machine</span></a>
+  <nav>
+    {% if user %}
+      <a href="/dashboard">Dashboard</a>
+      <a href="/drafts">Drafts</a>
+      <a href="/setup">Set up</a>
+      <a href="/account">Account</a>
+      {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
+      <form method="post" action="/logout"><button class="link">Sign out</button></form>
+    {% else %}
+      <a href="/find">Free tool</a>
+      <a href="/playbook">Playbook</a>
+      <a class="cta" href="/login">Sign in</a>
+    {% endif %}
+  </nav>
+</header>
+
+<div class="installbar" id="installbar" hidden>
+  <span>Add Job Machine to your home screen.</span>
+  <span class="installbtns">
+    <button class="btn small" id="installbtn">Install</button>
+    <button class="link" id="installno">Not now</button>
+  </span>
+</div>
+
+<main>
+  {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+  <p>One email per employer. Never a guessed address. Never a claim you
+     cannot back.</p>
+  <p><a href="/playbook">The playbook</a> is free.</p>
+</footer>
+
+<script>
+// Register the service worker so the app can be installed. It caches static
+// files only - never a page - because this app shows one person's private
+// job search and a cached dashboard on a shared device is a real leak.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {
+      // An app that will not install still works perfectly in the browser,
+      // so this is never worth interrupting anybody about.
+    });
+  });
+}
+
+// Chrome and Edge fire this instead of showing their own prompt. iOS Safari
+// never fires it - there the install is Share -> Add to Home Screen, which is
+// what the banner below says.
+(function () {
+  var deferred = null;
+  var bar = document.getElementById("installbar");
+  var btn = document.getElementById("installbtn");
+  if (!bar || !btn) return;
+
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (localStorage.getItem("jm-install-dismissed") !== "1") {
+      bar.hidden = false;
+    }
+  });
+
+  btn.addEventListener("click", function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.finally(function () {
+      deferred = null;
+      bar.hidden = true;
+    });
+  });
+
+  var no = document.getElementById("installno");
+  if (no) no.addEventListener("click", function () {
+    bar.hidden = true;
+    try { localStorage.setItem("jm-install-dismissed", "1"); } catch (e) {}
+  });
+})();
+</script>
+
+</body>
+</html>

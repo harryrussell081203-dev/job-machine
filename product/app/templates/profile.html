@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your search</h1>
+<p class="lede">Everything written on your behalf comes from this page.</p>
+
+{% if from_cv %}
+  <div class="note good">
+    <p><b>Filled in from your CV.</b> Check every line &mdash; this is a
+       machine's reading, and it is about to write to employers under your
+       name.</p>
+    <p>Your <b>pay floor</b> and your <b>never claim</b> list were left blank
+       on purpose. Both are yours to state.</p>
+  </div>
+{% elif request.query_params.get('e') == 'ai' %}
+  <div class="note">Your CV is saved and there is nothing wrong with it
+    &mdash; we just could not read it right now. Try again in a few minutes,
+    or fill this in by hand.</div>
+{% elif request.query_params.get('e') == 'cv' %}
+  <div class="note">Your CV is saved, but we could not read enough from it
+    &mdash; usually that means a scan rather than text. Please fill this in by
+    hand.</div>
+{% endif %}
+
+<form method="post" action="/profile">
+
+  <div class="panel">
+    <h2 style="margin-top:0">You</h2>
+    <div class="row">
+      <div>
+        <label for="name">Full name</label>
+        <p class="hint">As it signs a letter.</p>
+        <input id="name" name="name" type="text" required
+               value="{{ data.get('name','') }}">
+      </div>
+      <div>
+        <label for="phone">Phone</label>
+        <p class="hint">Printed in every sign-off.</p>
+        <input id="phone" name="phone" type="text" required
+               value="{{ data.get('phone','') }}">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="location">Where you are</label>
+        <input id="location" name="location" type="text" required
+               placeholder="Sheffield, England"
+               value="{{ data.get('location','') }}">
+      </div>
+      <div>
+        <label for="email">Your email</label>
+        <input id="email" name="email" type="email"
+               value="{{ data.get('email','') }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Where you stand</h2>
+    <div class="row">
+      <div>
+        <label for="situation">Situation</label>
+        <p class="hint">In work? A job paying the same counts for nothing.</p>
+        <select id="situation" name="situation">
+          {% for opt in ["employed", "unemployed", "notice_period", "student"] %}
+            <option value="{{ opt }}"
+              {% if data.get('situation') == opt %}selected{% endif %}>
+              {{ opt.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="current_salary">What you earn now (per year)</label>
+        <p class="hint">Needed if you are employed.</p>
+        <input id="current_salary" name="current_salary" type="number" min="0"
+               value="{{ data.get('current_salary') or '' }}">
+      </div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" name="may_name_employer"
+        {% if data.get('may_name_employer') %}checked{% endif %}>
+        My current employer may be named in letters</label>
+    </div>
+    <p class="hint">Leave unticked unless you have a reason.</p>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Your floor</h2>
+    <p class="hint">Set at least one. Anything below it is refused.</p>
+    <div class="row">
+      <div>
+        <label for="min_salary_annual">Lowest yearly salary worth your time</label>
+        <input id="min_salary_annual" name="min_salary_annual" type="number"
+               min="0" value="{{ data.get('min_salary_annual') or '' }}">
+      </div>
+      <div>
+        <label for="min_rate_hourly">Lowest hourly rate on a contract</label>
+        <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0"
+               value="{{ data.get('min_rate_hourly') or '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">What you want</h2>
+    <p class="hint">Tick what matters. Weighed in the order shown.</p>
+    <div class="checks">
+      {% for p in ["money", "travel", "contract", "progression", "stability",
+                   "hours", "location", "training"] %}
+        <label><input type="checkbox" name="priorities" value="{{ p }}"
+          {% if p in (data.get('priorities') or []) %}checked{% endif %}>
+          {{ p }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Your history</h2>
+    <p class="hint">Detail earns replies: equipment, standards, systems,
+    numbers. Not &ldquo;responsible for maintenance&rdquo;.</p>
+    {% set hist = data.get('history') or [{}, {}, {}] %}
+    {% for h in hist + [{}] %}
+      <div class="row" style="margin-bottom:10px">
+        <div>
+          <label>Job title</label>
+          <input name="h_title" type="text" value="{{ h.get('title','') }}">
+        </div>
+        <div>
+          <label>Employer</label>
+          <input name="h_org" type="text" value="{{ h.get('org','') }}">
+        </div>
+      </div>
+      <label>What you actually did</label>
+      <input name="h_detail" type="text" value="{{ h.get('detail','') }}">
+    {% endfor %}
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">What must never be said about you</h2>
+    <p class="hint">One per line, anything you do <b>not</b> hold. Asked to
+    sell you, an AI reaches for credentials you never mentioned, and that gets
+    found out at vetting.</p>
+    <label for="never_claim">Never claim&hellip;</label>
+    <textarea id="never_claim" name="never_claim"
+      placeholder="that I hold a current 17th Edition certificate&#10;that I have finished my HNC">{{ (data.get('never_claim') or []) | join('\n') }}</textarea>
+
+    <label for="qualifications">Qualifications you <em>do</em> hold</label>
+    <textarea id="qualifications" name="qualifications">{{ (data.get('qualifications') or []) | join('\n') }}</textarea>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Where and what to look for</h2>
+    <div class="row">
+      <div>
+        <label for="locations">Towns and cities</label>
+        <p class="hint">One per line.</p>
+        <textarea id="locations" name="locations">{{ (data.get('locations') or []) | join('\n') }}</textarea>
+      </div>
+      <div>
+        <label for="target_roles">Job titles to search for</label>
+        <p class="hint">One per line.</p>
+        <textarea id="target_roles" name="target_roles">{{ (data.get('target_roles') or []) | join('\n') }}</textarea>
+      </div>
+    </div>
+    <label for="radius_miles">Miles around each</label>
+    <input id="radius_miles" name="radius_miles" type="number" min="1" max="200"
+           value="{{ data.get('radius_miles') or 25 }}">
+  </div>
+
+  <p><button type="submit">Save</button>
+     <a class="btn ghost" href="/dashboard">Cancel</a></p>
+</form>
+{% endblock %}

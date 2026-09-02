@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Subscribe to start</h1>
+<p class="lede">{{ config.PRICE_LABEL }}. Cancel any time.</p>
+<div class="panel">
+  <p><b>Fresh listings three times a weekday</b>, scored against your profile
+  and your pay floor.</p>
+  <p><b>A real named contact</b> wherever one can be found.</p>
+  <p><b>A written letter for each</b>, to the rules that earned 26%.</p>
+  <p><b>You send them</b>, one click each, from your own address.</p>
+</div>
+<p><a class="btn" href="/billing/checkout">Subscribe</a></p>
+<p><small>Signed in as {{ user["email"] }}. Payment is handled by Stripe;
+we never see your card.</small></p>
+{% endblock %}

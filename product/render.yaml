@@ -1,0 +1,90 @@
+# One-click deploy on Render: New > Blueprint > point at this repo.
+#
+# This is the FREE configuration. It costs nothing and needs no card, because
+# the database is not here - it is a Supabase Postgres reached through
+# DATABASE_URL. That separation is the whole point: Render's free tier has no
+# disk that survives a deploy, so anything stored on the app would be deleted
+# by the next push, customer table included.
+#
+# For the paid route instead (~$5/month, no Supabase needed), set
+# `plan: starter`, add the `disk:` block noted below, set DB_PATH to a path on
+# that disk, and leave DATABASE_URL empty.
+services:
+  - type: web
+    name: job-machine
+    runtime: python
+    plan: free
+    rootDir: product
+    buildCommand: pip install -r requirements.txt
+    # One worker. Free instances are small, and the app does not need more.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+
+    # The paid alternative to DATABASE_URL. A disk requires a paid plan;
+    # Render rejects the blueprint if this is present on the free one.
+    #   disk:
+    #     name: data
+    #     mountPath: /data
+    #     sizeGB: 1
+
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true       # Render generates and stores it
+      - key: BILLING_ENABLED
+        value: "1"
+      - key: PRICE_LABEL
+        value: "£9 a month"
+
+      # Only used when DATABASE_URL is empty, i.e. the paid disk route.
+      - key: DB_PATH
+        value: /data/jobmachine.db
+
+      # --- set these in the dashboard, never in this file ---------------
+
+      # Supabase: Project Settings > Database > Connection string > URI.
+      # Without it the app falls back to a SQLite file on a disk that does
+      # not survive a deploy, and the customer table goes with the next push.
+      - key: DATABASE_URL
+        sync: false
+
+      # Encrypts each user's mail password. Without it the app still runs and
+      # still writes every letter; automatic sending is unavailable and says
+      # so, rather than storing passwords in the clear.
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: CREDENTIAL_KEY
+        sync: false
+
+      # The address this app is reachable at, e.g. https://job-machine.onrender.com
+      # Sign-in links are built from it, so a wrong value means links that go
+      # nowhere. Set it once the service has its URL, then redeploy.
+      - key: BASE_URL
+        sync: false
+
+      # Billing. A Payment Link is the short route: Stripe hosts the checkout
+      # page, so there is no secret key and no price id to set - only the
+      # webhook secret, which is what actually opens the app.
+      - key: STRIPE_PAYMENT_LINK
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Only needed if you use the API route instead of a Payment Link.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+
+      # The app emailing its own customers their sign-in links.
+      - key: APP_SMTP_ADDRESS
+        sync: false
+      - key: APP_SMTP_PASSWORD
+        sync: false
+
+      # The job search itself.
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: REED_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

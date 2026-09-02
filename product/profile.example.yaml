@@ -1,0 +1,98 @@
+# Your job search, in one file.
+#
+# Copy this to `profile.yaml` and make it yours. Everything the machine writes
+# on your behalf comes from here, so the more specific you are, the better the
+# letters. Vague in, vague out.
+#
+# Run `python -m jobseeker.wizard` if you would rather be asked questions than
+# edit YAML. It writes this same file.
+
+# --- who you are ------------------------------------------------------------
+name: Sam Doherty
+location: Sheffield, England
+phone: "07700 900123"
+email: sam.doherty@example.com
+
+# --- where you stand --------------------------------------------------------
+# One of: employed, unemployed, notice_period, student
+#
+# This is not cosmetic. On `employed`, a job that matches your trade but pays
+# the same is scored as worthless, and your letters stop sounding available.
+situation: employed
+current_salary: 32000
+
+# Naming your current employer to another employer in the same city is how a
+# quiet search stops being quiet. Leave this false unless you have a reason.
+may_name_employer: false
+
+# --- your floor -------------------------------------------------------------
+# Set at least one. With no floor the machine writes to jobs that pay less
+# than you already earn, which is the most expensive mistake it can make.
+min_salary_annual: 38000
+min_rate_hourly: 20
+
+# --- what you actually want, in your own order of priority ------------------
+# Pick from: money, travel, contract, progression, stability, hours,
+#            location, training
+#
+# Order matters. The first one wins when two jobs are otherwise equal.
+priorities:
+  - money
+  - progression
+  - training
+
+wants_travel: false
+wants_contract: true
+
+# --- what you have ----------------------------------------------------------
+# `detail` is the part that earns replies. Write what you actually did and what
+# you did it to - equipment, standards, systems, numbers. "Responsible for
+# maintenance" is worth nothing; the line below is worth a reply.
+history:
+  - title: Maintenance Technician
+    org: Brightwater Foods
+    start: "2022"
+    end: "2026"
+    detail: >-
+      planned and reactive maintenance on high-speed packaging lines, fault
+      finding on PLC-controlled conveyors and fillers, reduced unplanned
+      downtime on the primary line by roughly a third over two years
+
+  - title: Mechanical Fitter
+    org: Kestrel Engineering
+    start: "2019"
+    end: "2022"
+    detail: >-
+      stripped and rebuilt pumps, gearboxes and hydraulic units, worked to
+      drawings and to tolerance, and covered a four-on-four-off shift pattern
+
+qualifications:
+  - Level 3 NVQ in Engineering Maintenance
+  - 18th Edition wiring regulations
+  - IPAF and full clean UK driving licence
+
+# --- what must never be said about you --------------------------------------
+# The most important list here. A model asked to sell you will reach for
+# credentials you never mentioned. Anything you do NOT currently hold, put it
+# here - a lapsed ticket, a degree you paused, a clearance that expired, a
+# licence you are still working towards.
+never_claim:
+  - that they hold a current 17th Edition certificate - it lapsed in 2023
+  - that they have completed their HNC - it is paused at year one
+  - any offshore survival or medical ticket
+
+# --- where to look ----------------------------------------------------------
+locations:
+  - Sheffield
+  - Rotherham
+  - Doncaster
+  - Chesterfield
+radius_miles: 25
+
+# --- what to look for -------------------------------------------------------
+target_roles:
+  - maintenance technician
+  - multi-skilled engineer
+  - mechanical fitter
+  - field service engineer
+  - shift engineer

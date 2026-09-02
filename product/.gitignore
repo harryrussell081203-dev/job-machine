@@ -1,0 +1,12 @@
+# Your own profile and keys. Never commit either.
+profile.yaml
+profile.json
+.env
+__pycache__/
+*.pyc
+
+# the app
+*.db
+*.db-wal
+*.db-shm
+.env

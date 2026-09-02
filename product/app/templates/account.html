@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Account</h1>
+<div class="panel">
+  <p><b>{{ user["email"] }}</b></p>
+  {# Never print subscription_status straight out. It holds Stripe's words -
+     "none", "canceled", "past_due" - and a person reading their own account
+     page should not have to work out what the database meant. #}
+  {% if not config.BILLING_ENABLED %}
+    <p class="muted">Full access.</p>
+  {% elif user["email"] | lower in config.FREE_ACCESS_EMAILS %}
+    <p class="muted">Free access, with our compliments. There is nothing to
+    pay and nothing to cancel.</p>
+  {% elif user["subscription_status"] == "trialing" %}
+    <p class="muted">On trial.</p>
+  {% elif paid and user["stripe_subscription_id"] %}
+    <p class="muted">Subscribed &mdash; {{ config.PRICE_LABEL }}.</p>
+  {% elif paid %}
+    {# Paid once rather than subscribed. Do not call this free: they paid. #}
+    <p class="muted">Paid up. This was a one-off payment rather than a
+    subscription, so there is nothing recurring to cancel.</p>
+  {% elif user["subscription_status"] == "past_due" %}
+    <p class="muted">Your last payment did not go through, so access is
+    paused. Sorting the card out with Stripe picks it straight back up.</p>
+  {% elif user["subscription_status"] == "canceled" %}
+    <p class="muted">Cancelled. Start again any time you like &mdash;
+    everything you set up is still here.</p>
+  {% else %}
+    <p class="muted">No subscription yet.</p>
+  {% endif %}
+</div>
+
+{% if portal %}
+  <p><a class="btn ghost" href="{{ portal }}">Manage or cancel subscription</a></p>
+  <p><small>Opens Stripe, where you can change your card or cancel. Cancelling
+  keeps your access until the end of the period you have paid for.</small></p>
+{% elif config.BILLING_ENABLED and not paid %}
+  <p><a class="btn" href="/billing/checkout">Subscribe</a></p>
+{% endif %}
+
+<h2>Delete your account</h2>
+<p class="muted">Removes your profile, drafts and history for good{% if
+  user["stripe_subscription_id"] %}, and cancels your subscription first{%
+  endif %}.</p>
+<p><a class="btn ghost" href="/account/delete">Delete account</a></p>
+{% endblock %}

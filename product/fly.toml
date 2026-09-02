@@ -1,0 +1,27 @@
+# fly launch --no-deploy, then fly volumes create data --size 1, then fly deploy
+app = "job-machine"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DB_PATH = "/data/jobmachine.db"
+  BILLING_ENABLED = "1"
+  DELIVERY_MODE = "handoff"
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false      # a stopped machine misses Stripe webhooks
+  min_machines_running = 1
+
+  [http_service.checks]
+    [http_service.checks.health]
+      path = "/healthz"
+      interval = "30s"
+      timeout = "5s"
