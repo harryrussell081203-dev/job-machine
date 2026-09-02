@@ -25,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 
+from jobseeker.pipeline import contacts, discover  # noqa: E402
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 
 from . import admin as adminlib  # noqa: E402
@@ -80,6 +81,51 @@ def landing(request: Request):
     if current_user(request):
         return RedirectResponse("/dashboard", status_code=303)
     return render(request, "landing.html", spots_left=db.free_spots_left())
+
+
+# ----------------------------------------------------------------------
+# the free tool
+# ----------------------------------------------------------------------
+# Paste a job advert, find out whether there is a real person to write to.
+#
+# It exists to be given away. The hardest and most valuable thing this
+# product does is find an address nobody guessed, and no amount of landing
+# copy demonstrates that as well as doing it once, for free, on an advert
+# the visitor chose themselves.
+#
+# Deliberately it reads only the pasted text. It does not look the company
+# up and it does not fetch anything, which means: no API cost, no scraping
+# somebody else's site on an anonymous stranger's say-so, nothing that can
+# be pointed at a third party as a denial of service, and no request that
+# can sit for ten seconds holding the one worker this app has. The site
+# lookup is the part you sign up for.
+FIND_PER_IP = (30, 3600)
+MAX_ADVERT = 20_000        # a long advert is 5k; past this it is an attack
+
+
+@app.get("/find", response_class=HTMLResponse)
+def find_form(request: Request):
+    return render(request, "find.html")
+
+
+@app.post("/find", response_class=HTMLResponse)
+async def find_submit(request: Request):
+    form = await request.form()
+    advert = (form.get("advert") or "")[:MAX_ADVERT]
+    if not advert.strip():
+        return render(request, "find.html",
+                      error="Paste the advert text first.")
+
+    limit, window = FIND_PER_IP
+    if not ratelimit.hit(f"find:ip:{ratelimit.client_ip(request)}",
+                         limit=limit, window=window):
+        return render(request, "find.html", advert=advert,
+                      error="That is a lot of adverts in an hour. Try again "
+                            "later, or sign up and let it run on its own.")
+
+    found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
+    return render(request, "find.html", advert=advert, found=found,
+                  searched=True)
 
 
 @app.get("/playbook", response_class=HTMLResponse)
