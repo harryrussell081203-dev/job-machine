@@ -1525,6 +1525,29 @@ def has_role_word(local):
     return False
 
 
+# Departments that are real, staffed, and must never receive a job
+# application. Writing to investor relations or the complaints desk about a
+# vacancy is not a near miss - it is the wrong building, and it is the kind
+# of thing an employer remembers about a candidate.
+#
+# Matched as WHOLE SEGMENTS, never as substrings. A man called Boardman is
+# not the board, and Frances is not France - the same rule the place list
+# already learned the hard way.
+NEVER_WRITE_TO = frozenset((
+    "complaint", "complaints", "investor", "investors", "investorrelations",
+    "shareholder", "shareholders", "board", "trustee", "trustees",
+    "governance", "audit", "ombudsman", "dispute", "disputes", "refund",
+    "refunds", "billing", "feedback", "escalation", "escalations", "chair",
+    "chairman", "secretary", "customer", "customers", "returns",
+    "dpo", "gdpr", "foi",
+))
+
+
+def never_write_to(local: str) -> bool:
+    return any(seg in NEVER_WRITE_TO
+               for seg in re.split(r"[._\-0-9]+", local) if seg)
+
+
 def is_personal(local):
     """True only if the local part belongs to an individual rather than a shared
     inbox: jane.smith, j.smith and jane all qualify, careers and info do not."""
@@ -1557,6 +1580,8 @@ def name_from_email(local):
 def classify(address):
     """(tier, first_name). 3 named person > 2 hiring inbox > 1 generic > 0 unusable."""
     local = address.split("@")[0].lower()
+    if never_write_to(local):
+        return 0, None
     if is_personal(local):
         return 3, name_from_email(local)
     # a hiring word anywhere counts - 'mysupporthr' is still an HR inbox
@@ -3021,8 +3046,8 @@ def timeline_sentence(situation=None, today_str=None):
         # sentence: not 'hurry up', but 'I am not desperate' - the thing that
         # stops a technician in work being read as somebody who will take
         # anything. It never names the employer, same rule as the offer.
-        return ("For context, I am in work at the moment, so I am not in a rush - "
-                "I am only looking at moves that are a clear step up.")
+        return ("For context, I am in work at the moment, so I am not applying "
+                "widely - this is one of the few I wanted to ask about directly.")
     return ""
 
 
@@ -3095,6 +3120,15 @@ def run_followups(state):
         # already gone quiet is just useful information for them.
         timeline = timeline_sentence()
         pressure = f"{timeline}\n\n" if timeline else ""
+        # "Free to start now" next to "I am in work at the moment" is a
+        # contradiction in the same email, and the reader notices it before
+        # they notice anything else. Somebody in work has a notice period.
+        in_work = bool(load_situation().get("employed"))
+        availability = ("based, and I would work a notice period for the right "
+                        "move" if in_work else "based and free to start now")
+        still_available = ("Still interested if it is live"
+                           if in_work else
+                           "Still interested and available immediately if it is live")
         if which == 1:
             body = (
                 f"{greeting}\n\n"
@@ -3111,7 +3145,7 @@ def run_followups(state):
                 f"I wrote to a colleague about the {job['title']} role a couple of "
                 f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
                 f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
-                f"based and free to start now.\n\n"
+                f"{availability}.\n\n"
                 f"{pressure}"
                 f"Is that role still open, or is there someone better placed for me "
                 f"to speak to?\n\n"
@@ -3121,7 +3155,7 @@ def run_followups(state):
             body = (
                 f"{greeting}\n\n"
                 f"Last note from me on the {job['title']} role - I know inboxes get "
-                f"buried. Still interested and available immediately if it is live. "
+                f"buried. {still_available}. "
                 f"If the timing is wrong, no bother at all.\n\n"
                 f"{pressure}"
                 f"Worth keeping my CV on file for the next opening?\n\n"

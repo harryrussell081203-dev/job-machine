@@ -155,6 +155,29 @@ def has_role_word(local: str) -> bool:
     return False
 
 
+# Departments that are real, staffed, and must never receive a job
+# application. Writing to investor relations or the complaints desk about a
+# vacancy is not a near miss - it is the wrong building, and it is the kind
+# of thing an employer remembers about a candidate.
+#
+# Matched as WHOLE SEGMENTS, never as substrings. A man called Boardman is
+# not the board, and Frances is not France - the same rule the place list
+# already learned the hard way.
+NEVER_WRITE_TO = frozenset((
+    "complaint", "complaints", "investor", "investors", "investorrelations",
+    "shareholder", "shareholders", "board", "trustee", "trustees",
+    "governance", "audit", "ombudsman", "dispute", "disputes", "refund",
+    "refunds", "billing", "feedback", "escalation", "escalations", "chair",
+    "chairman", "secretary", "customer", "customers", "returns",
+    "dpo", "gdpr", "foi",
+))
+
+
+def never_write_to(local: str) -> bool:
+    return any(seg in NEVER_WRITE_TO
+               for seg in re.split(r"[._\-0-9]+", local) if seg)
+
+
 def is_personal(local: str) -> bool:
     """True only if the local part belongs to an individual.
 
@@ -192,6 +215,8 @@ def name_from_email(local: str) -> str | None:
 def classify(address: str) -> tuple[int, str | None]:
     """(tier, first_name). 3 named > 2 hiring > 1 generic > 0 unusable."""
     local = address.split("@")[0].lower()
+    if never_write_to(local):
+        return 0, None
     if is_personal(local):
         return 3, name_from_email(local)
     # A hiring word anywhere counts: 'mysupporthr' is still an HR inbox.
