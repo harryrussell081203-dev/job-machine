@@ -192,3 +192,47 @@ class TestDomains(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheWrongDeskEntirely(unittest.TestCase):
+    """Addresses that are real, staffed, and must never get a job application.
+
+    Every one of these was written to for real. complaints@matchtech.com was
+    greeted "Hi Complaints,"; board@gevernova.com was greeted "Hi Board,";
+    investors@ ranked top because an unrecognised word looked like a name.
+    Wrong department is not a near miss - it is the kind of thing an employer
+    remembers about a candidate.
+    """
+
+    def refuses(self, address):
+        tier, name = c.classify(address)
+        self.assertEqual(tier, 0, f"{address} is still writable")
+        self.assertIsNone(name, f"{address} would be greeted by name")
+
+    def test_the_complaints_desk(self):
+        self.refuses("complaints@matchtech.com")
+
+    def test_investor_relations(self):
+        self.refuses("investors@company.com")
+        self.refuses("investor.relations@company.com")
+
+    def test_the_board(self):
+        self.refuses("board@gevernova.com")
+
+    def test_others_of_the_same_kind(self):
+        for local in ("audit", "ombudsman", "refunds", "billing", "governance",
+                      "trustees", "shareholders", "disputes", "chairman"):
+            self.refuses(f"{local}@company.com")
+
+    # -- and the names it must not take down with them -----------------
+    def test_a_man_called_boardman_is_not_the_board(self):
+        tier, name = c.classify("boardman@company.co.uk")
+        self.assertEqual(tier, 3)
+        self.assertEqual(name, "Boardman")
+
+    def test_a_woman_called_frances_is_not_france(self):
+        self.assertEqual(c.classify("frances@company.com"), (3, "Frances"))
+
+    def test_a_real_person_at_the_same_company_still_gets_through(self):
+        self.assertEqual(c.classify("sarah.mcleod@company.co.uk"),
+                         (3, "Sarah"))
