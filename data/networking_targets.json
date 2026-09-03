@@ -1,0 +1,51 @@
+{
+  "_README": [
+    "Trade and industry bodies worth one short note asking for a conversation.",
+    "",
+    "WHAT THIS IS NOT",
+    "  Not a job application - these bodies do not hire technicians, and an",
+    "  email treating them as an employer wastes the one approach we get.",
+    "  Not a funding ask - see data/funding_opportunities.json for why money",
+    "  is never mentioned in a cold email in this project.",
+    "",
+    "  It asks for a short conversation about the sector, and nothing else.",
+    "  The value of a trade body is that it knows who is hiring, who is",
+    "  growing, and which employers in the region take service leavers - none",
+    "  of which is a favour to ask, and all of which is what they exist for.",
+    "",
+    "THE RULES, SAME AS EVERYWHERE ELSE HERE",
+    "  - One approach per body, ever. No follow-up sequence. A body that has",
+    "    not replied has answered.",
+    "  - No address is ever guessed. The name and website here are the input;",
+    "    the pipeline's ordinary discovery finds a real, MX-checked address or",
+    "    this sends nothing at all. No named contact is recorded here, because",
+    "    inventing one would be exactly the guessing this project forbids.",
+    "  - No CV attached. A CV is a job-application artifact and attaching one",
+    "    to a 'could we talk' note turns it into the job pitch it is not.",
+    "",
+    "VERIFY BEFORE TRUSTING",
+    "  Domains were correct when written. Anything marked \"confidence\":",
+    "  \"check\" is one to look at before assuming the letter landed anywhere",
+    "  useful."
+  ],
+  "targets": [
+    {
+      "name": "Global Underwater Hub",
+      "domain": "globalunderwaterhub.com",
+      "note": "The industry-backed body for UK underwater engineering and technology, headquartered in Aberdeen. Formed out of Subsea UK, so this is the live organisation rather than the older name.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Society for Underwater Technology",
+      "domain": "sut.org",
+      "note": "The professional body for underwater engineering and science, with an active Aberdeen branch running talks and evening events - the kind of room where a technician meets the people who run the work.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Offshore Energies UK",
+      "domain": "oeuk.org.uk",
+      "note": "The trade association for the UK offshore energy industry, Aberdeen-based. Their members are the operators and contractors this whole search is aimed at.",
+      "confidence": "confirmed"
+    }
+  ]
+}

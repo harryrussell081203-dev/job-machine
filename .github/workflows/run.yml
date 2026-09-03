@@ -20,6 +20,7 @@ on:
       - "fire-run/**"           # force an ordinary run
       - "fire-rescore/**"       # re-judge listings scored under an old profile
       - "fire-support/**"       # write to the charities and training bodies
+      - "fire-network/**"       # write to the trade and industry bodies
       - "fire-covenant/**"      # rebuild the Armed Forces Covenant list
   workflow_dispatch:
     inputs:
@@ -95,6 +96,7 @@ jobs:
           SEARCH_RADIUS_MILES: ${{ vars.SEARCH_RADIUS_MILES }}
           SCORE_THRESHOLD: ${{ vars.SCORE_THRESHOLD }}
           SUPPORT_PER_RUN: ${{ vars.SUPPORT_PER_RUN }}
+          SPEC_PER_DAY: ${{ vars.SPEC_PER_DAY }}
           RESCORE_FLOOR: ${{ vars.RESCORE_FLOOR }}
         run: |
           # The MoD register of Covenant signatories. Every name on it is an
@@ -113,6 +115,13 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == fire-support/* ]]; then
             echo "fire-support branch: writing to the support organisations"
             python support_outreach.py --send
+            exit 0
+          fi
+          # The trade bodies. Not employers and not funders - they are asked
+          # for a conversation about the sector, one approach each, ever.
+          if [[ "${GITHUB_REF_NAME}" == fire-network/* ]]; then
+            echo "fire-network branch: writing to the trade and industry bodies"
+            python networking_outreach.py --send
             exit 0
           fi
           # A change to CANDIDATE_PROFILE invalidates every score already in
