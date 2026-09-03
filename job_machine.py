@@ -390,8 +390,17 @@ STYLE_RULES = f"""HARD RULES:
 - Body is 60-90 words, not counting the greeting and the sign-off.
 - Short sentences. Plain English a tradesman would say out loud.
 - Greet by first name if one is given, otherwise 'Hi,'.
-- Line 1 names the exact role and one concrete detail from THIS listing (a product,
-  site, shift pattern, piece of kit, standard, venue) that proves he read it.
+- Line 1 names the exact role and one concrete detail from THIS listing (a
+  product, a site or building, a team, a piece of kit, a standard, a venue,
+  what the work is on) that proves he read it.
+- That detail must be something only THIS employer could have written. Working
+  hours, shift patterns, days of the week and pay are NOT concrete details -
+  they describe the shift, not the employer, and reading them back proves only
+  that he can read. Of the original 86 letters, at a named contact, one whose
+  detail was the shift pattern got a reply 24% of the time; one that named a
+  building, a site or a team got 53%.
+- If the advert is thin and genuinely offers nothing of that kind, say less.
+  A short first line beats quoting the rota back at them.
 - Then 2 or 3 numbered proof points, written as '1.', '2.', '3.' on their own lines.
   Each one must matter to THIS job. Use specifics and numbers. Never list everything.
 - Then one line: a single easy question as the call to action.
@@ -1525,6 +1534,29 @@ def has_role_word(local):
     return False
 
 
+# Departments that are real, staffed, and must never receive a job
+# application. Writing to investor relations or the complaints desk about a
+# vacancy is not a near miss - it is the wrong building, and it is the kind
+# of thing an employer remembers about a candidate.
+#
+# Matched as WHOLE SEGMENTS, never as substrings. A man called Boardman is
+# not the board, and Frances is not France - the same rule the place list
+# already learned the hard way.
+NEVER_WRITE_TO = frozenset((
+    "complaint", "complaints", "investor", "investors", "investorrelations",
+    "shareholder", "shareholders", "board", "trustee", "trustees",
+    "governance", "audit", "ombudsman", "dispute", "disputes", "refund",
+    "refunds", "billing", "feedback", "escalation", "escalations", "chair",
+    "chairman", "secretary", "customer", "customers", "returns",
+    "dpo", "gdpr", "foi",
+))
+
+
+def never_write_to(local: str) -> bool:
+    return any(seg in NEVER_WRITE_TO
+               for seg in re.split(r"[._\-0-9]+", local) if seg)
+
+
 def is_personal(local):
     """True only if the local part belongs to an individual rather than a shared
     inbox: jane.smith, j.smith and jane all qualify, careers and info do not."""
@@ -1557,6 +1589,8 @@ def name_from_email(local):
 def classify(address):
     """(tier, first_name). 3 named person > 2 hiring inbox > 1 generic > 0 unusable."""
     local = address.split("@")[0].lower()
+    if never_write_to(local):
+        return 0, None
     if is_personal(local):
         return 3, name_from_email(local)
     # a hiring word anywhere counts - 'mysupporthr' is still an HR inbox
@@ -3021,8 +3055,8 @@ def timeline_sentence(situation=None, today_str=None):
         # sentence: not 'hurry up', but 'I am not desperate' - the thing that
         # stops a technician in work being read as somebody who will take
         # anything. It never names the employer, same rule as the offer.
-        return ("For context, I am in work at the moment, so I am not in a rush - "
-                "I am only looking at moves that are a clear step up.")
+        return ("For context, I am in work at the moment, so I am not applying "
+                "widely - this is one of the few I wanted to ask about directly.")
     return ""
 
 
@@ -3095,6 +3129,15 @@ def run_followups(state):
         # already gone quiet is just useful information for them.
         timeline = timeline_sentence()
         pressure = f"{timeline}\n\n" if timeline else ""
+        # "Free to start now" next to "I am in work at the moment" is a
+        # contradiction in the same email, and the reader notices it before
+        # they notice anything else. Somebody in work has a notice period.
+        in_work = bool(load_situation().get("employed"))
+        availability = ("based, and I would work a notice period for the right "
+                        "move" if in_work else "based and free to start now")
+        still_available = ("Still interested if it is live"
+                           if in_work else
+                           "Still interested and available immediately if it is live")
         if which == 1:
             body = (
                 f"{greeting}\n\n"
@@ -3111,7 +3154,7 @@ def run_followups(state):
                 f"I wrote to a colleague about the {job['title']} role a couple of "
                 f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
                 f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
-                f"based and free to start now.\n\n"
+                f"{availability}.\n\n"
                 f"{pressure}"
                 f"Is that role still open, or is there someone better placed for me "
                 f"to speak to?\n\n"
@@ -3121,7 +3164,7 @@ def run_followups(state):
             body = (
                 f"{greeting}\n\n"
                 f"Last note from me on the {job['title']} role - I know inboxes get "
-                f"buried. Still interested and available immediately if it is live. "
+                f"buried. {still_available}. "
                 f"If the timing is wrong, no bother at all.\n\n"
                 f"{pressure}"
                 f"Worth keeping my CV on file for the next opening?\n\n"
