@@ -167,6 +167,55 @@ def names_role(text: str, title: str) -> bool:
     return any(t[:5] in low for t in tokens)
 
 
+STOPWORDS = frozenset("""
+your you the a an and or of for at in on to with as is are was were be been
+this that these those it its i we our us my me saw see seen caught eye role
+job listing advert position vacancy opening looking recruit recruiting
+recruitment hiring applying application apply noticed spotted across their
+there here who which what when where how why not no yes also just about
+""".split())
+
+
+# Working hours are the easiest thing to lift out of a thin advert, and the
+# least worth saying. Reading "Monday to Friday, 8:30am to 5pm" back to
+# somebody proves you can read; it does not prove you read THEIR advert.
+#
+# From the 86 letters of the original run, holding the contact type fixed at
+# a named person: a letter whose one detail was the shift pattern replied at
+# 24% (4/17). One that named something only that employer has - a building,
+# a site, a team - replied at 53% (9/17). Same template, same length, same
+# person on the other end.
+#
+# Short adverts are where this bites: with 500 characters to work from, the
+# hours are the only concrete thing there, so the model takes them and the
+# rule that asks for "one concrete detail" is satisfied by nothing.
+HOURS_AND_PAY = frozenset("""
+monday tuesday wednesday thursday friday saturday sunday mon tue wed thu fri
+sat sun am pm oclock shift shifts shifted rotation rotating rota rotas days
+day nights night backs earlies lates hours hour week weeks weekly weekday
+weekdays weekend weekends overtime fulltime parttime full part time flexible
+flexi permanent temporary temp contract contracted ongoing salary salaried
+pay paid rate rates wage wages annum hourly yearly annual competitive
+negotiable doe dependent depending experience upto up to per plus benefits
+pension holiday holidays package circa from between k working works
+one two three four five six seven eight nine ten eleven twelve
+""".split())
+
+
+def detail_is_only_hours(first_line: str, title: str) -> bool:
+    """True when the one concrete detail is really just the shift pattern.
+
+    Everything the role title already said is stripped first, along with the
+    hours-and-pay vocabulary and anything that is a bare number. If nothing
+    is left, the letter named the role and then said nothing about the
+    employer.
+    """
+    words = re.findall(r"[a-z]+", first_line.lower())
+    known = set(role_tokens(title)) | HOURS_AND_PAY | STOPWORDS
+    left = [w for w in words if w not in known and len(w) > 2]
+    return not left
+
+
 def problems(subject: str, core: str, listing, profile) -> list[str]:
     """Everything code refuses to send, phrased as feedback for the retry."""
     out = []
@@ -193,6 +242,13 @@ def problems(subject: str, core: str, listing, profile) -> list[str]:
     if not names_role(first_line, listing.title):
         out.append(f"the first line must name the exact role ({listing.title}) "
                    "plus one concrete detail from the advert")
+    elif detail_is_only_hours(first_line, listing.title):
+        out.append("the detail in the first line is only the working hours or "
+                   "the pay. Name something that belongs to this employer - a "
+                   "site, a building, a team, a piece of kit, what the work is "
+                   "on. If the advert genuinely says nothing like that, drop "
+                   "the detail and keep the line short rather than quoting "
+                   "the shift pattern back at them")
 
     count = word_count(core)
     if not MIN_WORDS <= count <= MAX_WORDS:
@@ -244,6 +300,13 @@ def build_prompt(listing, contact, profile, feedback=()) -> str:
         f"- {MIN_WORDS}-{MAX_WORDS} words in the body\n"
         "- the first line names the exact role and ONE concrete detail from "
         "the advert above, proving it was read\n"
+        "- that detail must be something only this employer could have "
+        "written: a site or building, a team, a piece of kit, a standard, "
+        "what the work is on. Working hours, shift patterns, days of the "
+        "week and pay are NOT details - they describe the shift, not the "
+        "employer, and reading them back proves only that you can read\n"
+        "- if the advert is thin and offers nothing of that kind, say "
+        "less. A short first line beats quoting the rota back at them\n"
         "- then 2 or 3 numbered proof points on their own lines, each "
         "relevant to THIS job, specific, with numbers where possible\n"
         "- then exactly ONE question, and nothing after it\n"

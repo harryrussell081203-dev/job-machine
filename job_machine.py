@@ -390,8 +390,17 @@ STYLE_RULES = f"""HARD RULES:
 - Body is 60-90 words, not counting the greeting and the sign-off.
 - Short sentences. Plain English a tradesman would say out loud.
 - Greet by first name if one is given, otherwise 'Hi,'.
-- Line 1 names the exact role and one concrete detail from THIS listing (a product,
-  site, shift pattern, piece of kit, standard, venue) that proves he read it.
+- Line 1 names the exact role and one concrete detail from THIS listing (a
+  product, a site or building, a team, a piece of kit, a standard, a venue,
+  what the work is on) that proves he read it.
+- That detail must be something only THIS employer could have written. Working
+  hours, shift patterns, days of the week and pay are NOT concrete details -
+  they describe the shift, not the employer, and reading them back proves only
+  that he can read. Of the original 86 letters, at a named contact, one whose
+  detail was the shift pattern got a reply 24% of the time; one that named a
+  building, a site or a team got 53%.
+- If the advert is thin and genuinely offers nothing of that kind, say less.
+  A short first line beats quoting the rota back at them.
 - Then 2 or 3 numbered proof points, written as '1.', '2.', '3.' on their own lines.
   Each one must matter to THIS job. Use specifics and numbers. Never list everything.
 - Then one line: a single easy question as the call to action.

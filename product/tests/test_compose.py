@@ -306,3 +306,65 @@ class TestPlainFallback(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheDetailMustBeAboutTheEmployer(unittest.TestCase):
+    """The rule that came out of the first 86 letters.
+
+    Holding the contact type fixed at a named person, a letter whose one
+    concrete detail was the shift pattern got a reply 4 times in 17. One that
+    named something only that employer has - a building, a site, a team - got
+    9 in 17. Same template, same length, same person reading it.
+
+    The cause was the instruction itself: it offered "shift pattern" as an
+    example of a concrete detail, and on a 500-character advert the hours are
+    the only concrete thing there, so that is what the model reached for.
+    """
+
+    def only_hours(self, line, title):
+        return c.detail_is_only_hours(line, title)
+
+    def test_the_shift_pattern_is_not_a_detail(self):
+        # Sent for real, no reply.
+        self.assertTrue(self.only_hours(
+            "Saw you are recruiting a Maintenance Electrician - for a three "
+            "shift rotation across days, backs and nights.",
+            "Maintenance Electrician"))
+
+    def test_the_working_week_is_not_a_detail(self):
+        # Sent for real, no reply.
+        self.assertTrue(self.only_hours(
+            "Saw you are recruiting a Manufacturing Technician - working "
+            "Monday to Friday, 8:30am to 5pm.",
+            "Manufacturing Technician"))
+
+    def test_pay_is_not_a_detail(self):
+        self.assertTrue(self.only_hours(
+            "Saw you are recruiting an Electrician - full time permanent, "
+            "competitive salary depending on experience.",
+            "Electrician"))
+
+    # --- and the ones that must still pass, all of which got replies ---
+    def test_a_building_is_a_detail(self):
+        self.assertFalse(self.only_hours(
+            "Your Building Services Engineering Technician listing caught my "
+            "eye - the hybrid working at Angus House.",
+            "Building Services Engineering Technician"))
+
+    def test_a_site_is_a_detail_even_alongside_the_shifts(self):
+        self.assertFalse(self.only_hours(
+            "Saw you are recruiting a Maintenance Engineer - rotating shifts "
+            "at your South Lanarkshire site.",
+            "Maintenance Engineer"))
+
+    def test_a_team_is_a_detail(self):
+        self.assertFalse(self.only_hours(
+            "Your Coating Technician listing caught my eye - leading a team "
+            "for your Services and Offshore UK Team.",
+            "Coating Technician"))
+
+    def test_what_the_work_is_on_is_a_detail(self):
+        self.assertFalse(self.only_hours(
+            "Your Electrician listing caught my eye - citywide domestic and "
+            "commercial properties in Aberdeen.",
+            "Electrician"))
