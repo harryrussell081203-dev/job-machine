@@ -117,7 +117,13 @@ REPLY_AUTORESPOND = env_flag("REPLY_AUTORESPOND", True)
 # through a list whose whole point is that it has no ceiling. The daily send
 # cap still governs the total, so this raises the speculative share of it
 # rather than the amount of mail leaving the account.
-SPEC_PER_DAY = env_int("SPEC_PER_DAY", 6)
+#
+# Raised again to twelve once the list passed ninety and kept growing every
+# run: at six a day the queue was filling faster than it drained. Not higher
+# than twelve, because these share DAILY_SEND_CAP with applications to real
+# advertised vacancies, and a speculative note should never be the reason a
+# live job goes unapplied-for.
+SPEC_PER_DAY = env_int("SPEC_PER_DAY", 12)
 TARGETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "data", "targets.json")
 VETERAN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -3037,6 +3043,17 @@ INBOUND_TASKS = [
     ("LinkedIn - Open to Work",
      "https://www.linkedin.com/",
      "set it to recruiters only; they filter on it"),
+    ("LinkedIn - headline",
+     "https://www.linkedin.com/",
+     "make it say electronics and instrumentation technician, and that you "
+     "run Leads2Profit - not just your job title. It is the line every "
+     "recruiter and every person you have written to reads first, and yours "
+     "is doing none of the work it could"),
+    ("Post something about Leads2Profit",
+     "https://www.linkedin.com/",
+     "one short update on what you are building. Visibility compounds and "
+     "nobody else is going to post it for you - this is the one item on this "
+     "list the machine genuinely cannot do any part of for you"),
 ]
 
 
@@ -3061,6 +3078,55 @@ def inbound_reminder(when=None):
             "<p class=m>Recruiters search CV databases by how recently a CV was "
             "touched, so ten minutes here puts you at the top of next week's "
             "searches.</p><ul>" + "".join(items) + "</ul>")
+    return text, html
+
+
+FUNDING_PATH = os.path.join(ROOT, "data", "funding_opportunities.json")
+
+
+def funding_opportunities_reminder(when=None):
+    """Competitive funding for Leads2Profit, surfaced monthly, never emailed.
+
+    These are entered by Harry, not applied for on his behalf, and the
+    distinction is legal rather than stylistic: a cold email asking somebody
+    to put money into a business is a financial promotion under section 21 of
+    FSMA, and making one without authorisation is a criminal offence. Asking
+    an established body whether their published scheme covers you is a
+    different act - that is what the 'business support' letters in
+    support_outreach.py do. A competition with rounds and a pitch is not that,
+    so it lives here instead, in a file with no address in it for anything to
+    send to.
+
+    Monthly rather than weekly because rounds move in months, and a list that
+    repeats every Sunday stops being read by the third week."""
+    now_uk = when or uk_now()
+    if now_uk.day != 1:
+        return None, None
+    try:
+        with open(FUNDING_PATH) as f:
+            opportunities = json.load(f).get("opportunities", [])
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    if not opportunities:
+        return None, None
+    text = ["Funding you would enter yourself - nothing here is applied for on",
+            "your behalf. Check the current round before spending an evening "
+            "on one.", ""]
+    items = []
+    for opp in opportunities:
+        text.append(f"  {opp['name']} - {opp['amount']}")
+        text.append(f"      {opp['shape']}")
+        text.append(f"      {opp['note']}")
+        text.append(f"      {opp['url']}")
+        items.append(
+            f"<li><b>{esc(opp['name'])}</b> - {esc(opp['amount'])}<br>"
+            f"<span class=m>{esc(opp['shape'])}</span><br>"
+            f"{esc(opp['note'])}<br>"
+            f'<a href="{esc(opp["url"])}">{esc(opp["url"])}</a></li>')
+    html = ("<h2>Funding for Leads2Profit - worth an evening this month</h2>"
+            "<p class=m>You enter these yourself; nothing here is applied for "
+            "on your behalf. Check the current round first.</p><ul>"
+            + "".join(items) + "</ul>")
     return text, html
 
 
@@ -3109,6 +3175,11 @@ def summary_bodies(data):
     if inbound_text:
         lines += ["", "INBOUND - 10 MINUTES, ONCE A WEEK", "-" * 33] + inbound_text
 
+    funding_text, funding_html = funding_opportunities_reminder()
+    if funding_text:
+        lines += ["", "FUNDING FOR LEADS2PROFIT - ONCE A MONTH",
+                  "-" * 39] + funding_text
+
     extras = []
     if data["replies"]:
         extras.append("Replies received: " + ", ".join(
@@ -3144,6 +3215,7 @@ ul{{font-size:14px;padding-left:18px}}
 <p class=m style="margin:0 0 14px">Everything sent in the last 24 hours.</p>
 {table}
 {inbound_html or ''}
+{funding_html or ''}
 <ul>{''.join(f'<li>{esc(x)}</li>' for x in extras)}</ul>
 </body></html>"""
     return subject, "\n".join(lines), html

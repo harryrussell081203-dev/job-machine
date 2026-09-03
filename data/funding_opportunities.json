@@ -1,0 +1,53 @@
+{
+  "_README": [
+    "Competitive, pitch-based funding for Leads2Profit. These are surfaced to",
+    "Harry once a month in the nightly digest and NEVER emailed to anybody.",
+    "",
+    "WHY THIS FILE HAS NO ADDRESS FIELD, AND MUST NEVER GAIN ONE",
+    "  A cold email asking somebody to put money into a business is a financial",
+    "  promotion under section 21 of the Financial Services and Markets Act.",
+    "  Making one without FCA authorisation or an exemption is a criminal",
+    "  offence. Asking an established body whether their own published scheme",
+    "  covers you is a different act entirely - that is what",
+    "  data/support_orgs.json's 'business support' entries do, and they are",
+    "  emailed.",
+    "",
+    "  These are not that. A funding competition with rounds and a pitch is",
+    "  something Harry enters himself. So this file carries no email, no",
+    "  domain and no contact of any kind - not as a matter of policy that a",
+    "  future edit could quietly reverse, but because the discovery pipeline",
+    "  has nothing here to find. The absence is the guardrail.",
+    "",
+    "  Nothing that loads this file may ever call send_email(). Today exactly",
+    "  one function reads it - funding_opportunities_reminder() - and its only",
+    "  output is text for the digest.",
+    "",
+    "VERIFY BEFORE APPLYING",
+    "  Amounts and eligibility were correct when written and these schemes",
+    "  change. Check the current round on the site before spending an evening",
+    "  on an application."
+  ],
+  "opportunities": [
+    {
+      "name": "Scottish EDGE",
+      "url": "https://www.scottishedge.com/",
+      "amount": "up to GBP 100,000, split grant and loan",
+      "shape": "competition - fixed application rounds, pitch process",
+      "note": "Scotland's biggest business funding competition, for early-stage companies across all sectors. Rounds open and close on fixed dates, so the first thing to check is whether one is open. Real effort to enter - a pitch, not a form."
+    },
+    {
+      "name": "Scottish Enterprise Small Capital Grant",
+      "url": "https://findbusinesssupport.gov.scot/service/funding/small-capital-grant",
+      "amount": "GBP 15,000 to GBP 250,000, covering up to 50% of eligible costs",
+      "shape": "formal grant application, no cost to apply, not round-based",
+      "note": "Aimed at capital spend rather than running costs, so worth reading the eligible-costs list before assuming a software and marketing business fits. No fee to apply either way."
+    },
+    {
+      "name": "Start Up Loans via X-Forces Enterprise",
+      "url": "https://x-forces.com/finance-for-forces/",
+      "amount": "GBP 500 to GBP 25,000, 6% fixed, 1 to 5 years",
+      "shape": "government-backed personal loan for business use, plus 12 months free mentoring",
+      "note": "A loan rather than a grant, so it is a debt Harry would personally owe - listed here because the mentoring that comes with it has value on its own, not as a recommendation to borrow. X-Forces is also written to directly by the support outreach, which asks about eligibility rather than applying."
+    }
+  ]
+}
