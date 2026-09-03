@@ -3011,3 +3011,81 @@ class TestRunCallScripts(unittest.TestCase):
         with mock.patch.object(jm, "text_harry") as sms:
             jm.run_call_scripts(state)
         sms.assert_not_called()
+
+
+class TestFundingOpportunitiesInTheDigest(unittest.TestCase):
+    """Competitive funding for Leads2Profit, surfaced monthly and never
+    emailed to anybody.
+
+    The distinction this class protects is legal, not stylistic: a cold email
+    asking somebody to put money into a business is a financial promotion
+    under section 21 of FSMA, and making one without authorisation is a
+    criminal offence. Asking an established body whether its own published
+    scheme covers you is a different act - that is what the 'business
+    support' letters do. A competition with rounds and a pitch is not that,
+    so it lives in a file with no address in it for anything to send to."""
+
+    def first(self):
+        return datetime(2026, 10, 1, 21, 0, tzinfo=timezone.utc)
+
+    def test_it_fires_on_the_first_of_the_month(self):
+        text, html = jm.funding_opportunities_reminder(self.first())
+        self.assertTrue(text)
+        self.assertTrue(html)
+
+    def test_it_stays_quiet_the_rest_of_the_month(self):
+        for day in (2, 9, 15, 28):
+            when = datetime(2026, 10, day, 21, 0, tzinfo=timezone.utc)
+            self.assertEqual(jm.funding_opportunities_reminder(when),
+                             (None, None))
+
+    def test_it_names_the_real_opportunities(self):
+        text, _ = jm.funding_opportunities_reminder(self.first())
+        blob = "\n".join(text)
+        self.assertIn("Scottish EDGE", blob)
+        self.assertIn("scottishedge.com", blob)
+
+    def test_it_says_plainly_that_harry_applies_himself(self):
+        text, html = jm.funding_opportunities_reminder(self.first())
+        self.assertIn("yourself", "\n".join(text).lower())
+        self.assertIn("yourself", html.lower())
+
+    def test_the_data_file_carries_no_address_of_any_kind(self):
+        """The absence is the guardrail. The discovery pipeline has nothing
+        here to find, so no future refactor can wire this into send_email()
+        the way targets.json or support_orgs.json entries are."""
+        with open(jm.FUNDING_PATH) as f:
+            raw = f.read()
+        blob = json.loads(raw)
+        for opp in blob["opportunities"]:
+            self.assertNotIn("email", opp)
+            self.assertNotIn("domain", opp)
+            self.assertNotIn("contact", opp)
+            self.assertNotIn("@", json.dumps(opp))
+
+    def test_a_missing_file_is_survived_quietly(self):
+        with mock.patch.object(jm, "FUNDING_PATH", "/nonexistent/x.json"):
+            self.assertEqual(jm.funding_opportunities_reminder(self.first()),
+                             (None, None))
+
+
+class TestTheVisibilityChecklist(unittest.TestCase):
+    """The two items the machine genuinely cannot do any part of itself - it
+    never logs into LinkedIn and never will."""
+
+    def sunday(self):
+        return datetime(2026, 10, 4, 21, 0, tzinfo=timezone.utc)
+
+    def test_the_new_items_are_on_the_weekly_list(self):
+        text, html = jm.inbound_reminder(self.sunday())
+        blob = "\n".join(text)
+        self.assertIn("headline", blob.lower())
+        self.assertIn("Leads2Profit", blob)
+        self.assertIn("Leads2Profit", html)
+
+    def test_every_item_still_has_a_name_url_and_reason(self):
+        for entry in jm.INBOUND_TASKS:
+            self.assertEqual(len(entry), 3)
+            name, url, why = entry
+            self.assertTrue(name and why)
+            self.assertTrue(url.startswith("https://"))

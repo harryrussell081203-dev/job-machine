@@ -158,6 +158,36 @@ def compose(org):
         )
         return "Service leaver - how do I get RightJob access set up?", body
 
+    # The only letters on this list aimed at the business rather than at
+    # Harry. It asks one question - am I eligible - and it is written this way
+    # for a reason that is not style: a cold email asking somebody to put money
+    # into a business is a financial promotion under section 21 of FSMA, and
+    # making one without FCA authorisation or an exemption is a criminal
+    # offence. Asking an established body whether their own published scheme
+    # covers you is not that, and never becomes that as long as the letter
+    # names their scheme and asks about eligibility rather than proposing that
+    # anyone invest. Nothing here may drift into a pitch.
+    if org.get("ask") == "business support":
+        body = (
+            f"Hello,\n\n"
+            f"I am an electronics technician in Aberdeen and a Royal Navy "
+            f"veteran - two years as a Communications and Information "
+            f"Specialist, leaving in 2023. Alongside my job I run "
+            f"Leads2Profit, a small marketing-automation business for "
+            f"nightlife and events venues, which I started in 2024 and still "
+            f"run.\n\n"
+            f"I am trying to find out whether it is eligible for anything you "
+            f"offer - funding, mentoring or advice - and what the process "
+            f"looks like from here.\n\n"
+            f"It is a genuinely small operation run alongside full-time work, "
+            f"so I would rather ask plainly than assume either way. If it is "
+            f"not the right fit, I would still be glad to know where a "
+            f"business at this stage should be looking.\n\n"
+            f"Thank you for reading this.\n\n"
+            f"Harry Russell\n07398 530978"
+        )
+        return "Small Aberdeen business - what am I eligible for?", body
+
     if org.get("ask") == "employer introductions":
         body = (
             f"Hello,\n\n"
@@ -275,7 +305,11 @@ def run(state, send=False, limit=None):
             asked += 1
             continue
         try:
-            jm.send_email(address, subject, body, attach_cv=True)
+            # A CV is a job-application artifact. The business-support letters
+            # are about Leads2Profit, not about hiring Harry, so attaching his
+            # technician CV to one would be answering a question nobody asked.
+            jm.send_email(address, subject, body,
+                          attach_cv=org.get("ask") != "business support")
             record(state, org, address)
             asked += 1
             print(f"[support] asked {org['name']} <{address}>")
