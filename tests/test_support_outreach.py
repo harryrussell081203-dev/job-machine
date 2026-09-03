@@ -95,7 +95,7 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
             self.assertEqual(addr, "info@x.org")
 
         with mock.patch.object(so.jm, "has_mx", return_value=True), \
-             mock.patch.object(so.jm, "scrape_site", return_value=[]):
+             mock.patch.object(so.jm, "scrape_site", return_value=([], [])):
             addr, _ = so.find_address({
                 "name": "Y", "domain": "y.org", "email": "info@y.org"})
             self.assertIsNone(addr)
@@ -130,14 +130,14 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
 
     def test_a_site_with_no_address_on_it_is_refused(self):
         with mock.patch.object(jm, "has_mx", return_value=True), \
-             mock.patch.object(jm, "scrape_site", return_value=[]):
+             mock.patch.object(jm, "scrape_site", return_value=([], [])):
             self.assertEqual(so.find_address({"domain": "acme.org"}),
                              (None, None))
 
     def test_a_real_address_is_used(self):
         with mock.patch.object(jm, "has_mx", return_value=True), \
              mock.patch.object(jm, "scrape_site",
-                               return_value=["grants@acme.org"]):
+                               return_value=(["grants@acme.org"], [])):
             address, _ = so.find_address({"domain": "acme.org"})
         self.assertEqual(address, "grants@acme.org")
 
@@ -252,6 +252,24 @@ class TestTheCtpLetter(unittest.TestCase):
         _, body = self.letter()
         self.assertIn("for life", body.lower())
         self.assertIn("could you tell me", body.lower())
+
+
+class TestFindAddressMatchesTheRealScrapeSiteContract(unittest.TestCase):
+    """scrape_site() returns (emails, phones), not a bare list of emails - a
+    call-script feature changed that shape and this file's own
+    find_address() was never updated to match, so every organisation without
+    a pre-recorded email crashed the moment it fell through to a real
+    website scrape. The other tests in this file mock scrape_site with the
+    OLD shape, which is exactly why none of them caught it."""
+
+    def test_a_real_scrape_site_return_value_is_handled(self):
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=(["grants@acme.org"],
+                                             [{"number": "01224372000",
+                                               "has_keyword": True}])):
+            address, _ = so.find_address({"domain": "acme.org"})
+        self.assertEqual(address, "grants@acme.org")
 
 
 if __name__ == "__main__":

@@ -242,7 +242,7 @@ def find_address(org):
     domain = org.get("domain")
     if not domain or not jm.has_mx(domain):
         return None, None
-    address, name, tier = jm.best_email(jm.scrape_site(domain))
+    address, name, tier = jm.best_email(jm.scrape_site(domain)[0])
     if not address or tier < 1:
         return None, None
     if not jm.has_mx(address.split("@")[1]):
