@@ -95,7 +95,7 @@ class TestWhoGetsWrittenTo(unittest.TestCase):
             self.assertEqual(addr, "info@x.org")
 
         with mock.patch.object(so.jm, "has_mx", return_value=True), \
-             mock.patch.object(so.jm, "scrape_site", return_value=[]):
+             mock.patch.object(so.jm, "scrape_site", return_value=([], [])):
             addr, _ = so.find_address({
                 "name": "Y", "domain": "y.org", "email": "info@y.org"})
             self.assertIsNone(addr)
@@ -130,14 +130,14 @@ class TestAddressesAreNeverGuessed(unittest.TestCase):
 
     def test_a_site_with_no_address_on_it_is_refused(self):
         with mock.patch.object(jm, "has_mx", return_value=True), \
-             mock.patch.object(jm, "scrape_site", return_value=[]):
+             mock.patch.object(jm, "scrape_site", return_value=([], [])):
             self.assertEqual(so.find_address({"domain": "acme.org"}),
                              (None, None))
 
     def test_a_real_address_is_used(self):
         with mock.patch.object(jm, "has_mx", return_value=True), \
              mock.patch.object(jm, "scrape_site",
-                               return_value=["grants@acme.org"]):
+                               return_value=(["grants@acme.org"], [])):
             address, _ = so.find_address({"domain": "acme.org"})
         self.assertEqual(address, "grants@acme.org")
 
@@ -252,6 +252,121 @@ class TestTheCtpLetter(unittest.TestCase):
         _, body = self.letter()
         self.assertIn("for life", body.lower())
         self.assertIn("could you tell me", body.lower())
+
+
+class TestTheBusinessSupportLetter(unittest.TestCase):
+    """The only letters aimed at Leads2Profit rather than at Harry, and the
+    ones with a legal line to stay the right side of.
+
+    A cold email asking somebody to put money into a business is a financial
+    promotion under section 21 of FSMA, and making one without FCA
+    authorisation or an exemption is a criminal offence. Asking an
+    established body whether their own published scheme covers you is a
+    different act entirely, and these tests exist to keep it that way if
+    somebody edits the copy later."""
+
+    def letter(self):
+        return so.compose({"name": "X-Forces Enterprise", "group": "veteran",
+                          "ask": "business support"})
+
+    def test_it_asks_about_eligibility(self):
+        _, body = self.letter()
+        self.assertIn("whether it is eligible", body)
+
+    def test_it_never_asks_anybody_to_invest(self):
+        subject, body = self.letter()
+        for solicitation in ("invest", "investment", "investor", "equity",
+                            "stake in", "shares", "raising", "raise capital",
+                            "funding round", "back us", "back me financially",
+                            "put money into", "return on"):
+            self.assertNotIn(solicitation, body.lower(), solicitation)
+            self.assertNotIn(solicitation, subject.lower(), solicitation)
+
+    def test_it_never_pitches_the_business(self):
+        """An eligibility question, not a sales document. No projections, no
+        traction claims, no valuation - none of which we could substantiate
+        and all of which turn a question into a pitch."""
+        _, body = self.letter()
+        for pitch in ("revenue", "growth rate", "valuation", "traction",
+                     "projected", "market opportunity", "scale rapidly",
+                     "disrupt"):
+            self.assertNotIn(pitch, body.lower(), pitch)
+
+    def test_it_states_only_facts_we_hold(self):
+        _, body = self.letter()
+        self.assertIn("Leads2Profit", body)
+        self.assertIn("2024", body)
+        self.assertIn("Royal Navy", body)
+        self.assertIn("Aberdeen", body)
+
+    def test_it_is_honest_that_the_business_is_small(self):
+        """Overstating it to a funder is the same failure as overstating a
+        clearance to an employer."""
+        _, body = self.letter()
+        self.assertIn("small", body.lower())
+        self.assertIn("alongside full-time work", body.lower())
+
+    def test_it_leaves_the_door_open_if_the_answer_is_no(self):
+        _, body = self.letter()
+        self.assertIn("not the right fit", body.lower())
+
+    def test_the_subject_says_what_is_being_asked(self):
+        subject, _ = self.letter()
+        self.assertIn("eligible", subject.lower())
+
+    def test_the_shipped_list_has_business_support_entries(self):
+        with open(so.SUPPORT_PATH) as f:
+            orgs = json.load(f)["organisations"]
+        business = [o for o in orgs if o.get("ask") == "business support"]
+        self.assertGreaterEqual(len(business), 2)
+        for org in business:
+            self.assertTrue(org.get("domain"), org["name"])
+
+    def test_no_cv_is_attached_to_a_business_letter(self):
+        """A technician CV answers a question nobody asked when the letter is
+        about the business."""
+        state = {"jobs": {}, "support_asked": {}}
+        org = {"name": "X-Forces Enterprise", "domain": "x-forces.com",
+               "group": "veteran", "ask": "business support"}
+        with mock.patch.object(so, "load_orgs", return_value=[org]), \
+             mock.patch.object(so, "find_address",
+                               return_value=("hello@x-forces.com", None)), \
+             mock.patch.object(so.jm, "save"), \
+             mock.patch.object(so.time, "sleep"), \
+             mock.patch.object(so.jm, "send_email") as send:
+            so.run(state, send=True)
+        self.assertFalse(send.call_args.kwargs["attach_cv"])
+
+    def test_a_charity_letter_still_gets_the_cv(self):
+        state = {"jobs": {}, "support_asked": {}}
+        org = {"name": "SSAFA", "domain": "ssafa.org.uk", "group": "veteran",
+               "ask": "registration"}
+        with mock.patch.object(so, "load_orgs", return_value=[org]), \
+             mock.patch.object(so, "find_address",
+                               return_value=("info@ssafa.org.uk", None)), \
+             mock.patch.object(so.jm, "save"), \
+             mock.patch.object(so.time, "sleep"), \
+             mock.patch.object(so.jm, "send_email") as send:
+            so.run(state, send=True)
+        self.assertTrue(send.call_args.kwargs["attach_cv"])
+
+
+class TestFindAddressMatchesTheRealScrapeSiteContract(unittest.TestCase):
+    """scrape_site() returns (emails, phones), not a bare list of emails - a
+    call-script feature changed that shape and this file's own
+    find_address() was never updated to match, so every organisation without
+    a pre-recorded email crashed the moment it fell through to a real
+    website scrape. The other tests in this file mock scrape_site with the
+    OLD shape, which is exactly why none of them caught it."""
+
+    def test_a_real_scrape_site_return_value_is_handled(self):
+        with mock.patch.object(jm, "has_mx", return_value=True), \
+             mock.patch.object(jm, "scrape_site",
+                               return_value=(["grants@acme.org"],
+                                             [{"number": "01224372000",
+                                               "has_keyword": True}])):
+            address, _ = so.find_address({"domain": "acme.org"})
+        self.assertEqual(address, "grants@acme.org")
 
 
 if __name__ == "__main__":
