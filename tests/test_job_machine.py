@@ -3089,3 +3089,51 @@ class TestTheVisibilityChecklist(unittest.TestCase):
             name, url, why = entry
             self.assertTrue(name and why)
             self.assertTrue(url.startswith("https://"))
+
+
+class TestTheAnswersFileNeverClaimsAClearance(unittest.TestCase):
+    """data/answers.json once read "DV (Developed Vetting)", which is false -
+    Harry's clearance lapsed at discharge and he asked for it removed
+    everywhere. It was removed, and then an automated state commit reverted
+    the whole file to a months-old copy on 31 August 2026, putting the false
+    claim back into a public repo until it was spotted on 3 September.
+
+    CLEARANCE_CLAIM already guards every outgoing email. Pointing it at the
+    data file too means the next revert fails the build instead of sitting
+    there unnoticed."""
+
+    def answers(self):
+        with open(os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "data", "answers.json")) as f:
+            return json.load(f)
+
+    def test_the_clearance_answer_makes_no_claim(self):
+        answer = self.answers().get("security_clearance") or ""
+        self.assertIsNone(jm.claims_clearance(answer), answer)
+
+    def test_no_field_anywhere_in_the_file_claims_one(self):
+        for key, value in self.answers().items():
+            if isinstance(value, str):
+                with self.subTest(field=key):
+                    self.assertIsNone(jm.claims_clearance(value), value)
+
+    def test_it_still_says_he_is_eligible_to_be_vetted(self):
+        """Removing the false claim must not remove the true, useful fact."""
+        answer = (self.answers().get("security_clearance") or "").lower()
+        self.assertIn("none", answer)
+        self.assertIn("vetting", answer)
+
+    def test_the_employer_is_the_current_one(self):
+        answers = self.answers()
+        self.assertEqual(answers.get("current_employer"), "Hydro Group")
+        self.assertEqual(answers.get("previous_employer"),
+                         "Sonardyne International")
+
+    def test_it_does_not_say_he_is_available_immediately(self):
+        """He is employed. Saying otherwise to an employer is a false claim
+        about the same family as the clearance one."""
+        answers = self.answers()
+        for field in ("notice_period", "earliest_start_date"):
+            with self.subTest(field=field):
+                self.assertNotIn("immediately",
+                                 (answers.get(field) or "").lower())
