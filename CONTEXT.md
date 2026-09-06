@@ -212,5 +212,23 @@ so the figure goes down. It means "sent and still waiting", not a total.
 `send_counts` is a per-day **cap counter** merged with `max()` across
 concurrent runs and is never a lifetime figure.
 
-**Quote `sent + replied`.** It only ever goes up. `job_machine.py --stats`
-prints one labelled block; use it rather than counting by hand.
+**Run `python3 job_machine.py --stats`.** It reads only, writes nothing, and
+prints one labelled block separating the figures that only go up from the
+snapshot ones. The digest's "Applications sent all time" reads the same
+function, so the two cannot disagree.
+
+As of 2026-09-06:
+
+| | |
+| --- | --- |
+| Applications emailed (`sent` + `replied`) | **102** |
+| Replies | 24 (24%) |
+| Employers written to | 82 |
+| Speculative notes | 9 |
+| Support letters | 14 |
+| Sent and still waiting *(moves both ways)* | 78 |
+| Listings ever seen | 8,945 |
+
+Listings with no address: **407** "no domain found", 217 "no real address
+found", 10 no MX, 5 wrong company. The 407 is the figure to use — an earlier
+count of 422 wrongly folded in the last three rows.

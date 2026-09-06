@@ -3284,3 +3284,87 @@ class TestReopeningListingsWeCanNowAnswer(unittest.TestCase):
         jm.rediscover(state)
         self.assertEqual(state["jobs"]["sent"]["status"], "sent")
         self.assertEqual(state["jobs"]["resolved"]["status"], "ready")
+
+
+class TestTheNumbersDoNotWobble(unittest.TestCase):
+    """Harry noticed the reported figures kept changing and asked for
+    consistent tracking. He was right, and it was not time passing:
+
+        2026-09-03   sent=79  replied=23
+        2026-09-03   sent=78  replied=24     <- sent went DOWN
+
+    status == 'sent' DRAINS. A reply flips the record to 'replied' and it
+    leaves the bucket, so quoting it as a running total makes the machine look
+    like it is going backwards on precisely its best days.
+    """
+
+    def state(self, **counts):
+        jobs, n = {}, 0
+        for status, how_many in counts.items():
+            for _ in range(how_many):
+                n += 1
+                jobs[str(n)] = {"status": status, "company": f"Firm {n}"}
+        return {"jobs": jobs}
+
+    def test_applications_ever_is_sent_plus_replied(self):
+        s = jm.lifetime_stats(self.state(sent=78, replied=24))
+        self.assertEqual(s["applications_ever"], 102)
+
+    def test_it_does_not_fall_when_a_reply_arrives(self):
+        """The whole point. A reply must move the needle up or leave it alone,
+        never down."""
+        before = jm.lifetime_stats(self.state(sent=79, replied=23))
+        after = jm.lifetime_stats(self.state(sent=78, replied=24))
+        self.assertEqual(before["applications_ever"],
+                         after["applications_ever"])
+        self.assertLess(before["awaiting_reply"], after["applications_ever"])
+        # and the misleading figure is still reported, just labelled as the
+        # snapshot it is
+        self.assertGreater(before["awaiting_reply"], after["awaiting_reply"])
+
+    def test_a_reply_raises_the_reply_rate(self):
+        self.assertEqual(jm.lifetime_stats(self.state(sent=79, replied=23))
+                         ["reply_rate"], 23)
+        self.assertEqual(jm.lifetime_stats(self.state(sent=78, replied=24))
+                         ["reply_rate"], 24)
+
+    def test_nothing_sent_is_not_a_division_by_zero(self):
+        s = jm.lifetime_stats({"jobs": {}})
+        self.assertEqual(s["applications_ever"], 0)
+        self.assertEqual(s["reply_rate"], 0)
+
+    def test_speculative_notes_are_counted_separately(self):
+        """A speculative note is not an application to an advertised role and
+        must not inflate the headline."""
+        s = jm.lifetime_stats(self.state(sent=10, replied=2, spec_sent=9))
+        self.assertEqual(s["applications_ever"], 12)
+        self.assertEqual(s["speculative_notes"], 9)
+
+    def test_employers_are_counted_once_however_they_are_spelled(self):
+        state = {"jobs": {
+            "1": {"status": "sent", "company": "Survitec"},
+            "2": {"status": "replied", "company": "Survitec Group Ltd"},
+            "3": {"status": "sent", "company": "Matchtech"},
+        }}
+        s = jm.lifetime_stats(state)
+        self.assertEqual(s["applications_ever"], 3)
+        self.assertEqual(s["companies_ever"], 2)
+
+    def test_the_digest_and_stats_cannot_disagree(self):
+        """Two counters for one number is one counter to forget. The digest's
+        'Applications sent all time' reads the same function."""
+        state = self.state(sent=5, replied=3, spec_sent=2, ready=4)
+        data = jm.collect_summary(state, jm.summary_window(state))
+        self.assertEqual(data["lifetime"],
+                         jm.lifetime_stats(state)["applications_ever"])
+
+
+class TestAskingWhatHappenedChangesNothing(unittest.TestCase):
+    def test_stats_never_writes(self):
+        """Asking the machine what it has done must not be able to change what
+        it has done."""
+        with mock.patch.object(jm, "load", return_value={"jobs": {}}), \
+             mock.patch.object(jm, "save") as save, \
+             mock.patch("builtins.print"):
+            self.assertEqual(jm.main(["--stats"]), 0)
+        save.assert_not_called()

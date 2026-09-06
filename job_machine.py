@@ -16,6 +16,7 @@ message to Harry's own inbox, prefixes the subject with the intended recipient,
 leaves companies unmarked and disables follow-ups.
 """
 import argparse
+import collections
 import email.utils
 import glob
 import imaplib
@@ -3121,6 +3122,85 @@ def summary_window(state):
     return min(since, floor) if since else floor
 
 
+def lifetime_stats(state):
+    """The counts that do not wobble, and the ones that do, labelled.
+
+    This exists because I kept quoting different figures for the same thing
+    and Harry called it out. He was right, and the cause is not time passing:
+
+        2026-09-03   sent=79  replied=23
+        2026-09-03   sent=78  replied=24     <- sent went DOWN
+
+    `status == "sent"` DRAINS. When somebody answers, the record flips to
+    'replied' and leaves the bucket. It means "sent and still waiting", not a
+    running total, and quoting it as one makes the machine look like it is
+    going backwards on exactly the days it is going best.
+
+    `send_counts` is worse to quote: it is a per-day CAP counter, merged
+    across concurrent runs with max(), so it is not a lifetime total of
+    anything and its 134 has never meant what it looks like.
+
+    applications_ever = sent + replied is the monotonic one. That is the
+    number to say out loud.
+    """
+    jobs = list((state.get("jobs") or {}).values())
+
+    def count(*statuses):
+        return sum(1 for j in jobs if j.get("status") in statuses)
+
+    awaiting = count("sent")
+    replied = count("replied")
+    ever = awaiting + replied
+    binned = collections.Counter(
+        j.get("skip_reason") or "unexplained"
+        for j in jobs if j.get("status") == "no_email")
+    return {
+        # monotonic - safe to quote
+        "applications_ever": ever,
+        "replies": replied,
+        "reply_rate": round(100 * replied / ever) if ever else 0,
+        "speculative_notes": count("spec_sent"),
+        "portal_submitted": count("portal_submitted"),
+        "support_letters": len(state.get("support_asked") or {}),
+        "trade_bodies": len(state.get("network_asked") or {}),
+        "companies_ever": len({company_key(j.get("company") or "")
+                               for j in jobs
+                               if j.get("status") in ("sent", "replied")
+                               and (j.get("company") or "").strip()}),
+        # a snapshot of right now - these move in both directions
+        "awaiting_reply": awaiting,
+        "queued_to_send": count("ready"),
+        "listings_seen": len(jobs),
+        "no_address": dict(binned.most_common()),
+    }
+
+
+def print_stats(state):
+    s = lifetime_stats(state)
+    print("These only ever go up")
+    print(f"  applications emailed      {s['applications_ever']}")
+    print(f"  replies                   {s['replies']}  "
+          f"({s['reply_rate']}%)")
+    print(f"  employers written to      {s['companies_ever']}")
+    print(f"  speculative notes         {s['speculative_notes']}")
+    print(f"  applications via a portal {s['portal_submitted']}")
+    print(f"  support letters           {s['support_letters']}")
+    print(f"  trade bodies asked        {s['trade_bodies']}")
+    print()
+    print("Where things stand right now (these move both ways)")
+    print(f"  sent and still waiting    {s['awaiting_reply']}")
+    print(f"  written and queued        {s['queued_to_send']}")
+    print(f"  listings ever seen        {s['listings_seen']}")
+    print()
+    print("Listings with no address, by reason")
+    for reason, n in s["no_address"].items():
+        print(f"  {n:5}  {reason}")
+    print()
+    print("Quote 'applications emailed'. Never 'sent' on its own - it drains "
+          "as replies arrive, so it falls on the best days.")
+    return s
+
+
 def collect_summary(state, since):
     """What happened since the last digest."""
     def after(value):
@@ -3141,9 +3221,11 @@ def collect_summary(state, since):
         "queued": [j for j in jobs if j.get("status") == "ready"],
         "waiting": [j for j in jobs if j.get("status") == "sent"
                     and not j.get("followup_sent_at")],
-        "lifetime": sum(1 for j in jobs
-                        if j.get("status") in ("sent", "replied")
-                        or j.get("followup_sent_at")),
+        # One definition of "how many have ever gone out", shared with
+        # --stats. Two counters for the same number is one counter to forget
+        # to update, and this project has already been caught quoting three
+        # different figures for it.
+        "lifetime": lifetime_stats(state)["applications_ever"],
     }
 
 
@@ -3726,6 +3808,9 @@ def main(argv=None):
                         help="put listings binned for 'no domain found' back in "
                              "the queue when their employer's domain is already "
                              "known from another listing")
+    parser.add_argument("--stats", action="store_true",
+                        help="print one labelled, authoritative set of numbers "
+                             "and do nothing else")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -3733,6 +3818,12 @@ def main(argv=None):
     parser.add_argument("--replies", action="store_true",
                         help="only check the inbox and handle replies (fast)")
     args = parser.parse_args(argv)
+
+    # Before anything else, and it never writes. Asking the machine what it
+    # has done should not be able to change what it has done.
+    if args.stats:
+        print_stats(load())
+        return 0
 
     if args.summary:
         state = load()
