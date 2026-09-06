@@ -3183,10 +3183,46 @@ def brand_new(job, hours=None):
     return age <= (hours if hours is not None else BRAND_NEW_HOURS)
 
 
-def summary_due(force=False):
-    """The workflow fires at 21:00 and 22:00 UTC; exactly one of those is 22:00
-    in the UK, whichever way the clocks are set."""
-    return force or uk_now().hour == SUMMARY_HOUR_UK
+def uk_date(stamp):
+    """The UK calendar date a moment falls on."""
+    try:
+        from zoneinfo import ZoneInfo
+        return stamp.astimezone(ZoneInfo(SUMMARY_TZ)).date()
+    except Exception:
+        # Same BST approximation uk_now() falls back to, reused rather than
+        # repeated: its offset is correct for right now, which is the only
+        # comparison this function is ever asked to make.
+        return (stamp.astimezone(timezone.utc) + uk_now().utcoffset()).date()
+
+
+def summary_sent_today(state):
+    last = parse_ts((state or {}).get("last_summary_at"))
+    return bool(last) and uk_date(last) == uk_now().date()
+
+
+def summary_due(state=None, force=False):
+    """22:00 UK or later, and nothing sent yet on this UK date.
+
+    This was `uk_now().hour == SUMMARY_HOUR_UK` - a ONE-HOUR window against a
+    scheduler that makes no delivery guarantee. GitHub queues scheduled
+    workflows behind its own load and routinely starts them late, and the
+    three digests this machine ever sent landed at 21:28, 21:35 and 21:36
+    UTC. The window closed at 21:59. Once the delay crossed the hour the run
+    still exited 0 and simply printed that it was not 22:00 yet, so eleven
+    consecutive nights were lost behind a green tick.
+
+    A late digest is worth having; a missing one is not. So the window is
+    open-ended upwards, and the thing that stops two digests going out in one
+    evening is asking whether one already has - not the clock happening to be
+    in exactly the right hour. That matters because in BST both scheduled
+    runs (21:00 and 22:00 UTC) are now inside the window: the second finds
+    the first has been and stands down.
+    """
+    if force:
+        return True
+    if uk_now().hour < SUMMARY_HOUR_UK:
+        return False
+    return not summary_sent_today(state)
 
 
 def summary_window(state):
@@ -3510,8 +3546,11 @@ ul{{font-size:14px;padding-left:18px}}
 
 
 def send_summary(state, force=False):
-    if not summary_due(force):
-        print(f"[summary] not 22:00 in the UK yet (local {uk_now():%H:%M}), skipping")
+    if not summary_due(state, force):
+        reason = ("one has already gone out today"
+                  if summary_sent_today(state)
+                  else f"not {SUMMARY_HOUR_UK}:00 in the UK yet")
+        print(f"[summary] {reason} (local {uk_now():%H:%M}), skipping")
         return
     if not (GMAIL_ADDRESS and GMAIL_APP_PASSWORD):
         print("[summary] no Gmail credentials")

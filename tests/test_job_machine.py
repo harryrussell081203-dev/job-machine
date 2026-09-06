@@ -766,6 +766,53 @@ class TestDailySummary(unittest.TestCase):
             self.assertFalse(jm.summary_due())
             self.assertTrue(jm.summary_due(force=True))
 
+    def test_a_late_run_still_sends(self):
+        """The bug that lost eleven nights: GitHub starts the job late.
+
+        The gate was an exact hour match, so a run delivered at 23:05 UK
+        printed "not 22:00 yet" and exited green. A digest an hour late is
+        still worth having.
+        """
+        uk = datetime(2026, 8, 1, 23, 5, tzinfo=timezone.utc)
+        with mock.patch.object(jm, "uk_now", return_value=uk):
+            self.assertTrue(jm.summary_due({}))
+
+    def test_never_twice_on_the_same_uk_day(self):
+        """What replaces the hour match as the double-send guard."""
+        uk = datetime(2026, 8, 1, 22, 0, tzinfo=timezone.utc)
+        sent = {"last_summary_at": datetime(
+            2026, 8, 1, 21, 10, tzinfo=timezone.utc).isoformat()}
+        with mock.patch.object(jm, "uk_now", return_value=uk):
+            self.assertFalse(jm.summary_due(sent))
+            # force is still an override, not a suggestion
+            self.assertTrue(jm.summary_due(sent, force=True))
+
+    def test_the_next_evening_is_due_again(self):
+        uk = datetime(2026, 8, 2, 22, 0, tzinfo=timezone.utc)
+        sent = {"last_summary_at": datetime(
+            2026, 8, 1, 22, 5, tzinfo=timezone.utc).isoformat()}
+        with mock.patch.object(jm, "uk_now", return_value=uk):
+            self.assertTrue(jm.summary_due(sent))
+
+    def test_both_bst_runs_produce_exactly_one_digest(self):
+        """21:00 and 22:00 UTC are 22:00 and 23:00 UK. Both are now inside
+        the window, so the guard - not the clock - has to be what stops the
+        second one."""
+        state = self.state(self.sent_job())
+        sends = []
+        for utc_hour in (21, 22):
+            # 2026-08-01 is BST, so UK local is one hour ahead of UTC.
+            utc = datetime(2026, 8, 1, utc_hour, 0, tzinfo=timezone.utc)
+            uk = utc.astimezone(timezone(timedelta(hours=1)))
+            with mock.patch.object(jm, "uk_now", return_value=uk), \
+                 mock.patch.object(jm, "now", return_value=utc.isoformat()), \
+                 mock.patch.object(jm.smtplib, "SMTP_SSL") as smtp:
+                jm.send_summary(state)
+                sends.append(smtp.called)
+        self.assertEqual(sends, [True, False])
+        self.assertEqual(jm.parse_ts(state["last_summary_at"]),
+                         datetime(2026, 8, 1, 21, 0, tzinfo=timezone.utc))
+
     def test_skipped_outside_the_window_without_touching_smtp(self):
         state = self.state(self.sent_job())
         uk = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
