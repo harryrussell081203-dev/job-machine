@@ -3137,3 +3137,150 @@ class TestTheAnswersFileNeverClaimsAClearance(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertNotIn("immediately",
                                  (answers.get(field) or "").lower())
+
+
+class TestRememberingDomainsAlreadyFound(unittest.TestCase):
+    """The machine kept forgetting what it had just worked out.
+
+    find_domain asked Clearbit afresh for every listing, so any run where the
+    lookup came back empty parked that listing at "no domain found" for good -
+    with the answer sitting in state.json the whole time. Of 422 listings
+    binned this way, 144 were companies already resolved elsewhere: Ernest
+    Gordon Recruitment Limited 29 times, Rise Technical 16, Reed 10. Enerpac
+    Tool Group appears in both the resolved and the binned lists seven times
+    each, which is what a transient failure looks like when nothing retries.
+    """
+
+    def state(self, *pairs):
+        jobs = {}
+        for i, (company, domain) in enumerate(pairs):
+            jobs[str(i)] = {"company": company, "company_domain": domain,
+                            "status": "ready"}
+        return {"jobs": jobs}
+
+    def test_a_company_resolved_once_is_remembered(self):
+        known = jm.known_domains(self.state(
+            ("Ernest Gordon Recruitment", "ernestgordonrecruitment.com")))
+        self.assertEqual(known[jm.company_key("Ernest Gordon Recruitment")],
+                         "ernestgordonrecruitment.com")
+
+    def test_it_is_found_under_a_different_spelling_of_the_same_name(self):
+        """'Ernest Gordon Recruitment' resolved and 'Ernest Gordon Recruitment
+        Limited' was binned 29 times. Same company, same key."""
+        state = self.state(("Survitec", "survitecgroup.com"))
+        known = jm.known_domains(state)
+        self.assertEqual(known.get(jm.company_key("Survitec Group Ltd")),
+                         "survitecgroup.com")
+
+    def test_a_known_company_costs_no_network_call(self):
+        with mock.patch.object(jm.requests, "get",
+                               side_effect=AssertionError("asked Clearbit")):
+            self.assertEqual(
+                jm.find_domain("Speedy Hire", {"speedy hire": "speedyhire.com"}),
+                "speedyhire.com")
+
+    def test_an_unknown_company_still_asks(self):
+        response = mock.Mock()
+        response.raise_for_status = lambda: None
+        response.json = lambda: [{"name": "EnerMech", "domain": "enermech.com"}]
+        with mock.patch.object(jm.requests, "get", return_value=response):
+            self.assertEqual(jm.find_domain("EnerMech", {"other": "x.com"}),
+                             "enermech.com")
+
+
+class TestARememberedDomainIsRevalidated(unittest.TestCase):
+    """The first version of the cache trusted the file, reasoning that any
+    domain in it had already passed the strict matcher.
+
+    That reasoning is wrong and the real state file proves it: written before
+    the matcher learned to refuse them, it holds Wood -> woodforest.com, Wood
+    Group -> woodforest.com and Engineering Employment -> illinoisexpo.org.
+    Handing those back as "already known" would have re-opened twenty listings
+    pointed straight at the stranger this entire guard exists to avoid.
+    """
+
+    def trusted(self, company, domain):
+        state = {"jobs": {"1": {"company": company, "company_domain": domain}}}
+        return jm.company_key(company) in jm.known_domains(state)
+
+    def test_the_bank_in_texas_is_never_handed_back(self):
+        self.assertFalse(self.trusted("Wood", "woodforest.com"))
+        self.assertFalse(self.trusted("Wood Group", "woodforest.com"))
+
+    def test_a_domain_sharing_no_word_with_the_name_is_refused(self):
+        """What domain_matches_company misses: it only polices single-word
+        names, so a two-word name carries anything at all through it."""
+        self.assertFalse(self.trusted("Engineering Employment",
+                                      "illinoisexpo.org"))
+        self.assertFalse(self.trusted("BES Group", "soyoulive.com"))
+
+    def test_the_other_documented_near_misses_stay_out(self):
+        for company, domain in (("Sanctuary", "sanctuaryclothing.com"),
+                                ("Stork", "stork24.eu"),
+                                ("Ember", "emberhome.com"),
+                                ("Orion Group", "orionworld.com")):
+            with self.subTest(company=company):
+                self.assertFalse(self.trusted(company, domain))
+
+    def test_one_matching_word_is_enough_and_all_of_them_is_too_many(self):
+        """Requiring every word was the first attempt and it threw away
+        twenty-five correct entries, because company_key does not strip
+        'council' or 'university' and nobody puts those in a domain."""
+        for company, domain in (
+                ("Aberdeenshire Council", "aberdeenshire.gov.uk"),
+                ("ABERTAY UNIVERSITY", "abertay.ac.uk"),
+                ("Cirrus Logic", "cirrus.com"),
+                ("University of Dundee", "dundee.ac.uk"),
+                ("Ernest Gordon Recruitment Limited",
+                 "ernestgordonrecruitment.com"),
+                ("Future Engineering Recruitment Ltd", "futureengr.com")):
+            with self.subTest(company=company):
+                self.assertTrue(self.trusted(company, domain))
+
+    def test_an_acronym_domain_is_left_out_deliberately(self):
+        """bgs.ac.uk and nlb.org.uk are both right and neither is checkable by
+        name. Refusing costs one Clearbit lookup, which is what happens today
+        anyway; accepting a wrong one applies it to every future listing."""
+        self.assertFalse(self.trusted("British Geological Survey", "bgs.ac.uk"))
+        self.assertFalse(self.trusted("Northern Lighthouse Board", "nlb.org.uk"))
+
+
+class TestReopeningListingsWeCanNowAnswer(unittest.TestCase):
+    def state(self):
+        return {"jobs": {
+            "known": {"company": "Speedy Hire", "status": "no_email",
+                      "skip_reason": "no domain found"},
+            "unknown": {"company": "Nobody Ever Heard Of Them",
+                        "status": "no_email", "skip_reason": "no domain found"},
+            "no_address": {"company": "Speedy Hire", "status": "no_email",
+                           "skip_reason": "no real address found"},
+            "resolved": {"company": "Speedy Hire", "status": "ready",
+                         "company_domain": "speedyhire.com"},
+            "sent": {"company": "Speedy Hire", "status": "sent"},
+        }}
+
+    def test_a_listing_whose_employer_is_known_goes_back_in_the_queue(self):
+        state = self.state()
+        self.assertEqual(jm.rediscover(state), 1)
+        job = state["jobs"]["known"]
+        self.assertEqual(job["status"], "scored")
+        self.assertIsNone(job["skip_reason"])
+        self.assertTrue(job["rediscovered_at"])
+
+    def test_a_listing_we_still_cannot_answer_is_left_alone(self):
+        state = self.state()
+        jm.rediscover(state)
+        self.assertEqual(state["jobs"]["unknown"]["status"], "no_email")
+
+    def test_no_real_address_found_is_not_reopened(self):
+        """That company's site was fetched and had no address on it. It is a
+        fact about the site, not a gap in what the machine remembered."""
+        state = self.state()
+        jm.rediscover(state)
+        self.assertEqual(state["jobs"]["no_address"]["status"], "no_email")
+
+    def test_it_never_drags_a_sent_application_backwards(self):
+        state = self.state()
+        jm.rediscover(state)
+        self.assertEqual(state["jobs"]["sent"]["status"], "sent")
+        self.assertEqual(state["jobs"]["resolved"]["status"], "ready")

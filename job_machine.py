@@ -1808,17 +1808,111 @@ def domain_matches_company(company, domain):
     return rest in own_words
 
 
-def find_domain(company):
+def known_domains(state):
+    """{company key: domain} for every company already resolved.
+
+    The machine kept forgetting what it had just worked out. `find_domain`
+    asked Clearbit afresh for every single listing, so the same employer was
+    looked up again and again - and any run where that lookup came back empty
+    parked the listing at "no domain found" for good, with the answer sitting
+    in state.json the whole time.
+
+    That is not a hypothetical either. Of 422 listings binned this way, 144
+    are companies this machine already holds a domain for: 107 under the
+    identical name (Ernest Gordon Recruitment Limited 29 times, Rise Technical
+    16, Wood 16, Reed 10) and 37 more under a spelling that keys to the same
+    company. Enerpac Tool Group appears in both lists seven times each way,
+    which is what a transient failure looks like when nothing retries.
+
+    Keyed on company_key, so 'Survitec Group Ltd' finds what 'Survitec'
+    resolved to.
+
+    EVERY ENTRY IS RE-VALIDATED, and that is not defensive habit. The first
+    version of this trusted the file on the reasoning that any domain in it
+    had already been accepted by the strict matcher below. That reasoning is
+    wrong, and the real file says so: it currently holds
+
+        Wood            -> woodforest.com     (a bank in Texas)
+        Wood Group      -> woodforest.com
+        Engineering Employment -> illinoisexpo.org
+
+    written before the matcher learned to refuse them. Handing those back as
+    "already known" would have re-opened twenty listings and pointed them
+    straight at the exact stranger this whole guard exists to keep them away
+    from. Nothing had been SENT there - domain_matches_company() runs at send
+    time and stops it - but the listings would have burned their discovery
+    budget getting there.
+
+    Two conditions, because one is not enough:
+
+      - domain_matches_company(), which is the send-time guard. It catches
+        Wood -> woodforest.com, Stork -> stork24.eu and Ember ->
+        emberhome.com, but only polices single-word names.
+      - at least one distinctive word of the company's name appears in the
+        domain. This is what catches Engineering Employment ->
+        illinoisexpo.org and BES Group -> soyoulive.com, which the first
+        condition waves through for having two words in them.
+
+    ONE word, not all of them. Requiring all was the first attempt and it
+    threw away twenty-five correct entries - Aberdeenshire Council ->
+    aberdeenshire.gov.uk, Abertay University -> abertay.ac.uk, Cirrus Logic
+    -> cirrus.com - because company_key does not strip 'council' or
+    'university' and no organisation puts those in its domain.
+
+    Acronym domains still fail this: British Geological Survey -> bgs.ac.uk
+    and Northern Lighthouse Board -> nlb.org.uk are both right and neither is
+    checkable by name. They are left out on purpose. A rejected entry costs
+    one Clearbit lookup, which is what happens today anyway; a wrong entry
+    accepted here is applied to every future listing for that employer.
+
+    A cached domain is being applied to a DIFFERENT listing from the one it
+    was found on, so it has to clear a higher bar than a domain still attached
+    to the advert that produced it. Anything that fails simply is not cached,
+    and that company gets looked up live like any other.
+    """
+    found = {}
+    for job in (state.get("jobs") or {}).values():
+        domain = (job.get("company_domain") or "").strip().lower()
+        company = (job.get("company") or "").strip()
+        key = company_key(company)
+        if not domain or not key or key in found:
+            continue
+        if trustworthy_domain(company, domain):
+            found[key] = domain
+    return found
+
+
+def trustworthy_domain(company, domain):
+    """Whether a domain found for one listing may be reused for another.
+
+    See known_domains() for why this is stricter than the send-time guard.
+    """
+    if not domain_matches_company(company, domain):
+        return False
+    root = re.split(r"[.]", domain.lower().strip())[0]
+    root = re.sub(r"[^a-z0-9]", "", root)
+    return any(token in root for token in name_tokens(company))
+
+
+def find_domain(company, known=None):
     """Clearbit autocomplete: free, no key.
 
     Only a confident match is accepted. Matching on a raw substring is what put
     a note meant for Wood plc into the inbox of Woodforest National Bank, so
     every word of the company name now has to appear as a whole word in the
-    match, and the domain has to sit on a plausible TLD."""
+    match, and the domain has to sit on a plausible TLD.
+
+    `known` is what this machine has already resolved - see known_domains().
+    Checked before the network, so a company only ever costs one lookup and a
+    Clearbit outage cannot un-know an answer already held.
+    """
     wanted = company_key(company)
     wanted_tokens = name_tokens(company)
     if not wanted_tokens:
         return None
+    if known and wanted in known:
+        print(f"[discover] '{company}' -> {known[wanted]} (already known)")
+        return known[wanted]
     try:
         r = requests.get("https://autocomplete.clearbit.com/v1/companies/suggest",
                          params={"query": company}, headers=UA, timeout=15)
@@ -1945,6 +2039,10 @@ def discover(state):
     todo = [j for j in state["jobs"].values()
             if j["status"] == "scored"][:MAX_DISCOVERED_PER_RUN]
     found = 0
+    # Built once per run rather than per listing, and updated below as new
+    # companies resolve, so two listings for the same employer in one batch
+    # cost one lookup rather than two.
+    known = known_domains(state)
     for job in todo:
         # 1) addresses printed in the advert itself - directly tied to this job
         text = job.get("description", "") + " " + fetch_listing_text(job)
@@ -1970,11 +2068,12 @@ def discover(state):
             if not company:
                 job.update({"status": "skipped", "skip_reason": "no company name"})
                 continue
-            domain = find_domain(company)
+            domain = find_domain(company, known)
             if not domain:
                 job.update({"status": "no_email", "skip_reason": "no domain found"})
                 continue
             job["company_domain"] = domain
+            known.setdefault(company_key(company), domain)
             if not has_mx(domain):
                 job.update({"status": "no_email", "skip_reason": "domain has no MX"})
                 continue
@@ -3568,6 +3667,40 @@ def rescore(state, floor=55):
     return woken
 
 
+def rediscover(state):
+    """Re-open listings binned for "no domain found" that we can now answer.
+
+    Same argument as rescore(): a listing parked on a judgement the machine
+    has since improved on should not stay parked. The difference is that this
+    one is not a judgement call at all - these listings were binned for want
+    of a domain this machine already held, so re-opening them asks nothing new
+    of anybody.
+
+    Only listings whose company is in known_domains() are woken. The rest
+    genuinely have no domain, and putting them back would spend the discovery
+    budget re-asking Clearbit the same question and getting the same answer.
+
+    'no real address found' is deliberately left alone: that company's site
+    was fetched and had no address on it, which is a fact about the site
+    rather than a gap in what this machine remembered.
+    """
+    known = known_domains(state)
+    woken = 0
+    for job in state["jobs"].values():
+        if job.get("status") != "no_email":
+            continue
+        if job.get("skip_reason") != "no domain found":
+            continue
+        if company_key(job.get("company") or "") not in known:
+            continue
+        job.update({"status": "scored", "skip_reason": None,
+                    "rediscovered_at": now()})
+        woken += 1
+    print(f"[rediscover] {woken} listing(s) put back in the queue - their "
+          f"employer's domain was already known")
+    return woken
+
+
 def stage(name, fn, *args):
     """Run a stage, swallowing its failure so the rest of the run continues.
 
@@ -3589,6 +3722,10 @@ def main(argv=None):
                         help="put listings skipped for a low score back in the "
                              "queue, so a change to the candidate profile is "
                              "applied to what was already judged under the old one")
+    parser.add_argument("--rediscover", action="store_true",
+                        help="put listings binned for 'no domain found' back in "
+                             "the queue when their employer's domain is already "
+                             "known from another listing")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -3617,6 +3754,9 @@ def main(argv=None):
     state = load()
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
+        save(state)
+    if args.rediscover:
+        stage("rediscover", rediscover, state)
         save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)

@@ -240,3 +240,92 @@ class TestTheAgencyApproachCounter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheRediscoveredJobsSurvivingTheMerge(unittest.TestCase):
+    """rediscover() moves a listing from 'no_email' (rank 3) back to 'scored'
+    (rank 1), because the machine turned out to already hold its employer's
+    domain.
+
+    That is the third stage to move a listing backwards on purpose, and the
+    first two both learned the same lesson the expensive way: the ordinary
+    more-advanced-wins rule reads a deliberate step back as an accident and
+    reverts it. Eighty-six portal listings were released three runs running
+    and silently re-parked here every time.
+
+    So this is under test from the same commit that added the stage, rather
+    than after watching a hundred listings quietly go back in the bin."""
+
+    def test_a_rediscovered_job_is_not_re_parked_by_the_merge(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "no_email",
+                            "skip_reason": "no domain found"}}},
+            {"jobs": {"a": {"status": "scored",
+                            "rediscovered_at": "2026-09-06T10:00:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_it_works_whichever_side_the_reopening_is_on(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "scored",
+                            "rediscovered_at": "2026-09-06T10:00:00"}}},
+            {"jobs": {"a": {"status": "no_email",
+                            "skip_reason": "no domain found"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_the_newer_reopening_wins_over_an_older_one(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "new",
+                            "rescored_at": "2026-09-01T09:00:00"}}},
+            {"jobs": {"a": {"status": "scored",
+                            "rediscovered_at": "2026-09-06T10:00:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+    def test_an_application_already_sent_is_never_dragged_back(self):
+        out = ms.merge(
+            {"jobs": {"a": {"status": "sent"}}},
+            {"jobs": {"a": {"status": "scored",
+                            "rediscovered_at": "2026-09-06T10:00:00"}}})
+        self.assertEqual(out["jobs"]["a"]["status"], "sent")
+
+
+class TestNoReopeningEverBeatsALetterAlreadySent(unittest.TestCase):
+    """The re-opening rule was written to beat rank, and it beat rank
+    absolutely - so 'sent' on one side lost to a re-opened 'scored' on the
+    other, and the application would go out a second time.
+
+    It stayed invisible because the one test covering it put the SAME
+    portal_fallback_at on both sides, making them equal and falling through to
+    rank before the re-opening rule could do any harm. The hole only opens
+    when one side carries a stamp the other does not - the ordinary case for
+    any stage that re-opens listings.
+
+    An employer cannot be un-emailed, so this is tested for every status that
+    means something left the building, and against every stamp that re-opens.
+    """
+
+    def test_every_terminal_status_survives_every_kind_of_reopening(self):
+        for status in ("sent", "replied", "spec_sent", "test_sent",
+                       "portal_submitted", "do_not_contact"):
+            for field in ("rescored_at", "portal_fallback_at",
+                          "rediscovered_at"):
+                for order in (0, 1):
+                    with self.subTest(status=status, field=field, order=order):
+                        gone = {"jobs": {"a": {"status": status}}}
+                        back = {"jobs": {"a": {"status": "scored",
+                                               field: "2026-09-06T10:00:00"}}}
+                        sides = (gone, back) if order == 0 else (back, gone)
+                        out = ms.merge(*sides)
+                        self.assertEqual(out["jobs"]["a"]["status"], status)
+
+    def test_a_reopening_still_beats_a_status_that_is_not_terminal(self):
+        """The rule this protects must not be broken in the fixing of it: a
+        listing parked at 'skipped' or 'no_email' is still in the queue and a
+        deliberate re-opening must still win."""
+        for parked in ("skipped", "no_email", "compose_failed", "ready",
+                       "portal_manual"):
+            with self.subTest(parked=parked):
+                out = ms.merge(
+                    {"jobs": {"a": {"status": parked}}},
+                    {"jobs": {"a": {"status": "scored",
+                                    "rediscovered_at": "2026-09-06T10:00:00"}}})
+                self.assertEqual(out["jobs"]["a"]["status"], "scored")
