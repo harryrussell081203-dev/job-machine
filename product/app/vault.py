@@ -31,7 +31,20 @@ from __future__ import annotations
 import base64
 import os
 
-_KEY = (os.environ.get("CREDENTIAL_KEY") or "").strip()
+# Read on every call, never captured at import. Two reasons, and the second
+# is the one that bit:
+#
+#   - Import order stops mattering. A module-level read freezes whatever the
+#     environment held the first time anything imported this file, so a test
+#     that sets CREDENTIAL_KEY in setUp got the frozen empty string if some
+#     earlier test module had already pulled the vault in. Fourteen tests
+#     passed alone and failed in the suite for exactly that reason.
+#   - It is honest about configuration. "The key is whatever is set now" is
+#     a rule you can state; "the key is whatever was set at the moment some
+#     unrelated module was first imported" is not.
+def _key() -> str:
+    return (os.environ.get("CREDENTIAL_KEY") or "").strip()
+
 
 # Short enough to be a guessable passphrase rather than a random
 # value. Refused outright: a weak key here is worse than no feature,
@@ -47,7 +60,7 @@ def available() -> bool:
     """Whether credentials can be stored at all. The UI asks before offering
     automatic sending, so the answer is a missing feature rather than a
     server error."""
-    return bool(_KEY) and _fernet() is not None
+    return bool(_key()) and _fernet() is not None
 
 
 def new_key() -> str:
@@ -56,22 +69,28 @@ def new_key() -> str:
     return Fernet.generate_key().decode()
 
 
+# Building a Fernet is not free - the stretched path runs a KDF - so the
+# result is still cached. It is cached AGAINST THE KEY IT WAS BUILT FROM
+# rather than against "have we tried yet", so changing CREDENTIAL_KEY
+# rebuilds instead of silently serving a cipher for the old key.
 _cached = None
-_tried = False
+_cached_for = None
 
 
 def _fernet():
-    global _cached, _tried
-    if _tried:
+    global _cached, _cached_for
+    key = _key()
+    if _cached_for == key:
         return _cached
-    _tried = True
-    if not _KEY:
+    _cached_for = key
+    _cached = None
+    if not key:
         return None
     try:
         from cryptography.fernet import Fernet
         try:
             # A real Fernet key, from Fernet.generate_key(). Used as-is.
-            _cached = Fernet(_KEY.encode())
+            _cached = Fernet(key.encode())
         except Exception:
             # Anything else long enough gets stretched into one. This exists
             # so a host's own "generate a random value" button works: those
@@ -83,10 +102,10 @@ def _fernet():
             # secret into a key of an exact length, and the fixed salt is fine
             # because the input is expected to be random rather than a
             # remembered password.
-            if len(_KEY) < MIN_KEY_LENGTH:
+            if len(key) < MIN_KEY_LENGTH:
                 _cached = None
             else:
-                _cached = Fernet(_derive(_KEY))
+                _cached = Fernet(_derive(key))
     except Exception:
         # A malformed key is a configuration mistake, not a runtime one. Fail
         # closed: the feature is unavailable, the app still boots, and the

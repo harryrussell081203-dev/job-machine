@@ -14,7 +14,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from jobseeker.pipeline import harvest as h  # noqa: E402
 from jobseeker.profile import Profile, Role  # noqa: E402
 
-NOW = datetime(2026, 8, 30, 12, 0, tzinfo=timezone.utc)
+# Deliberately the real clock, not a fixed date.
+#
+# This was datetime(2026, 8, 30, 12, 0) and the suite went red a week later
+# without a line of code changing. adzuna_job() builds a listing three hours
+# before NOW and the harvester drops anything past the search window, so once
+# the wall clock moved on the fixture aged out and three tests failed.
+#
+# A test that rots on a calendar is worse than no test: it fails when nothing
+# is wrong, and everybody learns to ignore it. Freshness here is relative -
+# "three hours ago" - so relative is what the fixture should say. The tests
+# that genuinely need a fixed instant pass NOW explicitly as `now=`.
+NOW = datetime.now(timezone.utc)
 
 
 def profile(**over):

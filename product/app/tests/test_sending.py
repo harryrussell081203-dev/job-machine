@@ -642,3 +642,58 @@ class TestCredentialKeyForms(unittest.TestCase):
 
     def tearDown(self):
         os.environ.pop("CREDENTIAL_KEY", None)
+
+
+class TestTheKeyIsReadWhenItIsUsed(unittest.TestCase):
+    """The key comes from the environment at the moment it is needed, never
+    from whatever the environment held when some unrelated module first
+    imported this one.
+
+    It used to be captured at import. That is invisible in production, where
+    the environment is set before the process starts, and vicious in a test
+    run: fourteen tests in test_sending_rules.py passed on their own and
+    errored in the full suite with "CREDENTIAL_KEY is not set", purely
+    because another module had imported the vault first and frozen the empty
+    string. The tests were right and the vault was wrong.
+
+    Note what these do NOT do: reload the module. That is the point.
+    """
+
+    def setUp(self):
+        self.original = os.environ.get("CREDENTIAL_KEY")
+        # Whatever module object the rest of the suite is using. Fetched
+        # rather than imported at the top of the file because build() reloads
+        # app.vault, and a stale reference would test a module nothing else
+        # in the process is running.
+        self.vault = (sys.modules.get("app.vault")
+                      or importlib.import_module("app.vault"))
+
+    def tearDown(self):
+        if self.original is None:
+            os.environ.pop("CREDENTIAL_KEY", None)
+        else:
+            os.environ["CREDENTIAL_KEY"] = self.original
+
+    def test_a_key_set_after_import_is_picked_up(self):
+        os.environ.pop("CREDENTIAL_KEY", None)
+        self.assertFalse(self.vault.available())
+        os.environ["CREDENTIAL_KEY"] = Fernet.generate_key().decode()
+        self.assertTrue(self.vault.available())
+        self.assertEqual(self.vault.decrypt(self.vault.encrypt("pw")), "pw")
+
+    def test_changing_the_key_does_not_serve_a_cipher_for_the_old_one(self):
+        """The cache is keyed on the key. Get this wrong and a rotated
+        CREDENTIAL_KEY silently keeps encrypting under the previous one -
+        which reads as working right up until the process restarts and every
+        stored password is unreadable."""
+        os.environ["CREDENTIAL_KEY"] = Fernet.generate_key().decode()
+        token = self.vault.encrypt("pw")
+        os.environ["CREDENTIAL_KEY"] = Fernet.generate_key().decode()
+        with self.assertRaises(self.vault.VaultError):
+            self.vault.decrypt(token)
+
+    def test_removing_the_key_turns_the_feature_off_again(self):
+        os.environ["CREDENTIAL_KEY"] = Fernet.generate_key().decode()
+        self.assertTrue(self.vault.available())
+        os.environ.pop("CREDENTIAL_KEY", None)
+        self.assertFalse(self.vault.available())

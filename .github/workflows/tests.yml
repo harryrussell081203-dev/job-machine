@@ -1,0 +1,80 @@
+name: tests
+
+# Both machines have thorough test suites and, until now, nothing ran them
+# except a person remembering to. That is how two bugs reached this file's
+# first commit:
+#
+#   - product/tests/test_harvest.py pinned "now" to a fixed date, so three
+#     tests went red a week later without a line of code changing
+#   - app/vault.py read CREDENTIAL_KEY at import, so fourteen tests passed
+#     alone and errored in the full suite depending on import order
+#
+# Neither was hard to find once something looked. Nothing was looking.
+#
+# Free on GitHub's hardware for a public repository, and a couple of minutes
+# a push if this ever goes private.
+
+on:
+  push:
+    branches-ignore:
+      # The fire-* branches exist to trigger a run, and several of them are
+      # pushed and deleted in the same minute. Testing them is noise.
+      - "fire-*/**"
+      - "fire-*"
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # A push that supersedes another on the same branch makes the older run's
+  # answer irrelevant, so cancel it - unlike the machines themselves, where
+  # cancelling mid-send is the thing to avoid.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  personal:
+    name: the personal job machine
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        # The root machine has no requirements file - it is deliberately thin.
+        # Same three as run.yml, which is the list that matters: if the tests
+        # need a package the real run does not install, the tests are passing
+        # against something that cannot exist in production.
+        run: pip install requests dnspython reportlab
+      - name: Test
+        # Offline by construction: every test that would reach the network
+        # patches it. A failure here is a real failure, never a flake.
+        run: python -m unittest discover -s tests -v
+
+  product:
+    name: the product
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Test the pipeline
+        # Two suites with two different roots, which is why they are two
+        # steps rather than one discover: tests/ imports `jobseeker`, and
+        # app/tests/ imports `app`.
+        run: python -m unittest discover -s tests -t tests
+      - name: Test the app
+        run: python -m unittest discover -s app/tests -t .
