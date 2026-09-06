@@ -136,6 +136,19 @@ def playbook(request: Request):
     return render(request, "playbook.html", playbook=text)
 
 
+# Reachable without an account, deliberately. Somebody deciding whether to
+# hand over a CV and a mailbox password has to be able to read what happens
+# to them first, and a privacy notice behind a sign-in wall is not a notice.
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy(request: Request):
+    return render(request, "privacy.html")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms(request: Request):
+    return render(request, "terms.html")
+
+
 # ----------------------------------------------------------------------
 # sign in
 # ----------------------------------------------------------------------

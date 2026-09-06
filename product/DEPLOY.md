@@ -296,6 +296,26 @@ limit collapses to one bucket for everybody. Check your host does set it.
 
 ## 6. Before you charge anyone
 
+### The two that are not optional
+
+**Set `CONTROLLER_NAME`, `CONTACT_EMAIL` and `CONTROLLER_LOCATION`.** The
+terms and privacy pages are at `/terms` and `/privacy`, linked from every
+page's footer and from the paywall. Unset, the privacy notice names nobody,
+and UK GDPR requires the controller to be identifiable and contactable.
+
+**Pay the ICO data protection fee.** Holding other people's CVs, home
+addresses and mailbox credentials, for money, is not one of the exemptions.
+It is **£52 a year, or £47 by direct debit** at tier 1 — which is anyone
+under £632,000 turnover or 10 staff. Register at
+[ico.org.uk](https://ico.org.uk/for-organisations/data-protection-fee/).
+Not paying it is an offence in its own right, separately from anything to do
+with how the data is handled.
+
+That is the largest running cost this product has, and it is worth knowing
+before the first customer rather than after.
+
+### Then
+
 - Sign up as a real customer with a real card. Cancel it. Check both worked.
 - Confirm a cancelled subscription actually closes access.
 - Confirm the sign-in link email arrives and is not in spam.

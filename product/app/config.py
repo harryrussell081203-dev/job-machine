@@ -237,3 +237,20 @@ GEMINI_API_KEY = _env("GEMINI_API_KEY")
 DELIVERY_MODE = _env("DELIVERY_MODE", "handoff")
 
 PRICE_LABEL = _env("PRICE_LABEL", "£9 a month")
+
+# --- who is responsible for the data ----------------------------------
+# UK GDPR requires the controller to be identifiable and contactable on the
+# privacy notice. These are configuration rather than constants because the
+# operator is a person: hard-coding a name and a home address into a public
+# repository is how one ends up indexed.
+#
+# An email address is enough for the notice itself. The full trading address
+# is a separate matter between the operator and the ICO register.
+CONTROLLER_NAME = _env("CONTROLLER_NAME", "the operator of this site")
+CONTACT_EMAIL = _env("CONTACT_EMAIL")
+CONTROLLER_LOCATION = _env("CONTROLLER_LOCATION", "the United Kingdom")
+
+# The date the published terms and privacy notice last changed in substance.
+# Set by hand when they do - a notice that silently rewrites itself is worse
+# than one that is out of date, because nobody can say what they agreed to.
+LEGAL_UPDATED = _env("LEGAL_UPDATED", "6 September 2026")

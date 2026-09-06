@@ -55,6 +55,13 @@
   <p>One email per employer. Never a guessed address. Never a claim you
      cannot back.</p>
   <p><a href="/playbook">The playbook</a> is free.</p>
+  <p class="legal">
+    <a href="/terms">Terms</a> ·
+    <a href="/privacy">Privacy</a>
+    {% if config.CONTACT_EMAIL %}
+      · <a href="mailto:{{ config.CONTACT_EMAIL }}">Contact</a>
+    {% endif %}
+  </p>
 </footer>
 
 <script>

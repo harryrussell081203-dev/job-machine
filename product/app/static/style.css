@@ -452,6 +452,11 @@ footer {
 }
 footer p { font-size: 13px; color: var(--muted); margin: 0 0 6px; max-width: none; }
 footer a { color: var(--muted); }
+/* Terms and privacy sit a step below the promises above them: they have to be
+   findable from every page, which is the point, but the first thing read in a
+   footer should still be what the thing does. */
+footer .legal { margin-top: 14px; }
+footer .legal a { text-decoration: underline; text-underline-offset: 2px; }
 
 @media (max-width: 560px) {
   main { padding: 28px 18px 72px; }

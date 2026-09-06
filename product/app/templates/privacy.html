@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Privacy — job machine{% endblock %}
+{% block content %}
+<h1>Privacy</h1>
+<p class="lede">What this site holds about you, why, where it sits, and how to
+get rid of it. Written from what the code actually does.</p>
+<p><small>Last updated {{ config.LEGAL_UPDATED }}.</small></p>
+
+<h2>Who holds it</h2>
+<div class="panel">
+<p>{{ config.CONTROLLER_NAME }}, based in {{ config.CONTROLLER_LOCATION }}, is
+the data controller for everything described here.</p>
+{% if config.CONTACT_EMAIL %}
+<p>Contact: <a href="mailto:{{ config.CONTACT_EMAIL }}">{{ config.CONTACT_EMAIL }}</a>.
+   Questions about your data go to the same address as everything else — there
+   is one person, and he reads it.</p>
+{% endif %}
+</div>
+
+<h2>What is held, and why</h2>
+<div class="panel scroll">
+<table>
+  <tr><th>What</th><th>Why</th><th>Lawful basis</th></tr>
+  <tr>
+    <td>Your email address</td>
+    <td>It is the account. Sign-in links go to it.</td>
+    <td>Performing our contract with you</td>
+  </tr>
+  <tr>
+    <td>Your CV, as a file and as text read out of it</td>
+    <td>To match you to jobs and to attach to letters</td>
+    <td>Performing our contract with you</td>
+  </tr>
+  <tr>
+    <td>Your answers: trade, locations, pay floor, work history</td>
+    <td>To score listings and write letters that are about you</td>
+    <td>Performing our contract with you</td>
+  </tr>
+  <tr>
+    <td>Letters drafted for you, and a log of ones sent</td>
+    <td>So the same employer is never written to twice</td>
+    <td>Performing our contract with you</td>
+  </tr>
+  <tr>
+    <td>Your mail server address and password, <b>encrypted</b></td>
+    <td>Only if you switch automatic sending on</td>
+    <td>Your consent, withdrawable at any time</td>
+  </tr>
+  <tr>
+    <td>Stripe customer and subscription identifiers</td>
+    <td>To know whether your subscription is live</td>
+    <td>Performing our contract with you</td>
+  </tr>
+  <tr>
+    <td>Your IP address, briefly, when you use the free tool or sign in</td>
+    <td>Rate limiting, so one person cannot exhaust the site for everybody</td>
+    <td>Legitimate interests — keeping the service available</td>
+  </tr>
+</table>
+</div>
+<p><b>Card details are never seen by this site.</b> Payment happens on
+Stripe's own pages. Nothing here stores a card number, and nothing here
+could.</p>
+
+<h2>The mail password, specifically</h2>
+<div class="panel">
+<p>Automatic sending is off unless you turn it on. Turning it on means giving
+this site something that can send mail as you, because there is no way to
+send as somebody without it. So, plainly:</p>
+<p><b>Use an app password, not your account password.</b> It can be revoked on
+its own, without changing your password or touching another device.</p>
+<p>It is stored encrypted, with the key held in the server's environment and
+never in the database — so the most likely breach by a distance, a leaked
+database dump, yields ciphertext.</p>
+<p>It is still access to your mailbox. An app password can generally read that
+mailbox as well as send from it. That is the honest summary, and it is why
+the by-hand route exists and always will: the app writes the letter, you press
+send from your own mail client, and nothing of yours is stored.</p>
+<p>Disconnecting the mailbox deletes the stored credential.</p>
+</div>
+
+<h2>Where it lives</h2>
+<div class="panel">
+<p>The database is <b>Supabase</b>, hosted in Ireland (eu-west-1). The app
+itself runs on <b>Render</b>, in Frankfurt. Both are inside the EEA.</p>
+</div>
+
+<h2>Who else sees it</h2>
+<div class="panel scroll">
+<table>
+  <tr><th>Who</th><th>What reaches them</th></tr>
+  <tr><td>Supabase</td><td>Everything above — they host the database</td></tr>
+  <tr><td>Render</td><td>The running app, and its logs</td></tr>
+  <tr><td>Stripe</td><td>Your email address and payment. Their privacy notice governs what they then do with it.</td></tr>
+  <tr>
+    <td><b>Google</b> (Gemini)</td>
+    <td>Job adverts, and the parts of your CV and answers needed to score a
+        listing and write a letter. This is a transfer outside the UK, to the
+        United States, under the transfer terms in Google's own API terms.</td>
+  </tr>
+  <tr><td>Adzuna and Reed</td><td>Search terms only — your trade and your locations. Not your CV, not your name.</td></tr>
+  <tr><td>Your own mail provider</td><td>Whatever you send through them, if you connect a mailbox</td></tr>
+</table>
+</div>
+<p>Nothing is sold, and nothing is shared for advertising. There is no
+advertising here to share it with.</p>
+
+<h2>Cookies</h2>
+<div class="panel">
+<p>One, and it is the sign-in session. There is no analytics, no tracking
+pixel and no third-party script on any page of this site.</p>
+</div>
+
+<h2>How long it is kept</h2>
+<div class="panel">
+<p>While you have an account. <b>Delete your account and it goes</b> — the
+user row, the profile, the CV, the drafts, the contacted list and the stored
+mail credential, in one operation, from <a href="/account">your account
+page</a>. It is not a request queued for somebody to action; the rows are
+removed.</p>
+<p>What cannot be pulled back: letters already sent are in the recipient's
+inbox, and Stripe keeps its own payment records for as long as its own
+obligations require.</p>
+</div>
+
+<h2>Your rights</h2>
+<div class="panel">
+<p>Under UK GDPR you can ask for a copy of what is held, ask for it to be
+corrected, ask for it to be deleted, ask for it in a portable form, object to
+processing based on legitimate interests, and withdraw consent for automatic
+sending at any time.</p>
+{% if config.CONTACT_EMAIL %}
+<p>Ask at <a href="mailto:{{ config.CONTACT_EMAIL }}">{{ config.CONTACT_EMAIL }}</a>.</p>
+{% endif %}
+<p>If the answer is unsatisfactory you can complain to the Information
+Commissioner's Office at <a href="https://ico.org.uk/make-a-complaint/"
+rel="noopener">ico.org.uk</a>, or on 0303 123 1113. You do not have to ask
+here first.</p>
+</div>
+
+<h2>Children</h2>
+<div class="panel">
+<p>This is a service for people looking for work and is not intended for
+anyone under 16.</p>
+</div>
+
+<p style="margin-top:28px"><a href="/terms">Terms</a> · <a href="/">Home</a></p>
+{% endblock %}

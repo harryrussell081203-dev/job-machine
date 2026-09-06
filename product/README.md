@@ -40,10 +40,18 @@ chases twice if nobody answers.
   letters go out on their own, with your CV attached, from your address.
 - **Scheduled runs** for every subscriber, on free GitHub Actions hardware.
 - `PLAYBOOK.md` — the method, complete, free to everyone at `/playbook`.
+- **Terms and a privacy notice** at `/terms` and `/privacy`, public, linked
+  from every footer. Written from what the code does rather than from a
+  template, so the "what it will never do" list is the same four promises the
+  code enforces. Set `CONTROLLER_NAME` and `CONTACT_EMAIL` or the notice
+  names nobody.
 
 **Not done:**
 
-- A privacy policy and terms. Required before charging anyone in the UK.
+- **Registration with the ICO.** £52 a year (£47 by direct debit). Holding
+  other people's CVs and mailbox credentials for money is not an exempt
+  purpose, and this is a legal requirement rather than a nicety. See
+  `DEPLOY.md` §6.
 - Commercial API terms from Adzuna, Reed and Google. Their free tiers are for
   personal use, and this is the thing most likely to change the shape of the
   product.
