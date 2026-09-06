@@ -97,6 +97,28 @@ class TestPublicPages(AppTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("banned", r.text.lower())
 
+    def test_there_is_something_to_click_before_the_evidence(self):
+        """The landing page had no call to action until its foot - 1,600px
+        down on a desktop, 6,000 on a phone. A reader convinced by the first
+        two sentences had to scroll past four sections to act.
+
+        The assertion is on ORDER, not presence: the buttons at the bottom
+        were always there, and it is being above the evidence that matters.
+        """
+        body = self.client.get("/").text
+        cta = body.find('class="hero-cta"')
+        stats = body.find('class="stats"')
+        self.assertNotEqual(cta, -1, "no call to action in the hero")
+        self.assertLess(cta, stats,
+                        "the call to action is below the evidence again")
+
+    def test_the_closing_call_to_action_is_still_there(self):
+        """Two calls to action for two readers: one already sold by the
+        headline, one who needed the numbers first. Adding the hero one must
+        not have replaced the other."""
+        body = self.client.get("/").text
+        self.assertGreater(body.count('href="/login"'), 1)
+
     def test_health(self):
         self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
 

@@ -315,6 +315,19 @@ label.check input:checked::after {
   margin-top: 26px;
 }
 
+/* --- the call to action in the hero ------------------------------------ */
+/* Buttons wrap rather than shrink on a narrow phone: two full-width taps beat
+   two cramped ones, and this is the first thing a thumb reaches. */
+.hero-cta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin: 22px 0 10px; max-width: none;
+}
+.hero-note { margin: 0 0 30px; }
+@media (max-width: 420px) {
+  .hero-cta { flex-direction: column; align-items: stretch; }
+  .hero-cta .btn { text-align: center; }
+}
+
 /* --- numbers ---------------------------------------------------------- */
 .stats {
   display: grid;

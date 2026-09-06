@@ -4,6 +4,25 @@
 <p class="lede">Most applications go into a system. This sends a short, specific
 email to the person who actually does the hiring, from your own address.</p>
 
+{# Somebody convinced by the headline had nothing to click until the foot of
+   the page - 1,600px down on a desktop and 6,000 on a phone. The evidence
+   below is what convinces a sceptic, and it stays; this is for the reader who
+   is already sold by the first two sentences and should not have to scroll
+   past four sections to act. The closing call to action stays as well: they
+   are for different readers. #}
+<p class="hero-cta">
+  <a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start &mdash; {{ config.PRICE_LABEL }}{% endif %}</a>
+  <a class="btn ghost" href="/find">Try it free, no account</a>
+</p>
+<p class="hero-note"><small>
+  {%- if spots_left %}
+    <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left</b>,
+    then {{ config.PRICE_LABEL }}. No card, nothing to cancel.
+  {%- else %}
+    {{ config.PRICE_LABEL }}. Cancel any time.
+  {%- endif %}
+</small></p>
+
 <div class="stats">
   <div class="stat"><b>26</b><span>emails sent</span></div>
   <div class="stat"><b>7</b><span>replies from a person</span></div>
