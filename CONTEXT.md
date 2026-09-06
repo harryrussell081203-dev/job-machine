@@ -204,8 +204,58 @@ Choices already made, so they are not relitigated every session.
 | 2026-09-06 | Product merges to **main**, with isolation enforced by path filters, separate secrets and separate concurrency groups — not by living on a branch |
 | 2026-09-06 | First live product run uses his **main Gmail**, with all 169 contacted companies imported **before** the mailbox is connected |
 | 2026-09-06 | Spend: domain ~£8–10/yr. No paid email-finder API (£27+/mo, and a logic fix does most of it free). No Render paid tier until `/status` says cold starts are costing signups. |
+| 2026-09-06 | **Newsletter** on AI adoption in daily life and work, as content marketing and lead capture. Lives **on jobmachine.co.uk** — shares the domain, the design system, the ICO registration and the audience; every reader is a warm lead for the paid product. **Deferred**: not started until the product is merged, live on the domain and earning. Harry's call, and the right one. |
+| 2026-09-06 | Design direction: **no AI-house-style**. The existing product pages are the reference, not a starting point to be replaced. See §5. |
 
-## 5. How to report numbers
+## 5. House style — why the pages do not look AI-generated
+
+Harry: *"the ui and user experience must be elite I want proper web design
+not ai base generated stuff"*.
+
+**The reference is already in this repo.** `product/app/templates/` and
+`style.css` are the house style — not a draft to be replaced with something
+smarter. Anything new matches them.
+
+### The tells to avoid, specifically
+
+Generated design has a fingerprint, and it is nameable rather than vague:
+
+- a violet-to-blue gradient, or that one indigo (`#6366f1`)
+- frosted-glass cards, `backdrop-blur`, everything `rounded-2xl`
+- one uniform drop shadow on every surface
+- dead-centre symmetry, and a three-across feature grid
+- emoji standing in for icons
+- untouched framework defaults — the stock grey ramp, stock weights, stock
+  letter-spacing
+- hero → three features → testimonial → pricing → CTA, in that order, always
+- copy that **describes** rather than **states**: "streamline your workflow"
+  where a real page would say "26 sent, 7 replies, 27%"
+
+### What this project does instead
+
+Every one of these is already true of the landing page and is the bar:
+
+- **One accent, no gradients.** Colour is a token in `:root`, and it is used
+  for one thing at a time.
+- **Type does the work.** A real scale (13.5 / 15 / 21 / 30px), negative
+  tracking on headings, `tabular-nums` on figures.
+- **Asymmetry where it helps.** The stat cards wrap on an `auto-fit` grid
+  rather than being forced into a symmetric three.
+- **The copy is specific and checkable.** "60–90 words, one concrete detail
+  from that advert." "Autoresponders are not counted. There was one more."
+  That sentence is worth more than any visual flourish on the page, and it is
+  the thing no generated page will write, because it costs the author
+  something.
+- **Restraint reads as confidence.** Off-white ground, hairline borders, one
+  black button. Nothing glows.
+
+### The rule behind all of it
+
+Design decisions follow content. Placeholder copy produces placeholder
+design, every time — which is most of why generated pages look generated.
+Write the true sentence first, then lay it out.
+
+## 6. How to report numbers
 
 `status=sent` **drains** — a record flips to `replied` and leaves the bucket,
 so the figure goes down. It means "sent and still waiting", not a total.
