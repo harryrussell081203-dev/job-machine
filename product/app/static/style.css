@@ -1,0 +1,494 @@
+/* Quiet, crisp, monochrome. Built to read on a phone between jobs.
+ *
+ * The colourway is white and black and nothing else: colour is spent only
+ * where it carries meaning - a failure, a success, a contact tier - and even
+ * then it is muted, because a page that shouts everywhere emphasises nothing.
+ *
+ * Two Apple habits are worth naming because they are load-bearing rather than
+ * decorative. The header is translucent and blurs what scrolls under it, so
+ * the page reads as one surface with a sheet floating over it rather than two
+ * stacked blocks. And every control is a pill with a real pressed state,
+ * because on a touch screen the only feedback you get is the one you draw.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f5f5f7;          /* the ground the sheets sit on */
+  --panel: #ffffff;
+  --panel-2: #fafafa;
+  --glass: rgba(255, 255, 255, 0.72);
+
+  --ink: #1d1d1f;         /* near-black; true black is harsh on white */
+  --ink-2: #424245;
+  --muted: #86868b;
+
+  --line: rgba(0, 0, 0, 0.10);
+  --line-strong: rgba(0, 0, 0, 0.18);
+
+  --accent: #1d1d1f;      /* the primary action is simply black */
+  --accent-ink: #ffffff;
+  --focus: rgba(0, 113, 227, 0.55);
+
+  --bad: #b3261e;
+  --bad-bg: #fdf2f1;
+  --good: #1d6b3f;
+  --good-bg: #f0f7f2;
+
+  --radius: 18px;
+  --radius-sm: 12px;
+  --pill: 980px;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 28px -18px rgba(0, 0, 0, .28);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, .06), 0 14px 38px -20px rgba(0, 0, 0, .34);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #000000;
+    --panel: #1c1c1e;
+    --panel-2: #232325;
+    --glass: rgba(28, 28, 30, 0.72);
+
+    --ink: #f5f5f7;
+    --ink-2: #d1d1d6;
+    --muted: #8e8e93;
+
+    --line: rgba(255, 255, 255, 0.12);
+    --line-strong: rgba(255, 255, 255, 0.22);
+
+    --accent: #f5f5f7;
+    --accent-ink: #1d1d1f;
+    --focus: rgba(10, 132, 255, 0.65);
+
+    --bad: #ff9c90;
+    --bad-bg: rgba(255, 69, 58, 0.12);
+    --good: #7ed3a4;
+    --good-bg: rgba(48, 209, 88, 0.12);
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 28px -18px rgba(0, 0, 0, .9);
+    --shadow-lift: 0 2px 6px rgba(0, 0, 0, .6), 0 14px 38px -20px rgba(0, 0, 0, 1);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro",
+        system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 22px 96px;
+}
+
+/* --- header ----------------------------------------------------------
+ * Sticky and translucent. The blur is what makes it read as glass rather
+ * than a grey bar, and the saturate keeps colour underneath from going flat.
+ */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 12px 22px;
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bar { background: var(--panel); }
+}
+
+.brand {
+  font-weight: 600; font-size: 19px; letter-spacing: -0.028em;
+  text-decoration: none; color: var(--ink);
+}
+.brand span { color: var(--muted); font-weight: 400; }
+
+.bar nav { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.bar nav a {
+  color: var(--ink-2); text-decoration: none; font-size: 14px;
+  letter-spacing: -0.008em;
+  transition: color .18s ease;
+}
+.bar nav a:hover { color: var(--ink); }
+.bar nav a.cta {
+  color: var(--accent-ink); background: var(--accent);
+  padding: 7px 16px; border-radius: var(--pill); font-weight: 500;
+}
+.bar nav a.cta:hover { opacity: .85; color: var(--accent-ink); }
+
+/* --- install prompt --------------------------------------------------- */
+.installbar[hidden] { display: none; }
+.installbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 14px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 15px; color: var(--ink-2);
+}
+.installbtns { display: flex; align-items: center; gap: 12px; }
+
+/* --- type ------------------------------------------------------------- */
+h1, h2, h3 { letter-spacing: -0.024em; line-height: 1.08; margin: 0 0 12px; }
+h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 650; text-wrap: balance; }
+h2 { font-size: 24px; font-weight: 600; margin-top: 40px; }
+h3 { font-size: 18px; font-weight: 600; margin-top: 26px; }
+
+p { margin: 0 0 14px; max-width: 62ch; }
+
+.lede {
+  font-size: 20px; line-height: 1.45; color: var(--ink-2);
+  letter-spacing: -0.016em; max-width: 60ch;
+}
+.hint, small { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.muted { color: var(--muted); }
+.ok { color: var(--good); font-weight: 500; }
+
+a { color: var(--ink); text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+
+/* --- surfaces --------------------------------------------------------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+  margin: 0 0 18px;
+}
+
+.row {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+
+.note {
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin: 0 0 20px;
+  font-size: 15px; line-height: 1.5;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.note.bad  { background: var(--bad-bg);  border-color: transparent; color: var(--bad); }
+.note.good { background: var(--good-bg); border-color: transparent; color: var(--good); }
+
+/* --- controls ---------------------------------------------------------
+ * One shape for everything you can press. The transform on :active is the
+ * only feedback a touch screen gives, so it is not decoration.
+ */
+button, .btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px;
+  font: inherit; font-size: 16px; font-weight: 500;
+  letter-spacing: -0.011em;
+  padding: 11px 22px;
+  border: 1px solid transparent;
+  border-radius: var(--pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity .18s ease, transform .12s ease, background .18s ease;
+}
+button:hover, .btn:hover { opacity: .86; color: var(--accent-ink); }
+button:active, .btn:active { transform: scale(0.975); }
+
+.btn.small { font-size: 14px; padding: 8px 16px; }
+
+button.ghost, .btn.ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+button.ghost:hover, .btn.ghost:hover {
+  background: var(--panel-2); opacity: 1; color: var(--ink);
+}
+
+button.link {
+  background: none; border: none; padding: 0;
+  color: var(--ink-2); font-size: 14px; font-weight: 400;
+  border-radius: 4px;
+}
+button.link:hover { color: var(--ink); opacity: 1; text-decoration: underline;
+                    text-underline-offset: 3px; }
+button.link:active { transform: none; }
+.link.danger, button.link.danger { color: var(--bad); }
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--focus);
+  border-radius: var(--radius-sm);
+}
+
+/* --- forms ------------------------------------------------------------ */
+form.stack { display: flex; flex-direction: column; gap: 4px; }
+form.inline { display: inline; }
+
+label {
+  display: block;
+  font-size: 14px; font-weight: 500; color: var(--ink-2);
+  margin: 18px 0 7px;
+  letter-spacing: -0.006em;
+}
+
+input[type=text], input[type=email], input[type=number],
+input[type=password], input[type=tel], input[type=url],
+select, textarea {
+  font: inherit; font-size: 16px;   /* 16px+ stops iOS zooming on focus */
+  color: var(--ink);
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color .18s ease, box-shadow .18s ease;
+  -webkit-appearance: none; appearance: none;
+}
+textarea { min-height: 140px; line-height: 1.55; resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
+
+input[type=text]:focus, input[type=email]:focus,
+input[type=number]:focus, input[type=password]:focus,
+input[type=tel]:focus, input[type=url]:focus,
+select:focus, textarea:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 4px var(--focus);
+}
+
+select {
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 20px) 55%, calc(100% - 14px) 55%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 40px;
+}
+
+label.check {
+  display: flex; align-items: flex-start; gap: 11px;
+  font-weight: 400; color: var(--ink);
+  margin: 12px 0;
+  cursor: pointer;
+}
+label.check input {
+  width: 21px; height: 21px; flex: none; margin: 1px 0 0;
+  border-radius: 6px; padding: 0;
+  border: 1.5px solid var(--line-strong);
+  background: var(--panel);
+  cursor: pointer;
+}
+label.check input:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+label.check input:checked::after {
+  content: ""; display: block;
+  width: 5px; height: 10px;
+  margin: 2px auto 0;
+  border: solid var(--accent-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg);
+}
+.checks { margin: 6px 0 8px; }
+
+.actions {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+/* --- numbers ---------------------------------------------------------- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.stat b {
+  font-size: 30px; font-weight: 600; letter-spacing: -0.028em;
+  font-variant-numeric: tabular-nums; line-height: 1.05;
+}
+.stat span { font-size: 13px; color: var(--muted); }
+
+/* --- steps ------------------------------------------------------------
+ * A numbered card. The badge fills in and becomes a tick once the step is
+ * done, so the remaining work is countable at a glance.
+ */
+.step h2 {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 12px; font-size: 21px;
+}
+.step .num {
+  display: inline-grid; place-items: center; flex: none;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 15px; font-weight: 600; letter-spacing: 0;
+}
+.step.done .num {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--accent-ink); font-size: 0;
+}
+.step.done .num::before { content: "\2713"; font-size: 15px; }
+
+/* --- tabs, tags ------------------------------------------------------- */
+.tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 22px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--pill);
+  width: fit-content;
+}
+.tabs a {
+  font-size: 14px; text-decoration: none; color: var(--ink-2);
+  padding: 7px 15px; border-radius: var(--pill);
+  transition: background .18s ease, color .18s ease;
+}
+.tabs a:hover { color: var(--ink); }
+.tabs a.on { background: var(--panel); color: var(--ink); font-weight: 500;
+             box-shadow: var(--shadow); }
+
+.tag {
+  display: inline-block;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.01em;
+  padding: 4px 10px;
+  border-radius: var(--pill);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/* --- drafts -----------------------------------------------------------
+ * The tier says how sure we are of the address. It earns the only colour on
+ * the page because acting on a guessed address is the expensive mistake.
+ */
+.draft {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--good);
+  border-radius: var(--radius-sm);
+  padding: 18px 20px;
+  margin: 0 0 14px;
+  box-shadow: var(--shadow);
+  transition: box-shadow .2s ease;
+}
+.draft:hover { box-shadow: var(--shadow-lift); }
+.draft.tier2 { border-left-color: var(--muted); }
+.draft.tier3 { border-left-color: var(--bad); }
+
+.meta { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+
+.letter {
+  white-space: pre-wrap;
+  font-size: 15.5px; line-height: 1.6;
+  color: var(--ink-2);
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  margin: 12px 0;
+  max-width: none;
+}
+
+/* --- tables ----------------------------------------------------------- */
+/* Checkboxes and radios draw in the browser's own blue otherwise, which is
+   the one splash of colour in a design that has none. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; font-weight: 600; color: var(--muted);
+     text-transform: uppercase; letter-spacing: 0.05em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* --- misc ------------------------------------------------------------- */
+details summary {
+  cursor: pointer; font-size: 15px; color: var(--ink-2);
+  padding: 10px 0; list-style: none;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "› "; color: var(--muted); }
+details[open] summary::before { content: "⌄ "; }
+
+pre.playbook {
+  white-space: pre-wrap;
+  font: 15px/1.65 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--ink-2);
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  margin-top: 64px;
+  padding: 28px 22px 40px;
+  text-align: center;
+}
+footer p { font-size: 13px; color: var(--muted); margin: 0 0 6px; max-width: none; }
+footer a { color: var(--muted); }
+
+@media (max-width: 560px) {
+  main { padding: 28px 18px 72px; }
+  .bar { padding: 11px 18px; }
+  .bar nav { gap: 15px; }
+  .panel { padding: 18px 18px; border-radius: var(--radius-sm); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  button:active, .btn:active { transform: none; }
+}
+
+/* --- rules the markup relies on -------------------------------------- */
+.bar form { display: inline; margin: 0; }
+
+.actions > *, .actions form { margin: 0; }
+.actions .btn, .actions button { flex: none; }
+
+.row > * { margin: 0; }
+.row label { margin: 0; }
+
+.checks label { margin: 10px 0; }
+label.check input:disabled + span { color: var(--muted); }
+label.check input:disabled { opacity: .5; cursor: not-allowed; }
+
+.draft h3 { margin: 0 0 4px; font-size: 17px; }
+
+input[type=file] {
+  font: inherit; font-size: 15px; color: var(--ink-2);
+  max-width: 100%;
+}
+input[type=file]::file-selector-button {
+  font: inherit; font-size: 14px; font-weight: 500;
+  margin-right: 12px; padding: 8px 16px;
+  border: 1px solid var(--line-strong); border-radius: var(--pill);
+  background: var(--panel); color: var(--ink);
+  cursor: pointer;
+}
+input[type=file]::file-selector-button:hover { background: var(--panel-2); }
