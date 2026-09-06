@@ -40,14 +40,14 @@ def rank(job):
     return PROGRESS.index(status) if status in PROGRESS else 0
 
 
-REOPENING_FIELDS = ("rescored_at", "portal_fallback_at")
+REOPENING_FIELDS = ("rescored_at", "portal_fallback_at", "rediscovered_at")
 
 
 def reopened(job):
     """When was this record deliberately put back in the queue?
 
-    Two stages do it, for different reasons, and both move a listing BACKWARDS
-    through PROGRESS on purpose:
+    Three stages do it, for different reasons, and all move a listing
+    BACKWARDS through PROGRESS on purpose:
 
       rescored_at        a profile change invalidated the score, so the
                          listing goes back to 'new' to be judged again
@@ -56,14 +56,38 @@ def reopened(job):
                          The portal agent is retired and nothing writes this
                          field any more, but released records still carry it
                          and it still has to beat their old parked status.
+      rediscovered_at    the listing was binned for want of a company domain
+                         this machine turned out to already hold, so it goes
+                         back to 'scored' to have its address looked for.
 
     Only the first was handled here. The second ranks 'scored' (1) below
     'portal_manual' (7), so every one of the eighty-six listings the fallback
     released was reverted by this function on the way back to main - the stage
     ran correctly, three runs in a row, and its work was thrown away each time.
 
+    The third is added at the same time as the stage that writes it, rather
+    than after discovering the same way that it does not survive the merge.
+    'scored' (1) ranks below 'no_email' (3), so without this line every
+    rediscovered listing would be reverted on its way back to main.
+
     The newest deliberate re-opening wins, whichever stage did it."""
     return max(str(job.get(field) or "") for field in REOPENING_FIELDS)
+
+
+# Statuses a listing never comes back from. Either a message has actually
+# left the building, or one must never leave it.
+#
+# Re-opening only ever means "put this back in the queue to be looked at
+# again", and none of these is in the queue any more. An employer cannot be
+# un-emailed.
+TERMINAL = frozenset((
+    "do_not_contact", "portal_submitted", "test_sent", "spec_sent",
+    "sent", "replied",
+))
+
+
+def terminal(job):
+    return job.get("status") in TERMINAL
 
 
 def pick(a, b):
@@ -74,7 +98,22 @@ def pick(a, b):
     and both of those rank below the status they came from, so the ordinary
     rule quietly undid the whole thing - a re-judging run reported 'no state
     changes' because every listing it re-opened was reverted by this function.
-    A deliberate step backwards has to beat an accidental step forwards."""
+    A deliberate step backwards has to beat an accidental step forwards.
+
+    But not past a letter that has already gone. The re-opening rule was
+    written to beat rank, and it beat rank absolutely - so a record marked
+    'sent' on one side lost to a re-opened 'scored' on the other, and the
+    application would be composed and sent a second time.
+
+    That hole was invisible because the one test covering it put the SAME
+    portal_fallback_at on both sides, which makes the two equal and falls
+    through to rank before the re-opening rule can do any damage. It only
+    opens when one side carries a re-opening stamp the other does not - which
+    is the ordinary case for a stage that re-opens listings, and would have
+    shipped with rediscover().
+    """
+    if terminal(a) != terminal(b):
+        return a if terminal(a) else b
     if reopened(a) != reopened(b):
         return a if reopened(a) > reopened(b) else b
     if rank(a) != rank(b):

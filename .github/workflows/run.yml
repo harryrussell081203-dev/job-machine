@@ -19,6 +19,7 @@ on:
     branches:
       - "fire-run/**"           # force an ordinary run
       - "fire-rescore/**"       # re-judge listings scored under an old profile
+      - "fire-rediscover/**"    # retry listings binned for a domain we now hold
       - "fire-support/**"       # write to the charities and training bodies
       - "fire-network/**"       # write to the trade and industry bodies
       - "fire-covenant/**"      # rebuild the Armed Forces Covenant list
@@ -143,6 +144,14 @@ jobs:
             fi
             echo "fire-rescore branch: re-judging everything scored >= ${FLOOR}"
             ARGS="--rescore ${FLOOR}"
+          fi
+          # Puts back the listings binned for "no domain found" whose employer
+          # this machine already had a domain for - 144 of the 422 at the time
+          # this was added. No floor to choose: it re-opens exactly the ones it
+          # can already answer and leaves the rest alone.
+          if [[ "${GITHUB_REF_NAME}" == fire-rediscover/* ]]; then
+            echo "fire-rediscover branch: re-opening listings whose employer is already known"
+            ARGS="${ARGS} --rediscover"
           fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             python job_machine.py --dry-run $ARGS

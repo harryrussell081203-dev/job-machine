@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Terms — job machine{% endblock %}
+{% block content %}
+<h1>Terms</h1>
+<p class="lede">What you get, what it costs, what it will not do, and how to
+leave.</p>
+<p><small>Last updated {{ config.LEGAL_UPDATED }}. Between
+{{ config.CONTROLLER_NAME }} and you.</small></p>
+
+<h2>What the service is</h2>
+<div class="panel">
+<p>It finds job listings, scores them against the profile you give it, looks
+for a real email address for a person at that employer, and writes a short
+letter. Depending on your setting it either hands you the letter to send
+yourself, or sends it from the mailbox you connected.</p>
+<p><b>It applies for jobs. It does not get you one.</b> Nobody can promise
+that, and a service that implied otherwise would be lying to you.</p>
+</div>
+
+<h2>What it will never do</h2>
+<div class="panel">
+<p>These are commitments, not aspirations, and each is enforced in code:</p>
+<p><b>Guess an email address.</b> If no real address can be found, no letter
+is sent. There is no fallback to firstname.lastname@company.com.</p>
+<p><b>Claim a qualification you do not hold.</b> Letters are written from what
+your CV and answers say.</p>
+<p><b>Write to the same employer twice.</b> One employer, one letter, ever.</p>
+<p><b>Name your current employer to anybody.</b></p>
+<p><b>Write to anyone on your block list</b>, including anyone who asks you to
+stop.</p>
+</div>
+
+<h2>Your side</h2>
+<div class="panel">
+<p>You need to be 16 or over and have the right to work where you are
+applying.</p>
+<p><b>What you upload has to be true.</b> The letters are written from your CV
+and your answers, and they go out with your name on them. If your CV claims a
+ticket you do not hold, this will repeat that claim to an employer, and that
+is on you.</p>
+<p>Upload only your own CV and your own details.</p>
+<p><b>Read your drafts.</b> Letters are written by a language model. It is
+good and it is not perfect. On the by-hand setting you see every letter before
+it goes. If you switch automatic sending on, you are choosing to let them go
+without reading them first, and there is a holding window before each one
+leaves precisely so you can change your mind.</p>
+<p>Do not use this to send anything abusive, misleading, or to anyone who has
+asked you to stop.</p>
+</div>
+
+<h2>Automatic sending</h2>
+<div class="panel">
+<p>Off unless you turn it on. When it is on:</p>
+<p>There is a <b>daily ceiling</b> on how many letters go out, and a
+<b>holding window</b> before each one leaves.</p>
+<p>Letters send from <b>your</b> mailbox, as you. Your mail provider's own
+rules apply to that, and a personal address sending a large volume of cold
+email can be rate-limited or suspended by them. The recommended daily number
+is set low for that reason. You can raise it; the warning beside the control
+says what it risks.</p>
+<p>If your mail provider rejects the password, automatic sending switches
+<b>off</b> rather than retrying, because repeatedly failing to authenticate is
+how an account gets locked.</p>
+<p>Withdraw it whenever you like, from your account page. Disconnecting the
+mailbox deletes the stored credential.</p>
+</div>
+
+<h2>Paying</h2>
+<div class="panel">
+<p>{{ config.PRICE_LABEL }}, taken by Stripe. Access starts when Stripe
+confirms the payment.</p>
+<p><b>Cancel any time</b>, from your account page. Cancelling stops the next
+charge and you keep access until the end of the period you have paid for.
+There is no notice period and nothing to phone anybody about.</p>
+<p>If a payment fails, access pauses until it succeeds.</p>
+<p><b>Your legal cancellation right.</b> Under the Consumer Contracts
+Regulations you normally have 14 days to cancel a service bought online and
+get your money back. Because the service starts immediately, that right can
+be reduced once you have started using it — but as a matter of practice, if
+you are inside 14 days and it has not done what you hoped, ask and you will
+be refunded. Statutory rights under the Consumer Rights Act 2015 are not
+affected by anything on this page.</p>
+</div>
+
+<h2>Things outside anyone's control</h2>
+<div class="panel">
+<p>The job listings come from Adzuna and Reed, and the letters are written
+with Google's Gemini. If one of those changes its terms, its prices or its
+availability, parts of this may change or stop. You will be told, and you can
+cancel.</p>
+<p>Email delivery is not guaranteed by anybody. A letter can be sent
+correctly and still land in a spam folder.</p>
+</div>
+
+<h2>The limits of this</h2>
+<div class="panel">
+<p>The service is provided as it is. It is not legal advice, careers advice,
+or a guarantee of any outcome.</p>
+<p>Nothing here limits liability for death or personal injury caused by
+negligence, for fraud, or for anything else that cannot lawfully be limited.
+Beyond that, liability is limited to the amount you have paid in the twelve
+months before the claim.</p>
+<p>Your statutory rights as a consumer stand regardless of this section.</p>
+</div>
+
+<h2>Ending it</h2>
+<div class="panel">
+<p>You can delete your account at any time from
+<a href="/account">your account page</a>, and everything held about you goes
+with it. See <a href="/privacy">Privacy</a> for exactly what that covers.</p>
+<p>Access here may be ended if the service is used to send abusive or
+knowingly false letters, or to write to people who have asked to be left
+alone. In that case any unused part of a payment is refunded.</p>
+</div>
+
+<h2>Changes, and the law</h2>
+<div class="panel">
+<p>If these terms change in substance you will be told by email before it
+takes effect, and the date at the top will change. Continuing to use the
+service after that is acceptance; if you would rather not, cancel.</p>
+<p>These terms are governed by the law of Scotland, and the Scottish courts
+have jurisdiction. If you live elsewhere in the UK, you keep the right to
+bring a claim in your own local courts.</p>
+</div>
+
+{% if config.CONTACT_EMAIL %}
+<p style="margin-top:28px">Anything unclear:
+<a href="mailto:{{ config.CONTACT_EMAIL }}">{{ config.CONTACT_EMAIL }}</a>.</p>
+{% endif %}
+<p><a href="/privacy">Privacy</a> · <a href="/">Home</a></p>
+{% endblock %}

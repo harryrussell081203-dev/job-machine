@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Admin &middot; job machine{% endblock %}
+
+{# Styles live here rather than in style.css because nothing else in the app
+   draws a chart, and one private page is not worth widening the stylesheet
+   everybody downloads. Reuses the same tokens, so it follows the theme. #}
+{% block content %}
+<style>
+  /* Six tiles read as 3+3 rather than 5 and an orphan. */
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 700px) { .stats { grid-template-columns: repeat(3, 1fr); } }
+
+  .funnel { display: flex; flex-direction: column; gap: 10px; }
+  .funnel .row2 { display: grid; grid-template-columns: 170px 1fr 74px;
+                  align-items: center; gap: 14px; }
+  .funnel .label { font-size: 14px; color: var(--ink-2); }
+  /* Both are explicitly block: a span is inline by default, and an inline
+     element ignores width and height, which is exactly how a bar chart ends
+     up drawing six empty tracks. */
+  .funnel .track { display: block; background: var(--panel-2);
+                   border: 1px solid var(--line);
+                   border-radius: var(--pill); height: 26px; overflow: hidden; }
+  .funnel .fill { display: block; background: var(--accent); height: 100%;
+                  border-radius: var(--pill); min-width: 3px; }
+  .funnel .n { font-size: 14px; text-align: right;
+               font-variant-numeric: tabular-nums; color: var(--muted); }
+  .funnel .n b { color: var(--ink); font-weight: 600; }
+
+  /* Ten columns of numbers wrapping mid-cell is unreadable; let the panel
+     scroll instead, which it is already set up to do. */
+  .everyone th, .everyone td { white-space: nowrap; }
+
+  .chart { display: flex; align-items: flex-end; gap: 8px; height: 110px;
+           padding-top: 8px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column;
+                justify-content: flex-end; align-items: center; gap: 6px;
+                height: 100%; }
+  .chart .stalk { width: 100%; background: var(--accent);
+                  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+                  min-height: 2px; }
+  .chart .stalk.empty { background: var(--line); }
+  .chart .tick { font-size: 11px; color: var(--muted); }
+  .chart .cnt { font-size: 12px; font-variant-numeric: tabular-nums; }
+</style>
+
+<h1>Admin</h1>
+<p class="lede">Everyone who has an account, and how far they got.</p>
+
+<div class="stats">
+  <div class="stat"><b>{{ people }}</b><span>accounts</span></div>
+  <div class="stat"><b>{{ active_7d }}</b><span>active this week</span></div>
+  <div class="stat"><b>{{ paying }}</b><span>paying</span></div>
+  <div class="stat"><b>{{ drafts }}</b><span>letters</span></div>
+  <div class="stat"><b>{{ sent }}</b><span>sent</span></div>
+  <div class="stat">
+    <b>{% if send_rate is not none %}{{ send_rate }}%{% else %}&mdash;{% endif %}</b>
+    <span>send rate</span></div>
+</div>
+
+{% if config.FREE_SPOTS %}
+  <p class="muted" style="margin:-8px 0 20px">
+    {% if spots_left %}<b>{{ spots_left }}</b> of {{ config.FREE_SPOTS }} free
+      places left. The landing page is offering them.
+    {% else %}All {{ config.FREE_SPOTS }} free places are taken &mdash; the
+      landing page is asking for money again.{% endif %}
+  </p>
+{% endif %}
+
+<h2>How far people get</h2>
+<div class="panel">
+  <div class="funnel">
+    {% for stage in funnel %}
+      <div class="row2">
+        <span class="label">{{ stage.name }}</span>
+        <span class="track"><span class="fill" style="width: {{ stage.percent }}%"></span></span>
+        <span class="n"><b>{{ stage.count }}</b> &middot; {{ stage.percent }}%</span>
+      </div>
+    {% endfor %}
+  </div>
+  <p style="margin-top:14px"><small class="muted">Counts everyone at that
+  stage <em>or past it</em>. The steps are not compulsory &mdash; a profile
+  can be filled in by hand without a CV &mdash; so counting each on its own
+  would make the funnel go up in the middle.</small></p>
+</div>
+
+<h2>Signups</h2>
+<div class="panel">
+  <div class="chart">
+    {% for w in weeks %}
+      <div class="col">
+        <span class="cnt">{{ w.count or '' }}</span>
+        <span class="stalk {% if not w.count %}empty{% endif %}"
+              style="height: {{ w.height }}%"></span>
+        <span class="tick">{% if w.weeks_ago == 0 %}now{% else %}-{{ w.weeks_ago }}w{% endif %}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if stalled %}
+  <h2>Stalled in setup</h2>
+  <div class="panel">
+    <p>Signed up more than two days ago and never finished setup. These are
+    the people to email.</p>
+    <ul style="margin:0; padding-left:18px">
+      {% for r in stalled %}
+        <li class="muted" style="margin-bottom:4px">{{ r.email }}
+          &middot; joined {{ ago(r.created_at) }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<h2>Everyone</h2>
+<div class="panel scroll">
+  <table class="everyone">
+    <tr>
+      <th>Email</th><th>Setup</th><th>Billing</th>
+      <th class="num">Written</th><th class="num">Sent</th>
+      <th>Joined</th><th>Last seen</th>
+    </tr>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.email }}</td>
+        <td class="muted">
+          {%- if r.mail_at %}auto sending
+          {%- elif r.profile_at %}done
+          {%- elif r.cv_at %}CV only
+          {%- else %}not started{% endif -%}
+        </td>
+        <td>
+          {% if r.email | lower in config.FREE_ACCESS_EMAILS %}
+            <span class="tag">free</span>
+          {% elif r.free_spot %}
+            <span class="tag">free place</span>
+          {% elif r.subscription_status in ("active", "trialing") %}
+            <span class="tag">paying</span>
+          {% else %}
+            <span class="muted">&mdash;</span>
+          {% endif %}
+        </td>
+        <td class="num">{{ r.drafts }}</td>
+        <td class="num">{{ r.sent }}</td>
+        <td class="muted">{{ ago(r.created_at) }}</td>
+        <td class="muted">{{ ago(r.last_seen_at) }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p><small class="muted">There is no reply rate here on purpose. The app never
+reads anybody's mailbox, so any number would be invented &mdash; the real one
+has to come from asking people.</small></p>
+{% endblock %}
