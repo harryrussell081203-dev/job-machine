@@ -16,6 +16,7 @@ message to Harry's own inbox, prefixes the subject with the intended recipient,
 leaves companies unmarked and disables follow-ups.
 """
 import argparse
+import collections
 import email.utils
 import glob
 import imaplib
@@ -413,8 +414,17 @@ STYLE_RULES = f"""HARD RULES:
 - Body is 60-90 words, not counting the greeting and the sign-off.
 - Short sentences. Plain English a tradesman would say out loud.
 - Greet by first name if one is given, otherwise 'Hi,'.
-- Line 1 names the exact role and one concrete detail from THIS listing (a product,
-  site, shift pattern, piece of kit, standard, venue) that proves he read it.
+- Line 1 names the exact role and one concrete detail from THIS listing (a
+  product, a site or building, a team, a piece of kit, a standard, a venue,
+  what the work is on) that proves he read it.
+- That detail must be something only THIS employer could have written. Working
+  hours, shift patterns, days of the week and pay are NOT concrete details -
+  they describe the shift, not the employer, and reading them back proves only
+  that he can read. Of the original 86 letters, at a named contact, one whose
+  detail was the shift pattern got a reply 24% of the time; one that named a
+  building, a site or a team got 53%.
+- If the advert is thin and genuinely offers nothing of that kind, say less.
+  A short first line beats quoting the rota back at them.
 - Then 2 or 3 numbered proof points, written as '1.', '2.', '3.' on their own lines.
   Each one must matter to THIS job. Use specifics and numbers. Never list everything.
 - Then one line: a single easy question as the call to action.
@@ -1625,6 +1635,29 @@ def has_role_word(local):
     return False
 
 
+# Departments that are real, staffed, and must never receive a job
+# application. Writing to investor relations or the complaints desk about a
+# vacancy is not a near miss - it is the wrong building, and it is the kind
+# of thing an employer remembers about a candidate.
+#
+# Matched as WHOLE SEGMENTS, never as substrings. A man called Boardman is
+# not the board, and Frances is not France - the same rule the place list
+# already learned the hard way.
+NEVER_WRITE_TO = frozenset((
+    "complaint", "complaints", "investor", "investors", "investorrelations",
+    "shareholder", "shareholders", "board", "trustee", "trustees",
+    "governance", "audit", "ombudsman", "dispute", "disputes", "refund",
+    "refunds", "billing", "feedback", "escalation", "escalations", "chair",
+    "chairman", "secretary", "customer", "customers", "returns",
+    "dpo", "gdpr", "foi",
+))
+
+
+def never_write_to(local: str) -> bool:
+    return any(seg in NEVER_WRITE_TO
+               for seg in re.split(r"[._\-0-9]+", local) if seg)
+
+
 def is_personal(local):
     """True only if the local part belongs to an individual rather than a shared
     inbox: jane.smith, j.smith and jane all qualify, careers and info do not."""
@@ -1657,6 +1690,8 @@ def name_from_email(local):
 def classify(address):
     """(tier, first_name). 3 named person > 2 hiring inbox > 1 generic > 0 unusable."""
     local = address.split("@")[0].lower()
+    if never_write_to(local):
+        return 0, None
     if is_personal(local):
         return 3, name_from_email(local)
     # a hiring word anywhere counts - 'mysupporthr' is still an HR inbox
@@ -1774,20 +1809,188 @@ def domain_matches_company(company, domain):
     return rest in own_words
 
 
-def find_domain(company):
+def known_domains(state):
+    """{company key: domain} for every company already resolved.
+
+    The machine kept forgetting what it had just worked out. `find_domain`
+    asked Clearbit afresh for every single listing, so the same employer was
+    looked up again and again - and any run where that lookup came back empty
+    parked the listing at "no domain found" for good, with the answer sitting
+    in state.json the whole time.
+
+    That is not a hypothetical either. Of 422 listings binned this way, 144
+    are companies this machine already holds a domain for: 107 under the
+    identical name (Ernest Gordon Recruitment Limited 29 times, Rise Technical
+    16, Wood 16, Reed 10) and 37 more under a spelling that keys to the same
+    company. Enerpac Tool Group appears in both lists seven times each way,
+    which is what a transient failure looks like when nothing retries.
+
+    Keyed on company_key, so 'Survitec Group Ltd' finds what 'Survitec'
+    resolved to.
+
+    EVERY ENTRY IS RE-VALIDATED, and that is not defensive habit. The first
+    version of this trusted the file on the reasoning that any domain in it
+    had already been accepted by the strict matcher below. That reasoning is
+    wrong, and the real file says so: it currently holds
+
+        Wood            -> woodforest.com     (a bank in Texas)
+        Wood Group      -> woodforest.com
+        Engineering Employment -> illinoisexpo.org
+
+    written before the matcher learned to refuse them. Handing those back as
+    "already known" would have re-opened twenty listings and pointed them
+    straight at the exact stranger this whole guard exists to keep them away
+    from. Nothing had been SENT there - domain_matches_company() runs at send
+    time and stops it - but the listings would have burned their discovery
+    budget getting there.
+
+    Two conditions, because one is not enough:
+
+      - domain_matches_company(), which is the send-time guard. It catches
+        Wood -> woodforest.com, Stork -> stork24.eu and Ember ->
+        emberhome.com, but only polices single-word names.
+      - at least one distinctive word of the company's name appears in the
+        domain. This is what catches Engineering Employment ->
+        illinoisexpo.org and BES Group -> soyoulive.com, which the first
+        condition waves through for having two words in them.
+
+    ONE word, not all of them. Requiring all was the first attempt and it
+    threw away twenty-five correct entries - Aberdeenshire Council ->
+    aberdeenshire.gov.uk, Abertay University -> abertay.ac.uk, Cirrus Logic
+    -> cirrus.com - because company_key does not strip 'council' or
+    'university' and no organisation puts those in its domain.
+
+    Acronym domains still fail this: British Geological Survey -> bgs.ac.uk
+    and Northern Lighthouse Board -> nlb.org.uk are both right and neither is
+    checkable by name. They are left out on purpose. A rejected entry costs
+    one Clearbit lookup, which is what happens today anyway; a wrong entry
+    accepted here is applied to every future listing for that employer.
+
+    A cached domain is being applied to a DIFFERENT listing from the one it
+    was found on, so it has to clear a higher bar than a domain still attached
+    to the advert that produced it. Anything that fails simply is not cached,
+    and that company gets looked up live like any other.
+    """
+    found = {}
+    for job in (state.get("jobs") or {}).values():
+        domain = (job.get("company_domain") or "").strip().lower()
+        company = (job.get("company") or "").strip()
+        key = company_key(company)
+        if not domain or not key or key in found:
+            continue
+        if trustworthy_domain(company, domain):
+            found[key] = domain
+    return found
+
+
+def trustworthy_domain(company, domain):
+    """Whether a domain found for one listing may be reused for another.
+
+    See known_domains() for why this is stricter than the send-time guard.
+    """
+    if not domain_matches_company(company, domain):
+        return False
+    root = re.split(r"[.]", domain.lower().strip())[0]
+    root = re.sub(r"[^a-z0-9]", "", root)
+    return any(token in root for token in name_tokens(company))
+
+
+def find_domain(company, known=None):
     """Clearbit autocomplete: free, no key.
 
     Only a confident match is accepted. Matching on a raw substring is what put
     a note meant for Wood plc into the inbox of Woodforest National Bank, so
     every word of the company name now has to appear as a whole word in the
-    match, and the domain has to sit on a plausible TLD."""
+    match, and the domain has to sit on a plausible TLD.
+
+    `known` is what this machine has already resolved - see known_domains().
+    Checked before the network, so a company only ever costs one lookup and a
+    Clearbit outage cannot un-know an answer already held.
+
+    When the advert's name finds nothing, simpler versions of it are tried -
+    see query_variants(). Only the QUESTION gets simpler. Every candidate
+    still has to pass the identical checks below, so this can surface matches
+    that were being missed but cannot loosen which of them is accepted.
+    """
     wanted = company_key(company)
     wanted_tokens = name_tokens(company)
     if not wanted_tokens:
         return None
+    if known and wanted in known:
+        print(f"[discover] '{company}' -> {known[wanted]} (already known)")
+        return known[wanted]
+    for query in query_variants(company):
+        domain = _clearbit_match(query, company, wanted, wanted_tokens)
+        if domain:
+            if query != company:
+                print(f"[discover] '{company}' -> {domain} "
+                      f"(found by asking for '{query}')")
+            return domain
+    print(f"[discover] no confident domain for '{company}'")
+    return None
+
+
+# Legal-form noise. Clearbit's autocomplete is a fuzzy search over company
+# names, and these words are not in the names it holds - so they are dead
+# weight in the query at best, and at worst they are what makes it return
+# nothing at all.
+LEGAL_FORMS = re.compile(
+    r"\b(ltd|ltd\.|limited|plc|p\.l\.c|llp|llc|inc|inc\.|incorporated|"
+    r"corp|corp\.|corporation|co\.|gmbh|b\.?v|s\.?a|pty|the)\b", re.I)
+
+
+def query_variants(company, limit=3):
+    """Progressively simpler things to ask Clearbit for this company.
+
+    'Ernest Gordon Recruitment' resolved. 'Ernest Gordon Recruitment Limited'
+    was binned twenty-nine times. Both reduce to the same company_key, so the
+    matcher was never reached - the only difference between them is the string
+    handed to Clearbit, which found nothing for the longer one. Same story for
+    'Rise Technical Recruitment Limited' (16), 'Pioneer Selection Ltd' (5) and
+    'Escape Recruitment Serv Ltd' (7).
+
+    known_domains() already rescues these WHEN the company was also seen under
+    a cleaner name. This is for the ones that never were.
+
+    Capped, and only reached after the full name has already failed, so the
+    cost is bounded and falls only on lookups that were going to fail anyway.
+
+    The shortening loop stops at two words. Dropping to one would spend a call
+    asking a question so vague the matcher is then obliged to refuse every
+    answer to it - a single word does not identify a company, which is the
+    Sanctuary rule. Stripping 'Limited' off 'Yunex Limited' is different and
+    still allowed: that leaves the company's actual name, not a fragment of
+    it, and the exact-match path handles it correctly.
+    """
+    out = []
+
+    def add(text):
+        # Punctuation left stranded by the strip - "RM Staffing B.V." became
+        # "RM Staffing ." - is noise in a fuzzy search, same as the word was.
+        text = " ".join((text or "").split())
+        text = re.sub(r"[\s,.;:&/-]+$", "", text).strip()
+        if text and text.lower() not in [x.lower() for x in out]:
+            out.append(text)
+
+    add(company)
+    stripped = LEGAL_FORMS.sub(" ", company)
+    add(stripped)
+    words = stripped.split()
+    for n in range(len(words) - 1, 1, -1):
+        add(" ".join(words[:n]))
+    return out[:limit]
+
+
+def _clearbit_match(query, company, wanted, wanted_tokens):
+    """One Clearbit lookup, returning a domain only on a confident match.
+
+    `query` is what to ask for; `company`, `wanted` and `wanted_tokens` are
+    always the advert's own name. Keeping those apart is the whole safety
+    property: a simplified query changes nothing about what counts as a match.
+    """
     try:
         r = requests.get("https://autocomplete.clearbit.com/v1/companies/suggest",
-                         params={"query": company}, headers=UA, timeout=15)
+                         params={"query": query}, headers=UA, timeout=15)
         r.raise_for_status()
         hits = r.json()
         if not isinstance(hits, list):
@@ -1824,9 +2027,8 @@ def find_domain(company):
                 if (hit_tokens - wanted_tokens) <= CORPORATE_WORDS:
                     return domain
                 print(f"[discover] '{hit.get('name')}' is not '{company}'")
-        print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
-        print(f"[discover] clearbit '{company}': {e}")
+        print(f"[discover] clearbit '{query}': {e}")
     return None
 
 
@@ -1911,6 +2113,10 @@ def discover(state):
     todo = [j for j in state["jobs"].values()
             if j["status"] == "scored"][:MAX_DISCOVERED_PER_RUN]
     found = 0
+    # Built once per run rather than per listing, and updated below as new
+    # companies resolve, so two listings for the same employer in one batch
+    # cost one lookup rather than two.
+    known = known_domains(state)
     for job in todo:
         # 1) addresses printed in the advert itself - directly tied to this job
         text = job.get("description", "") + " " + fetch_listing_text(job)
@@ -1936,11 +2142,12 @@ def discover(state):
             if not company:
                 job.update({"status": "skipped", "skip_reason": "no company name"})
                 continue
-            domain = find_domain(company)
+            domain = find_domain(company, known)
             if not domain:
                 job.update({"status": "no_email", "skip_reason": "no domain found"})
                 continue
             job["company_domain"] = domain
+            known.setdefault(company_key(company), domain)
             if not has_mx(domain):
                 job.update({"status": "no_email", "skip_reason": "domain has no MX"})
                 continue
@@ -2988,6 +3195,85 @@ def summary_window(state):
     return min(since, floor) if since else floor
 
 
+def lifetime_stats(state):
+    """The counts that do not wobble, and the ones that do, labelled.
+
+    This exists because I kept quoting different figures for the same thing
+    and Harry called it out. He was right, and the cause is not time passing:
+
+        2026-09-03   sent=79  replied=23
+        2026-09-03   sent=78  replied=24     <- sent went DOWN
+
+    `status == "sent"` DRAINS. When somebody answers, the record flips to
+    'replied' and leaves the bucket. It means "sent and still waiting", not a
+    running total, and quoting it as one makes the machine look like it is
+    going backwards on exactly the days it is going best.
+
+    `send_counts` is worse to quote: it is a per-day CAP counter, merged
+    across concurrent runs with max(), so it is not a lifetime total of
+    anything and its 134 has never meant what it looks like.
+
+    applications_ever = sent + replied is the monotonic one. That is the
+    number to say out loud.
+    """
+    jobs = list((state.get("jobs") or {}).values())
+
+    def count(*statuses):
+        return sum(1 for j in jobs if j.get("status") in statuses)
+
+    awaiting = count("sent")
+    replied = count("replied")
+    ever = awaiting + replied
+    binned = collections.Counter(
+        j.get("skip_reason") or "unexplained"
+        for j in jobs if j.get("status") == "no_email")
+    return {
+        # monotonic - safe to quote
+        "applications_ever": ever,
+        "replies": replied,
+        "reply_rate": round(100 * replied / ever) if ever else 0,
+        "speculative_notes": count("spec_sent"),
+        "portal_submitted": count("portal_submitted"),
+        "support_letters": len(state.get("support_asked") or {}),
+        "trade_bodies": len(state.get("network_asked") or {}),
+        "companies_ever": len({company_key(j.get("company") or "")
+                               for j in jobs
+                               if j.get("status") in ("sent", "replied")
+                               and (j.get("company") or "").strip()}),
+        # a snapshot of right now - these move in both directions
+        "awaiting_reply": awaiting,
+        "queued_to_send": count("ready"),
+        "listings_seen": len(jobs),
+        "no_address": dict(binned.most_common()),
+    }
+
+
+def print_stats(state):
+    s = lifetime_stats(state)
+    print("These only ever go up")
+    print(f"  applications emailed      {s['applications_ever']}")
+    print(f"  replies                   {s['replies']}  "
+          f"({s['reply_rate']}%)")
+    print(f"  employers written to      {s['companies_ever']}")
+    print(f"  speculative notes         {s['speculative_notes']}")
+    print(f"  applications via a portal {s['portal_submitted']}")
+    print(f"  support letters           {s['support_letters']}")
+    print(f"  trade bodies asked        {s['trade_bodies']}")
+    print()
+    print("Where things stand right now (these move both ways)")
+    print(f"  sent and still waiting    {s['awaiting_reply']}")
+    print(f"  written and queued        {s['queued_to_send']}")
+    print(f"  listings ever seen        {s['listings_seen']}")
+    print()
+    print("Listings with no address, by reason")
+    for reason, n in s["no_address"].items():
+        print(f"  {n:5}  {reason}")
+    print()
+    print("Quote 'applications emailed'. Never 'sent' on its own - it drains "
+          "as replies arrive, so it falls on the best days.")
+    return s
+
+
 def collect_summary(state, since):
     """What happened since the last digest."""
     def after(value):
@@ -3008,9 +3294,11 @@ def collect_summary(state, since):
         "queued": [j for j in jobs if j.get("status") == "ready"],
         "waiting": [j for j in jobs if j.get("status") == "sent"
                     and not j.get("followup_sent_at")],
-        "lifetime": sum(1 for j in jobs
-                        if j.get("status") in ("sent", "replied")
-                        or j.get("followup_sent_at")),
+        # One definition of "how many have ever gone out", shared with
+        # --stats. Two counters for the same number is one counter to forget
+        # to update, and this project has already been caught quoting three
+        # different figures for it.
+        "lifetime": lifetime_stats(state)["applications_ever"],
     }
 
 
@@ -3343,8 +3631,8 @@ def timeline_sentence(situation=None, today_str=None):
         # sentence: not 'hurry up', but 'I am not desperate' - the thing that
         # stops a technician in work being read as somebody who will take
         # anything. It never names the employer, same rule as the offer.
-        return ("For context, I am in work at the moment, so I am not in a rush - "
-                "I am only looking at moves that are a clear step up.")
+        return ("For context, I am in work at the moment, so I am not applying "
+                "widely - this is one of the few I wanted to ask about directly.")
     return ""
 
 
@@ -3417,6 +3705,15 @@ def run_followups(state):
         # already gone quiet is just useful information for them.
         timeline = timeline_sentence()
         pressure = f"{timeline}\n\n" if timeline else ""
+        # "Free to start now" next to "I am in work at the moment" is a
+        # contradiction in the same email, and the reader notices it before
+        # they notice anything else. Somebody in work has a notice period.
+        in_work = bool(load_situation().get("employed"))
+        availability = ("based, and I would work a notice period for the right "
+                        "move" if in_work else "based and free to start now")
+        still_available = ("Still interested if it is live"
+                           if in_work else
+                           "Still interested and available immediately if it is live")
         if which == 1:
             body = (
                 f"{greeting}\n\n"
@@ -3433,7 +3730,7 @@ def run_followups(state):
                 f"I wrote to a colleague about the {job['title']} role a couple of "
                 f"weeks back and I suspect it landed at a busy moment. Ex-Royal Navy "
                 f"comms, three years at Sonardyne on subsea electronics, Aberdeen "
-                f"based and free to start now.\n\n"
+                f"{availability}.\n\n"
                 f"{pressure}"
                 f"Is that role still open, or is there someone better placed for me "
                 f"to speak to?\n\n"
@@ -3443,7 +3740,7 @@ def run_followups(state):
             body = (
                 f"{greeting}\n\n"
                 f"Last note from me on the {job['title']} role - I know inboxes get "
-                f"buried. Still interested and available immediately if it is live. "
+                f"buried. {still_available}. "
                 f"If the timing is wrong, no bother at all.\n\n"
                 f"{pressure}"
                 f"Worth keeping my CV on file for the next opening?\n\n"
@@ -3525,6 +3822,40 @@ def rescore(state, floor=55):
     return woken
 
 
+def rediscover(state):
+    """Re-open listings binned for "no domain found" that we can now answer.
+
+    Same argument as rescore(): a listing parked on a judgement the machine
+    has since improved on should not stay parked. The difference is that this
+    one is not a judgement call at all - these listings were binned for want
+    of a domain this machine already held, so re-opening them asks nothing new
+    of anybody.
+
+    Only listings whose company is in known_domains() are woken. The rest
+    genuinely have no domain, and putting them back would spend the discovery
+    budget re-asking Clearbit the same question and getting the same answer.
+
+    'no real address found' is deliberately left alone: that company's site
+    was fetched and had no address on it, which is a fact about the site
+    rather than a gap in what this machine remembered.
+    """
+    known = known_domains(state)
+    woken = 0
+    for job in state["jobs"].values():
+        if job.get("status") != "no_email":
+            continue
+        if job.get("skip_reason") != "no domain found":
+            continue
+        if company_key(job.get("company") or "") not in known:
+            continue
+        job.update({"status": "scored", "skip_reason": None,
+                    "rediscovered_at": now()})
+        woken += 1
+    print(f"[rediscover] {woken} listing(s) put back in the queue - their "
+          f"employer's domain was already known")
+    return woken
+
+
 def stage(name, fn, *args):
     """Run a stage, swallowing its failure so the rest of the run continues.
 
@@ -3546,6 +3877,13 @@ def main(argv=None):
                         help="put listings skipped for a low score back in the "
                              "queue, so a change to the candidate profile is "
                              "applied to what was already judged under the old one")
+    parser.add_argument("--rediscover", action="store_true",
+                        help="put listings binned for 'no domain found' back in "
+                             "the queue when their employer's domain is already "
+                             "known from another listing")
+    parser.add_argument("--stats", action="store_true",
+                        help="print one labelled, authoritative set of numbers "
+                             "and do nothing else")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -3553,6 +3891,12 @@ def main(argv=None):
     parser.add_argument("--replies", action="store_true",
                         help="only check the inbox and handle replies (fast)")
     args = parser.parse_args(argv)
+
+    # Before anything else, and it never writes. Asking the machine what it
+    # has done should not be able to change what it has done.
+    if args.stats:
+        print_stats(load())
+        return 0
 
     if args.summary:
         state = load()
@@ -3574,6 +3918,9 @@ def main(argv=None):
     state = load()
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
+        save(state)
+    if args.rediscover:
+        stage("rediscover", rediscover, state)
         save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)

@@ -1,0 +1,105 @@
+name: product sweep
+
+# This is what makes it a product rather than a page somebody has to visit.
+# Three times a weekday it looks for work for every paying user and sends
+# whatever is due, so a subscriber who never signs in still gets letters out.
+#
+# It runs on GitHub's hardware, which is free for public repositories, so the
+# scheduled compute costs nothing.
+#
+# ----------------------------------------------------------------------
+# THIS FILE MUST LIVE AT .github/workflows/ IN THE REPOSITORY ROOT.
+#
+# It spent its whole life at product/.github/workflows/sweep.yml, where it
+# was never once run and never could be. GitHub reads workflows from
+# .github/workflows/ at the root and nowhere else, so a copy in a
+# subdirectory is an inert text file that looks exactly like a working one -
+# green in review, absent from the Actions tab, and silent about it.
+#
+# Scheduled workflows have a second rule that bit at the same time: cron only
+# fires from the repository's DEFAULT BRANCH. On a feature branch this file
+# is still dead even in the right directory. That is why the product had
+# automatic sending written, tested, documented and sold, and had never sent
+# a single letter.
+#
+# It runs against product/ via `working-directory` below. Do not move it back
+# to sit beside the code it runs.
+# ----------------------------------------------------------------------
+#
+# Isolation from the personal job machine in the repository root is not a
+# matter of trust: no workflow here triggers on an ordinary push, the
+# secrets below and the personal machine's GMAIL_* secrets do not overlap,
+# and the concurrency groups are separate. The two never see each other.
+
+on:
+  schedule:
+    # 07:10, 11:10 and 15:10 UTC, weekdays. Deliberately not on the hour:
+    # GitHub delays jobs scheduled at popular times, sometimes by a lot.
+    - cron: "10 7,11,15 * * 1-5"
+  push:
+    # Same idiom the personal machine uses: push a branch to force a run when
+    # the Actions UI is not to hand. Deliberately not `branches: [main]` - an
+    # ordinary merge must never send anybody's letters.
+    branches: ["fire-sweep/**"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be sent, without sending"
+        type: boolean
+        default: false
+
+# Reads the repository, writes nothing back to it - unlike the personal
+# machine, whose state lives in a committed JSON file. Everything this run
+# produces goes to Postgres.
+permissions:
+  contents: read
+
+concurrency:
+  # Never two sweeps at once. Two overlapping runs could each read the same
+  # draft as unsent and send it twice, which is the one mistake this whole
+  # product is built to avoid.
+  group: sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: product
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Sweep
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CREDENTIAL_KEY: ${{ secrets.CREDENTIAL_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          STRIPE_PAYMENT_LINK: ${{ secrets.STRIPE_PAYMENT_LINK }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Without a database this would run against an empty SQLite file on
+          # a throwaway runner: no users, no drafts, and a green tick saying
+          # everything is fine. Refuse instead.
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL is not set, so there are no users to"\
+                 "sweep. Add it as a repository secret."
+            exit 1
+          fi
+          python -m app.sweep ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Drafts</h1>
+
+<div class="tabs">
+  <a href="/drafts?status=draft" {% if status == 'draft' %}class="on"{% endif %}>Waiting</a>
+  <a href="/drafts?status=sent" {% if status == 'sent' %}class="on"{% endif %}>Sent</a>
+  <a href="/drafts?status=discarded" {% if status == 'discarded' %}class="on"{% endif %}>Discarded</a>
+</div>
+
+{% if not items %}
+  <div class="panel"><p class="muted">Nothing here.</p></div>
+{% endif %}
+
+{% for item in items %}
+  {% set d = item.row %}
+  <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
+    <h3>{{ d['job_title'] }}</h3>
+    <p class="meta">
+      {{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
+      {% if d['salary_text'] %} &middot; {{ d['salary_text'] }}{% endif %}
+      {% if d['score'] %} &middot; scored {{ d['score'] }}{% endif %}
+    </p>
+    <p class="meta">
+      To {{ d['to_name'] or d['to_email'] }}
+      {% if d['contact_tier'] == 3 %}<span class="tag">named person</span>
+      {% elif d['contact_tier'] == 2 %}<span class="tag">hiring inbox</span>
+      {% else %}<span class="tag">generic inbox</span>{% endif %}
+    </p>
+
+    <p><b>{{ d['subject'] }}</b></p>
+    <div class="letter">{{ d['body'] }}</div>
+
+    {% if status == 'draft' %}
+      <div class="actions">
+        <a class="btn" href="{{ item.mailto }}">Open in mail app</a>
+        <a class="btn ghost" href="{{ item.gmail }}" target="_blank"
+           rel="noopener">Open in Gmail</a>
+        <form method="post" action="/drafts/{{ d['id'] }}/sent">
+          <button class="ghost" type="submit">Mark sent</button></form>
+        <form method="post" action="/drafts/{{ d['id'] }}/discarded">
+          <button class="ghost" type="submit">Discard</button></form>
+        <form method="post" action="/drafts/{{ d['id'] }}/block">
+          <button class="ghost" type="submit">Never this company</button></form>
+      </div>
+      {% if d['listing_url'] %}
+        <p style="margin-top:10px"><small><a href="{{ d['listing_url'] }}"
+          target="_blank" rel="noopener">Read the original advert</a></small></p>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endfor %}
+
+{% if status == 'draft' and items %}
+  <p><small><b>Mark sent</b> only once it has gone &mdash; that is what stops
+  this employer being written to twice.</small></p>
+{% endif %}
+{% endblock %}

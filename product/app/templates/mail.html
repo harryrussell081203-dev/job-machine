@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Connect your email &middot; job machine{% endblock %}
+{% block content %}
+
+<h1>Connect your email</h1>
+<p class="lede">So letters go out from your address, not from a service.</p>
+
+{% if request.query_params.get('e') == 'needed' %}
+  <div class="note bad">Automatic sending needs an email account connected
+    first.</div>
+{% endif %}
+
+{% if not vault_ready %}
+  <div class="note">
+    <p><b>Automatic sending is switched off at the moment</b>, so there is
+       nothing to connect here yet. Nothing for you to do.</p>
+    <p>Everything else runs as normal: we find the jobs, write the letters,
+       and you send each one with a click from the drafts screen.</p>
+  </div>
+{% else %}
+
+<div class="note">
+  <p><b>Use an app password, not your normal one.</b> Your real password is
+     refused even when it is correct.</p>
+  <p><b>Gmail:</b> Google Account &rarr; Security &rarr; 2-Step Verification
+     &rarr; App passwords. <b>Outlook:</b> Security &rarr; Advanced security
+     options &rarr; App passwords.</p>
+</div>
+
+<div class="note bad">
+  <p><b>What this gives us.</b> An app password lets us send mail as you, and
+     would let anyone holding it read that mailbox. It is stored encrypted, but
+     the honest summary is that you are trusting us with your mailbox.</p>
+  <p>Revoke it any time from your email provider, without changing your own
+     password. Or skip this &mdash; we still write every letter and you press
+     send.</p>
+</div>
+
+<form method="post" action="/setup/mail" class="stack">
+  <label>Your email address
+    <input type="email" name="address" required
+           value="{{ address or profile.get('email', '') }}"
+           placeholder="you@gmail.com">
+  </label>
+
+  <label>App password
+    <input type="password" name="password" required
+           placeholder="16 characters from your provider">
+  </label>
+
+  <details>
+    <summary>Mail server settings</summary>
+    <p class="hint">Filled in automatically for Gmail, Outlook, Yahoo and
+       iCloud. Only needed for a work address or your own domain.</p>
+    <div class="row">
+      <label>Server <input name="host" value="{{ host or '' }}"
+                           placeholder="smtp.gmail.com"></label>
+      <label>Port <input name="port" type="number" value="{{ port or 465 }}"></label>
+    </div>
+  </details>
+
+  <p class="hint">Checked by signing in before anything is saved.</p>
+
+  <button class="btn">Check and connect</button>
+  <a class="link" href="/setup">Cancel</a>
+</form>
+{% endif %}
+
+{% endblock %}
