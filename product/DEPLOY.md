@@ -131,6 +131,63 @@ with billing on but Stripe settings missing — both deliberately, because a
 paywall that silently defaults to open is not a thing you notice from the
 outside.
 
+## 3a. Your own domain
+
+`job-machine.onrender.com` on a page asking somebody for a card reads as a
+weekend project, which is the one thing this is not. A `.co.uk` runs about
+£8–10 a year and is the cheapest credibility you can buy.
+
+**The app is already domain-ready.** Every link it builds — sign-in links,
+Stripe's return URLs — comes from `BASE_URL`, and `/status` warns if that
+does not match the address the page was actually served from. So this is a
+purchase and some DNS, not a change to the code.
+
+### Buy it
+
+Any registrar selling near cost. Cloudflare sells at wholesale and does not
+do the trick where the first year is £1 and the renewal is £30, so check the
+**renewal** price wherever you buy. `.co.uk` needs no UK address proof.
+
+### Point it at Render
+
+1. Render → the service → **Settings → Custom Domains → Add**. Add both
+   `jobmachine.co.uk` and `www.jobmachine.co.uk`. Render shows you the DNS
+   records it wants.
+2. At the registrar's DNS panel, add exactly those records. For a root
+   `.co.uk` it will be an **A record** (a bare domain cannot be a CNAME);
+   `www` gets a **CNAME** to your `.onrender.com` address.
+3. Wait. Render issues a free TLS certificate once it can see the records —
+   usually minutes, occasionally an hour. The dashboard says when it is live.
+   **Do not go to step 4 until it does**, or you will point the app at an
+   address that does not answer yet.
+
+### Then, in this order
+
+4. Set `BASE_URL=https://jobmachine.co.uk` in Render's environment panel.
+   Getting this wrong is invisible until a customer clicks a sign-in link and
+   it goes nowhere, which is why `/status` checks it.
+5. **Stripe**, if you are on the API route rather than a Payment Link: change
+   the webhook endpoint to `https://jobmachine.co.uk/webhooks/stripe`. The
+   signing secret does not change. On a Payment Link there is nothing to do.
+6. Load `/status` and confirm it is not complaining, then sign in from a
+   phone that has never seen the site.
+
+Keep the `.onrender.com` address working — Render does — so anything already
+bookmarked still resolves.
+
+### Email on the same domain, free
+
+Worth doing while you are in the DNS panel, and it fixes something separate:
+`harryrussell081203@gmail.com` puts a date of birth in the From line of every
+application. Cloudflare **Email Routing** forwards `harry@jobmachine.co.uk`
+into the same Gmail for nothing, and Gmail's **Settings → Accounts → Send
+mail as** then lets you send from it.
+
+**Do not move the mailbox.** Sending stays on Gmail's servers, so the IMAP
+reply harvest keeps working, the contacted history stays keyed to the same
+inbox, and you keep Gmail's sending reputation instead of starting a new
+domain's from zero. Only the address recruiters see changes.
+
 ## 3b. Two keys the new features need
 
 **`CREDENTIAL_KEY`** — required for automatic sending. It encrypts each user's
