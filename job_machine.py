@@ -1906,6 +1906,11 @@ def find_domain(company, known=None):
     `known` is what this machine has already resolved - see known_domains().
     Checked before the network, so a company only ever costs one lookup and a
     Clearbit outage cannot un-know an answer already held.
+
+    When the advert's name finds nothing, simpler versions of it are tried -
+    see query_variants(). Only the QUESTION gets simpler. Every candidate
+    still has to pass the identical checks below, so this can surface matches
+    that were being missed but cannot loosen which of them is accepted.
     """
     wanted = company_key(company)
     wanted_tokens = name_tokens(company)
@@ -1914,9 +1919,78 @@ def find_domain(company, known=None):
     if known and wanted in known:
         print(f"[discover] '{company}' -> {known[wanted]} (already known)")
         return known[wanted]
+    for query in query_variants(company):
+        domain = _clearbit_match(query, company, wanted, wanted_tokens)
+        if domain:
+            if query != company:
+                print(f"[discover] '{company}' -> {domain} "
+                      f"(found by asking for '{query}')")
+            return domain
+    print(f"[discover] no confident domain for '{company}'")
+    return None
+
+
+# Legal-form noise. Clearbit's autocomplete is a fuzzy search over company
+# names, and these words are not in the names it holds - so they are dead
+# weight in the query at best, and at worst they are what makes it return
+# nothing at all.
+LEGAL_FORMS = re.compile(
+    r"\b(ltd|ltd\.|limited|plc|p\.l\.c|llp|llc|inc|inc\.|incorporated|"
+    r"corp|corp\.|corporation|co\.|gmbh|b\.?v|s\.?a|pty|the)\b", re.I)
+
+
+def query_variants(company, limit=3):
+    """Progressively simpler things to ask Clearbit for this company.
+
+    'Ernest Gordon Recruitment' resolved. 'Ernest Gordon Recruitment Limited'
+    was binned twenty-nine times. Both reduce to the same company_key, so the
+    matcher was never reached - the only difference between them is the string
+    handed to Clearbit, which found nothing for the longer one. Same story for
+    'Rise Technical Recruitment Limited' (16), 'Pioneer Selection Ltd' (5) and
+    'Escape Recruitment Serv Ltd' (7).
+
+    known_domains() already rescues these WHEN the company was also seen under
+    a cleaner name. This is for the ones that never were.
+
+    Capped, and only reached after the full name has already failed, so the
+    cost is bounded and falls only on lookups that were going to fail anyway.
+
+    The shortening loop stops at two words. Dropping to one would spend a call
+    asking a question so vague the matcher is then obliged to refuse every
+    answer to it - a single word does not identify a company, which is the
+    Sanctuary rule. Stripping 'Limited' off 'Yunex Limited' is different and
+    still allowed: that leaves the company's actual name, not a fragment of
+    it, and the exact-match path handles it correctly.
+    """
+    out = []
+
+    def add(text):
+        # Punctuation left stranded by the strip - "RM Staffing B.V." became
+        # "RM Staffing ." - is noise in a fuzzy search, same as the word was.
+        text = " ".join((text or "").split())
+        text = re.sub(r"[\s,.;:&/-]+$", "", text).strip()
+        if text and text.lower() not in [x.lower() for x in out]:
+            out.append(text)
+
+    add(company)
+    stripped = LEGAL_FORMS.sub(" ", company)
+    add(stripped)
+    words = stripped.split()
+    for n in range(len(words) - 1, 1, -1):
+        add(" ".join(words[:n]))
+    return out[:limit]
+
+
+def _clearbit_match(query, company, wanted, wanted_tokens):
+    """One Clearbit lookup, returning a domain only on a confident match.
+
+    `query` is what to ask for; `company`, `wanted` and `wanted_tokens` are
+    always the advert's own name. Keeping those apart is the whole safety
+    property: a simplified query changes nothing about what counts as a match.
+    """
     try:
         r = requests.get("https://autocomplete.clearbit.com/v1/companies/suggest",
-                         params={"query": company}, headers=UA, timeout=15)
+                         params={"query": query}, headers=UA, timeout=15)
         r.raise_for_status()
         hits = r.json()
         if not isinstance(hits, list):
@@ -1953,9 +2027,8 @@ def find_domain(company, known=None):
                 if (hit_tokens - wanted_tokens) <= CORPORATE_WORDS:
                     return domain
                 print(f"[discover] '{hit.get('name')}' is not '{company}'")
-        print(f"[discover] no confident domain for '{company}'")
     except Exception as e:
-        print(f"[discover] clearbit '{company}': {e}")
+        print(f"[discover] clearbit '{query}': {e}")
     return None
 
 
