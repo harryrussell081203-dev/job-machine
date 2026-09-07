@@ -45,6 +45,10 @@ jobs:
           SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
           SMS_FROM: ${{ secrets.SMS_FROM }}
           SMS_TO: ${{ secrets.SMS_TO }}
+          # Optional. A free monitor's ping URL, so something OUTSIDE
+          # GitHub notices if this stops running entirely - the one
+          # case the machine cannot report on itself.
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
           TEST_MODE: ${{ vars.TEST_MODE }}
           REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
         run: python job_machine.py --replies

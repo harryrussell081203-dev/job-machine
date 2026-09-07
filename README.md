@@ -436,6 +436,55 @@ workflow fires at both 21:00 and 22:00 UTC and the script sends only on the one
 that is actually 22:00 in the UK. To see a digest right now, run the **job-machine
 summary** workflow by hand with `force` left at `true`.
 
+## Knowing when it has stopped
+
+**GitHub does not run scheduled workflows reliably, and it fails silently.**
+
+This is not a theory. Between Friday 4 and Monday 7 September 2026 this
+machine did not run at all. `reply.yml` is scheduled six times a weekday and
+was managing two or three, one to three hours late, and then none. There was
+no failed build to see, no error, no red tick - a workflow that does not fire
+produces no signal whatsoever, which looks exactly like everything being fine.
+Nobody noticed for three days.
+
+So the alarm cannot live inside the thing that is not running. There are two
+layers, and they catch different failures.
+
+### 1. The gap check (on by default, nothing to set up)
+
+Every workflow calls `--heartbeat` before it does anything else. If too much
+**working time** has passed since the last one, you get a text and an email
+saying when it last ran.
+
+Working time, not wall-clock time, and that distinction is what makes it
+usable. Friday evening to Monday morning is 63 hours and completely normal; a
+Tuesday 9am to 5pm gap is 8 hours and means a whole day of slots was dropped.
+Only Mon-Fri 07:00-19:00 UTC counts, so it stays quiet at night and at
+weekends. An alarm that cries wolf every Monday gets muted, and a muted alarm
+is worse than none.
+
+`QUIET_HOURS_BEFORE_ALARM` sets the threshold, default 8 - roughly "a full
+working day's runs went missing". It fires **once per outage**, not once per
+run, so five workflows catching up together do not send five texts.
+
+**What it cannot do is notice permanent silence.** It is sent by the machine,
+so if the machine never runs again, nothing is left to raise it.
+
+### 2. A dead man's switch (optional, and the only cover for the above)
+
+Set the `HEALTHCHECK_URL` secret to a ping URL from any free cron monitor.
+Every run pings it; if the pings stop arriving, **they** email you. That is
+the only layer that survives the machine never running again, because the
+watcher is not the thing being watched.
+
+It needs an account, so it is not set up for you.
+
+### If it happens again
+
+Fire a run by hand: **Actions → job-machine → Run workflow**. Ten seconds, and
+it catches the day up. Worth doing the moment you get the text rather than
+waiting to see whether the next scheduled run turns up.
+
 ## Pausing or rehearsing
 
 - **Stop everything:** disable the `job-machine` workflow in the Actions tab.

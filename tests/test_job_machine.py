@@ -3510,3 +3510,175 @@ class TestAskingClearbitASimplerQuestion(unittest.TestCase):
                 jm.find_domain("Speedy Hire Ltd",
                                {jm.company_key("Speedy Hire"): "speedyhire.com"}),
                 "speedyhire.com")
+
+
+class TestNoticingThatNothingRan(unittest.TestCase):
+    """A scheduled workflow that does not fire produces NO signal - not a
+    failed build, not an error, just silence, which is indistinguishable from
+    everything being fine.
+
+    That is how this machine sat idle from Friday 4 September to Monday 7
+    September while GitHub quietly dropped its crons. reply.yml is scheduled
+    six times a weekday and was managing two or three, hours late, and then
+    none at all. Nobody noticed for three days.
+    """
+
+    def at(self, *args):
+        return datetime(*args, tzinfo=timezone.utc)
+
+    # -- the measure ---------------------------------------------------
+    def test_a_weekend_is_not_an_outage(self):
+        """The one that decides whether this alarm survives contact with
+        reality. Friday evening to Monday morning is 63 wall-clock hours and
+        entirely expected. An alarm that cries wolf every Monday gets muted,
+        and a muted alarm is worse than none."""
+        friday_evening = self.at(2026, 9, 4, 18, 11)
+        monday_morning = self.at(2026, 9, 7, 9, 0)
+        self.assertGreater((monday_morning - friday_evening).total_seconds(),
+                           60 * 60 * 60)
+        self.assertLess(jm.working_hours_between(friday_evening,
+                                                 monday_morning),
+                        jm.QUIET_HOURS_BEFORE_ALARM)
+
+    def test_a_night_is_not_an_outage(self):
+        self.assertLess(
+            jm.working_hours_between(self.at(2026, 9, 8, 17, 0),
+                                     self.at(2026, 9, 9, 8, 0)),
+            jm.QUIET_HOURS_BEFORE_ALARM)
+
+    def test_a_missed_working_day_is(self):
+        """Tuesday 08:00 to Tuesday 17:00 with nothing in between means every
+        slot that day was dropped."""
+        self.assertGreaterEqual(
+            jm.working_hours_between(self.at(2026, 9, 8, 8, 0),
+                                     self.at(2026, 9, 8, 17, 0)),
+            jm.QUIET_HOURS_BEFORE_ALARM)
+
+    def test_it_counts_only_the_hours_the_machine_works(self):
+        # 03:00 to 05:00 on a Tuesday: two hours, none of them working ones.
+        self.assertEqual(
+            jm.working_hours_between(self.at(2026, 9, 8, 3, 0),
+                                     self.at(2026, 9, 8, 5, 0)), 0.0)
+        # 06:00 to 08:00 straddles the 07:00 start, so one hour counts.
+        self.assertEqual(
+            jm.working_hours_between(self.at(2026, 9, 8, 6, 0),
+                                     self.at(2026, 9, 8, 8, 0)), 1.0)
+
+    def test_time_running_backwards_is_zero_rather_than_negative(self):
+        self.assertEqual(
+            jm.working_hours_between(self.at(2026, 9, 8, 12, 0),
+                                     self.at(2026, 9, 8, 11, 0)), 0.0)
+        self.assertEqual(jm.working_hours_between(None, self.at(2026, 9, 8)),
+                         0.0)
+
+    # -- the alarm -----------------------------------------------------
+    def quiet_since(self, stamp):
+        return {"jobs": {}, "heartbeat": {"last_run": stamp}}
+
+    def test_the_first_run_ever_does_not_cry_wolf(self):
+        """No last_run means a fresh state file, not a three-day outage."""
+        state = {"jobs": {}}
+        with mock.patch.object(jm, "text_harry") as sms, \
+             mock.patch.object(jm, "send_email") as email, \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+        sms.assert_not_called()
+        email.assert_not_called()
+        self.assertTrue(state["heartbeat"]["last_run"])
+
+    def test_a_long_silence_reaches_harry_on_both_channels(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        state = self.quiet_since(old)
+        with mock.patch.object(jm, "text_harry") as sms, \
+             mock.patch.object(jm, "send_email") as email, \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+        sms.assert_called_once()
+        email.assert_called_once()
+        self.assertIn("quiet", sms.call_args.args[0].lower())
+
+    def test_it_says_when_it_last_ran_rather_than_just_that_it_stopped(self):
+        """"Something is wrong" is not actionable. A date is."""
+        old = (datetime.now(timezone.utc) - timedelta(days=14))
+        state = self.quiet_since(old.isoformat())
+        with mock.patch.object(jm, "text_harry") as sms, \
+             mock.patch.object(jm, "send_email"), \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+        self.assertIn(old.strftime("%a %d %b"), sms.call_args.args[0])
+
+    def test_it_alarms_once_per_outage_not_once_per_run(self):
+        """Five workflows catching up in the same hour must not send five
+        texts. The second alarm is how a person learns to ignore the first."""
+        old = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        state = self.quiet_since(old)
+        with mock.patch.object(jm, "text_harry") as sms, \
+             mock.patch.object(jm, "send_email"), \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+            jm.heartbeat(state)
+            jm.heartbeat(state)
+        self.assertEqual(sms.call_count, 1)
+
+    def test_a_healthy_machine_is_silent(self):
+        recent = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+        state = self.quiet_since(recent)
+        with mock.patch.object(jm, "text_harry") as sms, \
+             mock.patch.object(jm, "send_email") as email, \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+        sms.assert_not_called()
+        email.assert_not_called()
+
+    def test_every_run_moves_the_stamp_on(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        state = self.quiet_since(old)
+        with mock.patch.object(jm, "text_harry"), \
+             mock.patch.object(jm, "send_email"), \
+             mock.patch.object(jm, "ping_healthcheck"):
+            jm.heartbeat(state)
+        self.assertNotEqual(state["heartbeat"]["last_run"], old)
+
+    # -- the external half ---------------------------------------------
+    def test_an_unreachable_monitor_never_stops_a_run(self):
+        """A monitor being down must not cost somebody their job application."""
+        with mock.patch.object(jm, "HEALTHCHECK_URL", "https://example.invalid"), \
+             mock.patch.object(jm.requests, "get",
+                               side_effect=OSError("no route")):
+            self.assertFalse(jm.ping_healthcheck())
+
+    def test_it_is_pinged_when_configured(self):
+        with mock.patch.object(jm, "HEALTHCHECK_URL", "https://hc.example/abc"), \
+             mock.patch.object(jm.requests, "get") as get:
+            self.assertTrue(jm.ping_healthcheck())
+        self.assertEqual(get.call_args.args[0], "https://hc.example/abc")
+
+    def test_nothing_is_pinged_when_it_is_not(self):
+        with mock.patch.object(jm, "HEALTHCHECK_URL", ""), \
+             mock.patch.object(jm.requests, "get") as get:
+            self.assertFalse(jm.ping_healthcheck())
+        get.assert_not_called()
+
+    def test_a_failed_alarm_does_not_leave_it_alarming_for_ever(self):
+        """The mail server being unreachable is exactly the sort of thing
+        that happens during the outage this is reporting on. If that raised,
+        the stamps below it would be skipped, the next run would measure the
+        same outage, alarm again, and fail again - a monitor stuck reporting
+        an outage that ended days ago."""
+        old = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        state = self.quiet_since(old)
+        with mock.patch.object(jm, "text_harry",
+                               side_effect=OSError("no route to host")), \
+             mock.patch.object(jm, "ping_healthcheck"):
+            gap = jm.heartbeat(state)          # must not raise
+        self.assertGreater(gap, 0)
+        self.assertNotEqual(state["heartbeat"]["last_run"], old)
+        self.assertTrue(state["heartbeat"]["alerted_at"])
+
+    def test_the_state_file_can_be_pointed_somewhere_safe(self):
+        """It was a hardcoded constant. I set STATE_PATH in the environment to
+        try a stale heartbeat, the override was ignored, and it wrote to the
+        real file - the only record of who has been written to."""
+        self.assertTrue(jm.STATE_PATH.endswith(".json"))
+        with mock.patch.dict(os.environ, {"STATE_PATH": "/tmp/elsewhere.json"}):
+            self.assertEqual(jm.env_str("STATE_PATH"), "/tmp/elsewhere.json")

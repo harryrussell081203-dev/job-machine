@@ -169,7 +169,13 @@ PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-STATE_PATH = os.path.join(ROOT, "data", "state.json")
+# Overridable so the machine can be exercised against a throwaway copy. It was
+# a hardcoded constant, and I found that out by setting STATE_PATH in the
+# environment to try a stale heartbeat, watching the override be ignored, and
+# writing to the real file - the one that holds the only record of who has
+# been written to. No harm done that time; the point is that there was no way
+# to try anything against this file without risking it.
+STATE_PATH = env_str("STATE_PATH", os.path.join(ROOT, "data", "state.json"))
 DNC_PATH = os.path.join(ROOT, "data", "do_not_contact.json")
 CV_DIRS = [os.path.join(ROOT, "cv"), ROOT]
 
@@ -3195,6 +3201,148 @@ def summary_window(state):
     return min(since, floor) if since else floor
 
 
+# --- has this thing actually been running? ----------------------------
+#
+# A scheduled workflow that does not fire produces NO signal. Not a failed
+# build, not an error, not a red tick - silence, which is indistinguishable
+# from everything being fine. That is how this machine sat idle from Friday
+# 4 September to Monday 7 September without anybody noticing, while GitHub
+# quietly dropped its crons: reply.yml is scheduled six times a weekday and
+# was managing two or three, hours late, and then none at all.
+#
+# So the alarm cannot live inside the thing that is not running. It is in two
+# layers, because they catch different failures:
+#
+#   1. THE GAP CHECK, below. Every workflow that DOES run reports in, and if
+#      too much working time has passed since the last report it says so.
+#      Catches "it stopped and then came back", which is the common case.
+#      Cannot catch permanent silence - nothing is left to notice it.
+#   2. AN EXTERNAL DEAD MAN'S SWITCH. Set HEALTHCHECK_URL to a ping URL from
+#      a free monitor and every run pings it; if the ping stops arriving,
+#      THEY email Harry. That is the only layer that survives the machine
+#      never running again. Optional, because it needs an account and this
+#      project does not create accounts in Harry's name.
+HEALTHCHECK_URL = env_str("HEALTHCHECK_URL", "")
+
+# Hours that count as "the machine should be working". Its crons run 08:00 to
+# 17:00 UTC on weekdays, so silence at 3am on a Sunday is correct behaviour
+# and must never raise an alarm - a monitor that cries wolf every Monday
+# morning gets muted, and then it is worse than none.
+WORKING_HOURS = (7, 19)
+QUIET_HOURS_BEFORE_ALARM = int(env_str("QUIET_HOURS_BEFORE_ALARM", "8"))
+
+
+def working_hours_between(start, end):
+    """Hours between two instants that fall inside a working weekday.
+
+    Wall-clock elapsed time is the wrong measure. Friday evening to Monday
+    morning is 63 hours and entirely expected; a Tuesday 9am to Tuesday 5pm
+    gap is 8 hours and means the machine missed a full day of work. Counting
+    only Mon-Fri 07:00-19:00 UTC makes those two comparable.
+
+    Counted hour by hour rather than by arithmetic on the difference: it is a
+    handful of iterations for any gap worth alarming about, and the arithmetic
+    version of this is where off-by-one errors about which side of midnight
+    a weekend starts on come from.
+    """
+    if not start or not end or end <= start:
+        return 0.0
+    hours = 0.0
+    cursor = start.replace(minute=0, second=0, microsecond=0)
+    while cursor < end:
+        nxt = cursor + timedelta(hours=1)
+        if cursor.weekday() < 5 and WORKING_HOURS[0] <= cursor.hour < WORKING_HOURS[1]:
+            # Part-hours at each end count for what they are worth.
+            overlap = min(nxt, end) - max(cursor, start)
+            hours += max(0.0, overlap.total_seconds() / 3600)
+        cursor = nxt
+    return round(hours, 2)
+
+
+def ping_healthcheck():
+    """Tell an external monitor we are alive. Never fails the run.
+
+    This is the half of the alarm that works when the machine is not running,
+    because it is somebody else's cron watching for the absence of a ping. A
+    monitor that could be taken down by the thing it monitors is not one.
+    """
+    if not HEALTHCHECK_URL:
+        return False
+    try:
+        requests.get(HEALTHCHECK_URL, timeout=10)
+        print("[heartbeat] pinged the external monitor")
+        return True
+    except Exception as exc:
+        # Deliberately swallowed. A monitor being unreachable is worth a line
+        # in the log and must never stop a run that would otherwise send
+        # somebody's job application.
+        print(f"[heartbeat] could not reach the monitor: {exc}")
+        return False
+
+
+def heartbeat(state, alarm=True):
+    """Record that the machine ran, and shout if it had gone quiet.
+
+    Called at the start of every workflow, so the most frequent one that still
+    fires is the one that notices. Returns the working-hour gap it measured.
+    """
+    ping_healthcheck()
+    beat = state.setdefault("heartbeat", {})
+    last = parse_ts(beat.get("last_run"))
+    stamp = datetime.now(timezone.utc)
+    gap = working_hours_between(last, stamp)
+
+    if alarm and last and gap >= QUIET_HOURS_BEFORE_ALARM:
+        # Once per outage, not once per run. The first workflow to come back
+        # raises it; the next five that run in the following hour must not.
+        already = parse_ts(beat.get("alerted_at"))
+        if not already or working_hours_between(already, stamp) >= QUIET_HOURS_BEFORE_ALARM:
+            quiet_since = last.strftime("%a %d %b %H:%M UTC")
+            print(f"[heartbeat] ALARM: nothing ran for {gap} working hours")
+            # Every line of this is best-effort. An alarm that raises would
+            # skip the two stamps below, so the next run would measure the
+            # same outage, alarm again, and fail again - a monitor stuck in a
+            # loop reporting an outage that ended days ago. The mail server
+            # being unreachable is exactly the sort of thing that happens
+            # during the outage this is reporting on.
+            try:
+                _sound_the_alarm(gap, quiet_since)
+            except Exception as exc:
+                print(f"[heartbeat] could not raise the alarm: {exc}")
+            beat["alerted_at"] = now()
+
+    beat["last_run"] = now()
+    return gap
+
+
+def _sound_the_alarm(gap, quiet_since):
+    """Tell Harry, on both channels. Raising is the caller's problem to
+    swallow - see heartbeat()."""
+    text_harry(
+        f"job-machine went quiet.\n"
+        f"Last run {quiet_since} - {gap:.0f} working hours ago.\n"
+        f"Running now. GitHub drops scheduled runs under load; fire one by "
+        f"hand from the Actions tab if this repeats.")
+    send_email(
+        GMAIL_ADDRESS,
+        "[job-machine] it stopped running and has just come back",
+        f"The machine had not run since {quiet_since}, which is "
+        f"{gap:.0f} working hours of silence.\n\n"
+        f"Nothing was broken in the code. GitHub deprioritises scheduled "
+        f"workflows and drops them under load, and it does so silently - "
+        f"there is no failed build to look at, which is the whole reason "
+        f"this email exists.\n\n"
+        f"If it keeps happening:\n"
+        f"  - Fire a run by hand. Actions -> job-machine -> Run workflow. Ten "
+        f"seconds, and it catches the day up.\n"
+        f"  - Set HEALTHCHECK_URL to a free monitor's ping URL. Then "
+        f"something outside GitHub is watching for silence, and you hear "
+        f"about it even if the machine never runs again - which is the one "
+        f"case this email cannot cover, because this email is sent BY the "
+        f"machine.\n",
+        attach_cv=False)
+
+
 def lifetime_stats(state):
     """The counts that do not wobble, and the ones that do, labelled.
 
@@ -3884,6 +4032,9 @@ def main(argv=None):
     parser.add_argument("--stats", action="store_true",
                         help="print one labelled, authoritative set of numbers "
                              "and do nothing else")
+    parser.add_argument("--heartbeat", action="store_true",
+                        help="report in, and alert if the machine had gone "
+                             "quiet. Run at the start of every workflow")
     parser.add_argument("--summary", action="store_true",
                         help="send the daily digest instead of running the pipeline")
     parser.add_argument("--force", action="store_true",
@@ -3898,6 +4049,16 @@ def main(argv=None):
         print_stats(load())
         return 0
 
+    # Its own command so every workflow can call it, including the ones that
+    # do not run the pipeline. save() rather than leaving it to the caller:
+    # a heartbeat that is not written down is not a heartbeat.
+    if args.heartbeat:
+        state = load()
+        gap = heartbeat(state)
+        save(state)
+        print(f"[heartbeat] {gap} working hours since the last run")
+        return 0
+
     if args.summary:
         state = load()
         send_summary(state, force=args.force)
@@ -3906,6 +4067,10 @@ def main(argv=None):
 
     if args.replies:
         state = load()
+        # The reply sweep is scheduled six times a weekday, more often than
+        # anything else here, which makes it the best-placed stage to notice
+        # that the machine had stopped.
+        stage("heartbeat", heartbeat, state)
         stage("replies", check_replies, state)
         save(state)
         return 0
@@ -3916,6 +4081,7 @@ def main(argv=None):
           f"locations={','.join(SEARCH_LOCATIONS)} cv={cv_path() or 'MISSING'}")
 
     state = load()
+    stage("heartbeat", heartbeat, state)
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
         save(state)

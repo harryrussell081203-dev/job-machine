@@ -255,6 +255,31 @@ Design decisions follow content. Placeholder copy produces placeholder
 design, every time — which is most of why generated pages look generated.
 Write the true sentence first, then lay it out.
 
+## 5b. GitHub cron is not reliable, and it fails silently
+
+**Established the hard way on 7 September 2026.** The machine did not run
+between Friday 4 Sep 18:11 and Monday 7 Sep — three days. `reply.yml` is
+scheduled six times a weekday and was managing two or three, one to three
+hours late, then none. `run.yml`'s Friday "15:00" run landed at 18:11.
+
+A scheduled workflow that does not fire produces **no signal**: no failed
+build, no error, nothing. Indistinguishable from working. Push- and
+PR-triggered workflows ran fine throughout, so it is specifically cron that
+GitHub deprioritises and drops under load.
+
+Two consequences that outlive the incident:
+
+- **`--heartbeat` runs at the start of every workflow.** It measures the gap
+  in *working* hours (Mon–Fri 07:00–19:00 UTC, so weekends and nights are
+  silent) and texts + emails Harry once per outage. See README.
+- **The product's landing page says "three times a weekday."** On this
+  evidence that is a claim the infrastructure cannot reliably keep. Either
+  soften it or move the scheduling off GitHub cron — this project does not
+  make claims it cannot back.
+
+The only real cover for permanent silence is `HEALTHCHECK_URL`, an external
+dead man's switch. Harry has to create that account himself.
+
 ## 6. How to report numbers
 
 `status=sent` **drains** — a record flips to `replied` and leaves the bucket,
