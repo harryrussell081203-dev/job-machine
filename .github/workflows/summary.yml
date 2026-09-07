@@ -1,18 +1,34 @@
 name: job-machine summary
 
-# Three chances a night, and the script sends on the first one that lands
-# after 22:00 UK. It will not send twice: summary_due() asks whether a digest
-# has already gone out on this UK date rather than trusting the clock.
+# Five chances a night, and the script sends on the first one that lands at
+# or after 22:00 UK. It will not send twice: summary_due() asks whether a
+# digest has already gone out on this UK date rather than trusting the clock,
+# so the other four stand down.
 #
-# Three, rather than the two this had, because GitHub does not promise to run
-# a scheduled workflow on time - it queues them behind its own load. The gate
-# used to be an exact hour match, and the three digests this repo ever sent
-# arrived at 21:28, 21:35 and 21:36 UTC against a window that shut at 21:59.
-# When the delay finally crossed the hour the run still went green and sent
-# nothing, and that is how eleven consecutive nightly digests were lost.
+# Five, because GitHub does not promise to run a scheduled workflow on time -
+# it queues them behind its own load - and the slip on this repository is not
+# the half hour the August commit timestamps implied. Every scheduled summary
+# run actually observed starting:
+#
+#     cron 22:00  ->  started 2026-09-05 23:44 UTC   1h44m late
+#     cron 21:00  ->  started 2026-09-06 22:50 UTC   1h50m late
+#     cron 22:00  ->  started 2026-09-06 23:43 UTC   1h43m late
+#     cron 21:00  ->  not started by 2026-09-07 22:23 UTC, 1h23m and counting
+#
+# So the working assumption is a slip of roughly two hours, not thirty
+# minutes. Against that, a 21:00 cron is not an evening job at all: it starts
+# near midnight UK, and a 22:00 one starts after it, on tomorrow's date, where
+# no gate can rescue it.
+#
+# The crons below are therefore spread so that at least one START lands inside
+# 22:00-23:59 UK for any slip between zero and about three hours. The early
+# ones are not "extra digests" - on a punctual night they are before 22:00 UK
+# and stand down on the hour check, costing about fifteen seconds each.
 on:
   schedule:
-    - cron: "0 21 * * *"   # 22:00 BST / 21:00 GMT
+    - cron: "30 19 * * *"  # covers a slip of ~2.5-4h
+    - cron: "30 20 * * *"  # covers a slip of ~1.5-3h
+    - cron: "0 21 * * *"   # 22:00 BST / 21:00 GMT - punctual, and ~0-2h slip
     - cron: "0 22 * * *"   # 23:00 BST / 22:00 GMT
     - cron: "0 23 * * *"   # 23:00 GMT - the GMT backstop; in BST this is
                            # already tomorrow in the UK, so it stands down
