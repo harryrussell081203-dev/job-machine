@@ -37,6 +37,12 @@ def build(**env):
         "STRIPE_WEBHOOK_SECRET": "", "STRIPE_PAYMENT_LINK": "",
         "BASE_URL": "http://testserver",
         "CREDENTIAL_KEY": Fernet.generate_key().decode(),
+        # Blanked rather than omitted, like the Stripe keys above and for the
+        # same reason: os.environ.update() only ever sets, so a value left by
+        # an earlier test's build() would still be there. A test asserting
+        # that Job Machine addresses are NOT offered passed alone and failed
+        # in the suite because a previous class had switched them on.
+        "MANAGED_MAIL_DOMAIN": "", "MANAGED_MAIL_KEY": "",
     }
     defaults.update(env)
     os.environ.update(defaults)

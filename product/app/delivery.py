@@ -66,19 +66,29 @@ def gmail_compose_link(to_email: str, subject: str, body: str) -> str:
 def send_via_smtp(*, host: str, port: int, username: str, password: str,
                   to_email: str, subject: str, body: str,
                   attachment: tuple[str, bytes] | None = None,
-                  reply_to: str = "", display_name: str = "") -> None:
+                  reply_to: str = "", display_name: str = "",
+                  from_address: str = "") -> None:
     """Send one letter, using credentials the user supplied.
 
     Deliberately takes the credentials as arguments rather than reading them
     from anywhere: nothing in this module decides to store them, so nothing in
     this module can leak them.
+
+    `from_address` exists because the two are not always the same thing. On a
+    user's own mailbox they are: you authenticate as harry@gmail.com and the
+    letter comes from harry@gmail.com. On a Job Machine address you
+    authenticate to Resend as the literal username "resend" and the letter
+    comes from harry.russell@mail.jobmachine.co.uk - and putting "resend" on
+    the From line would be both wrong and faintly comic. Defaults to the
+    username so every existing caller is unchanged.
     """
+    sender = from_address or username
     msg = EmailMessage()
     msg["Subject"] = subject
     # A real name on the From line, because a letter from "Harry Russell"
     # reads as a person and one from a bare address reads as a mailshot.
-    msg["From"] = (formataddr((display_name, username)) if display_name
-                   else username)
+    msg["From"] = (formataddr((display_name, sender)) if display_name
+                   else sender)
     msg["To"] = to_email
     if reply_to:
         msg["Reply-To"] = reply_to
@@ -133,6 +143,37 @@ def guess_host(address: str):
     """(host, port) for a well-known provider, or None to make the user say."""
     domain = (address or "").split("@")[-1].strip().lower()
     return KNOWN_HOSTS.get(domain)
+
+
+# A Job Machine address has to read as a person's, because the entire reason
+# these letters get answered is that they look like one person writing to
+# another. harry.russell@ passes; user4821@ or noreply@ announces a tool
+# before the subject line is read.
+_LOCAL_PART_OK = "abcdefghijklmnopqrstuvwxyz0123456789."
+
+
+def local_part_for(name: str, fallback: str = "") -> str:
+    """The local part of a Job Machine address, from a person's name.
+
+    "Harry Russell" -> "harry.russell". Accents are folded rather than
+    dropped, so Björn becomes bjorn instead of bj rn, and O'Brien keeps its
+    letters instead of splitting into two.
+    """
+    import unicodedata
+    raw = unicodedata.normalize("NFKD", (name or "").strip())
+    raw = "".join(c for c in raw if not unicodedata.combining(c)).lower()
+    raw = raw.replace("'", "").replace("’", "")
+    cleaned = "".join(c if c in _LOCAL_PART_OK else " " for c in raw)
+    parts = [p for p in cleaned.split() if p]
+    local = ".".join(parts).strip(".")
+    while ".." in local:
+        local = local.replace("..", ".")
+    if not local:
+        # Somebody whose name is entirely outside the Latin alphabet still
+        # needs an address. Falling back to the account's email local part
+        # keeps it recognisable to them, and only then to a generic one.
+        local = local_part_for(fallback.split("@")[0]) if fallback else ""
+    return local[:40] or "applicant"
 
 
 def verify(*, host: str, port: int, username: str, password: str) -> None:

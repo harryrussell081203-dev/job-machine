@@ -315,6 +315,17 @@ label.check input:checked::after {
   margin-top: 26px;
 }
 
+/* --- an address we issued ---------------------------------------------- */
+/* firstname.lastname@mail.jobmachine.co.uk is 38 characters of monospace,
+   which on a 390px phone reaches the edge of its panel and stops looking
+   like something you own. Breaking beats shrinking: it is the one string on
+   the page the reader actually has to take in. */
+.issued-address {
+  font-size: 17px; margin: 0 0 14px; max-width: none;
+  overflow-wrap: anywhere; word-break: break-word; line-height: 1.4;
+}
+.issued-address code { font-size: inherit; }
+
 /* --- the call to action in the hero ------------------------------------ */
 /* Buttons wrap rather than shrink on a narrow phone: two full-width taps beat
    two cramped ones, and this is the first thing a thumb reaches. */

@@ -43,8 +43,13 @@ the data controller for everything described here.</p>
   </tr>
   <tr>
     <td>Your mail server address and password, <b>encrypted</b></td>
-    <td>Only if you switch automatic sending on</td>
+    <td>Only if you connect your own mailbox</td>
     <td>Your consent, withdrawable at any time</td>
+  </tr>
+  <tr>
+    <td>A Job Machine sending address, if you take one</td>
+    <td>To send from, instead of using your own address</td>
+    <td>Performing our contract with you</td>
   </tr>
   <tr>
     <td>Stripe customer and subscription identifiers</td>
@@ -62,11 +67,25 @@ the data controller for everything described here.</p>
 Stripe's own pages. Nothing here stores a card number, and nothing here
 could.</p>
 
+<h2>If you take a Job Machine address</h2>
+<div class="panel">
+<p>You can send from an address we issue instead of your own. If you do,
+there is <b>no password</b> for us to hold, because there is nothing of yours
+to authenticate as.</p>
+<p>What we do hold is the address itself and <b>the real address your replies
+go to</b>. Your letters carry that on Reply-To, so an employer answering one
+writes straight to your own inbox — the reply does not come to us and we do
+not keep a copy.</p>
+<p>The trade is that the letter leaves through our mail provider rather than
+your mailbox, so <b>that provider processes it</b> — the same as your own
+provider would.</p>
+</div>
+
 <h2>The mail password, specifically</h2>
 <div class="panel">
-<p>Automatic sending is off unless you turn it on. Turning it on means giving
-this site something that can send mail as you, because there is no way to
-send as somebody without it. So, plainly:</p>
+<p>This section applies only if you connect <b>your own</b> mailbox. Doing
+that means giving this site something that can send mail as you, because
+there is no way to send as somebody without it. So, plainly:</p>
 <p><b>Use an app password, not your account password.</b> It can be revoked on
 its own, without changing your password or touching another device.</p>
 <p>It is stored encrypted, with the key held in the server's environment and

@@ -817,10 +817,60 @@ def mail_form(request: Request):
     user, blocked = _gate(request)
     if blocked:
         return blocked
+    profile = db.load_profile(user["id"]) or {}
     return render(request, "mail.html", user=user,
                   mail=db.get_mail_account(user["id"]),
                   vault_ready=vault.available(),
-                  profile=db.load_profile(user["id"]) or {})
+                  managed_ready=config.managed_mail_available(),
+                  managed_preview=(
+                      db.issue_managed_address(
+                          user["id"], profile.get("name") or "",
+                          user["email"])
+                      if config.managed_mail_available() else ""),
+                  profile=profile)
+
+
+@app.post("/setup/mail/managed")
+def mail_managed(request: Request):
+    """Issue a Job Machine address instead of taking the user's own.
+
+    No password to hand over, because there is nothing of theirs to
+    authenticate as: we send through our own provider and put their real
+    address on Reply-To, so an employer's answer goes straight to them.
+    """
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    profile = db.load_profile(user["id"]) or {}
+    if not vault.available() or not config.managed_mail_available():
+        return render(request, "mail.html", user=user, mail=None,
+                      vault_ready=vault.available(),
+                      managed_ready=config.managed_mail_available(),
+                      managed_preview="", profile=profile,
+                      error="Job Machine addresses are not switched on here.")
+
+    # Where replies land. Their account address unless they gave a different
+    # one on their profile - and never blank, because a letter no employer
+    # can answer is worse than no letter.
+    reply_to = (profile.get("email") or user["email"] or "").strip()
+    if "@" not in reply_to:
+        return render(request, "mail.html", user=user, mail=None,
+                      vault_ready=True, managed_ready=True,
+                      managed_preview="", profile=profile,
+                      error="We need a real address to send replies to "
+                            "before we can issue you a sending one.")
+
+    address = db.issue_managed_address(user["id"], profile.get("name") or "",
+                                       user["email"])
+    first_time = db.get_mail_account(user["id"]) is None
+    db.save_mail_account(
+        user["id"], address=address,
+        host=config.MANAGED_MAIL_HOST, port=config.MANAGED_MAIL_PORT,
+        password=config.MANAGED_MAIL_KEY, kind="managed", reply_to=reply_to)
+    if first_time:
+        db.save_send_settings(user["id"], auto_send=1)
+    return RedirectResponse("/setup", status_code=303)
 
 
 @app.post("/setup/mail", response_class=HTMLResponse)
@@ -853,10 +903,22 @@ async def mail_save(request: Request):
         port = 465
 
     def again(message):
+        # The Job Machine option has to survive this screen. Somebody who has
+        # just been told their app password was rejected is exactly the person
+        # who wants the route that needs no password, and dropping it from the
+        # error render would hide it at the only moment it is obviously
+        # useful.
+        profile = db.load_profile(user["id"]) or {}
         return render(request, "mail.html", user=user, mail=None,
                       vault_ready=True, error=message, address=address,
                       host=host, port=port,
-                      profile=db.load_profile(user["id"]) or {})
+                      managed_ready=config.managed_mail_available(),
+                      managed_preview=(
+                          db.issue_managed_address(
+                              user["id"], profile.get("name") or "",
+                              user["email"])
+                          if config.managed_mail_available() else ""),
+                      profile=profile)
 
     if not address or "@" not in address:
         return again("That does not look like an email address.")

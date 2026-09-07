@@ -142,16 +142,37 @@ CREATE TABLE IF NOT EXISTS seen_listings (
 -- as this service. The password is always ciphertext; see vault.py. It is a
 -- separate table from users so that a dump of the user list - the thing most
 -- likely to be shared around for support or analytics - carries no secrets.
+-- How a user's letters get sent. Two kinds, and `kind` says which:
+--
+--   'own'      their own mailbox, their own credentials, From = address.
+--              The default, and the one that reads best to an employer.
+--   'managed'  an address we issued at MANAGED_MAIL_DOMAIN. `address` is
+--              that address, `secret` is the shared provider key, and
+--              `reply_to` is the user's real inbox so answers reach them
+--              without their own address ever being used to send.
 CREATE TABLE IF NOT EXISTS mail_accounts (
     user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     address      TEXT    NOT NULL,
     host         TEXT    NOT NULL,
     port         INTEGER NOT NULL,
     secret       TEXT    NOT NULL,
+    kind         TEXT    NOT NULL DEFAULT 'own',
+    reply_to     TEXT    NOT NULL DEFAULT '',
     verified_at  BIGINT,
     last_error   TEXT,
     updated_at   BIGINT  NOT NULL
 );
+
+-- Every letter sent from a Job Machine address, so the provider's shared
+-- daily allowance can be counted before a send rather than discovered from a
+-- rejection. One row per send, dated, across all users - because the cap is
+-- across all users.
+CREATE TABLE IF NOT EXISTS managed_sends (
+    id       {key},
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sent_at  BIGINT  NOT NULL
+);
+CREATE INDEX IF NOT EXISTS managed_sends_by_day ON managed_sends(sent_at);
 
 -- The CV lives in the database rather than on disk, for the same reason
 -- everything else does: the app process is disposable and free hosts have no
@@ -323,6 +344,15 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
 _ADDED_COLUMNS = [
     ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
     ("users", "free_spot", "INTEGER NOT NULL DEFAULT 0"),
+    # How this mailbox sends. 'own' is a user's own SMTP credentials and is
+    # the default precisely because every row that existed before this column
+    # did was one of those - a default of 'managed' would have silently
+    # rerouted every existing customer's letters through a domain they never
+    # agreed to send from.
+    ("mail_accounts", "kind", "TEXT NOT NULL DEFAULT 'own'"),
+    # Where replies go. Empty on an 'own' account, where the From address is
+    # already the user's and needs no redirect.
+    ("mail_accounts", "reply_to", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

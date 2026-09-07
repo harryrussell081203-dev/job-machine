@@ -346,7 +346,8 @@ def may_contact(user_id: int, company: str) -> bool:
 # the user's own mail account, for sending as them
 # ----------------------------------------------------------------------
 def save_mail_account(user_id: int, *, address: str, host: str, port: int,
-                      password: str) -> None:
+                      password: str, kind: str = "own",
+                      reply_to: str = "") -> None:
     """Store credentials, encrypted. Never call this with a password that has
     not just been proved to work - see delivery.verify()."""
     from . import vault
@@ -354,15 +355,16 @@ def save_mail_account(user_id: int, *, address: str, host: str, port: int,
     with connect() as c:
         c.execute(
             "INSERT INTO mail_accounts (user_id, address, host, port, secret, "
-            "verified_at, last_error, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?) "
+            "kind, reply_to, verified_at, last_error, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET "
             "address = excluded.address, host = excluded.host, "
             "port = excluded.port, secret = excluded.secret, "
+            "kind = excluded.kind, reply_to = excluded.reply_to, "
             "verified_at = excluded.verified_at, last_error = NULL, "
             "updated_at = excluded.updated_at",
             (user_id, address.strip().lower(), host.strip(), int(port),
-             secret, now(), now()))
+             secret, kind, (reply_to or "").strip().lower(), now(), now()))
 
 
 def get_mail_account(user_id: int):
@@ -382,6 +384,62 @@ def mail_login(user_id: int):
         return None
     return (row["address"], row["host"], int(row["port"]),
             vault.decrypt(row["secret"]))
+
+
+def issue_managed_address(user_id: int, name: str, fallback_email: str = "") -> str:
+    """Claim a Job Machine address for this user, or return the one they have.
+
+    Idempotent on purpose. Somebody who disconnects and reconnects keeps the
+    address employers already have - reissuing a different one would orphan
+    every reply still in flight, which is the whole point of having an address
+    at all.
+
+    The dedupe is the fiddly part: two people called Harry Russell cannot both
+    have harry.russell@, and the second one must not silently receive the
+    first one's replies. So the local part is claimed against every address
+    already issued, and a collision appends a number rather than failing.
+    """
+    from . import config, delivery
+    existing = get_mail_account(user_id)
+    if existing and existing["kind"] == "managed" and existing["address"]:
+        return existing["address"]
+
+    domain = config.MANAGED_MAIL_DOMAIN
+    base = delivery.local_part_for(name, fallback_email)
+    with connect() as c:
+        rows = c.execute(
+            "SELECT address FROM mail_accounts WHERE kind = 'managed'"
+        ).fetchall()
+    taken = {(r["address"] or "").split("@")[0].lower() for r in rows}
+
+    local = base
+    n = 1
+    while local in taken:
+        n += 1
+        local = f"{base}{n}"
+    return f"{local}@{domain}"
+
+
+def managed_sent_today(now_ts: int | None = None) -> int:
+    """How many letters have gone out from Job Machine addresses today.
+
+    Across ALL users, because the provider's allowance is across all users.
+    Counting per-user would let ten people each stay under their own limit
+    and blow the shared one between them.
+    """
+    stamp = now() if now_ts is None else now_ts
+    start = stamp - (stamp % 86400)
+    with connect() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM managed_sends WHERE sent_at >= ?",
+            (start,)).fetchone()
+    return int(row["n"])
+
+
+def record_managed_send(user_id: int) -> None:
+    with connect() as c:
+        c.execute("INSERT INTO managed_sends (user_id, sent_at) VALUES (?, ?)",
+                  (user_id, now()))
 
 
 def note_mail_error(user_id: int, message: str) -> None:
