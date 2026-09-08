@@ -164,9 +164,11 @@ questions about what jobs you want where you want them and find the jobs the
 person will be best applicant for and the interviews just land in their
 inbox".
 
-**Live at** `job-machine.onrender.com` (Render free plan, Supabase eu-west-1)
-**since 2 Sep 2026.** Moving to **`recruited.org.uk`**, bought 8 Sep — the
-domain is for hosting the app, that is its primary job.
+**Live at `recruited.org.uk`** (Render free plan, Supabase eu-west-1) since
+8 Sep 2026 — Render's own deploy banner names it the **primary** URL, which
+it only does once the domain is verified and the certificate issued.
+`job-machine.onrender.com` still answers and is now the fallback, not the
+address to give anybody.
 
 **It was called Job Machine until 8 Sep 2026.** Renamed because
 `jobmachine.com` is an operating US business in the same category, selling to
@@ -190,9 +192,23 @@ organisations — Harry's own niche. See the decisions log.
 - **Automatic sending stores a mail app password encrypted**, key outside the
   database, and the by-hand route exists permanently for people who won't.
 
-**Not done, and blocking:** a privacy policy and terms (UK GDPR — he holds
-CVs, home addresses and mailbox passwords); commercial API terms from Adzuna,
-Reed and Google, whose free tiers are for personal use.
+**Not done, and blocking a first paying customer:**
+
+- **Four GitHub repository secrets** — `DATABASE_URL`, `CREDENTIAL_KEY`,
+  `SECRET_KEY`, `BASE_URL`. The sweep runs on GitHub's hardware, so a value
+  set in Render's dashboard is invisible to it, and without these automatic
+  sending cannot run at all. They must be **copied from Render, never
+  generated fresh** — a fresh `CREDENTIAL_KEY` cannot decrypt mail passwords
+  stored under the old one, and a different `DATABASE_URL` points the sweep
+  at a database the website never writes to. Both failures look like nothing
+  happening. Only Harry can set these; there is no API for it here.
+- **ICO data protection fee**, £52/yr (£47 by direct debit), before charging
+  anyone.
+- **Commercial API terms** from Adzuna, Reed and Google, whose free tiers are
+  for personal use.
+
+Terms and the privacy notice are **written and live** at `/terms` and
+`/privacy`, linked from the footer.
 
 ---
 
@@ -213,6 +229,7 @@ Choices already made, so they are not relitigated every session.
 | 2026-09-06 | Design direction: **no AI-house-style**. The existing product pages are the reference, not a starting point to be replaced. See §5. |
 | 2026-09-08 | **The product is called Recruited**, at `recruited.org.uk` (bought, £1 first year). Renamed from "Job Machine" because `jobmachine.com` is an operating US business in the same category — AI job placement sold to workforce boards, colleges, outplacement firms **and veteran-serving organisations**, which is Harry's own niche. `.app` gone too. Renaming before buying cost an afternoon; after would have cost the domain, Stripe, the legal pages, the Insta handle and every video. |
 | 2026-09-08 | Names rejected on the way, with reasons worth keeping: **AutoApply** — it is the generic feature name used by Jobscan, AIApply, WonsultingAI and AutoApplys, so undefendable as a trademark, invisible in search, and it brands the product as the thing recruiters bin in under 20 seconds. **`.io`** — the Chagos risk is real but small (ICANN: five-year phase-out minimum, `IO` could go on the exceptionally-reserved list like `SU`/`AC`/`UK`); the actual blockers were ~£30–45/yr against a £30 budget, and that "recruit*" names read as employer-side software. |
+| 2026-09-08 | **The site is live on the domain.** Render deploys from `main`, IONOS points the apex and `www` at Render, the `AAAA` record that would have sent mobile traffic to IONOS's parking page is gone, and `BASE_URL=https://recruited.org.uk` so sign-in links point at the domain rather than at `onrender.com`. Order mattered and was kept: the certificate was confirmed issued **before** `BASE_URL` moved, because pointing the app at an address that cannot answer breaks the only way anybody signs in. |
 | 2026-09-08 | `.org.uk` rather than `.co.uk` was Harry's call, flagged and made. It reads slightly non-commercial for a paid product; £1 against ~£10 decided it. `recruited.co.uk` can be added later pointing at the same site. |
 
 ## 5. House style — why the pages do not look AI-generated
