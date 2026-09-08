@@ -30,6 +30,7 @@ def main(argv=None) -> int:
 
     from . import autosend, db
     db.init()
+    _say_billing_mode()
 
     if args.dry_run:
         return _dry_run()
@@ -41,6 +42,27 @@ def main(argv=None) -> int:
     for err in totals["errors"][:20]:
         print(f"[sweep] {err}", file=sys.stderr)
     return 0
+
+
+def _say_billing_mode() -> None:
+    """Print which side of the paywall this run is on.
+
+    The sweep and the website read BILLING_ENABLED from two different places -
+    GitHub secrets and the host's dashboard - and nothing makes them agree. If
+    they disagree the failure is silent and goes both ways:
+
+      - sweep off, website on: every account counts as paid here, so letters
+        go out for people the website is still asking to pay
+      - sweep on, website off: the sweep matches on a subscription status
+        nobody has, finds nobody, and reports success for ever
+
+    Neither raises. So this line exists to be READ - in the workflow log, next
+    to the user count, where "paywall off, 2 users" is obviously wrong.
+    """
+    from . import config
+    mode = "ON" if config.BILLING_ENABLED else ("OFF - every account counts "
+                                                "as paid")
+    print(f"[sweep] paywall {mode}")
 
 
 def _dry_run() -> int:
