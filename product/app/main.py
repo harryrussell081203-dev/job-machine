@@ -198,10 +198,35 @@ def login_submit(request: Request, email: str = Form("")):
     return render(request, "login.html", sent=email.strip())
 
 
+def _landing_for(user) -> str:
+    """Where a signed-in person should be put.
+
+    Somebody with no profile has nothing to look at on the dashboard except a
+    note telling them so. Send them to the thing that needs doing; the CV
+    upload there fills in most of the next screen on its own.
+    """
+    return "/dashboard" if db.load_profile(user["id"]) else "/setup"
+
+
 @app.get("/auth/verify")
 def verify(request: Request, token: str = ""):
     email = auth.consume_login_token(token)
     if not email:
+        # A used link plus a live session is by far the commonest way to get
+        # here, and it is not a failure: somebody goes back to their inbox and
+        # taps the same link again. Sign-in links are single use - which is
+        # right, and stays right - so the second tap is refused, and until now
+        # that put a signed-in person on a login screen being told to ask for
+        # a link they did not need. It is the reason the whole flow reads as
+        # "an email every time" when the session actually lasts a month.
+        #
+        # Checked in this order deliberately. The token is consumed first, so
+        # a genuinely expired link is still spent rather than left usable, and
+        # the session below is only a nicer landing for somebody who is
+        # already authenticated. It grants nothing on its own.
+        user = current_user(request)
+        if user:
+            return RedirectResponse(_landing_for(user), status_code=303)
         return render(request, "login.html",
                       error="That link has expired or was already used. "
                             "Here is a fresh one.")
@@ -212,11 +237,7 @@ def verify(request: Request, token: str = ""):
     # already decided not to pay, which is the opposite of what it is for.
     if not existed:
         db.claim_free_spot(user["id"])
-    # Somebody with no profile has nothing to look at on the dashboard except
-    # a note telling them so. Send them to the thing that needs doing; the CV
-    # upload there fills in most of the next screen on its own.
-    landing = "/dashboard" if db.load_profile(user["id"]) else "/setup"
-    response = RedirectResponse(landing, status_code=303)
+    response = RedirectResponse(_landing_for(user), status_code=303)
     response.set_cookie(
         SESSION_COOKIE, auth.make_session(user["id"]),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
