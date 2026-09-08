@@ -353,6 +353,13 @@ _ADDED_COLUMNS = [
     # Where replies go. Empty on an 'own' account, where the From address is
     # already the user's and needs no redirect.
     ("mail_accounts", "reply_to", "TEXT NOT NULL DEFAULT ''"),
+    # WHY a listing scored what it did. The scorer has always produced this
+    # and the drafts table had nowhere to put it, so the screen showed a bare
+    # "scored 78" and threw the reasoning away. A number with no reasoning is
+    # something to be suspicious of; the same number with "matches subsea
+    # cable testing, pays above your floor, 40 minutes from Aberdeen" is
+    # something to act on.
+    ("drafts", "score_reason", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

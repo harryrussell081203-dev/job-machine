@@ -425,6 +425,14 @@ label.check input:checked::after {
   transition: box-shadow .2s ease;
 }
 .draft:hover { box-shadow: var(--shadow-lift); }
+/* Why this listing scored what it did. Indented under the score with a rule,
+   so it reads as the reasoning behind the number rather than another fact
+   about the job. */
+.why {
+  margin: -6px 0 12px; padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted); max-width: 62ch;
+}
 .draft.tier2 { border-left-color: var(--muted); }
 .draft.tier3 { border-left-color: var(--bad); }
 
