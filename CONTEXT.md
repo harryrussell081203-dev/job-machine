@@ -92,6 +92,25 @@ Both are enforced in `data/do_not_contact.json`. Hydro Group uses
 `"match": "exact"` on purpose — `company_key()` reduces it to `hydro`, which
 would otherwise block Hydro Cleansing, Hydro Systems and Hydro International.
 
+**Never open any of this from Hydro Group's network or on a Hydro device.**
+Established 2026-09-08, the hard way: `recruited.org.uk` would not load for
+Harry, and the page that came back was Hydro Group's own web filter — their
+branding, their Trexon appliance, his work egress IP — announcing that the
+domain had just been *categorised*. It was unknown to the filter until his
+visit, so his own request is what put a job-hunting domain on their list,
+under his device and his account.
+
+Everything else here exists to stop his employer finding out he is looking:
+they are never written to, never named in a letter, and blocked in the
+register. A filter log showing him browsing a job site from his desk throws
+all of that away, and no code can prevent it.
+
+So it is a rule about him, not about the software: the site, the Render
+dashboard, GitHub, and the job alerts in his Gmail get opened on his phone on
+mobile data, never on work wifi and never on the work laptop. Assume that
+machine is monitored generally, not only by the web filter. It works fine on
+his phone — confirmed the same day.
+
 ### Things he decided against
 
 - **The application portal.** "get rid of the application portal thing it
@@ -229,6 +248,8 @@ Choices already made, so they are not relitigated every session.
 | 2026-09-06 | Design direction: **no AI-house-style**. The existing product pages are the reference, not a starting point to be replaced. See §5. |
 | 2026-09-08 | **The product is called Recruited**, at `recruited.org.uk` (bought, £1 first year). Renamed from "Job Machine" because `jobmachine.com` is an operating US business in the same category — AI job placement sold to workforce boards, colleges, outplacement firms **and veteran-serving organisations**, which is Harry's own niche. `.app` gone too. Renaming before buying cost an afternoon; after would have cost the domain, Stripe, the legal pages, the Insta handle and every video. |
 | 2026-09-08 | Names rejected on the way, with reasons worth keeping: **AutoApply** — it is the generic feature name used by Jobscan, AIApply, WonsultingAI and AutoApplys, so undefendable as a trademark, invisible in search, and it brands the product as the thing recruiters bin in under 20 seconds. **`.io`** — the Chagos risk is real but small (ICANN: five-year phase-out minimum, `IO` could go on the exceptionally-reserved list like `SU`/`AC`/`UK`); the actual blockers were ~£30–45/yr against a £30 budget, and that "recruit*" names read as employer-side software. |
+| 2026-09-08 | **History imported into the product**, before any mailbox was connected: 95 employers on `contacted` with their real first-contact dates (2 Aug – 8 Sep), and 2 blocks — `allstaff` and `hydro`. Note the number: the personal machine's register holds **169 keys but only 95 distinct employers**, because it is keyed twice, once by company and once by domain. 169 was quoted as the employer count in an earlier session and was wrong. Written straight to Supabase rather than through the script, because the script needs `DATABASE_URL` and that did not need to pass through a chat log. |
+| 2026-09-08 | **Automatic sending works end to end for the first time.** Four GitHub secrets set, and the sweep's own bug fixed: the Stripe guard fired for anything importing `config`, which killed the sweep — a process that sells nothing. `BILLING_ENABLED=0` would have "fixed" it by making every account count as paid. Both halves confirmed on `BILLING_ENABLED=1` with Stripe configured on Render. |
 | 2026-09-08 | **The site is live on the domain.** Render deploys from `main`, IONOS points the apex and `www` at Render, the `AAAA` record that would have sent mobile traffic to IONOS's parking page is gone, and `BASE_URL=https://recruited.org.uk` so sign-in links point at the domain rather than at `onrender.com`. Order mattered and was kept: the certificate was confirmed issued **before** `BASE_URL` moved, because pointing the app at an address that cannot answer breaks the only way anybody signs in. |
 | 2026-09-08 | `.org.uk` rather than `.co.uk` was Harry's call, flagged and made. It reads slightly non-commercial for a paid product; £1 against ~£10 decided it. `recruited.co.uk` can be added later pointing at the same site. |
 
