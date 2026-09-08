@@ -194,7 +194,29 @@ SEARCH_WINDOWS = [
     (14, "Last 2 weeks"),
     (30, "Last month"),
 ]
-if BILLING_ENABLED and not DEV:
+def check_billing_config() -> None:
+    """Refuse to start the WEB APP if it can take money but cannot honour it.
+
+    Called from main.py at import, so a misconfigured website still dies at
+    boot rather than at the moment somebody tries to pay. That protection is
+    the point and it has not changed.
+
+    What changed is who it applies to. This used to run at the bottom of this
+    module, so it fired for anything that imported config at all - including
+    the scheduled sweep, which does not sell anything. It sends letters for
+    people who have ALREADY paid, on hardware that has no business holding a
+    Stripe secret key. Requiring one there would have meant copying the keys
+    to a second place for a process that never calls Stripe, and every extra
+    copy of a payment credential is a place it can leak from.
+
+    Note what is deliberately NOT relaxed: BILLING_ENABLED itself. The sweep
+    still reads it, and is_paid() and paid_user_ids() still turn on it. If the
+    sweep ran with the paywall off while the website had it on, every account
+    would count as paid and letters would go out for people who never paid -
+    so the sweep prints which mode it is in, and the two must agree.
+    """
+    if not BILLING_ENABLED or DEV:
+        return
     if STRIPE_PAYMENT_LINK:
         # Link mode: no API calls, so no secret key. The webhook is still what
         # opens the app, so it is still mandatory.

@@ -359,13 +359,20 @@ class TestConfigRefusals(unittest.TestCase):
         self.assertIn("SECRET_KEY", str(ctx.exception))
 
     def test_billing_on_without_stripe_keys_refuses_to_start(self):
+        # Asserted through check_billing_config() rather than through the
+        # reload, because the guard is no longer a side effect of importing
+        # config. It belongs to the website - the half that takes money - and
+        # main.py calls it at import, so a misconfigured site still dies at
+        # boot. The scheduled sweep imports config too, sells nothing, and
+        # must not need a Stripe key to start. See test_billing_guard.py.
         os.environ["SECRET_KEY"] = "x" * 40
         os.environ["DEV_MODE"] = "0"
         os.environ["BILLING_ENABLED"] = "1"
         for k in ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET"):
             os.environ.pop(k, None)
+        cfg = importlib.reload(importlib.import_module("app.config"))
         with self.assertRaises(RuntimeError) as ctx:
-            importlib.reload(importlib.import_module("app.config"))
+            cfg.check_billing_config()
         self.assertIn("STRIPE_SECRET_KEY", str(ctx.exception))
 
     def tearDown(self):
@@ -687,8 +694,11 @@ class TestLinkModeConfig(unittest.TestCase):
                            "SECRET_KEY": "x" * 40,
                            "STRIPE_PAYMENT_LINK": "https://buy.stripe.com/x"})
         os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+        # Through check_billing_config() for the reason given above: importing
+        # config no longer decides whether a payment route is honourable.
+        cfg = importlib.reload(importlib.import_module("app.config"))
         with self.assertRaises(RuntimeError) as ctx:
-            importlib.reload(importlib.import_module("app.config"))
+            cfg.check_billing_config()
         self.assertIn("STRIPE_WEBHOOK_SECRET", str(ctx.exception))
 
     def tearDown(self):

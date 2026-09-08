@@ -34,6 +34,11 @@ from . import runner  # noqa: E402
 
 log = logging.getLogger("recruited")
 
+# The website is the half that takes money, so it is the half that must not
+# start if it cannot honour a payment. Deliberately at import rather than in a
+# startup hook: a process that cannot serve checkout should never bind a port.
+config.check_billing_config()
+
 app = FastAPI(title="Recruited", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
