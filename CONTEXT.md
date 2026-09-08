@@ -153,7 +153,7 @@ FCA authorisation is a criminal offence. So `funding_opportunities.json`
 deliberately holds **no contact details at all** — it surfaces open schemes
 to Harry on the 1st of the month and he approaches them himself.
 
-### Machine B — the product (`product/`)
+### Machine B — **Recruited**, the product (`product/`)
 
 **Purpose:** make money and get users. His words: "i want to sell this system
 as a cheap subscription", and "i want to make money from this app and get
@@ -165,8 +165,13 @@ person will be best applicant for and the interviews just land in their
 inbox".
 
 **Live at** `job-machine.onrender.com` (Render free plan, Supabase eu-west-1)
-**since 2 Sep 2026.** To move to a bought domain — **the domain is for
-hosting the app**, that is its primary job.
+**since 2 Sep 2026.** Moving to **`recruited.org.uk`**, bought 8 Sep — the
+domain is for hosting the app, that is its primary job.
+
+**It was called Job Machine until 8 Sep 2026.** Renamed because
+`jobmachine.com` is an operating US business in the same category, selling to
+workforce boards, colleges, outplacement firms and veteran-serving
+organisations — Harry's own niche. See the decisions log.
 
 **Design commitments already made and not to be undone:**
 
@@ -204,8 +209,11 @@ Choices already made, so they are not relitigated every session.
 | 2026-09-06 | Product merges to **main**, with isolation enforced by path filters, separate secrets and separate concurrency groups — not by living on a branch |
 | 2026-09-06 | First live product run uses his **main Gmail**, with all 169 contacted companies imported **before** the mailbox is connected |
 | 2026-09-06 | Spend: domain ~£8–10/yr. No paid email-finder API (£27+/mo, and a logic fix does most of it free). No Render paid tier until `/status` says cold starts are costing signups. |
-| 2026-09-06 | **Newsletter** on AI adoption in daily life and work, as content marketing and lead capture. Lives **on jobmachine.co.uk** — shares the domain, the design system, the ICO registration and the audience; every reader is a warm lead for the paid product. **Deferred**: not started until the product is merged, live on the domain and earning. Harry's call, and the right one. |
+| 2026-09-06 | **Newsletter** on AI adoption in daily life and work, as content marketing and lead capture. Lives **on recruited.org.uk** — shares the domain, the design system, the ICO registration and the audience; every reader is a warm lead for the paid product. **Deferred**: not started until the product is merged, live on the domain and earning. Harry's call, and the right one. |
 | 2026-09-06 | Design direction: **no AI-house-style**. The existing product pages are the reference, not a starting point to be replaced. See §5. |
+| 2026-09-08 | **The product is called Recruited**, at `recruited.org.uk` (bought, £1 first year). Renamed from "Job Machine" because `jobmachine.com` is an operating US business in the same category — AI job placement sold to workforce boards, colleges, outplacement firms **and veteran-serving organisations**, which is Harry's own niche. `.app` gone too. Renaming before buying cost an afternoon; after would have cost the domain, Stripe, the legal pages, the Insta handle and every video. |
+| 2026-09-08 | Names rejected on the way, with reasons worth keeping: **AutoApply** — it is the generic feature name used by Jobscan, AIApply, WonsultingAI and AutoApplys, so undefendable as a trademark, invisible in search, and it brands the product as the thing recruiters bin in under 20 seconds. **`.io`** — the Chagos risk is real but small (ICANN: five-year phase-out minimum, `IO` could go on the exceptionally-reserved list like `SU`/`AC`/`UK`); the actual blockers were ~£30–45/yr against a £30 budget, and that "recruit*" names read as employer-side software. |
+| 2026-09-08 | `.org.uk` rather than `.co.uk` was Harry's call, flagged and made. It reads slightly non-commercial for a paid product; £1 against ~£10 decided it. `recruited.co.uk` can be added later pointing at the same site. |
 
 ## 5. House style — why the pages do not look AI-generated
 
@@ -254,6 +262,31 @@ Every one of these is already true of the landing page and is the bar:
 Design decisions follow content. Placeholder copy produces placeholder
 design, every time — which is most of why generated pages look generated.
 Write the true sentence first, then lay it out.
+
+## 5b. GitHub cron is not reliable, and it fails silently
+
+**Established the hard way on 7 September 2026.** The machine did not run
+between Friday 4 Sep 18:11 and Monday 7 Sep — three days. `reply.yml` is
+scheduled six times a weekday and was managing two or three, one to three
+hours late, then none. `run.yml`'s Friday "15:00" run landed at 18:11.
+
+A scheduled workflow that does not fire produces **no signal**: no failed
+build, no error, nothing. Indistinguishable from working. Push- and
+PR-triggered workflows ran fine throughout, so it is specifically cron that
+GitHub deprioritises and drops under load.
+
+Two consequences that outlive the incident:
+
+- **`--heartbeat` runs at the start of every workflow.** It measures the gap
+  in *working* hours (Mon–Fri 07:00–19:00 UTC, so weekends and nights are
+  silent) and texts + emails Harry once per outage. See README.
+- **The product's landing page says "three times a weekday."** On this
+  evidence that is a claim the infrastructure cannot reliably keep. Either
+  soften it or move the scheduling off GitHub cron — this project does not
+  make claims it cannot back.
+
+The only real cover for permanent silence is `HEALTHCHECK_URL`, an external
+dead man's switch. Harry has to create that account himself.
 
 ## 6. How to report numbers
 

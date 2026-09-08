@@ -103,11 +103,18 @@ Two things about the free tier, both real:
   lose you a payment.
 - **A free Supabase project pauses itself after about a week with no
   queries.** A paused database means nobody can sign in, and it fails
-  quietly. The `Keep the database awake` step in
-  `.github/workflows/run.yml` is there for exactly this: set `DATABASE_URL`
-  as a repository secret and the scheduled run touches the database three
-  times a weekday. Without a `DATABASE_URL` secret the step prints a line and
-  skips.
+  quietly.
+
+  This paragraph used to say a `Keep the database awake` step in
+  `.github/workflows/run.yml` handled it. **There is no such step, and there
+  never was** — the documentation described a protection that did not exist,
+  which is worse than describing none.
+
+  What actually keeps it awake is the **product sweep** (§3c): it runs three
+  times a weekday and queries the database every time. So set `DATABASE_URL`
+  as a repository secret and the problem solves itself as a side effect of
+  the product working. Leave it unset and both things are broken at once —
+  the sweep refuses to run, and the database eventually pauses.
 
 ### The paid route: one host with a volume
 
@@ -133,7 +140,7 @@ outside.
 
 ## 3a. Your own domain
 
-`job-machine.onrender.com` on a page asking somebody for a card reads as a
+`recruited.onrender.com` on a page asking somebody for a card reads as a
 weekend project, which is the one thing this is not. A `.co.uk` runs about
 £8–10 a year and is the cheapest credibility you can buy.
 
@@ -151,7 +158,7 @@ do the trick where the first year is £1 and the renewal is £30, so check the
 ### Point it at Render
 
 1. Render → the service → **Settings → Custom Domains → Add**. Add both
-   `jobmachine.co.uk` and `www.jobmachine.co.uk`. Render shows you the DNS
+   `recruited.org.uk` and `www.recruited.org.uk`. Render shows you the DNS
    records it wants.
 2. At the registrar's DNS panel, add exactly those records. For a root
    `.co.uk` it will be an **A record** (a bare domain cannot be a CNAME);
@@ -163,11 +170,11 @@ do the trick where the first year is £1 and the renewal is £30, so check the
 
 ### Then, in this order
 
-4. Set `BASE_URL=https://jobmachine.co.uk` in Render's environment panel.
+4. Set `BASE_URL=https://recruited.org.uk` in Render's environment panel.
    Getting this wrong is invisible until a customer clicks a sign-in link and
    it goes nowhere, which is why `/status` checks it.
 5. **Stripe**, if you are on the API route rather than a Payment Link: change
-   the webhook endpoint to `https://jobmachine.co.uk/webhooks/stripe`. The
+   the webhook endpoint to `https://recruited.org.uk/webhooks/stripe`. The
    signing secret does not change. On a Payment Link there is nothing to do.
 6. Load `/status` and confirm it is not complaining, then sign in from a
    phone that has never seen the site.
@@ -179,7 +186,7 @@ bookmarked still resolves.
 
 Worth doing while you are in the DNS panel, and it fixes something separate:
 `harryrussell081203@gmail.com` puts a date of birth in the From line of every
-application. Cloudflare **Email Routing** forwards `harry@jobmachine.co.uk`
+application. Cloudflare **Email Routing** forwards `harry@recruited.org.uk`
 into the same Gmail for nothing, and Gmail's **Settings → Accounts → Send
 mail as** then lets you send from it.
 
@@ -227,7 +234,62 @@ Check it before trusting it:
 python -m app.sweep --dry-run    # who would be written to, and from where
 ```
 
-## 3c. When the first deploy fails
+## 3c. The sweep needs the same four secrets, in GitHub
+
+`.github/workflows/sweep.yml` is what makes this a product rather than a page
+somebody has to visit: three times a weekday it looks for work for every
+paying user and sends what is due. It runs on GitHub's hardware, not Render's,
+so it reads **GitHub repository secrets** — a value set in Render's dashboard
+is invisible to it.
+
+Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret | Where it comes from |
+| --- | --- |
+| `DATABASE_URL` | the Supabase connection string |
+| `CREDENTIAL_KEY` | the Fernet key that encrypts stored mail passwords |
+| `SECRET_KEY` | the session and magic-link signing key |
+| `BASE_URL` | the address the app is reachable at |
+
+### Copy these from Render. Do not generate new ones.
+
+This is the whole point of the section, and getting it wrong fails in two
+ways that both look like nothing happening:
+
+**A different `CREDENTIAL_KEY`** cannot decrypt mail passwords that were
+stored under the old one. Every user looks connected, the sweep runs, and
+every send raises "reconnect your mailbox" instead. Nothing goes out, and
+nothing looks broken from the outside.
+
+**A different `DATABASE_URL`** points the sweep at a different database from
+the one the website writes to. It finds nobody, reports `0 paying users`,
+and returns a green tick, for ever.
+
+So open Render → the service → Environment, and copy each value across
+verbatim. `CREDENTIAL_KEY` in particular is not a fresh secret to be minted;
+it is an existing one that two places have to agree on.
+
+### It refuses rather than pretending
+
+The first real run of this failed on purpose:
+
+```
+##[error]DATABASE_URL is not set, so there are no users to sweep.
+          Add it as a repository secret.
+```
+
+Without that guard the sweep would have run against an empty SQLite file on
+a throwaway runner, found no users, and reported success — a green tick every
+weekday saying the product was working while it sent nothing at all. A loud
+failure on day one is worth more than a quiet one for a month.
+
+### Check it before it matters
+
+Actions → **product sweep** → Run workflow → tick **dry run**. It reports what
+would be sent and sends nothing, so it is safe to run as often as you like,
+and it tells you the secrets are right before a customer is depending on it.
+
+## 3d. When the first deploy fails
 
 It usually does, and it is nearly always one of five things. Read the last
 twenty lines of the Render log and match:

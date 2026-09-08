@@ -28,7 +28,7 @@ import time
 from ..names import CORPORATE_WORDS, DOMAIN_SUFFIXES, company_key, name_tokens
 from . import contacts
 
-UA = {"User-Agent": "Mozilla/5.0 (compatible; job-machine/1.0; +job search)"}
+UA = {"User-Agent": "Mozilla/5.0 (compatible; recruited/1.0; +job search)"}
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 MAILTO_RE = re.compile(r"mailto:([^\"'?>\s]+)")

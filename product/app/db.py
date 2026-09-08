@@ -264,6 +264,74 @@ def mark_draft(user_id: int, draft_id: int, status: str) -> None:
             (status, now() if status == "sent" else None, draft_id, user_id))
 
 
+# What an employer did about a letter. Ordered worst to best, so a summary
+# can be read as a funnel, and kept small on purpose: a tracker with fifteen
+# states is one nobody updates.
+OUTCOMES = ("rejected", "replied", "interview", "offer")
+
+
+def set_outcome(user_id: int, draft_id: int, outcome: str) -> bool:
+    """Record what came back. Returns False for anything not in OUTCOMES.
+
+    An empty string is allowed and means "undo" - somebody who taps the wrong
+    row on a phone has to be able to put it back, and a tracker you cannot
+    correct is one people stop trusting after the first mistake.
+    """
+    outcome = (outcome or "").strip().lower()
+    if outcome and outcome not in OUTCOMES:
+        return False
+    with connect() as c:
+        c.execute(
+            "UPDATE drafts SET outcome = ?, outcome_at = ? "
+            "WHERE id = ? AND user_id = ? AND status = 'sent'",
+            (outcome, now() if outcome else None, draft_id, user_id))
+    return True
+
+
+def applications(user_id: int, limit: int = 200):
+    """Every letter that actually went, newest first.
+
+    Only 'sent'. A draft is not an application and a discarded one never
+    was - putting them in the same list is how a tracker ends up flattering
+    somebody with a number that means nothing.
+    """
+    with connect() as c:
+        return c.execute(
+            "SELECT * FROM drafts WHERE user_id = ? AND status = 'sent' "
+            "ORDER BY sent_at DESC, id DESC LIMIT ?",
+            (user_id, limit)).fetchall()
+
+
+def application_stats(user_id: int) -> dict:
+    """The numbers for the top of the tracker.
+
+    Split the way `--stats` splits them in the personal machine, and for the
+    reason Harry found there: "awaiting a reply" DRAINS as answers arrive, so
+    quoting it as a total makes the thing look like it is going backwards on
+    its best days. `sent` here only ever goes up.
+    """
+    rows = applications(user_id, limit=10000)
+    sent = len(rows)
+    heard = [r for r in rows if r["outcome"]]
+    positive = [r for r in heard if r["outcome"] in ("replied", "interview",
+                                                     "offer")]
+    stamp = now()
+    waiting = [r for r in rows if not r["outcome"]]
+    return {
+        "sent": sent,
+        "heard_back": len(positive),
+        "interviews": len([r for r in heard
+                           if r["outcome"] in ("interview", "offer")]),
+        "reply_rate": round(100 * len(positive) / sent) if sent else 0,
+        "awaiting": len(waiting),
+        # The oldest thing still unanswered, in days. This is the number that
+        # tells somebody it is time to chase rather than wait.
+        "longest_wait_days": max(
+            [int((stamp - (r["sent_at"] or stamp)) // 86400) for r in waiting],
+            default=0),
+    }
+
+
 def seen_ids(user_id: int) -> set:
     with connect() as c:
         return {r["external_id"] for r in c.execute(
@@ -346,7 +414,8 @@ def may_contact(user_id: int, company: str) -> bool:
 # the user's own mail account, for sending as them
 # ----------------------------------------------------------------------
 def save_mail_account(user_id: int, *, address: str, host: str, port: int,
-                      password: str) -> None:
+                      password: str, kind: str = "own",
+                      reply_to: str = "") -> None:
     """Store credentials, encrypted. Never call this with a password that has
     not just been proved to work - see delivery.verify()."""
     from . import vault
@@ -354,15 +423,16 @@ def save_mail_account(user_id: int, *, address: str, host: str, port: int,
     with connect() as c:
         c.execute(
             "INSERT INTO mail_accounts (user_id, address, host, port, secret, "
-            "verified_at, last_error, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?) "
+            "kind, reply_to, verified_at, last_error, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET "
             "address = excluded.address, host = excluded.host, "
             "port = excluded.port, secret = excluded.secret, "
+            "kind = excluded.kind, reply_to = excluded.reply_to, "
             "verified_at = excluded.verified_at, last_error = NULL, "
             "updated_at = excluded.updated_at",
             (user_id, address.strip().lower(), host.strip(), int(port),
-             secret, now(), now()))
+             secret, kind, (reply_to or "").strip().lower(), now(), now()))
 
 
 def get_mail_account(user_id: int):
@@ -382,6 +452,62 @@ def mail_login(user_id: int):
         return None
     return (row["address"], row["host"], int(row["port"]),
             vault.decrypt(row["secret"]))
+
+
+def issue_managed_address(user_id: int, name: str, fallback_email: str = "") -> str:
+    """Claim a Recruited address for this user, or return the one they have.
+
+    Idempotent on purpose. Somebody who disconnects and reconnects keeps the
+    address employers already have - reissuing a different one would orphan
+    every reply still in flight, which is the whole point of having an address
+    at all.
+
+    The dedupe is the fiddly part: two people called Harry Russell cannot both
+    have harry.russell@, and the second one must not silently receive the
+    first one's replies. So the local part is claimed against every address
+    already issued, and a collision appends a number rather than failing.
+    """
+    from . import config, delivery
+    existing = get_mail_account(user_id)
+    if existing and existing["kind"] == "managed" and existing["address"]:
+        return existing["address"]
+
+    domain = config.MANAGED_MAIL_DOMAIN
+    base = delivery.local_part_for(name, fallback_email)
+    with connect() as c:
+        rows = c.execute(
+            "SELECT address FROM mail_accounts WHERE kind = 'managed'"
+        ).fetchall()
+    taken = {(r["address"] or "").split("@")[0].lower() for r in rows}
+
+    local = base
+    n = 1
+    while local in taken:
+        n += 1
+        local = f"{base}{n}"
+    return f"{local}@{domain}"
+
+
+def managed_sent_today(now_ts: int | None = None) -> int:
+    """How many letters have gone out from Recruited addresses today.
+
+    Across ALL users, because the provider's allowance is across all users.
+    Counting per-user would let ten people each stay under their own limit
+    and blow the shared one between them.
+    """
+    stamp = now() if now_ts is None else now_ts
+    start = stamp - (stamp % 86400)
+    with connect() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM managed_sends WHERE sent_at >= ?",
+            (start,)).fetchone()
+    return int(row["n"])
+
+
+def record_managed_send(user_id: int) -> None:
+    with connect() as c:
+        c.execute("INSERT INTO managed_sends (user_id, sent_at) VALUES (?, ?)",
+                  (user_id, now()))
 
 
 def note_mail_error(user_id: int, message: str) -> None:

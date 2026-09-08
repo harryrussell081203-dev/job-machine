@@ -142,16 +142,37 @@ CREATE TABLE IF NOT EXISTS seen_listings (
 -- as this service. The password is always ciphertext; see vault.py. It is a
 -- separate table from users so that a dump of the user list - the thing most
 -- likely to be shared around for support or analytics - carries no secrets.
+-- How a user's letters get sent. Two kinds, and `kind` says which:
+--
+--   'own'      their own mailbox, their own credentials, From = address.
+--              The default, and the one that reads best to an employer.
+--   'managed'  an address we issued at MANAGED_MAIL_DOMAIN. `address` is
+--              that address, `secret` is the shared provider key, and
+--              `reply_to` is the user's real inbox so answers reach them
+--              without their own address ever being used to send.
 CREATE TABLE IF NOT EXISTS mail_accounts (
     user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     address      TEXT    NOT NULL,
     host         TEXT    NOT NULL,
     port         INTEGER NOT NULL,
     secret       TEXT    NOT NULL,
+    kind         TEXT    NOT NULL DEFAULT 'own',
+    reply_to     TEXT    NOT NULL DEFAULT '',
     verified_at  BIGINT,
     last_error   TEXT,
     updated_at   BIGINT  NOT NULL
 );
+
+-- Every letter sent from a Recruited address, so the provider's shared
+-- daily allowance can be counted before a send rather than discovered from a
+-- rejection. One row per send, dated, across all users - because the cap is
+-- across all users.
+CREATE TABLE IF NOT EXISTS managed_sends (
+    id       {key},
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sent_at  BIGINT  NOT NULL
+);
+CREATE INDEX IF NOT EXISTS managed_sends_by_day ON managed_sends(sent_at);
 
 -- The CV lives in the database rather than on disk, for the same reason
 -- everything else does: the app process is disposable and free hosts have no
@@ -323,6 +344,34 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
 _ADDED_COLUMNS = [
     ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
     ("users", "free_spot", "INTEGER NOT NULL DEFAULT 0"),
+    # How this mailbox sends. 'own' is a user's own SMTP credentials and is
+    # the default precisely because every row that existed before this column
+    # did was one of those - a default of 'managed' would have silently
+    # rerouted every existing customer's letters through a domain they never
+    # agreed to send from.
+    ("mail_accounts", "kind", "TEXT NOT NULL DEFAULT 'own'"),
+    # Where replies go. Empty on an 'own' account, where the From address is
+    # already the user's and needs no redirect.
+    ("mail_accounts", "reply_to", "TEXT NOT NULL DEFAULT ''"),
+    # WHY a listing scored what it did. The scorer has always produced this
+    # and the drafts table had nowhere to put it, so the screen showed a bare
+    # "scored 78" and threw the reasoning away. A number with no reasoning is
+    # something to be suspicious of; the same number with "matches subsea
+    # cable testing, pays above your floor, 40 minutes from Aberdeen" is
+    # something to act on.
+    ("drafts", "score_reason", "TEXT NOT NULL DEFAULT ''"),
+    # What came back. A SEPARATE column from `status` on purpose: status says
+    # where a letter is (drafted, sent, discarded) and outcome says what the
+    # employer did about it. Folding them together would mean a reply
+    # overwriting the record that it was ever sent.
+    #
+    # Empty until the user says otherwise. We cannot detect a reply: on an own
+    # mailbox the answer goes to them, and on a Recruited address Reply-To
+    # sends it to them too - deliberately, so we never hold it. So this is
+    # recorded by the person who actually saw the reply, and the screen says
+    # so rather than implying it is watching.
+    ("drafts", "outcome", "TEXT NOT NULL DEFAULT ''"),
+    ("drafts", "outcome_at", "BIGINT"),
 ]
 
 

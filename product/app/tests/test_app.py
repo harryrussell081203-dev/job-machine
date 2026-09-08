@@ -700,3 +700,50 @@ class TestLinkModeConfig(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheScoreShowsItsWorking(AppTestCase):
+    """Every competitor in this category shows a match score with a breakdown
+    of the factors behind it, and it is the feature their users single out.
+
+    This machine has always computed the reasoning - scoring.py sets
+    `score_reason` and its own docstring says it is "so a user can" see it -
+    and the drafts table had nowhere to put it, so the screen showed a bare
+    "scored 78" and threw the rest away.
+
+    It matters more here than for them. They apply to everything; the number
+    is decoration. This applies to a fraction of what it sees, so the
+    reasoning is the evidence that it chose.
+    """
+
+    def draft_with(self, **over):
+        uid = self.main.db.get_or_create_user("sam@example.com")["id"]
+        fields = dict(job_title="Subsea Technician", company="Acme",
+                      to_email="a@acme.com", subject="s", body="b",
+                      score=78, score_reason="Matches subsea cable testing; "
+                                             "pays above your floor")
+        fields.update(over)
+        self.main.db.add_draft(uid, **fields)
+        return uid
+
+    def test_the_reasoning_is_stored_and_shown(self):
+        self.draft_with()
+        self.sign_in("sam@example.com")
+        body = self.client.get("/drafts").text
+        self.assertIn("78", body)
+        self.assertIn("Matches subsea cable testing", body)
+
+    def test_a_draft_without_reasoning_still_renders(self):
+        """Every draft written before this column existed has none, and an
+        old draft must not blank the screen."""
+        self.draft_with(score_reason="")
+        self.sign_in("sam@example.com")
+        r = self.client.get("/drafts")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Subsea Technician", r.text)
+
+    def test_the_score_is_shown_out_of_a_hundred(self):
+        """"78" alone could be anything. "78/100" is a judgement."""
+        self.draft_with()
+        self.sign_in("sam@example.com")
+        self.assertIn("78/100", self.client.get("/drafts").text)

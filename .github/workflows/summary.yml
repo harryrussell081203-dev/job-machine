@@ -46,7 +46,16 @@ jobs:
           SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
           SMS_FROM: ${{ secrets.SMS_FROM }}
           SMS_TO: ${{ secrets.SMS_TO }}
+          # Optional. A free monitor's ping URL, so something OUTSIDE
+          # GitHub notices if this stops running entirely - the one
+          # case the machine cannot report on itself.
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
         run: |
+          # Report in first. This workflow runs on its own schedule, so on a
+          # day when the main run.yml cron was dropped by GitHub this may be
+          # the only thing that fires - and therefore the only thing left
+          # able to notice the silence and say so.
+          python job_machine.py --heartbeat || true
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             python job_machine.py --summary --force
           else

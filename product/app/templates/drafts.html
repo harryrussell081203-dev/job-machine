@@ -19,8 +19,16 @@
     <p class="meta">
       {{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
       {% if d['salary_text'] %} &middot; {{ d['salary_text'] }}{% endif %}
-      {% if d['score'] %} &middot; scored {{ d['score'] }}{% endif %}
+      {% if d['score'] %} &middot; scored {{ d['score'] }}/100{% endif %}
     </p>
+    {# A number on its own is something to be suspicious of. The same number
+       with the reasoning under it is something to act on - and it is the one
+       thing that shows this picked the job rather than spraying every advert
+       it could reach. The scorer has always produced this; it just had
+       nowhere to go until now. #}
+    {% if d['score_reason'] %}
+      <p class="why"><small>{{ d['score_reason'] }}</small></p>
+    {% endif %}
     <p class="meta">
       To {{ d['to_name'] or d['to_email'] }}
       {% if d['contact_tier'] == 3 %}<span class="tag">named person</span>

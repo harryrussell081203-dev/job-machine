@@ -315,6 +315,17 @@ label.check input:checked::after {
   margin-top: 26px;
 }
 
+/* --- an address we issued ---------------------------------------------- */
+/* firstname.lastname@mail.recruited.org.uk is 38 characters of monospace,
+   which on a 390px phone reaches the edge of its panel and stops looking
+   like something you own. Breaking beats shrinking: it is the one string on
+   the page the reader actually has to take in. */
+.issued-address {
+  font-size: 17px; margin: 0 0 14px; max-width: none;
+  overflow-wrap: anywhere; word-break: break-word; line-height: 1.4;
+}
+.issued-address code { font-size: inherit; }
+
 /* --- the call to action in the hero ------------------------------------ */
 /* Buttons wrap rather than shrink on a narrow phone: two full-width taps beat
    two cramped ones, and this is the first thing a thumb reaches. */
@@ -414,6 +425,32 @@ label.check input:checked::after {
   transition: box-shadow .2s ease;
 }
 .draft:hover { box-shadow: var(--shadow-lift); }
+/* --- what came back ----------------------------------------------------- */
+/* Colour carries meaning here, so it is never the only thing carrying it:
+   every state is also spelled out in words, for colour blindness and for the
+   ten percent of screenshots that end up greyscale. */
+/* Inline rather than flex. A <form> is a block element, so as a flex child it
+   took a line of its own and dropped "undo" underneath the outcome instead of
+   beside it. */
+.outcome { font-weight: 600; margin: 4px 0 12px; }
+.outcome form { display: inline; margin: 0; }
+.outcome form button { margin-left: 10px; }
+.outcome-offer, .outcome-interview { color: var(--good); }
+.outcome-replied { color: var(--ink); }
+.outcome-rejected { color: var(--muted); font-weight: 500; }
+.outcome .link { font-weight: 400; font-size: 13px; color: var(--muted); }
+/* Four outcome buttons have to fit a phone without becoming a column of
+   full-width slabs - they are a quick tap, not a decision to agonise over. */
+button.ghost.small { font-size: 13px; padding: 6px 12px; }
+
+/* Why this listing scored what it did. Indented under the score with a rule,
+   so it reads as the reasoning behind the number rather than another fact
+   about the job. */
+.why {
+  margin: -6px 0 12px; padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted); max-width: 62ch;
+}
 .draft.tier2 { border-left-color: var(--muted); }
 .draft.tier3 { border-left-color: var(--bad); }
 

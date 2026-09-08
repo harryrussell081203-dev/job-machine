@@ -1,9 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Connect your email &middot; job machine{% endblock %}
+{% block title %}Connect your email &middot; Recruited{% endblock %}
 {% block content %}
 
 <h1>Connect your email</h1>
-<p class="lede">So letters go out from your address, not from a service.</p>
+{% if managed_ready %}
+  <p class="lede">So letters go out as you &mdash; from your own address, or
+     from one we give you.</p>
+{% else %}
+  <p class="lede">So letters go out from your address, not from a service.</p>
+{% endif %}
 
 {% if request.query_params.get('e') == 'needed' %}
   <div class="note bad">Automatic sending needs an email account connected
@@ -18,6 +23,45 @@
        and you send each one with a click from the drafts screen.</p>
   </div>
 {% else %}
+
+{% if managed_ready %}
+<h2>Two ways to do this</h2>
+<div class="panel">
+  <p><b>Your own address gets more replies.</b> A letter from
+     <code>{{ profile.get('email') or user['email'] }}</code> reads as a person
+     applying for a job, because it is one. That is the whole reason these get
+     answered, and it is why it is the first option here.</p>
+  <p><b>A Recruited address protects the one you use for everything.</b>
+     Nothing is perfect: cold email at volume can land you in spam folders,
+     and a personal account that starts looking like a mailshot can be
+     suspended by your provider. If that worries you, send from
+     <code>{{ managed_preview }}</code> instead and keep your own address out
+     of it entirely.</p>
+  <p>Replies come to you either way &mdash; a Recruited letter carries your
+     real address on Reply-To, so the employer answers into your inbox and we
+     never see it.</p>
+</div>
+
+<h2>Use a Recruited address</h2>
+<div class="panel">
+  <p class="issued-address"><code>{{ managed_preview }}</code></p>
+  <p><b>No password to hand over.</b> Nothing of yours is stored, because
+     there is nothing of yours to store.</p>
+  <p><b>Your own address is never used to send</b>, so nothing this does can
+     damage it.</p>
+  <p>The trade: it is a slightly less personal From line, and letters share a
+     daily allowance with everyone else using one, so a busy day can push some
+     of yours to tomorrow.</p>
+  {# The label deliberately does not repeat the address. It is set out in
+     full directly above, and putting a 38-character address inside a button
+     overflowed the panel on a 390px screen. #}
+  <form method="post" action="/setup/mail/managed">
+    <button class="btn ghost">Use this address</button>
+  </form>
+</div>
+
+<h2>Use your own mailbox</h2>
+{% endif %}
 
 <div class="note">
   <p><b>Use an app password, not your normal one.</b> Your real password is

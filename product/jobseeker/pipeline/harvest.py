@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 from ..names import company_key
 
-UA = {"User-Agent": "Mozilla/5.0 (compatible; job-machine/1.0; +job search)"}
+UA = {"User-Agent": "Mozilla/5.0 (compatible; recruited/1.0; +job search)"}
 
 MAX_AGE_HOURS = 48
 RESULTS_PER_PAGE = 50

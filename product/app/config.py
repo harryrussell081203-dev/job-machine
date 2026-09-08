@@ -254,3 +254,43 @@ CONTROLLER_LOCATION = _env("CONTROLLER_LOCATION", "the United Kingdom")
 # Set by hand when they do - a notice that silently rewrites itself is worse
 # than one that is out of date, because nobody can say what they agreed to.
 LEGAL_UPDATED = _env("LEGAL_UPDATED", "6 September 2026")
+
+# --- a Recruited sending address -------------------------------------
+# The alternative to handing us an app password for the mailbox you use for
+# everything. We issue you an address here, letters send from it, and replies
+# go straight to your real inbox because Reply-To carries it. Your own address
+# is never used to send, so it cannot be damaged by this.
+#
+# A SUBDOMAIN, not the apex, and that is the important part. Sending
+# reputation is per-domain, so a bad run by one user must not be able to take
+# down the marketing site's mail, the operator's own address, or the sign-in
+# links that let anybody in at all. mail.recruited.org.uk can be burned and
+# replaced; recruited.org.uk cannot.
+MANAGED_MAIL_DOMAIN = _env("MANAGED_MAIL_DOMAIN")
+
+# Resend speaks SMTP - smtp.resend.com, username "resend", password the API
+# key - so this reuses the same send path as a user's own mailbox rather than
+# adding a second one that could drift from it.
+MANAGED_MAIL_HOST = _env("MANAGED_MAIL_HOST", "smtp.resend.com")
+MANAGED_MAIL_PORT = int(_env("MANAGED_MAIL_PORT", "465"))
+MANAGED_MAIL_USERNAME = _env("MANAGED_MAIL_USERNAME", "resend")
+MANAGED_MAIL_KEY = _env("MANAGED_MAIL_KEY")
+
+# The provider's own ceiling, not a product decision. Resend's free tier
+# allows 100 a day across the whole account, and going over it does not
+# degrade politely - it rejects. Every user sending from a Recruited
+# address draws on this one pool, so it is enforced before the send rather
+# than discovered from a bounce.
+MANAGED_MAIL_DAILY_CAP = int(_env("MANAGED_MAIL_DAILY_CAP", "100"))
+
+
+def managed_mail_available() -> bool:
+    """Whether we can issue addresses at all.
+
+    Both halves are needed and neither has a safe default: without the domain
+    there is nowhere to issue an address, and without the key nothing can be
+    sent from it. Unset, the option is simply not offered - the same way
+    automatic sending hides itself when there is no CREDENTIAL_KEY, rather
+    than presenting a choice that fails later.
+    """
+    return bool(MANAGED_MAIL_DOMAIN and MANAGED_MAIL_KEY)
