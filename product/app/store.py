@@ -360,6 +360,18 @@ _ADDED_COLUMNS = [
     # cable testing, pays above your floor, 40 minutes from Aberdeen" is
     # something to act on.
     ("drafts", "score_reason", "TEXT NOT NULL DEFAULT ''"),
+    # What came back. A SEPARATE column from `status` on purpose: status says
+    # where a letter is (drafted, sent, discarded) and outcome says what the
+    # employer did about it. Folding them together would mean a reply
+    # overwriting the record that it was ever sent.
+    #
+    # Empty until the user says otherwise. We cannot detect a reply: on an own
+    # mailbox the answer goes to them, and on a Job Machine address Reply-To
+    # sends it to them too - deliberately, so we never hold it. So this is
+    # recorded by the person who actually saw the reply, and the screen says
+    # so rather than implying it is watching.
+    ("drafts", "outcome", "TEXT NOT NULL DEFAULT ''"),
+    ("drafts", "outcome_at", "BIGINT"),
 ]
 
 

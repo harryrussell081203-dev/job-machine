@@ -360,6 +360,35 @@ def drafts(request: Request, status: str = "draft"):
     return render(request, "drafts.html", user=user, items=items, status=status)
 
 
+@app.get("/applications", response_class=HTMLResponse)
+def applications(request: Request):
+    """Every letter that has gone, and what came of it."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    rows = db.applications(user["id"])
+    stamp = db.now()
+    items = [{
+        "row": r,
+        # Days waiting, which is the actionable number on this screen: it is
+        # what tells somebody it is time to chase rather than keep waiting.
+        "days": int((stamp - (r["sent_at"] or stamp)) // 86400),
+    } for r in rows]
+    return render(request, "applications.html", user=user, items=items,
+                  stats=db.application_stats(user["id"]),
+                  outcomes=db.OUTCOMES)
+
+
+@app.post("/applications/{draft_id}/outcome")
+async def set_outcome(request: Request, draft_id: int):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    form = await request.form()
+    db.set_outcome(user["id"], draft_id, form.get("outcome") or "")
+    return RedirectResponse("/applications", status_code=303)
+
+
 @app.post("/drafts/{draft_id}/block")
 def block_employer(request: Request, draft_id: int):
     """'Never write to this company again.' Deliberately one click, and

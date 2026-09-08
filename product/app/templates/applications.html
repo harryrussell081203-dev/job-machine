@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Applications &middot; job machine{% endblock %}
+{% block content %}
+<h1>Applications</h1>
+
+{% if not items %}
+  <p class="lede">Nothing has gone out yet.</p>
+  <div class="panel">
+    <p>Letters appear here the moment they are sent. Until then they are on
+       the <a href="/drafts">drafts screen</a> waiting for you.</p>
+  </div>
+{% else %}
+
+<p class="lede">Every letter that has gone, and what came of it.</p>
+
+{# Split the way --stats splits them, and for the same reason: "awaiting a
+   reply" DRAINS as answers arrive, so showing it as a headline total makes
+   the machine look like it is going backwards on its best days. Only the
+   first row here ever goes up. #}
+<div class="stats">
+  <div class="stat"><b>{{ stats.sent }}</b><span>letters sent</span></div>
+  <div class="stat"><b>{{ stats.heard_back }}</b><span>heard back</span></div>
+  <div class="stat"><b>{{ stats.reply_rate }}%</b><span>reply rate</span></div>
+  {% if stats.interviews %}
+    <div class="stat"><b>{{ stats.interviews }}</b><span>interviews</span></div>
+  {% endif %}
+</div>
+
+{% if stats.longest_wait_days >= 10 and stats.awaiting %}
+  <div class="note">
+    <b>{{ stats.awaiting }} still waiting</b>, the oldest for
+    {{ stats.longest_wait_days }} days. Worth a short follow-up on anything
+    past a fortnight &mdash; one line, not another letter.
+  </div>
+{% endif %}
+
+<div class="panel">
+  <p><small><b>You mark these yourself.</b> Replies go straight to your own
+     inbox and never come to us, so this cannot know what happened until you
+     say. It is two taps and it is what makes the numbers above yours rather
+     than ours.</small></p>
+</div>
+
+{% for item in items %}
+  {% set d = item.row %}
+  <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
+    <h3>{{ d['job_title'] }}</h3>
+    <p class="meta">
+      {{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
+      {% if d['salary_text'] %} &middot; {{ d['salary_text'] }}{% endif %}
+      {% if d['score'] %} &middot; scored {{ d['score'] }}/100{% endif %}
+    </p>
+    <p class="meta">
+      To {{ d['to_name'] or d['to_email'] }}
+      {% if d['contact_tier'] == 3 %}<span class="tag">named person</span>
+      {% elif d['contact_tier'] == 2 %}<span class="tag">hiring inbox</span>
+      {% else %}<span class="tag">generic inbox</span>{% endif %}
+      &middot;
+      {% if item.days == 0 %}sent today
+      {% elif item.days == 1 %}sent yesterday
+      {% else %}sent {{ item.days }} days ago{% endif %}
+    </p>
+
+    {% if d['outcome'] %}
+      <p class="outcome outcome-{{ d['outcome'] }}">
+        {% if d['outcome'] == 'offer' %}Offer
+        {% elif d['outcome'] == 'interview' %}Interview
+        {% elif d['outcome'] == 'replied' %}They replied
+        {% else %}Rejected{% endif %}
+        <form method="post" action="/applications/{{ d['id'] }}/outcome"
+              style="display:inline">
+          <input type="hidden" name="outcome" value="">
+          <button class="link" type="submit">undo</button>
+        </form>
+      </p>
+    {% else %}
+      <div class="actions">
+        {% for o in outcomes %}
+          <form method="post" action="/applications/{{ d['id'] }}/outcome">
+            <input type="hidden" name="outcome" value="{{ o }}">
+            <button class="ghost small" type="submit">
+              {% if o == 'replied' %}They replied
+              {% elif o == 'interview' %}Interview
+              {% elif o == 'offer' %}Offer
+              {% else %}Rejected{% endif %}
+            </button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <details>
+      <summary><small>The letter that went</small></summary>
+      <p><b>{{ d['subject'] }}</b></p>
+      <div class="letter">{{ d['body'] }}</div>
+      {% if d['listing_url'] %}
+        <p><small><a href="{{ d['listing_url'] }}" target="_blank"
+           rel="noopener">Read the original advert</a></small></p>
+      {% endif %}
+    </details>
+  </div>
+{% endfor %}
+{% endif %}
+{% endblock %}
