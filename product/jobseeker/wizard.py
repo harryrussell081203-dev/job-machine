@@ -24,7 +24,7 @@ import sys
 from .profile import KNOWN_PRIORITIES, SITUATIONS, Profile, ProfileError, Role
 
 BANNER = """
-  job machine - setup
+  Recruited - setup
   ------------------------------------------------------------------
   About ten minutes. Nothing is sent to anybody during this, and
   nothing leaves your machine except the key checks at the end.
@@ -344,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     with open(profile_path, "w", encoding="utf-8") as fh:
         fh.write(to_yaml(profile))
     with open(env_path, "w", encoding="utf-8") as fh:
-        fh.write("# keys for the job machine. never commit this file.\n")
+        fh.write("# keys for the Recruited. never commit this file.\n")
         for name, _, _ in KEYS:
             fh.write(f"{name}={keys.get(name, '')}\n")
     os.chmod(env_path, 0o600)

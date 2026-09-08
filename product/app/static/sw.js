@@ -63,7 +63,7 @@ self.addEventListener("fetch", (event) => {
           "<style>body{font:16px/1.6 system-ui;margin:0;display:grid;" +
           "place-items:center;height:100vh;background:#faf9f5;color:#141413;" +
           "text-align:center;padding:2rem}</style>" +
-          "<div><h1>No connection</h1><p>Job Machine needs to be online. " +
+          "<div><h1>No connection</h1><p>Recruited needs to be online. " +
           "Your letters are safe on the server &mdash; nothing is lost.</p></div>",
           { headers: { "Content-Type": "text/html; charset=utf-8" },
             status: 503 })

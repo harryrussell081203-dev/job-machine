@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}job machine{% endblock %}</title>
+<title>{% block title %}Recruited{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css">
 
 <!-- Installable. No store, no review, no fee: this is what makes the app
@@ -15,17 +15,21 @@
 <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Job Machine">
+<meta name="apple-mobile-web-app-title" content="Recruited">
 <meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
 
 <header class="bar">
-  <a class="brand" href="/">job<span>machine</span></a>
+  {# The span is the lighter half of the wordmark. Splitting the name here
+     rather than anywhere else puts the weight on "recruit" and lets "ed"
+     land as the payoff - which is the whole promise in two syllables. #}
+  <a class="brand" href="/">recruit<span>ed</span></a>
   <nav>
     {% if user %}
       <a href="/dashboard">Dashboard</a>
       <a href="/drafts">Drafts</a>
+      <a href="/applications">Sent</a>
       <a href="/setup">Set up</a>
       <a href="/account">Account</a>
       {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
@@ -39,7 +43,7 @@
 </header>
 
 <div class="installbar" id="installbar" hidden>
-  <span>Add Job Machine to your home screen.</span>
+  <span>Add Recruited to your home screen.</span>
   <span class="installbtns">
     <button class="btn small" id="installbtn">Install</button>
     <button class="link" id="installno">Not now</button>

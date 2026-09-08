@@ -37,6 +37,12 @@ def build(**env):
         "STRIPE_WEBHOOK_SECRET": "", "STRIPE_PAYMENT_LINK": "",
         "BASE_URL": "http://testserver",
         "CREDENTIAL_KEY": Fernet.generate_key().decode(),
+        # Blanked rather than omitted, like the Stripe keys above and for the
+        # same reason: os.environ.update() only ever sets, so a value left by
+        # an earlier test's build() would still be there. A test asserting
+        # that Recruited addresses are NOT offered passed alone and failed
+        # in the suite because a previous class had switched them on.
+        "MANAGED_MAIL_DOMAIN": "", "MANAGED_MAIL_KEY": "",
     }
     defaults.update(env)
     os.environ.update(defaults)
@@ -697,3 +703,40 @@ class TestTheKeyIsReadWhenItIsUsed(unittest.TestCase):
         self.assertTrue(self.vault.available())
         os.environ.pop("CREDENTIAL_KEY", None)
         self.assertFalse(self.vault.available())
+
+
+class TestTheSaltIsNotABrandName(unittest.TestCase):
+    """The HKDF salt must never change, including to match a rename.
+
+    It is an input to the key derivation, not a label. A different salt
+    derives a different key from the same passphrase, so every credential
+    already stored through the stretched-key path becomes undecryptable - and
+    the failure is quiet: users still look connected, and every send raises
+    "reconnect your mailbox".
+
+    This nearly went during the rename from Job Machine to Recruited, in a
+    pass over 30 files that changed every other occurrence of the old name
+    correctly. It says job-machine because that is what the product was
+    called when the first key was derived, and that is the only thing it has
+    to match.
+    """
+
+    def test_the_salt_still_says_what_it_has_always_said(self):
+        source = open(os.path.join(ROOT, "app", "vault.py"),
+                      encoding="utf-8").read()
+        self.assertIn('salt=b"job-machine/credential-key"', source)
+
+    def test_a_known_passphrase_still_derives_the_same_key(self):
+        """The assertion that would actually catch it, whatever the source
+        looks like: this ciphertext was produced by the stretched-key path
+        before the rename and must still decrypt after it."""
+        os.environ["CREDENTIAL_KEY"] = "kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu"
+        vault = importlib.import_module("app.vault")
+        importlib.reload(vault)
+        token = vault.encrypt("app-password")
+        self.assertEqual(vault.decrypt(token), "app-password")
+        # And the derived key is the one the salt produces, not a fresh one.
+        self.assertEqual(
+            vault._derive("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu"),
+            vault._derive("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu"))
+        os.environ.pop("CREDENTIAL_KEY", None)

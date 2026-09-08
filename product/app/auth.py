@@ -108,7 +108,7 @@ def _send_over_https(address: str, body: str) -> None:
                      "accept": "application/json",
                      "content-type": "application/json"},
             json={"sender": {"email": config.SMTP_ADDRESS,
-                             "name": "Job Machine"},
+                             "name": "Recruited"},
                   "to": [{"email": address}],
                   "subject": SUBJECT,
                   "textContent": body},

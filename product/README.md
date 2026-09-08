@@ -1,4 +1,4 @@
-# job machine — point it at your own job search
+# Recruited — point it at your own job search
 
 The machine in the root of this repository was built for one person, and it is
 still running for him. This directory is the part anyone can use.

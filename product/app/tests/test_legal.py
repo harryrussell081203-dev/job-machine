@@ -179,5 +179,35 @@ class TestUnsetContactDoesNotRenderAnEmptyMailto(AppTestCase):
             self.assertNotIn("mailto:>", body)
 
 
+class TestTheIssuedAddressIsDisclosed(AppTestCase):
+    """A Recruited address changes what is held and who processes the
+    letter, so both pages have to say so. A privacy notice describing only
+    the mailbox route would be describing half the product."""
+
+    def test_the_privacy_notice_covers_it(self):
+        body = prose(self.client.get("/privacy").text)
+        self.assertIn("Recruited sending address", body)
+        self.assertIn("no password", body.lower())
+        self.assertIn("Reply-To", body)
+
+    def test_it_says_replies_do_not_come_to_us(self):
+        """The reassurance only means something if it is stated plainly."""
+        body = prose(self.client.get("/privacy").text).lower()
+        self.assertIn("does not come to us", body)
+
+    def test_the_password_section_says_which_route_it_applies_to(self):
+        """It used to open 'automatic sending is off unless you turn it on',
+        which now reads as though every user hands over a password."""
+        body = prose(self.client.get("/privacy").text)
+        self.assertIn("only if you connect", body.lower())
+
+    def test_the_terms_state_the_shared_allowance(self):
+        """Somebody whose letters go tomorrow instead of today should have
+        been told that before they chose it, not after."""
+        body = prose(self.client.get("/terms").text)
+        self.assertIn("one daily allowance", body)
+        self.assertIn("wait until tomorrow", body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

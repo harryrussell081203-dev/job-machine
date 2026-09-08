@@ -1,6 +1,6 @@
 {
-  "name": "Job Machine",
-  "short_name": "Job Machine",
+  "name": "Recruited",
+  "short_name": "Recruited",
   "description": "Writes to the people who do the hiring, and sends it for you.",
   "start_url": "/dashboard",
   "scope": "/",

@@ -149,6 +149,7 @@ def _draft_one(user_id, listing, profile, ai, session, report, **kwargs):
         job_title=listing.title, company=listing.company,
         location=listing.location, listing_url=listing.url,
         salary_text=_salary_text(listing), score=listing.score,
+        score_reason=getattr(listing, "score_reason", "") or "",
         to_email=letter["to_email"], to_name=letter.get("to_name"),
         contact_tier=letter.get("contact_tier"),
         subject=letter["subject"], body=letter["body"])

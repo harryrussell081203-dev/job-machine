@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import db, delivery
+from . import config, db, delivery
 from .vault import VaultError
 
 MAX_CONSECUTIVE_FAILURES = 3
@@ -85,6 +85,21 @@ def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
         report.reason = f"daily limit of {settings['daily_cap']} already reached"
         return report
 
+    # A Recruited address draws on a shared provider allowance rather than
+    # the user's own mailbox, so there is a second ceiling above their own and
+    # it belongs to everybody. Checked here rather than left to the provider:
+    # going over does not degrade politely, it rejects, and a rejection would
+    # be recorded as a failed send and shown to the user as though their
+    # letter had bounced.
+    managed = account["kind"] == "managed"
+    if managed:
+        shared_left = config.MANAGED_MAIL_DAILY_CAP - db.managed_sent_today()
+        if shared_left <= 0:
+            report.reason = ("today's shared sending allowance is used up - "
+                             "your letters will go out tomorrow")
+            return report
+        allowance = min(allowance, shared_left)
+
     due = db.drafts_due(user_id, hold_minutes=settings["hold_minutes"])
     if not due:
         report.reason = "nothing is due yet"
@@ -126,10 +141,18 @@ def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
             continue
 
         try:
-            send(host=host, port=port, username=address, password=password,
+            # On a managed account the SMTP username is the provider's
+            # ("resend"), the From line is the issued address, and Reply-To is
+            # the user's real inbox - so an employer's answer reaches them
+            # directly and we never hold it.
+            send(host=host, port=port,
+                 username=config.MANAGED_MAIL_USERNAME if managed else address,
+                 password=password,
                  to_email=draft["to_email"], subject=draft["subject"],
                  body=draft["body"], attachment=attachment,
-                 display_name=display_name)
+                 display_name=display_name,
+                 from_address=address if managed else "",
+                 reply_to=account["reply_to"] if managed else "")
         except delivery.DeliveryError as exc:
             message = str(exc)
             report.failed += 1
@@ -159,6 +182,10 @@ def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
         db.record_contacted(user_id, company)
         db.record_sent(user_id, draft_id=draft["id"],
                        to_email=draft["to_email"], company=company, ok=True)
+        if managed:
+            # After the send, not before. Counting an attempt that then failed
+            # would spend the shared allowance on letters nobody received.
+            db.record_managed_send(user_id)
         done_now.add(key)
         report.sent += 1
 

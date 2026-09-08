@@ -117,6 +117,16 @@ def _fernet():
 def _derive(secret: str) -> bytes:
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    # DO NOT CHANGE THIS SALT, INCLUDING TO MATCH A RENAME.
+    #
+    # It is an input to the key derivation, not a label. A different salt
+    # derives a different key from the same passphrase, so every credential
+    # already stored through this path becomes undecryptable - and the
+    # failure is quiet: users still look connected, and every send raises
+    # "reconnect your mailbox" instead.
+    #
+    # It says recruited because that is what the product was called when
+    # the first key was derived. That is the only thing it has to match.
     raw = HKDF(algorithm=hashes.SHA256(), length=32,
                salt=b"job-machine/credential-key",
                info=b"mail credentials v1").derive(secret.encode())
