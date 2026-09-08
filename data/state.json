@@ -1940,6 +1940,9 @@
    "source": "signature of ask@uws.ac.uk"
   }
  },
+ "heartbeat": {
+  "last_run": "2026-09-08T12:03:35.898153+00:00"
+ },
  "inbox": {
   "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
    "address": "hello@gojiberry-news.com",
@@ -154909,6 +154912,11 @@
    ],
    "phone_method": "scraped",
    "posted_at": "2026-09-07T19:39:33+00:00",
+   "replied_at": "2026-09-08T12:03:41.787677+00:00",
+   "reply_category": "rejection",
+   "reply_excerpt": "Harry\n\nThanks for your application.\n\nNot sure about the Davidson Mains bit as we are not based there, however we are looking for someone with a much more in depth knowledge of pumps and pumping equipment.\n\nThanks for your interest \n\nBryn \n\n\nRecruitment \nT:0131 444 0888\nE:recruitment@pumpactionltd.co.uk\nW:pumpactionltd.co.uk\n5 New Mart Place, Edinburgh, EH14 1RW\n\nWe conduct our business on the basis of our relevant standard terms and conditions of sale \n\u200bwhich can be found via this link to our we",
+   "reply_handled_at": "2026-09-08T12:03:41.787694+00:00",
+   "reply_summary": "The company rejected the application due to a lack of in-depth knowledge of pumps and pumping equipment.",
    "salary_max": 39201.62,
    "salary_min": 39201.62,
    "score": 75,
@@ -154919,7 +154927,7 @@
    "sent_subject": "Engineering Manager, technical support for Service team",
    "sent_to": "recruitment@pumpactionltd.co.uk",
    "source": "adzuna",
-   "status": "sent",
+   "status": "replied",
    "template_family": "agency",
    "title": "Engineering Manager",
    "url": "https://www.adzuna.co.uk/jobs/details/5874378494?utm_medium=api&utm_source=afe77721"
