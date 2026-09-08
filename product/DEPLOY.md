@@ -140,7 +140,7 @@ outside.
 
 ## 3a. Your own domain
 
-`job-machine.onrender.com` on a page asking somebody for a card reads as a
+`recruited.onrender.com` on a page asking somebody for a card reads as a
 weekend project, which is the one thing this is not. A `.co.uk` runs about
 £8–10 a year and is the cheapest credibility you can buy.
 
@@ -158,7 +158,7 @@ do the trick where the first year is £1 and the renewal is £30, so check the
 ### Point it at Render
 
 1. Render → the service → **Settings → Custom Domains → Add**. Add both
-   `jobmachine.co.uk` and `www.jobmachine.co.uk`. Render shows you the DNS
+   `recruited.org.uk` and `www.recruited.org.uk`. Render shows you the DNS
    records it wants.
 2. At the registrar's DNS panel, add exactly those records. For a root
    `.co.uk` it will be an **A record** (a bare domain cannot be a CNAME);
@@ -170,11 +170,11 @@ do the trick where the first year is £1 and the renewal is £30, so check the
 
 ### Then, in this order
 
-4. Set `BASE_URL=https://jobmachine.co.uk` in Render's environment panel.
+4. Set `BASE_URL=https://recruited.org.uk` in Render's environment panel.
    Getting this wrong is invisible until a customer clicks a sign-in link and
    it goes nowhere, which is why `/status` checks it.
 5. **Stripe**, if you are on the API route rather than a Payment Link: change
-   the webhook endpoint to `https://jobmachine.co.uk/webhooks/stripe`. The
+   the webhook endpoint to `https://recruited.org.uk/webhooks/stripe`. The
    signing secret does not change. On a Payment Link there is nothing to do.
 6. Load `/status` and confirm it is not complaining, then sign in from a
    phone that has never seen the site.
@@ -186,7 +186,7 @@ bookmarked still resolves.
 
 Worth doing while you are in the DNS panel, and it fixes something separate:
 `harryrussell081203@gmail.com` puts a date of birth in the From line of every
-application. Cloudflare **Email Routing** forwards `harry@jobmachine.co.uk`
+application. Cloudflare **Email Routing** forwards `harry@recruited.org.uk`
 into the same Gmail for nothing, and Gmail's **Settings → Accounts → Send
 mail as** then lets you send from it.
 

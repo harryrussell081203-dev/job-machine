@@ -85,7 +85,7 @@ def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
         report.reason = f"daily limit of {settings['daily_cap']} already reached"
         return report
 
-    # A Job Machine address draws on a shared provider allowance rather than
+    # A Recruited address draws on a shared provider allowance rather than
     # the user's own mailbox, so there is a second ceiling above their own and
     # it belongs to everybody. Checked here rather than left to the provider:
     # going over does not degrade politely, it rejects, and a rejection would

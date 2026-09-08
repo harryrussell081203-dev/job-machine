@@ -180,13 +180,13 @@ class TestUnsetContactDoesNotRenderAnEmptyMailto(AppTestCase):
 
 
 class TestTheIssuedAddressIsDisclosed(AppTestCase):
-    """A Job Machine address changes what is held and who processes the
+    """A Recruited address changes what is held and who processes the
     letter, so both pages have to say so. A privacy notice describing only
     the mailbox route would be describing half the product."""
 
     def test_the_privacy_notice_covers_it(self):
         body = prose(self.client.get("/privacy").text)
-        self.assertIn("Job Machine sending address", body)
+        self.assertIn("Recruited sending address", body)
         self.assertIn("no password", body.lower())
         self.assertIn("Reply-To", body)
 

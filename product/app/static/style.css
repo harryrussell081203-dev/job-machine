@@ -316,7 +316,7 @@ label.check input:checked::after {
 }
 
 /* --- an address we issued ---------------------------------------------- */
-/* firstname.lastname@mail.jobmachine.co.uk is 38 characters of monospace,
+/* firstname.lastname@mail.recruited.org.uk is 38 characters of monospace,
    which on a 390px phone reaches the edge of its panel and stops looking
    like something you own. Breaking beats shrinking: it is the one string on
    the page the reader actually has to take in. */

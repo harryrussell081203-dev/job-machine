@@ -455,7 +455,7 @@ def mail_login(user_id: int):
 
 
 def issue_managed_address(user_id: int, name: str, fallback_email: str = "") -> str:
-    """Claim a Job Machine address for this user, or return the one they have.
+    """Claim a Recruited address for this user, or return the one they have.
 
     Idempotent on purpose. Somebody who disconnects and reconnects keeps the
     address employers already have - reissuing a different one would orphan
@@ -489,7 +489,7 @@ def issue_managed_address(user_id: int, name: str, fallback_email: str = "") -> 
 
 
 def managed_sent_today(now_ts: int | None = None) -> int:
-    """How many letters have gone out from Job Machine addresses today.
+    """How many letters have gone out from Recruited addresses today.
 
     Across ALL users, because the provider's allowance is across all users.
     Counting per-user would let ten people each stay under their own limit

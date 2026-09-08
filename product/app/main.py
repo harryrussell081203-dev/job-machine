@@ -32,9 +32,9 @@ from . import admin as adminlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
 
-log = logging.getLogger("jobmachine")
+log = logging.getLogger("recruited")
 
-app = FastAPI(title="job machine", docs_url=None, redoc_url=None)
+app = FastAPI(title="Recruited", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 
@@ -861,7 +861,7 @@ def mail_form(request: Request):
 
 @app.post("/setup/mail/managed")
 def mail_managed(request: Request):
-    """Issue a Job Machine address instead of taking the user's own.
+    """Issue a Recruited address instead of taking the user's own.
 
     No password to hand over, because there is nothing of theirs to
     authenticate as: we send through our own provider and put their real
@@ -877,7 +877,7 @@ def mail_managed(request: Request):
                       vault_ready=vault.available(),
                       managed_ready=config.managed_mail_available(),
                       managed_preview="", profile=profile,
-                      error="Job Machine addresses are not switched on here.")
+                      error="Recruited addresses are not switched on here.")
 
     # Where replies land. Their account address unless they gave a different
     # one on their profile - and never blank, because a letter no employer
@@ -932,7 +932,7 @@ async def mail_save(request: Request):
         port = 465
 
     def again(message):
-        # The Job Machine option has to survive this screen. Somebody who has
+        # The Recruited option has to survive this screen. Somebody who has
         # just been told their app password was rejected is exactly the person
         # who wants the route that needs no password, and dropping it from the
         # error render would hide it at the only moment it is obviously

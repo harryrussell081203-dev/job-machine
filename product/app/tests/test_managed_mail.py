@@ -1,4 +1,4 @@
-"""Tests for Job Machine sending addresses.
+"""Tests for Recruited sending addresses.
 
 The user picks: send from their own mailbox, or from an address we issue so
 their own is never used and cannot be damaged.
@@ -29,7 +29,7 @@ from cryptography.fernet import Fernet  # noqa: E402
 from test_sending import Base, build  # noqa: E402
 
 MANAGED = {
-    "MANAGED_MAIL_DOMAIN": "mail.jobmachine.co.uk",
+    "MANAGED_MAIL_DOMAIN": "mail.recruited.org.uk",
     "MANAGED_MAIL_KEY": "re_test_key",
 }
 
@@ -55,7 +55,7 @@ class TestTheAddressWeIssue(unittest.TestCase):
         uid = self.uid("harry@example.com")
         self.assertEqual(
             self.db.issue_managed_address(uid, "Harry Russell"),
-            "harry.russell@mail.jobmachine.co.uk")
+            "harry.russell@mail.recruited.org.uk")
 
     def test_two_people_with_one_name_do_not_share_an_address(self):
         """The second person would receive the first person's replies."""
@@ -68,7 +68,7 @@ class TestTheAddressWeIssue(unittest.TestCase):
         b = self.db.issue_managed_address(self.uid("b@example.com"),
                                           "Harry Russell")
         self.assertNotEqual(a, b)
-        self.assertEqual(b, "harry.russell2@mail.jobmachine.co.uk")
+        self.assertEqual(b, "harry.russell2@mail.recruited.org.uk")
 
     def test_asking_twice_returns_the_same_address(self):
         """Reissuing a different one would orphan every reply in flight."""
@@ -225,7 +225,7 @@ class TestTheOptionAppearsWhenItDoes(SignedIn):
         uid = self.db.get_or_create_user("harry@example.com")["id"]
         self.db.save_profile(uid, {"name": "Harry Russell"})
         body = self.client.get("/setup/mail").text
-        self.assertIn("harry.russell@mail.jobmachine.co.uk", body)
+        self.assertIn("harry.russell@mail.recruited.org.uk", body)
 
     def test_taking_it_connects_without_a_password(self):
         self.sign_in("harry@example.com")
@@ -234,7 +234,7 @@ class TestTheOptionAppearsWhenItDoes(SignedIn):
         self.client.post("/setup/mail/managed", follow_redirects=False)
         row = self.db.get_mail_account(uid)
         self.assertEqual(row["kind"], "managed")
-        self.assertEqual(row["address"], "harry.russell@mail.jobmachine.co.uk")
+        self.assertEqual(row["address"], "harry.russell@mail.recruited.org.uk")
         self.assertEqual(row["reply_to"], "harry@example.com")
 
     def test_it_survives_the_password_rejected_screen(self):
@@ -244,7 +244,7 @@ class TestTheOptionAppearsWhenItDoes(SignedIn):
         body = self.client.post("/setup/mail",
                                 data={"address": "not-an-email",
                                       "password": "x"}).text
-        self.assertIn("mail.jobmachine.co.uk", body)
+        self.assertIn("mail.recruited.org.uk", body)
 
 
 if __name__ == "__main__":

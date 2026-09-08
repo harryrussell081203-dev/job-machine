@@ -169,7 +169,7 @@ class TestTheScreen(Base):
 
     def test_it_says_the_user_marks_these_rather_than_implying_it_watches(self):
         """We cannot see replies - on an own mailbox they go to the user, and
-        a Job Machine address puts their address on Reply-To precisely so
+        a Recruited address puts their address on Reply-To precisely so
         they still do. Implying otherwise would be a lie on the one screen
         whose whole job is telling the truth about what happened."""
         self.application("Acme")

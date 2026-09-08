@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     updated_at   BIGINT  NOT NULL
 );
 
--- Every letter sent from a Job Machine address, so the provider's shared
+-- Every letter sent from a Recruited address, so the provider's shared
 -- daily allowance can be counted before a send rather than discovered from a
 -- rejection. One row per send, dated, across all users - because the cap is
 -- across all users.
@@ -366,7 +366,7 @@ _ADDED_COLUMNS = [
     # overwriting the record that it was ever sent.
     #
     # Empty until the user says otherwise. We cannot detect a reply: on an own
-    # mailbox the answer goes to them, and on a Job Machine address Reply-To
+    # mailbox the answer goes to them, and on a Recruited address Reply-To
     # sends it to them too - deliberately, so we never hold it. So this is
     # recorded by the person who actually saw the reply, and the screen says
     # so rather than implying it is watching.

@@ -14,7 +14,7 @@ Sending mail *as* a user needs one of three things:
      credentials granting full send access to strangers' mailboxes. One
      breach is the whole business plus somebody else's inbox.
   3. **Sending from our own domain on their behalf.** No credentials, but the
-     letter arrives as "via jobmachine", and the entire reason these get
+     letter arrives as "via recruited", and the entire reason these get
      answered is that they read as one person writing to another. It would
      degrade the product's only real advantage.
 
@@ -76,9 +76,9 @@ def send_via_smtp(*, host: str, port: int, username: str, password: str,
 
     `from_address` exists because the two are not always the same thing. On a
     user's own mailbox they are: you authenticate as harry@gmail.com and the
-    letter comes from harry@gmail.com. On a Job Machine address you
+    letter comes from harry@gmail.com. On a Recruited address you
     authenticate to Resend as the literal username "resend" and the letter
-    comes from harry.russell@mail.jobmachine.co.uk - and putting "resend" on
+    comes from harry.russell@mail.recruited.org.uk - and putting "resend" on
     the From line would be both wrong and faintly comic. Defaults to the
     username so every existing caller is unchanged.
     """
@@ -145,7 +145,7 @@ def guess_host(address: str):
     return KNOWN_HOSTS.get(domain)
 
 
-# A Job Machine address has to read as a person's, because the entire reason
+# A Recruited address has to read as a person's, because the entire reason
 # these letters get answered is that they look like one person writing to
 # another. harry.russell@ passes; user4821@ or noreply@ announces a tool
 # before the subject line is read.
@@ -153,7 +153,7 @@ _LOCAL_PART_OK = "abcdefghijklmnopqrstuvwxyz0123456789."
 
 
 def local_part_for(name: str, fallback: str = "") -> str:
-    """The local part of a Job Machine address, from a person's name.
+    """The local part of a Recruited address, from a person's name.
 
     "Harry Russell" -> "harry.russell". Accents are folded rather than
     dropped, so Björn becomes bjorn instead of bj rn, and O'Brien keeps its

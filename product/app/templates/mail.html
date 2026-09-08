@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Connect your email &middot; job machine{% endblock %}
+{% block title %}Connect your email &middot; Recruited{% endblock %}
 {% block content %}
 
 <h1>Connect your email</h1>
@@ -31,18 +31,18 @@
      <code>{{ profile.get('email') or user['email'] }}</code> reads as a person
      applying for a job, because it is one. That is the whole reason these get
      answered, and it is why it is the first option here.</p>
-  <p><b>A Job Machine address protects the one you use for everything.</b>
+  <p><b>A Recruited address protects the one you use for everything.</b>
      Nothing is perfect: cold email at volume can land you in spam folders,
      and a personal account that starts looking like a mailshot can be
      suspended by your provider. If that worries you, send from
      <code>{{ managed_preview }}</code> instead and keep your own address out
      of it entirely.</p>
-  <p>Replies come to you either way &mdash; a Job Machine letter carries your
+  <p>Replies come to you either way &mdash; a Recruited letter carries your
      real address on Reply-To, so the employer answers into your inbox and we
      never see it.</p>
 </div>
 
-<h2>Use a Job Machine address</h2>
+<h2>Use a Recruited address</h2>
 <div class="panel">
   <p class="issued-address"><code>{{ managed_preview }}</code></p>
   <p><b>No password to hand over.</b> Nothing of yours is stored, because
