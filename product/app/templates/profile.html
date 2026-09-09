@@ -152,13 +152,21 @@
     <div class="row">
       <div>
         <label for="locations">Towns and cities</label>
-        <p class="hint">One per line.</p>
-        <textarea id="locations" name="locations">{{ (data.get('locations') or []) | join('\n') }}</textarea>
+        {# The old hint said only "One per line" and somebody typed a
+           description of where they wanted to work. It went to the job board
+           as a literal search term, matched nothing, and looked like an empty
+           market. Show what goes in the box instead of describing it. #}
+        <p class="hint">Places, separated by commas or lines. Put
+           <b>United Kingdom</b> for anywhere.</p>
+        <textarea id="locations" name="locations" required
+          placeholder="Aberdeen, Edinburgh&#10;United Kingdom">{{ (data.get('locations') or []) | join('\n') }}</textarea>
       </div>
       <div>
         <label for="target_roles">Job titles to search for</label>
-        <p class="hint">One per line.</p>
-        <textarea id="target_roles" name="target_roles">{{ (data.get('target_roles') or []) | join('\n') }}</textarea>
+        <p class="hint">The titles an employer would advertise. More titles
+           means more matches &mdash; four or five beats one.</p>
+        <textarea id="target_roles" name="target_roles" required
+          placeholder="field service engineer&#10;maintenance technician&#10;instrumentation technician">{{ (data.get('target_roles') or []) | join('\n') }}</textarea>
       </div>
     </div>
     <label for="radius_miles">Miles around each</label>
