@@ -340,6 +340,54 @@ class TestProfileForm(AppTestCase):
         self.client.post("/profile", data=self._good_form())
         Profile.from_dict(self.main.db.load_profile(1))
 
+    def test_a_description_in_the_location_box_is_refused_in_the_ui(self):
+        """The one that cost a hundred and eighteen listings.
+
+        Saved silently, went to the job board as a literal search term, and
+        looked like there were no jobs. Nothing to fix afterwards, because
+        nothing had gone wrong as far as the software knew.
+        """
+        r = self.client.post("/profile", data=self._good_form(
+            locations="United Kingdom europe oil hotspots"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("reads like a sentence", r.text)
+        self.assertIsNone(self.main.db.load_profile(1))
+
+    def test_the_refusal_says_what_to_type_instead(self):
+        r = self.client.post("/profile", data=self._good_form(
+            locations="anywhere I can get to on the train"))
+        self.assertIn("One place per line", r.text)
+        self.assertIsNone(self.main.db.load_profile(1))
+
+    def test_commas_separate_places_as_well_as_lines(self):
+        """Nobody types four towns on four lines when a comma is right there,
+        and 'Aberdeen, Edinburgh' as ONE location searched for a place of that
+        name and found nothing."""
+        r = self.client.post("/profile", data=self._good_form(
+            locations="Aberdeen, Edinburgh\nGlasgow"),
+            follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(self.main.db.load_profile(1)["locations"],
+                         ["Aberdeen", "Edinburgh", "Glasgow"])
+
+    def test_commas_separate_job_titles_too(self):
+        r = self.client.post("/profile", data=self._good_form(
+            target_roles="field service engineer, maintenance technician"),
+            follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(self.main.db.load_profile(1)["target_roles"],
+                         ["field service engineer", "maintenance technician"])
+
+    def test_a_comma_inside_a_never_claim_rule_does_not_split_it(self):
+        """never_claim entries are prose, so a comma there is punctuation.
+        Splitting on it would turn one rule into two half-rules, and a
+        half-rule about what you must never claim is worse than none."""
+        rule = "a degree, which is paused rather than finished"
+        r = self.client.post("/profile", data=self._good_form(never_claim=rule),
+                             follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(self.main.db.load_profile(1)["never_claim"], [rule])
+
 
 class TestDrafts(AppTestCase):
     def setUp(self):

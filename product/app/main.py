@@ -323,7 +323,30 @@ async def profile_save(request: Request):
 
 
 def _lines(raw: str) -> list[str]:
+    """One entry per line. For fields whose entries are sentences.
+
+    never_claim and qualifications are written as prose - "a completed degree,
+    which is paused rather than finished" - so a comma is punctuation here and
+    splitting on it would chop one rule into two half-rules.
+    """
     return [ln.strip() for ln in (raw or "").splitlines() if ln.strip()]
+
+
+def _items(raw: str) -> list[str]:
+    """One entry per line OR per comma. For lists of short things.
+
+    Nobody types four towns on four lines when a comma is right there, and
+    "Aberdeen, Edinburgh" arriving as a single location searched for a place
+    of that name and found nothing. Accepting the separator people actually
+    use is cheaper than teaching them not to.
+    """
+    out = []
+    for line in (raw or "").splitlines():
+        for part in line.split(","):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
 
 
 def _profile_from_form(form) -> dict:
@@ -359,9 +382,9 @@ def _profile_from_form(form) -> dict:
         "history": history,
         "qualifications": _lines(s("qualifications")),
         "never_claim": _lines(s("never_claim")),
-        "locations": _lines(s("locations")),
+        "locations": _items(s("locations")),
         "radius_miles": i("radius_miles") or 25,
-        "target_roles": _lines(s("target_roles")),
+        "target_roles": _items(s("target_roles")),
     }
 
 
