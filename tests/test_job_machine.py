@@ -3682,3 +3682,115 @@ class TestNoticingThatNothingRan(unittest.TestCase):
         self.assertTrue(jm.STATE_PATH.endswith(".json"))
         with mock.patch.dict(os.environ, {"STATE_PATH": "/tmp/elsewhere.json"}):
             self.assertEqual(jm.env_str("STATE_PATH"), "/tmp/elsewhere.json")
+
+
+class TestTheScorerKnowsWhatHisTradeIs(unittest.TestCase):
+    """Harry flagged three letters the machine sent to roles he cannot do:
+
+        Substation Project Engineer
+        Research Technician - Biomedical Photonics
+        Diesel Engineer, North of Scotland Power Generation
+
+    All three cleared the title pre-filter, which is a deliberately wide net -
+    RELEVANT_TITLE matches bare "engineer" and "technician" on purpose so the
+    cheap filter never throws away a good listing. The AI scorer is the real
+    judge, and it had nothing telling it what his trade excludes.
+    """
+
+    def test_the_profile_names_the_trade_rather_than_the_job_titles(self):
+        # "engineer" and "technician" in a title mean almost nothing, which is
+        # how all three got through.
+        profile = jm.CANDIDATE_PROFILE
+        self.assertIn("ELECTRONICS", profile)
+        self.assertIn("IPC-A-610", profile)
+
+    def test_each_of_the_three_wrong_roles_is_named_as_a_rejection(self):
+        profile = jm.CANDIDATE_PROFILE
+        for example in ("Substation Project Engineer",
+                        "Diesel Engineer",
+                        "Biomedical Photonics"):
+            self.assertIn(example, profile)
+
+    def test_the_test_is_has_he_done_it_not_could_an_engineer_do_it(self):
+        # The profile wraps, so match on the words rather than a phrase that
+        # only looks contiguous in the source.
+        profile = " ".join(jm.CANDIDATE_PROFILE.split())
+        self.assertIn("has HE done this work", profile)
+        self.assertIn('not "could an engineer do this"', profile)
+
+    def test_the_prompt_puts_trade_before_pay(self):
+        # Deciding pay first is what let a well-paid wrong-trade role through.
+        batch = [make_job(external_id="0")]
+        seen = {}
+        with mock.patch.object(jm, "gemini_json",
+                               side_effect=lambda p, **k: seen.setdefault("p", p) and []):
+            jm.score_batch(batch)
+        prompt = seen["p"]
+        self.assertLess(prompt.index("FIRST, THE TRADE"),
+                        prompt.index("THEN PAY"))
+        self.assertIn("has HE done this work", prompt)
+
+
+class TestAnUnstatedSalaryIsNotAPenalty(unittest.TestCase):
+    """Harry: "dont limit to what you can see salary wise as most dont show,
+    ill make the descision of the salary when they inform me". The hard filter
+    already passed silence. The SCORER did not: every listing went in as
+    "Salary: None-None" beside a guide whose top band required pay "clearly
+    better than GBP 30,000", so a listing with no figure could not reach it.
+    """
+
+    def test_a_listing_with_no_salary_says_so_in_words(self):
+        job = make_job(external_id="0")
+        job["salary_min"] = job["salary_max"] = None
+        self.assertEqual(jm.advertised_pay_text(job),
+                         "not stated in the advert")
+
+    def test_a_stated_salary_is_still_passed_through(self):
+        job = make_job(external_id="0")
+        job["salary_min"], job["salary_max"] = 40000, 45000
+        self.assertIn("45000", jm.advertised_pay_text(job))
+        self.assertIn("a year", jm.advertised_pay_text(job))
+
+    def test_an_hourly_rate_is_not_read_as_an_annual_one(self):
+        # The Leonardo case: GBP 30.81 an hour is the best-paid thing in the
+        # queue and reads as thirty-one pounds a year.
+        job = make_job(external_id="0")
+        job["salary_min"] = job["salary_max"] = 30.81
+        self.assertIn("an hour", jm.advertised_pay_text(job))
+
+    def test_none_none_never_reaches_the_model_again(self):
+        job = make_job(external_id="0")
+        job["salary_min"] = job["salary_max"] = None
+        seen = {}
+        with mock.patch.object(jm, "gemini_json",
+                               side_effect=lambda p, **k: seen.setdefault("p", p) and []):
+            jm.score_batch([job])
+        self.assertNotIn("None-None", seen["p"])
+        self.assertIn("not stated in the advert", seen["p"])
+
+    def test_the_prompt_says_silence_costs_nothing(self):
+        seen = {}
+        with mock.patch.object(jm, "gemini_json",
+                               side_effect=lambda p, **k: seen.setdefault("p", p) and []):
+            jm.score_batch([make_job(external_id="0")])
+        prompt = seen["p"]
+        self.assertIn("NEUTRAL", prompt)
+        self.assertIn("must not cost a listing a single point", prompt)
+
+    def test_a_stated_low_salary_is_still_binding(self):
+        """The half Harry explicitly did NOT want changed: "do not change what
+        our doing for suitable roles with the salary listed"."""
+        seen = {}
+        with mock.patch.object(jm, "gemini_json",
+                               side_effect=lambda p, **k: seen.setdefault("p", p) and []):
+            jm.score_batch([make_job(external_id="0")])
+        self.assertIn("it is binding and unchanged", seen["p"])
+
+        low = make_job(external_id="1")
+        low["salary_min"] = low["salary_max"] = 26000
+        self.assertFalse(jm.pays_enough(low))
+
+    def test_the_hard_filter_still_lets_silence_through(self):
+        job = make_job(external_id="0")
+        job["salary_min"] = job["salary_max"] = None
+        self.assertTrue(jm.pays_enough(job))

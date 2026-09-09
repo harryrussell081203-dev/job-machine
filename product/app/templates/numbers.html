@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}The numbers &middot; Recruited{% endblock %}
+{% block content %}
+
+<h1>What this has actually done</h1>
+<p class="lede">Live, from the database, every time you load this page. It goes
+   down as well as up, and it says so when the answer is none.</p>
+
+<div class="panel">
+  {% if stats.letters %}
+    <div class="stats">
+      <div><b>{{ stats.letters }}</b><span>letters sent</span></div>
+      <div><b>{{ stats.people }}</b><span>{{ 'person' if stats.people == 1 else 'people' }}</span></div>
+      {% if stats.reply_rate is not none %}
+        <div><b>{{ stats.reply_rate }}%</b><span>replied</span></div>
+      {% endif %}
+      {% if stats.interviews %}
+        <div><b>{{ stats.interviews }}</b><span>interviews</span></div>
+      {% endif %}
+    </div>
+
+    {% if stats.rate_withheld %}
+      <p class="hint">No reply rate yet. With fewer than
+         {{ stats.min_people }} people using it, a percentage is one person's
+         diary rather than a statistic, and quoting it as though it were
+         evidence would be the exact thing this page exists to prevent.</p>
+    {% elif stats.marked %}
+      <p class="hint">The reply rate is {{ stats.heard_back }} of
+         {{ stats.marked }} letters whose outcome somebody has recorded &mdash;
+         not of all {{ stats.letters }} sent. We cannot see replies: they go to
+         the user's own inbox, so this counts what people have told us. A
+         rejection counts as hearing back but not as a reply, or the number
+         would improve as things went worse.</p>
+    {% endif %}
+  {% else %}
+    <p class="ok" style="font-size:19px"><b>No letters have gone out yet.</b></p>
+    <p>This product is new. Nobody has finished setting it up and sent
+       anything through it, so there is nothing here to show you.</p>
+    <p class="hint">This page exists from the beginning rather than from the
+       first good week, because a page that only appears once the numbers
+       flatter you is an advert, not evidence.</p>
+  {% endif %}
+</div>
+
+<h2>What normal looks like</h2>
+<p>So you can judge the numbers above rather than take a word for them. These
+   are other people's figures, not ours.</p>
+
+<div class="panel scroll stacked">
+  <table>
+    <thead>
+      <tr><th>Measure</th><th>Reported</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="lead" data-label="Measure">Applications that reach interview</td>
+        <td data-label="Reported"><b>2&ndash;3%</b></td>
+        <td class="muted" data-label="Source">2026 industry average</td>
+      </tr>
+      <tr>
+        <td class="lead" data-label="Measure">Sent 11&ndash;20 applications</td>
+        <td data-label="Reported"><b>9.25%</b></td>
+        <td class="muted" data-label="Source">Huntr, Q1 2026</td>
+      </tr>
+      <tr>
+        <td class="lead" data-label="Measure">Sent 100+ applications</td>
+        <td data-label="Reported"><b>2.58%</b></td>
+        <td class="muted" data-label="Source">Huntr, Q1 2026</td>
+      </tr>
+      <tr>
+        <td class="lead" data-label="Measure">A bulk auto-apply tool, tested</td>
+        <td data-label="Reported"><b>0.5%</b></td>
+        <td class="muted" data-label="Source">200 applications, one callback</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="note good">
+  <p><b>Read the third row again.</b> Applying to more jobs made it worse
+     &mdash; people who sent over a hundred applications interviewed at less
+     than a third of the rate of people who sent eleven to twenty. Volume is
+     not a strategy that is merely inefficient. It is one that backfires.</p>
+</div>
+
+<h2>Where the founder's own numbers come from</h2>
+<p>The 105 applications and 26 replies quoted elsewhere on this site are
+   Harry's, sent by the machine this product was built out of, from his own
+   mailbox, before there was a product. They are counted from his sent folder
+   and his replies &mdash; not from this database, which is why they are not
+   in the panel at the top.</p>
+<p>They also measure a different thing from the table above. Those are
+   <b>interview</b> rates. His is a <b>reply</b> rate: an answer from a human
+   being at the company. Putting the two side by side as though they were the
+   same number would be dishonest, so they are kept apart.</p>
+
+<p style="margin-top:24px" class="actions">
+  <a class="btn" href="/find">Try the free tool</a>
+  <a class="btn ghost" href="/playbook">Read the method</a>
+</p>
+
+{% endblock %}
