@@ -122,6 +122,34 @@ class TestPublicPages(AppTestCase):
     def test_health(self):
         self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
 
+    def test_a_shared_link_has_a_title_a_description_and_a_picture(self):
+        """Without these a link to the site is a bare grey URL everywhere it
+        is posted - Reddit, WhatsApp, a TikTok bio. The launch is made of
+        shares, so this is the first impression on nearly every visitor."""
+        page = self.client.get("/").text
+        for tag in ('property="og:title"', 'property="og:description"',
+                    'property="og:image"', 'name="description"',
+                    'name="twitter:card"'):
+            self.assertIn(tag, page)
+
+    def test_the_preview_image_is_an_absolute_url(self):
+        # A relative og:image is ignored by every scraper there is, and the
+        # failure looks like no image rather than a broken one.
+        page = self.client.get("/").text
+        self.assertIn('content="http://testserver/static/og.png"', page)
+
+    def test_the_preview_card_actually_exists(self):
+        r = self.client.get("/static/og.png")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b"\x89PNG"))
+
+    def test_the_description_does_not_leak_into_the_page(self):
+        """The obvious way to do per-page titles is a Jinja block, and a
+        declared block prints its body where it is declared - which puts the
+        marketing description as loose text at the top of every screen."""
+        body = self.client.get("/").text.split("<body>", 1)[1]
+        self.assertNotIn("A real email address at every company", body)
+
 
 class TestSignIn(AppTestCase):
     def test_a_bad_address_is_rejected(self):
