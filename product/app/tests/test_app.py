@@ -172,6 +172,37 @@ class TestSignIn(AppTestCase):
         self.assertEqual(second.status_code, 200)
         self.assertIn("expired or was already used", second.text)
 
+    def test_tapping_the_same_link_again_while_signed_in_just_goes_in(self):
+        # The real complaint behind "an email link every time". Somebody goes
+        # back to their inbox and taps the link a second time. It is single
+        # use, so it is refused - and they were shown a login screen and told
+        # to request another link, while holding a session good for a month.
+        link = self.main.auth.make_login_link("sam@example.com")
+        token = link.split("token=", 1)[1]
+        first = self.client.get(f"/auth/verify?token={token}",
+                                follow_redirects=False)
+        self.assertEqual(first.status_code, 303)
+
+        # Same token, same browser, cookies kept this time.
+        second = self.client.get(f"/auth/verify?token={token}",
+                                 follow_redirects=False)
+        self.assertEqual(second.status_code, 303)
+        self.assertIn(second.headers["location"], ("/dashboard", "/setup"))
+        self.assertNotIn("expired or was already used", second.text)
+
+    def test_a_forged_token_while_signed_in_still_does_not_sign_anyone_new_in(self):
+        # The session decides where an authenticated person LANDS. It must
+        # never be what authenticates them, or a junk token plus somebody
+        # else's cookie would read as a successful sign-in for that token's
+        # owner. Signed in as sam, the forged token must not change who you
+        # are - it should simply drop you back where sam belongs.
+        self.sign_in("sam@example.com")
+        r = self.client.get("/auth/verify?token=made.up.token",
+                            follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        who = self.client.get("/account")
+        self.assertIn("sam@example.com", who.text)
+
     def test_a_forged_token_is_refused(self):
         r = self.client.get("/auth/verify?token=made.up.token",
                             follow_redirects=False)

@@ -18,7 +18,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
+                               RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -198,10 +199,35 @@ def login_submit(request: Request, email: str = Form("")):
     return render(request, "login.html", sent=email.strip())
 
 
+def _landing_for(user) -> str:
+    """Where a signed-in person should be put.
+
+    Somebody with no profile has nothing to look at on the dashboard except a
+    note telling them so. Send them to the thing that needs doing; the CV
+    upload there fills in most of the next screen on its own.
+    """
+    return "/dashboard" if db.load_profile(user["id"]) else "/setup"
+
+
 @app.get("/auth/verify")
 def verify(request: Request, token: str = ""):
     email = auth.consume_login_token(token)
     if not email:
+        # A used link plus a live session is by far the commonest way to get
+        # here, and it is not a failure: somebody goes back to their inbox and
+        # taps the same link again. Sign-in links are single use - which is
+        # right, and stays right - so the second tap is refused, and until now
+        # that put a signed-in person on a login screen being told to ask for
+        # a link they did not need. It is the reason the whole flow reads as
+        # "an email every time" when the session actually lasts a month.
+        #
+        # Checked in this order deliberately. The token is consumed first, so
+        # a genuinely expired link is still spent rather than left usable, and
+        # the session below is only a nicer landing for somebody who is
+        # already authenticated. It grants nothing on its own.
+        user = current_user(request)
+        if user:
+            return RedirectResponse(_landing_for(user), status_code=303)
         return render(request, "login.html",
                       error="That link has expired or was already used. "
                             "Here is a fresh one.")
@@ -212,11 +238,7 @@ def verify(request: Request, token: str = ""):
     # already decided not to pay, which is the opposite of what it is for.
     if not existed:
         db.claim_free_spot(user["id"])
-    # Somebody with no profile has nothing to look at on the dashboard except
-    # a note telling them so. Send them to the thing that needs doing; the CV
-    # upload there fills in most of the next screen on its own.
-    landing = "/dashboard" if db.load_profile(user["id"]) else "/setup"
-    response = RedirectResponse(landing, status_code=303)
+    response = RedirectResponse(_landing_for(user), status_code=303)
     response.set_cookie(
         SESSION_COOKIE, auth.make_session(user["id"]),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
@@ -736,7 +758,29 @@ def setup(request: Request):
 
 @app.post("/setup/cv")
 async def upload_cv(request: Request):
-    """Take the CV, and use it to answer as many questions as it can."""
+    """Take the CV, and use it to answer as many questions as it can.
+
+    Answers JSON when asked to, because the page uploads with fetch rather
+    than by submitting the form. That is not decoration - see the script in
+    setup.html for why reading the bytes in the browser is the only place
+    Chrome's ERR_UPLOAD_FILE_CHANGED can be fixed. The plain form post still
+    works with no JavaScript at all, and returns redirects exactly as before.
+    """
+    wants_json = "application/json" in (request.headers.get("accept") or "")
+
+    def answer(next_url: str = "", error: str = "", status: int = 200):
+        if wants_json:
+            body = {"error": error} if error else {"next": next_url}
+            return JSONResponse(body, status_code=400 if error else 200)
+        if error:
+            return render(request, "setup.html", user=user, error=error,
+                          cv=db.cv_summary(user["id"]),
+                          profile=db.load_profile(user["id"]),
+                          mail=db.get_mail_account(user["id"]),
+                          settings=db.get_send_settings(user["id"]),
+                          vault_ready=vault.available())
+        return RedirectResponse(next_url, status_code=303)
+
     user, blocked = _gate(request)
     if blocked:
         return blocked
@@ -744,6 +788,9 @@ async def upload_cv(request: Request):
     form = await request.form()
     upload = form.get("cv")
     if upload is None or not getattr(upload, "filename", ""):
+        if wants_json:
+            return JSONResponse({"error": "no file was chosen"},
+                                status_code=400)
         return RedirectResponse("/setup?e=nofile", status_code=303)
 
     # Read with a ceiling rather than trusting the declared length: the only
@@ -761,12 +808,7 @@ async def upload_cv(request: Request):
     try:
         cvlib.check(upload.filename, blob)
     except cvlib.CVError as exc:
-        return render(request, "setup.html", user=user, error=str(exc),
-                      cv=db.cv_summary(user["id"]),
-                      profile=db.load_profile(user["id"]),
-                      mail=db.get_mail_account(user["id"]),
-                      settings=db.get_send_settings(user["id"]),
-                      vault_ready=vault.available())
+        return answer(error=str(exc))
 
     text = cvlib.extract_text(upload.filename, blob)
     db.save_cv(user["id"], filename=upload.filename,
@@ -776,8 +818,8 @@ async def upload_cv(request: Request):
     # Only offer to prefill an empty profile. Overwriting answers somebody
     # already gave with a model's reading of their CV would be rude and wrong.
     if text and not db.load_profile(user["id"]):
-        return RedirectResponse("/setup/from-cv", status_code=303)
-    return RedirectResponse("/setup", status_code=303)
+        return answer("/setup/from-cv")
+    return answer("/setup")
 
 
 @app.get("/setup/from-cv", response_class=HTMLResponse)
