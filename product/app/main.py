@@ -155,6 +155,21 @@ def terms(request: Request):
     return render(request, "terms.html")
 
 
+@app.get("/numbers", response_class=HTMLResponse)
+def numbers(request: Request):
+    """Everything this product has actually done, live, for anybody.
+
+    Public on purpose and uncomfortable on purpose. The whole pitch rests on
+    a number, and a number nobody can check is a claim. This is the page that
+    makes it checkable - including when the answer is zero, which is what it
+    says today.
+    """
+    return render(request, "numbers.html", stats=db.public_stats(),
+                  og_title="What Recruited has actually done",
+                  og_description="Every letter sent through Recruited, live. "
+                                 "Including when the answer is none.")
+
+
 # ----------------------------------------------------------------------
 # sign in
 # ----------------------------------------------------------------------
@@ -733,7 +748,8 @@ def healthz():
 # is explicit rather than "everything except": a new signed-in screen added
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
-PUBLIC_PAGES = ("/", "/find", "/playbook", "/terms", "/privacy", "/login")
+PUBLIC_PAGES = ("/", "/find", "/playbook", "/numbers", "/terms", "/privacy",
+                "/login")
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)

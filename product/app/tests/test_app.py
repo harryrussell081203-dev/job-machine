@@ -885,3 +885,93 @@ class TestTheScoreShowsItsWorking(AppTestCase):
         self.draft_with()
         self.sign_in("sam@example.com")
         self.assertIn("78/100", self.client.get("/drafts").text)
+
+
+class TestThePublicNumbers(AppTestCase):
+    """The pitch rests on a number, and a number nobody can check is a claim.
+
+    This page is what makes it checkable - including when the answer is zero,
+    which is what it says today.
+    """
+
+    def test_it_is_public(self):
+        r = self.client.get("/numbers")
+        self.assertEqual(r.status_code, 200)
+
+    def test_with_nothing_sent_it_says_so_plainly(self):
+        # A page that only appears once the numbers flatter you is an advert.
+        page = self.client.get("/numbers").text
+        self.assertIn("No letters have gone out yet", page)
+
+    def test_the_benchmarks_are_on_the_page_with_their_source(self):
+        page = self.client.get("/numbers").text
+        for figure in ("2&ndash;3%", "9.25%", "2.58%", "0.5%", "Huntr"):
+            self.assertIn(figure, page)
+
+    def test_it_keeps_reply_rate_and_interview_rate_apart(self):
+        """The benchmarks are INTERVIEW rates; Harry's 27% is a REPLY rate.
+        Presenting them as one number would be the exact arithmetic this page
+        exists to prevent."""
+        page = self.client.get("/numbers").text
+        self.assertIn("different thing", page)
+        landing = self.client.get("/").text
+        self.assertIn("Not the same measurement as ours", landing)
+
+
+class TestThePublicNumbersCountHonestly(AppTestCase):
+    def _send(self, n, outcome=None):
+        """n letters actually out of the door, optionally with an outcome."""
+        uid = self.main.db.get_or_create_user("sam@example.com")["id"]
+        for i in range(n):
+            did = self.main.db.add_draft(
+                uid, job_title="Technician", company=f"Co {i}",
+                to_email=f"a{i}@example.com", subject="s", body="b")
+            self.main.db.mark_draft(uid, did, "sent")
+            self.main.db.record_sent(uid, draft_id=did,
+                                     to_email=f"a{i}@example.com",
+                                     company=f"Co {i}")
+            if outcome:
+                self.main.db.set_outcome(uid, did, outcome)
+        return uid
+
+    def test_a_failed_send_is_not_a_letter(self):
+        """It reached nobody. Counting attempts would be the first lie on a
+        page whose only job is being checkable."""
+        uid = self.main.db.get_or_create_user("sam@example.com")["id"]
+        self.main.db.record_sent(uid, draft_id=None, to_email="a@b.com",
+                                 company="Co", ok=False, error="refused")
+        self.assertEqual(self.main.db.public_stats()["letters"], 0)
+
+    def test_the_total_does_not_fall_when_a_reply_arrives(self):
+        """The trap Harry found in the personal machine: a total built on
+        drafts.status goes DOWN as answers come in."""
+        self._send(3)
+        before = self.main.db.public_stats()["letters"]
+        uid = self.main.db.get_or_create_user("sam@example.com")["id"]
+        rows = self.main.db.applications(uid)
+        self.main.db.set_outcome(uid, rows[0]["id"], "replied")
+        self.assertEqual(self.main.db.public_stats()["letters"], before)
+
+    def test_a_rate_is_withheld_until_there_are_enough_people(self):
+        # With one user the percentage is one person's diary, not a statistic.
+        self._send(4, outcome="replied")
+        stats = self.main.db.public_stats()
+        self.assertIsNone(stats["reply_rate"])
+        self.assertTrue(stats["rate_withheld"])
+        # The template wraps, so assert on a phrase that survives the line
+        # break rather than one that only looks contiguous in the source.
+        page = self.client.get("/numbers").text
+        self.assertIn("diary rather than a statistic", page)
+        self.assertIn("No reply rate yet", page)
+
+    def test_the_raw_counts_are_never_hidden(self):
+        # Withholding those too would look like there is something to hide.
+        self._send(4)
+        self.assertEqual(self.main.db.public_stats()["letters"], 4)
+
+    def test_a_rejection_is_heard_back_but_is_not_a_reply(self):
+        """Or the headline improves as things go worse."""
+        self._send(2, outcome="rejected")
+        stats = self.main.db.public_stats()
+        self.assertEqual(stats["marked"], 2)
+        self.assertEqual(stats["heard_back"], 0)

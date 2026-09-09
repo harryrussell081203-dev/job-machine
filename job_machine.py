@@ -345,7 +345,33 @@ CANDIDATE_PROFILE = """Harry Russell, Aberdeen, Scotland.
   job genuinely needs him to already live somewhere he cannot get to and offers
   nothing towards it - and note that he does not drive, so a remote site with
   no transport laid on is a real problem where a rotational one is not.
-- EXCLUDE: chartered and director-level roles, unrelated sales/care/driving/hospitality."""
+- WHAT HIS TRADE ACTUALLY IS, because "engineer" and "technician" in a title
+  mean almost nothing on their own: he works on ELECTRONICS and
+  electro-mechanical assemblies. Assembly, test, calibration, fault-finding
+  and repair, to IPC-A-610 Class 3 - subsea cables, connectors and
+  terminations, acoustic positioning equipment, instrumentation, comms and
+  radio. Bench and workshop work, and field service on the same kit.
+- NOT SUITABLE, and these are rejections rather than marks down. Each one is a
+  real listing the machine wrongly wrote to, so treat them as the standard:
+  1. DESIGN AND PROFESSIONAL ENGINEERING. Project engineer, design engineer,
+     process engineer, anything wanting a completed degree, chartership or
+     responsibility for a design. "Substation Project Engineer" is the
+     example: high-voltage distribution design, and not his trade however
+     electrical it sounds.
+  2. MECHANICAL AND ROTATING PLANT as the primary trade. Diesel engines,
+     generators, gearboxes, pumps, HVAC, plant fitting. "Diesel Engineer,
+     Power Generation" is the example. He is an electronics man; a mechanical
+     fitter's job is not a step up for him, it is a different job.
+  3. LABORATORY AND SCIENTIFIC RESEARCH. Biomedical, life sciences, clinical,
+     academic research posts. "Research Technician - Biomedical Photonics" is
+     the example, and it is the trap worth naming: a word like photonics or
+     optics sits near electronics in a dictionary and nowhere near it in a
+     workshop.
+  Also excluded: chartered and director-level roles, and unrelated
+  sales/care/driving/hospitality work.
+- The test to apply is not "could an engineer do this". It is "has HE done
+  this work". If the honest answer is that he would be learning the trade from
+  scratch, it is a rejection whatever the title says."""
 
 SIGNOFF = "Harry Russell / 07398 530978 / CV attached"
 
@@ -1318,6 +1344,25 @@ def stated_pay(job):
     return amount, "year"
 
 
+def advertised_pay_text(job) -> str:
+    """What the advert says about pay, for the scorer to read.
+
+    "not stated" rather than "None-None", which is what it used to send. Most
+    adverts print no figure and the whole contract market quotes on
+    application, so this is the common case, and a model handed None-None has
+    to guess what that means. Guessing is exactly what produced the complaint:
+    good roles marked down for silence.
+    """
+    amount, unit = stated_pay(job)
+    if amount is None:
+        return "not stated in the advert"
+    if unit == "hour":
+        return f"about GBP {amount:g} an hour"
+    if unit == "day":
+        return f"about GBP {amount:g} a day"
+    return f"about GBP {amount:g} a year"
+
+
 def pays_enough(job):
     """False only when a listing STATES pay and that pay is too low.
 
@@ -1342,7 +1387,7 @@ def score_batch(batch):
     listings = "\n\n".join(
         f"--- LISTING {i} ---\nTitle: {j['title']}\nCompany: {j['company']}\n"
         f"Location: {j['location']}\n"
-        f"Salary: {j.get('salary_min')}-{j.get('salary_max')}\n"
+        f"Salary: {advertised_pay_text(j)}\n"
         f"Description: {j['description'][:900]}"
         for i, j in enumerate(batch))
     prompt = (
@@ -1350,16 +1395,39 @@ def score_batch(batch):
         'with a JSON array, one object per listing, in the same order: '
         '[{"listing": <index>, "score": <0-100>, "reason": "<one short sentence>"}]\n\n'
         f"CANDIDATE:\n{CANDIDATE_PROFILE}\n\n"
-        "SCORE GUIDE. He is IN WORK on GBP 30,000 a year, so the question is "
-        "not 'could he do this' but 'is this better than what he has'.\n"
-        "85+  clearly better paid than GBP 30,000, AND/OR states overseas "
-        "travel, field service abroad, client sites in other countries, or a "
-        "rotational pattern. Contract day rates and shift allowances count - "
-        "read GBP 30 an hour as roughly GBP 60,000, not as GBP 30.\n"
-        "70-84 a clear step up in pay or responsibility in his trade.\n"
-        "40-69 partial match, or a step up he could not obviously make.\n"
-        "<40  pays at or below GBP 30,000 however well the trade fits, wrong "
-        "field, or on his exclude list.\n"
+        "FIRST, THE TRADE. Decide this before you think about pay, and if it "
+        "fails, score it under 40 and stop. The question is not 'could an "
+        "engineer do this' - it is 'has HE done this work'. Read the NOT "
+        "SUITABLE list above and apply it strictly: design and professional "
+        "engineering, mechanical and rotating plant, laboratory and scientific "
+        "research are all rejections however good the rest of the advert "
+        "looks. A shared word in the title is not a shared trade.\n\n"
+        "THEN PAY, and the rule for an unstated salary is not the same as the "
+        "rule for a low one:\n"
+        "- Where the salary line says NOT STATED, treat pay as NEUTRAL and "
+        "judge the listing on the trade alone. Most adverts print no figure "
+        "and the whole contract market quotes on application, so silence "
+        "carries no information and must not cost a listing a single point. "
+        "Never mark one down, and never withhold a high score, because you "
+        "could not confirm the money. He will judge the pay himself when they "
+        "tell him.\n"
+        "- Where a figure IS given, it is binding and unchanged: at or below "
+        "GBP 30,000 scores under 40 however well the trade fits, because he "
+        "is in work on that already.\n\n"
+        "SCORE GUIDE. He is IN WORK on GBP 30,000 a year, so among listings "
+        "in his trade the question is 'is this better than what he has'.\n"
+        "85+  right trade AND (stated pay clearly above GBP 30,000, OR "
+        "overseas travel, field service abroad, client sites in other "
+        "countries, or a rotational pattern). Contract day rates and shift "
+        "allowances count - read GBP 30 an hour as roughly GBP 60,000, not as "
+        "GBP 30. A listing in his trade with travel and no stated salary "
+        "belongs here, not lower.\n"
+        "70-84 right trade, a step up in pay or responsibility, or an "
+        "unstated salary with nothing against it.\n"
+        "40-69 his trade only partly, or a step up he could not obviously "
+        "make.\n"
+        "<40  wrong field, on the NOT SUITABLE list, or a STATED pay at or "
+        "below GBP 30,000.\n"
         "Aberdeen is NEUTRAL - not a bonus and not a penalty. He lives there "
         "and works there already, and he will relocate or travel for a better "
         "job. Do not reward a listing for being local.\n"
