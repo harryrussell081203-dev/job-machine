@@ -122,6 +122,27 @@ class TestPublicPages(AppTestCase):
     def test_health(self):
         self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
 
+    def test_robots_points_at_the_sitemap_and_hides_the_private_screens(self):
+        body = self.client.get("/robots.txt").text
+        self.assertIn("Sitemap: http://testserver/sitemap.xml", body)
+        # The ones that would put somebody's drafts, CV or account in Google.
+        for private in ("/dashboard", "/drafts", "/setup", "/account",
+                        "/admin", "/cv", "/auth"):
+            self.assertIn(f"Disallow: {private}", body)
+
+    def test_the_sitemap_lists_the_public_pages_and_only_those(self):
+        xml = self.client.get("/sitemap.xml").text
+        for public in ("/find", "/playbook", "/terms", "/privacy"):
+            self.assertIn(f"http://testserver{public}<", xml)
+        for private in ("/dashboard", "/drafts", "/account", "/admin"):
+            self.assertNotIn(f"http://testserver{private}<", xml)
+
+    def test_the_sitemap_is_served_as_xml(self):
+        # Served as text/html it is ignored, and the failure is invisible.
+        r = self.client.get("/sitemap.xml")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("xml", r.headers["content-type"])
+
     def test_a_shared_link_has_a_title_a_description_and_a_picture(self):
         """Without these a link to the site is a bare grey URL everywhere it
         is posted - Reddit, WhatsApp, a TikTok bio. The launch is made of
