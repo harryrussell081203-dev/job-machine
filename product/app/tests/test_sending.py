@@ -449,6 +449,66 @@ class TestSetupScreens(Base):
         r = self.client.get("/cv")
         self.assertEqual(r.content, b"Harry Russell, scaffolder")
 
+    def test_the_upload_answers_json_when_the_page_asks_for_it(self):
+        """The setup page uploads with fetch rather than by submitting the
+        form, because reading the bytes in the browser is the only place
+        Chrome's ERR_UPLOAD_FILE_CHANGED can be fixed - it aborts before the
+        request is ever made, so no server code can catch it.
+
+        That needs an answer a script can read, rather than a 303 to a page.
+        """
+        self.sign_in()
+        r = self.client.post("/setup/cv",
+                             files={"cv": ("cv.txt", b"Harry Russell",
+                                           "text/plain")},
+                             headers={"Accept": "application/json"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["next"], "/setup/from-cv")
+        self.assertIsNotNone(self.db.get_cv(self.uid))
+
+    def test_a_refused_cv_comes_back_as_json_too(self):
+        # Or the page would report success on a file the server rejected.
+        self.sign_in()
+        r = self.client.post("/setup/cv",
+                             files={"cv": ("cv.pdf", b"MZ not a pdf",
+                                           "application/pdf")},
+                             headers={"Accept": "application/json"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("not", r.json()["error"].lower())
+        self.assertIsNone(self.db.get_cv(self.uid))
+
+    def test_the_plain_form_post_still_works_without_javascript(self):
+        """The fetch path is an enhancement, not a replacement. Somebody with
+        no JavaScript still gets redirects exactly as before."""
+        self.sign_in()
+        r = self.client.post("/setup/cv",
+                             files={"cv": ("cv.txt", b"Harry Russell",
+                                           "text/plain")},
+                             follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/setup/from-cv")
+        self.assertIsNotNone(self.db.get_cv(self.uid))
+
+    def test_choosing_a_file_is_the_only_action_needed(self):
+        """Fewest clicks: the page uploads on change, so the button is hidden
+        when the script is running. If the markup loses these ids the script
+        silently does nothing and the bug comes back."""
+        self.sign_in()
+        page = self.client.get("/setup").text
+        for hook in ('id="cvfile"', 'id="cvbtn"', 'id="cvform"',
+                     'addEventListener("change"'):
+            self.assertIn(hook, page)
+
+    def test_the_picker_accepts_files_that_arrive_by_mime_type(self):
+        """Android greys out cloud files when the accept list is extensions
+        only - a file coming from Drive often has a type and no useful name,
+        which is what made Drive look unsupported."""
+        self.sign_in()
+        page = self.client.get("/setup").text
+        self.assertIn("application/pdf", page)
+        self.assertIn("application/vnd.openxmlformats-officedocument"
+                      ".wordprocessingml.document", page)
+
     def test_automatic_sending_cannot_be_turned_on_without_mail(self):
         self.sign_in()
         r = self.client.post("/setup/sending", data={"auto_send": "1"},
