@@ -332,6 +332,70 @@ def application_stats(user_id: int) -> dict:
     }
 
 
+# Below this many people the totals are one person's diary rather than a
+# statistic, so the rate is withheld and the page says why. The raw counts are
+# always shown - they are the honest thing and hiding them would look like
+# there is something to hide.
+MIN_PEOPLE_FOR_A_RATE = 3
+
+
+def public_stats() -> dict:
+    """The numbers anybody may see, on /numbers. Aggregate only, forever.
+
+    Counted from sent_log rather than drafts.status, and the difference is the
+    whole point. `status` is current state: it changes to 'replied' when an
+    answer arrives and it disappears entirely if the draft is deleted, so a
+    total built on it goes DOWN on the machine's best days. sent_log is one
+    row per letter that actually left and is never rewritten, so it only ever
+    goes up. Harry found this exact trap in the personal machine's numbers.
+
+    ok = 1 only. A send that failed reached nobody, and counting attempts as
+    letters would be the first lie on a page whose only job is being checkable.
+    """
+    with connect() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS letters, COUNT(DISTINCT user_id) AS people "
+            "FROM sent_log WHERE ok = 1").fetchone()
+        letters = int(row["letters"] or 0)
+        people = int(row["people"] or 0)
+
+        # Outcomes live on drafts, because that is where the user records
+        # them, so this denominator is letters somebody has actually told us
+        # about - NOT every letter sent. Quoting replies over every letter
+        # would understate it, and quoting it without saying which would be
+        # the kind of number this project refuses to print.
+        marked = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts "
+            "WHERE status = 'sent' AND outcome <> ''").fetchone()
+        marked = int(marked["n"] or 0)
+        heard = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts WHERE status = 'sent' "
+            "AND outcome IN ('replied', 'interview', 'offer')").fetchone()
+        heard = int(heard["n"] or 0)
+        interviews = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts WHERE status = 'sent' "
+            "AND outcome IN ('interview', 'offer')").fetchone()
+        interviews = int(interviews["n"] or 0)
+        first = c.execute(
+            "SELECT MIN(sent_at) AS t FROM sent_log WHERE ok = 1").fetchone()
+
+    return {
+        "letters": letters,
+        "people": people,
+        "marked": marked,
+        "heard_back": heard,
+        "interviews": interviews,
+        # A rejection is hearing back and belongs in the tracker, but it is
+        # not a reply worth boasting about, so it is excluded here exactly as
+        # it is in application_stats. One rule, two places.
+        "reply_rate": (round(100 * heard / marked)
+                       if marked and people >= MIN_PEOPLE_FOR_A_RATE else None),
+        "rate_withheld": bool(marked and people < MIN_PEOPLE_FOR_A_RATE),
+        "first_send_at": (int(first["t"]) if first and first["t"] else 0),
+        "min_people": MIN_PEOPLE_FOR_A_RATE,
+    }
+
+
 def seen_ids(user_id: int) -> set:
     with connect() as c:
         return {r["external_id"] for r in c.execute(
