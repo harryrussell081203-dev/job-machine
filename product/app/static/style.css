@@ -490,6 +490,35 @@ th { font-size: 12px; font-weight: 600; color: var(--muted);
      text-transform: uppercase; letter-spacing: 0.05em; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* On a phone a three-column table does not fit, and .scroll only means the
+ * last column is off the edge with nothing to say so. The addresses found on
+ * /find are the most important thing this product shows anybody - it is the
+ * screen in the demo and the screen people share - so below this width the
+ * rows become stacked cards and every column is on screen.
+ *
+ * The header cells carry the labels via data-label, because a stacked row
+ * with no headings is a list of unexplained values. */
+@media (max-width: 560px) {
+  .stacked table, .stacked tbody, .stacked tr, .stacked td { display: block; width: 100%; }
+  .stacked thead { display: none; }
+  .stacked tr {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  .stacked tr:last-child { border-bottom: 0; }
+  .stacked td { border: 0; padding: 3px 0; }
+  .stacked td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 3px;
+  }
+  /* The address is the answer, so it leads and is allowed to break rather
+   * than push the card wider than the screen. */
+  .stacked td.lead { font-size: 17px; overflow-wrap: anywhere; }
+}
+
 /* --- misc ------------------------------------------------------------- */
 details summary {
   cursor: pointer; font-size: 15px; color: var(--ink-2);

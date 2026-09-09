@@ -20,25 +20,29 @@ in it worth writing to, and what kind. Free, no account.</p>
 {% if searched %}
   {% if found %}
     <h2>Found {{ found | length }}</h2>
-    <div class="panel scroll">
+    <div class="panel scroll stacked">
       <table>
-        <tr><th>Address</th><th>What it is</th><th>Worth writing to</th></tr>
+        <thead>
+          <tr><th>Address</th><th>What it is</th><th>Worth writing to</th></tr>
+        </thead>
+        <tbody>
         {% for c in found %}
           <tr>
-            <td><b>{{ c.email }}</b></td>
-            <td>
+            <td class="lead" data-label="Address"><b>{{ c.email }}</b></td>
+            <td data-label="What it is">
               {% if c.tier == 3 %}<span class="tag">named person</span>
                 {% if c.name %} &mdash; {{ c.name | title }}{% endif %}
               {% elif c.tier == 2 %}<span class="tag">hiring inbox</span>
               {% else %}<span class="tag">generic inbox</span>{% endif %}
             </td>
-            <td class="muted">
+            <td class="muted" data-label="Worth writing to">
               {%- if c.tier == 3 %}Yes. This is the one.
               {%- elif c.tier == 2 %}Yes.
               {%- else %}Worth a try, but expect less.{% endif -%}
             </td>
           </tr>
         {% endfor %}
+        </tbody>
       </table>
     </div>
 
@@ -61,10 +65,48 @@ in it worth writing to, and what kind. Free, no account.</p>
     </div>
   {% endif %}
 
-  <p style="margin-top:24px">
+  {# Somebody who has just watched this work on their own advert is the most
+     convinced this product will ever make anyone, and until now there was
+     nothing for them to do about it. This is the cheapest growth there is:
+     the person doing the recommending has just seen the evidence. #}
+  <p style="margin-top:24px" class="actions">
     <a class="btn" href="/">See what the full thing does</a>
     <a class="btn ghost" href="/playbook">Read the method free</a>
+    <button class="btn ghost" id="shareit" hidden>Send this to someone</button>
   </p>
+  <p class="hint" id="sharedone" hidden>Link copied.</p>
 {% endif %}
+
+<script>
+// Web Share where it exists - which on a phone is the whole point, because it
+// opens WhatsApp and the rest - and the clipboard everywhere else. Hidden
+// unless one of them is actually available, so the button is never a control
+// that does nothing when pressed.
+(function () {
+  var btn = document.getElementById("shareit");
+  var done = document.getElementById("sharedone");
+  if (!btn) return;
+
+  var text = "This finds the real email address on a job advert, so you can "
+           + "write to a person instead of a portal. Free, no account.";
+  var url = window.location.origin + "/find";
+  var canShare = !!navigator.share;
+  var canCopy = !!(navigator.clipboard && navigator.clipboard.writeText);
+  if (!canShare && !canCopy) return;
+
+  btn.hidden = false;
+  btn.addEventListener("click", function () {
+    if (canShare) {
+      // A rejected share is somebody changing their mind, not an error.
+      navigator.share({ title: "Recruited", text: text, url: url })
+               .catch(function () {});
+      return;
+    }
+    navigator.clipboard.writeText(text + " " + url).then(function () {
+      done.hidden = false;
+    }).catch(function () {});
+  });
+})();
+</script>
 
 {% endblock %}
