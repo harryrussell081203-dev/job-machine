@@ -18,6 +18,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import job_machine as jm  # noqa: E402
 
 
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def _no_network(*patches):
+    """Apply `patches`, and make sure nothing else can reach the internet.
+
+    The web-search fallback for finding a company's domain uses requests.post,
+    and every test written before it existed stubs requests.get alone. Those
+    tests passed locally, where the sandbox has no egress, and failed in CI,
+    where the runner does - the fallback quietly went out and answered for
+    itself. Whichever way round that happens it is the same bug: a unit test
+    is not allowed to depend on what a search engine says today.
+    """
+    with contextlib.ExitStack() as stack:
+        for patch in patches:
+            stack.enter_context(patch)
+        stack.enter_context(mock.patch.object(
+            jm.requests, "post",
+            return_value=mock.Mock(ok=True, status_code=200, text="")))
+        yield
+
+
 def make_job(**over):
     job = {
         "external_id": "reed_1", "source": "reed", "title": "Electronics Technician",
@@ -149,10 +172,20 @@ class TestWrongCompanyRegression(unittest.TestCase):
     for Wood plc, and greeted an HR inbox as 'Hi Mysupporthr'. Both here."""
 
     def clearbit(self, hits):
+        """Clearbit answers with `hits`, and the web falls silent.
+
+        Stubbing the search too is not tidiness, it is the point. These tests
+        ran green locally and failed in CI, because CI has real network access
+        and the search fallback went out and answered for itself - resolving
+        'Wood' to woodgroup.com inside the very test written to stop Wood
+        resolving. A test that reaches the internet is not testing the thing
+        it names, and it fails on whatever the internet says that morning.
+        """
         response = mock.Mock()
         response.raise_for_status = lambda: None
         response.json = lambda: hits
-        return mock.patch.object(jm.requests, "get", return_value=response)
+        return _no_network(mock.patch.object(jm.requests, "get",
+                                             return_value=response))
 
     def test_wood_does_not_match_woodforest(self):
         with self.clearbit([{"name": "Woodforest National Bank",
@@ -1987,7 +2020,8 @@ class TestExtraWordsMeanADifferentCompany(unittest.TestCase):
         response = mock.Mock()
         response.raise_for_status = lambda: None
         response.json = lambda: [{"name": name, "domain": domain}]
-        return mock.patch.object(jm.requests, "get", return_value=response)
+        return _no_network(mock.patch.object(jm.requests, "get",
+                                             return_value=response))
 
     def test_an_extra_business_word_is_refused(self):
         with self.clearbit("Grace and May Home", "graceandmayhome.co.uk"):
@@ -2837,13 +2871,59 @@ class TestFindingTheCompanyWebsiteBySearching(unittest.TestCase):
                         ("Innserve Ltd Jobs | Indeed.com",
                          "https://uk.indeed.com/cmp/Innserve-Ltd")))
 
-    def test_a_single_word_name_still_demands_an_exact_match(self):
-        """The Sanctuary rule, carried across intact. A one-word name does not
-        identify anybody, and a search for it returns the world."""
+    def test_a_single_word_name_is_never_searched_for_at_all(self):
+        """The Sanctuary rule, and CI is what taught it to this code path.
+
+        The local run has no network, so the fallback stayed silent and the
+        suite went green. The CI runner does, so the fallback went out and
+        answered for itself - resolving 'Wood' to woodgroup.com inside the
+        test written to stop Wood resolving.
+
+        Clearbit at least replies with a company record that can be compared.
+        A search engine always returns something confident for 'Wood',
+        'Encore' or 'Future', and an exact title match on a single word is no
+        evidence at all. So a one-word name does not get searched for.
+        """
+        for name in ("Wood", "Encore", "Future", "HMH"):
+            with self.subTest(name=name), \
+                 mock.patch.object(jm.requests, "post") as posted:
+                self.assertIsNone(
+                    jm._search_domain(name, jm.company_key(name),
+                                      jm.name_tokens(name)))
+                posted.assert_not_called()
+
+    def test_sanctuary_is_refused_by_the_domain_rather_than_by_length(self):
+        """Nine characters, so it is searched for - and still refused.
+
+        The two checks cover different halves of the problem. Length stops a
+        common word being searched at all; domain_matches_company() demands
+        that whatever the domain adds after the name be an ordinary suffix.
+        sanctuarygroup.co.uk is the housing association. sanctuaryclothing.com
+        is a shop in California, and an application very nearly went to a
+        named individual there.
+        """
         self.assertIsNone(
-            self.search("Sanctuary",
-                        ("Sanctuary Clothing - California",
-                         "https://www.sanctuaryclothing.com/")))
+            self.search("Sanctuary", ("Sanctuary Clothing",
+                                      "https://www.sanctuaryclothing.com/")))
+        self.assertEqual(
+            self.search("Sanctuary", ("Sanctuary | Housing",
+                                      "https://www.sanctuarygroup.co.uk/")),
+            "sanctuarygroup.co.uk")
+
+    def test_a_distinctive_one_word_name_is_still_found(self):
+        """'Innserve Ltd' keys to a single token because company_key strips
+        'Ltd', and it is exactly the sort of firm Clearbit has never heard of.
+        A flat refusal of one-token names threw this away with the bathwater."""
+        self.assertEqual(
+            self.search("Innserve Ltd", ("Innserve Ltd | Vending",
+                                         "https://www.innserveltd.co.uk/")),
+            "innserveltd.co.uk")
+
+    def test_wood_does_not_reach_woodgroup_through_the_search_fallback(self):
+        """The exact failure CI caught, kept as a test."""
+        self.assertIsNone(
+            self.search("Wood", ("Wood | Official Site",
+                                 "https://www.woodgroup.com/")))
 
     def test_a_different_company_with_a_longer_name_is_refused(self):
         """Grace May, a recruiter, once matched 'Grace and May Home' and an IT
@@ -3658,7 +3738,8 @@ class TestAskingClearbitASimplerQuestion(unittest.TestCase):
             response.raise_for_status = lambda: None
             response.json = lambda: hits
             return response
-        return mock.patch.object(jm.requests, "get", side_effect=get)
+        return _no_network(mock.patch.object(jm.requests, "get",
+                                             side_effect=get))
 
     def test_legal_form_noise_is_dropped_before_giving_up(self):
         with self.responses({

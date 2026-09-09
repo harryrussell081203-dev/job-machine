@@ -2303,6 +2303,29 @@ def _search_domain(company, wanted, wanted_tokens):
     Clearbit hits face, applied to the result's title - so this widens where
     the machine looks without changing what it will believe.
     """
+    # A short one-word company name never reaches a search engine. Clearbit at
+    # least answers with a company record that can be compared; a search
+    # engine always returns something confident for 'Wood', 'Encore' or
+    # 'Future', and an exact title match on a single common word is no
+    # evidence at all. CI caught this by having real network access where the
+    # local run did not - the fallback resolved 'Wood' to woodgroup.com,
+    # inside the test written to stop Wood resolving.
+    #
+    # A flat refusal of every one-token name was too blunt: company_key strips
+    # 'Ltd', so 'Innserve Ltd' is one token too, and it is exactly the kind of
+    # firm this fallback exists for. Length is what separates them. 'wood',
+    # 'encore', 'future' and 'hmh' are words anybody might own; 'innserve' is
+    # a coined name that identifies one company.
+    #
+    # Length alone would not be enough - 'Sanctuary' is nine characters and is
+    # one of the two names that burned Harry. What refuses that one is
+    # domain_matches_company() below, which already demands that whatever the
+    # domain adds after the name be an ordinary suffix: sanctuarygroup.co.uk
+    # is the housing association, sanctuaryclothing.com is a shop in
+    # California. The two checks cover different halves of the problem and
+    # both have to pass.
+    if len(wanted_tokens) < 2 and len(next(iter(wanted_tokens), "")) < 7:
+        return None
     for hit_title, domain in _search_hits(f"{company} official website"):
         if not plausible_domain(domain) or not _is_company_site(domain):
             continue
