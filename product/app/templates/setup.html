@@ -23,11 +23,18 @@
     </div>
   {% else %}
     <p>Attached to every letter. We read it to fill in the next step.</p>
-    <form method="post" action="/setup/cv" enctype="multipart/form-data">
-      <input type="file" name="cv" accept=".pdf,.docx,.doc,.txt,.md,.rtf" required>
-      <button class="btn">Upload</button>
+    {# The accept list carries MIME types as well as extensions. Android's
+       picker greys out cloud files when it cannot match an extension - a file
+       in Drive often arrives with a type and no useful name - so extensions
+       alone are what makes Drive look broken. #}
+    <form method="post" action="/setup/cv" enctype="multipart/form-data"
+          id="cvform">
+      <input type="file" name="cv" id="cvfile" required
+             accept=".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,text/markdown">
+      <button class="btn" id="cvbtn">Upload</button>
     </form>
-    <p class="hint">PDF or Word, 5MB limit.</p>
+    <p class="hint" id="cvhint">PDF or Word, 5MB limit. Drive and OneDrive are
+       fine.</p>
   {% endif %}
 </div>
 
@@ -186,5 +193,82 @@
      One employer, one letter, ever.</p>
   <p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
 </div>
+
+<script>
+// Why this exists, because it looks like a pointless rewrite of a form that
+// already worked:
+//
+// Chrome refuses the upload with ERR_UPLOAD_FILE_CHANGED when a file's size
+// or modified time differs between being CHOSEN and being SENT. A plain form
+// post reads the file off disk at submit time, so anything that touches it in
+// between kills the upload - and on Android, picking from Drive or OneDrive
+// does exactly that: the picker hands over a placeholder that the provider
+// then materialises. The failure happens in the browser, so no amount of
+// server code can catch it. It never reaches the server at all.
+//
+// Reading the bytes the moment the file is picked is the fix. After that the
+// upload is a Blob held in memory, and what the original file does afterwards
+// stops mattering.
+//
+// It also removes a click: choosing the file starts the upload, because
+// having chosen it there is nothing else the button could mean.
+(function () {
+  var form = document.getElementById("cvform");
+  var input = document.getElementById("cvfile");
+  var button = document.getElementById("cvbtn");
+  var hint = document.getElementById("cvhint");
+  if (!form || !input || !button || !hint) return;
+
+  // Needs both to work. Without them the plain form post is still there and
+  // still correct - it is only Drive-on-Android that it handles badly.
+  if (!window.fetch || !File.prototype.arrayBuffer) return;
+
+  button.hidden = true;
+  var busy = false;
+
+  function say(text, bad) {
+    hint.textContent = text;
+    hint.className = bad ? "hint bad" : "hint";
+  }
+
+  input.addEventListener("change", function () {
+    var file = input.files && input.files[0];
+    if (!file || busy) return;
+    busy = true;
+    button.hidden = false;
+    button.disabled = true;
+    say("Reading " + file.name + "…");
+
+    // The whole point: pull the bytes NOW, while the picker's handle is
+    // still good.
+    file.arrayBuffer().then(function (buf) {
+      var body = new FormData();
+      body.append("cv", new Blob([buf], { type: file.type || "" }), file.name);
+      say("Uploading " + file.name + "…");
+      return fetch("/setup/cv", {
+        method: "POST",
+        body: body,
+        credentials: "same-origin",
+        headers: { "Accept": "application/json" }
+      });
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok || data.error) throw new Error(data.error || "");
+        window.location.href = data.next || "/setup";
+      });
+    }).catch(function (err) {
+      // Falling back to the ordinary form would just reproduce the bug, so
+      // say what happened and let them pick again.
+      busy = false;
+      button.disabled = false;
+      input.value = "";
+      say(err && err.message
+            ? err.message
+            : "That file could not be read. If it lives in Drive, open it "
+              + "once to download it, then choose it again.", true);
+    });
+  });
+})();
+</script>
 
 {% endblock %}

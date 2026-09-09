@@ -131,8 +131,19 @@ main {
 }
 .bar nav a.cta:hover { opacity: .85; color: var(--accent-ink); }
 
+/* --- hidden means hidden ---------------------------------------------- */
+/* The browser hides [hidden] with display:none from its own stylesheet, which
+ * ANY author rule setting display beats. So `el.hidden = true` silently does
+ * nothing to a .btn (inline-flex) or the install bar (flex) - the element
+ * stays on screen and only the code looks correct.
+ *
+ * This was patched once for .installbar specifically. It bit again on the CV
+ * upload button, which is the point at which a general rule is cheaper than a
+ * third special case. !important because it has to beat those display rules.
+ */
+[hidden] { display: none !important; }
+
 /* --- install prompt --------------------------------------------------- */
-.installbar[hidden] { display: none; }
 .installbar {
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
