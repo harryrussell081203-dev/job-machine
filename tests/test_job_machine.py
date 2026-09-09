@@ -270,6 +270,38 @@ class TestWrongCompanyRegression(unittest.TestCase):
         self.assertTrue(jm.domain_matches_company("Sanctuary", None))
         self.assertTrue(jm.domain_matches_company("", "anything.com"))
 
+    def test_a_sector_word_does_not_make_it_the_same_company(self):
+        """Spire -> spireenergy.com sent an application for a Spacecraft
+        Electronics Engineer in Glasgow to a natural gas utility in St Louis.
+
+        'energy' was on the list of words a company may bolt onto its own name
+        in a domain, alongside 'group' and 'uk'. It does not belong there. A
+        word about a LINE OF BUSINESS is the very thing that tells two firms
+        sharing a name apart: Spire Energy is a gas utility and Spire Global
+        is the satellite company whose advert this was.
+        """
+        self.assertFalse(jm.domain_matches_company("Spire", "spireenergy.com"))
+        for word in jm.SECTOR_WORDS:
+            with self.subTest(word=word):
+                self.assertFalse(
+                    jm.domain_matches_company("Spire", f"spire{word}.com"))
+
+    def test_a_scope_word_still_is_the_same_company(self):
+        """The other half. 'global' says how far a firm reaches, not what it
+        does, and Lorien at lorienglobal.com is the same recruiter - a match
+        that has actually replied to Harry."""
+        for domain in ("lorienglobal.com", "loriengroup.com", "lorienuk.co.uk",
+                       "lorienholdings.com", "lorieninternational.com"):
+            with self.subTest(domain=domain):
+                self.assertTrue(jm.domain_matches_company("Lorien", domain))
+
+    def test_a_sector_word_from_the_companys_own_name_is_still_fine(self):
+        """company_key strips 'engineering', so 'Canmore Engineering' is one
+        token - but canmoreengineering.com is obviously theirs. The word was
+        never a guess; it was printed in the advert."""
+        self.assertTrue(jm.domain_matches_company("Canmore Engineering",
+                                                  "canmoreengineering.com"))
+
     def test_a_foreign_lookalike_domain_is_rejected(self):
         with self.clearbit([{"name": "HMH", "domain": "hmh.com.vn"}]):
             self.assertIsNone(jm.find_domain("HMH"))
@@ -739,6 +771,43 @@ class TestFollowups(unittest.TestCase):
         self.assertFalse(kwargs["attach_cv"])
         self.assertEqual(kwargs["headers"]["In-Reply-To"], "<orig>")
         self.assertTrue(send.call_args.args[1].startswith("Re: "))
+        self.assertIn("followup_sent_at", job)
+
+    def test_a_wrong_company_match_stops_the_whole_sequence(self):
+        """Harry forwarded the reply that exposed this.
+
+        An application for a Spacecraft Electronics Engineer in Glasgow went
+        to Spire Energy, a natural gas utility in St Louis. The advert said
+        'Spire'; the employer was Spire Global, the satellite company. A
+        coordinator there wrote back to say they had no such role.
+
+        run_sends() has re-checked the domain at send time for months. Nothing
+        re-checked it at follow-up time, so the sequence carried on regardless
+        - nudge on day four, nudge on day nine, and a 'second contact' with a
+        different person there still to come.
+        """
+        state, job = self.state_with(9, company="Spire",
+                                     company_domain="spireenergy.com",
+                                     contact_email="careers@spireenergy.com")
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "has_reply_from") as check, \
+             mock.patch.object(jm, "send_email") as send:
+            jm.run_followups(state)
+        send.assert_not_called()
+        # and it does not even spend an IMAP round trip finding that out
+        check.assert_not_called()
+        self.assertTrue(job["followups_stopped_at"])
+
+    def test_a_good_match_is_still_followed_up(self):
+        """The guard must not quietly kill the working sequence."""
+        state, job = self.state_with(5, company="Sonardyne",
+                                     company_domain="sonardyne.com",
+                                     contact_email="jane@sonardyne.com")
+        with mock.patch.object(jm, "TEST_MODE", False), \
+             mock.patch.object(jm, "has_reply_from", return_value=False), \
+             mock.patch.object(jm, "send_email", return_value="<f>") as send:
+            jm.run_followups(state)
+        send.assert_called_once()
         self.assertIn("followup_sent_at", job)
 
     def test_a_reply_stops_everything(self):

@@ -1888,9 +1888,27 @@ CORPORATE_WORDS = {
 # Words a company can legitimately bolt onto its own name in a domain.
 # 'sanctuary' -> 'sanctuarygroup.co.uk' is the same company; 'sanctuary' ->
 # 'sanctuaryclothing.com' is a clothing brand in California.
+#
+# These are words about a company's STRUCTURE or REACH. A firm can be Lorien
+# or Lorien Global and be the same firm - 'global' says how far it operates,
+# not what it does.
 DOMAIN_SUFFIXES = ("group", "uk", "ltd", "limited", "plc", "co", "com",
-                   "global", "int", "international", "energy", "services",
-                   "eng", "engineering", "tech", "technologies", "online")
+                   "holdings", "gb", "global", "int", "international")
+
+# Words about a LINE OF BUSINESS, which is the thing that tells two companies
+# sharing a name apart. These used to sit in DOMAIN_SUFFIXES and that is how
+# an application for a Spacecraft Electronics Engineer in Glasgow reached
+# Spire Energy, a natural gas utility in St Louis. The advert said 'Spire';
+# the real employer was Spire Global, the satellite company. 'energy' was on
+# the safe list, so spireenergy.com passed, and a coordinator there had to
+# write back and say they had no such role.
+#
+# A sector word is never a neutral suffix. It is the disambiguator. Kept
+# separate rather than deleted because the distinction is the whole point,
+# and because a company may still reach its own domain through this if the
+# word appears in its own name - see domain_matches_company().
+SECTOR_WORDS = ("energy", "services", "eng", "engineering", "tech",
+                "technologies", "online")
 
 
 def domain_matches_company(company, domain):
@@ -1922,6 +1940,10 @@ def domain_matches_company(company, domain):
     rest = root[len(token):].strip("-_")
     if rest in DOMAIN_SUFFIXES:
         return True
+    # A sector word is deliberately NOT enough on its own. 'Spire' plus
+    # 'energy' is Spire Energy, a gas utility, and not the Spire in a Glasgow
+    # spacecraft advert. It can still pass on the next test, where the word is
+    # in the company's own name and so was never a guess.
     # Or a word from the company's own name. company_key strips 'recruitment',
     # 'group', 'solutions' and the like, so 'Canmore Recruitment' reduces to
     # the single token 'canmore' - and canmorerecruitment.com is obviously
@@ -4184,6 +4206,28 @@ def run_followups(state):
             # the log as an error, and out of the queue every single run.
             job.setdefault("do_not_contact_at", now())
             job["do_not_contact_reason"] = stop.get("reason", "")
+            continue
+        # The same send-time domain re-check run_sends() does, because a
+        # follow-up was skipping it entirely. run_sends() guards the FIRST
+        # letter and nothing guarded the nudges, so a record that reached a
+        # wrong company went on to nudge it twice more and then open a
+        # "second contact" with a different person there.
+        #
+        # That is not hypothetical. An application for a Spacecraft
+        # Electronics Engineer in Glasgow went to Spire Energy, a natural gas
+        # utility in St Louis - the advert said 'Spire', the employer was
+        # Spire Global - and the machine followed it up on day four and day
+        # nine before a coordinator wrote back to say they had no such role.
+        # Stopping the match is the other half of this fix; stopping the
+        # sequence is this half, and it is what limits the damage when the
+        # next matching bug gets through.
+        if not domain_matches_company(job.get("company"),
+                                      job.get("company_domain")):
+            job["followups_stopped_at"] = now()
+            job["followups_stopped_reason"] = (
+                "domain does not belong to this company")
+            print(f"[followup] STOPPED {job.get('company')} -> "
+                  f"{job.get('company_domain')}: not the same company")
             continue
         if inbox_full(state, recipient(job)):
             job["followups_capped_at"] = now()
