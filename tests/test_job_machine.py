@@ -2775,6 +2775,228 @@ class TestScrapeSitePhones(unittest.TestCase):
         self.assertEqual((emails, phones), ([], []))
 
 
+def _ddg(*results):
+    """A DuckDuckGo HTML response containing these (title, url) results."""
+    body = "".join(
+        f'<a rel="nofollow" class="result__a" href="{url}">{title}</a>'
+        for title, url in results)
+    return mock.Mock(ok=True, status_code=200, text=body)
+
+
+class TestFindingTheCompanyWebsiteBySearching(unittest.TestCase):
+    """423 listings died at "no domain found" because Clearbit's autocomplete
+    is thin on the UK SMEs Harry applies to. Searching for the company's own
+    website is free and finds many of them.
+
+    The danger is obvious and is the same one that has bitten twice before:
+    a search for a company name returns plenty of pages that are not that
+    company. So every hit goes through name_identifies_company(), the very
+    same gate a Clearbit hit faces. This widens where the machine looks. It
+    must not widen what the machine believes.
+    """
+
+    def search(self, company, *results):
+        with mock.patch.object(jm.requests, "post", return_value=_ddg(*results)):
+            return jm._search_domain(company, jm.company_key(company),
+                                     jm.name_tokens(company))
+
+    def test_it_finds_a_company_clearbit_has_never_heard_of(self):
+        self.assertEqual(
+            self.search("Innserve Ltd",
+                        ("Innserve Ltd | Vending and Dispense",
+                         "https://www.innserveltd.co.uk/")),
+            "innserveltd.co.uk")
+
+    def test_a_linkedin_page_is_not_the_company_website(self):
+        """The first result for almost any company name. It is their page,
+        but it is not their domain, and an address found there is somebody
+        else's."""
+        self.assertIsNone(
+            self.search("Innserve Ltd",
+                        ("Innserve Ltd | LinkedIn",
+                         "https://uk.linkedin.com/company/innserve-ltd")))
+
+    def test_an_address_broker_is_never_accepted(self):
+        """RocketReach, Lusha, LeadIQ and the rest rank highly for exactly the
+        query this makes, and they will hand over an address for any company
+        on earth. They INFER it from a pattern. That is a guess wearing a
+        logo, and a guessed address is the one thing this machine must never
+        send to."""
+        for host in ("rocketreach.co", "lusha.com", "leadiq.com",
+                     "zoominfo.com", "apollo.io", "hunter.io",
+                     "contactout.com", "signalhire.com"):
+            with self.subTest(host=host):
+                self.assertIsNone(
+                    self.search("Innserve Ltd",
+                                (f"Innserve Ltd - Email Address | {host}",
+                                 f"https://www.{host}/c/innserve-ltd")))
+
+    def test_a_job_board_is_not_the_company_website(self):
+        self.assertIsNone(
+            self.search("Innserve Ltd",
+                        ("Innserve Ltd Jobs | Indeed.com",
+                         "https://uk.indeed.com/cmp/Innserve-Ltd")))
+
+    def test_a_single_word_name_still_demands_an_exact_match(self):
+        """The Sanctuary rule, carried across intact. A one-word name does not
+        identify anybody, and a search for it returns the world."""
+        self.assertIsNone(
+            self.search("Sanctuary",
+                        ("Sanctuary Clothing - California",
+                         "https://www.sanctuaryclothing.com/")))
+
+    def test_a_different_company_with_a_longer_name_is_refused(self):
+        """Grace May, a recruiter, once matched 'Grace and May Home' and an IT
+        Support application went to a home furnishings shop."""
+        self.assertIsNone(
+            self.search("Grace May",
+                        ("Grace and May Home - Interiors",
+                         "https://www.graceandmayhome.com/")))
+
+    def test_a_corporate_suffix_is_still_the_same_company(self):
+        self.assertEqual(
+            self.search("Baker Hughes",
+                        ("Baker Hughes Company | Energy Technology",
+                         "https://www.bakerhughes.com/")),
+            "bakerhughes.com")
+
+    def test_search_is_only_asked_after_clearbit_has_failed(self):
+        """It is a fallback. A company Clearbit answers costs no search at
+        all, which is what keeps this free and quick."""
+        with mock.patch.object(jm, "_clearbit_match", return_value="acme.com"), \
+             mock.patch.object(jm, "_search_domain") as searched:
+            self.assertEqual(jm.find_domain("Acme Subsea Ltd"), "acme.com")
+        searched.assert_not_called()
+
+    def test_a_search_that_fails_is_not_an_error(self):
+        """The endpoint is free, unofficial and allowed to go down. When it
+        does, the listing lands exactly where it was already heading."""
+        with mock.patch.object(jm, "_clearbit_match", return_value=None), \
+             mock.patch.object(jm.requests, "post",
+                               side_effect=OSError("network is down")):
+            self.assertIsNone(jm.find_domain("Nobody Ever Heard Of Them"))
+
+
+class TestTheDomainItselfHasToCarryTheName(unittest.TestCase):
+    """The check that does not depend on a denylist being complete.
+
+    Replaying the real backlog exposed how weak the title test is on its own:
+    "Innserve Ltd | LinkedIn" splits on the pipe into "Innserve Ltd", which is
+    an exact match, so 311 of 315 wrong titles walked through it. Only
+    NOT_A_COMPANY_SITE stopped them, and that list can only ever contain the
+    sites somebody remembered to add.
+    """
+
+    def test_a_directory_nobody_thought_to_block_is_still_refused(self):
+        for host in ("craft.co", "bizapedia.com", "company-profile.io",
+                     "jobsora.com", "opengovuk.com", "trustindex.io"):
+            with self.subTest(host=host):
+                self.assertFalse(
+                    jm.domain_carries_company_name("Ernest Gordon Recruitment",
+                                                   host))
+
+    def test_a_real_company_domain_passes(self):
+        for company, domain in [
+                ("Innserve Ltd", "innserveltd.co.uk"),
+                ("Ernest Gordon Recruitment Limited", "ernestgordonrecruitment.com"),
+                ("Rise Technical Recruitment Limited", "risetechnical.co.uk"),
+                ("Survitec Group Ltd", "survitec.com"),
+                ("Baker Hughes", "bakerhughes.com")]:
+            with self.subTest(company=company):
+                self.assertTrue(
+                    jm.domain_carries_company_name(company, domain))
+
+    def test_it_would_rather_refuse_a_real_company_than_guess(self):
+        """Northern Lighthouse Board really is nlb.org.uk, and this refuses
+        it. That is the right way to be wrong: a refusal costs a letter that
+        was never going to be sent, and the other kind of mistake puts Harry's
+        CV in a stranger's inbox."""
+        self.assertFalse(
+            jm.domain_carries_company_name("Northern Lighthouse Board",
+                                           "nlb.org.uk"))
+
+    def test_no_real_employer_in_the_backlog_accepts_a_hostile_result(self):
+        """The replay that found the hole in the first place, kept as a test.
+
+        Every company name the machine has actually been binned on, offered a
+        page of results of the kind a real search returns, none of which are
+        that company's website.
+        """
+        companies = [
+            "Ernest Gordon Recruitment Limited", "TechnipFMC", "Wood",
+            "Rise Technical Recruitment Limited", "EthosEnergy", "RES",
+            "Halliburton", "Hackajob Ltd", "Reed", "Vestas", "Oceaneering",
+            "James Fisher and Sons plc", "Enerpac Tool Group", "NOV",
+            "Survitec Group Ltd", "Morson Edge", "Aberdeenshire Council",
+            "Adecco", "Aggreko", "AG Barr", "AWE", "ALTEN",
+        ]
+        hostile_hosts = ["linkedin.com", "uk.indeed.com", "rocketreach.co",
+                         "lusha.com", "craft.co", "bizapedia.com",
+                         "jobsora.com", "glassdoor.co.uk", "zoominfo.com"]
+        for company in companies:
+            token = sorted(jm.name_tokens(company) or {"x"})[0]
+            results = [(f"{company} | {h.split('.')[0].title()}",
+                        f"https://www.{h}/c/x") for h in hostile_hosts]
+            results.append((f"{token.title()} Clothing Ltd",
+                            f"https://www.{token}clothing.com/"))
+            with self.subTest(company=company), \
+                 mock.patch.object(jm.requests, "post",
+                                   return_value=_ddg(*results)):
+                self.assertIsNone(
+                    jm._search_domain(company, jm.company_key(company),
+                                      jm.name_tokens(company)))
+
+
+class TestFollowingTheSitesOwnContactLinks(unittest.TestCase):
+    """230 listings were binned "no real address found" after the scraper
+    tried eleven guessed paths. Plenty of those sites publish an address on a
+    contact page the machine never opened, and every one of them links to it
+    from the front page."""
+
+    def test_it_follows_a_contact_link_the_fixed_paths_missed(self):
+        home = mock.Mock(status_code=200, text='<a href="/company/contact-details">Contact</a>')
+        page = mock.Mock(status_code=200, text="Email careers@acme.com")
+        miss = mock.Mock(status_code=404, text="")
+
+        def fake_get(url, **kw):
+            if url in ("https://acme.com", "http://acme.com"):
+                return home
+            if url == "https://acme.com/company/contact-details":
+                return page
+            return miss
+        with mock.patch.object(jm.requests, "get", side_effect=fake_get), \
+             mock.patch.object(jm.time, "sleep"):
+            emails, _ = jm.scrape_site("acme.com")
+        self.assertIn("careers@acme.com", emails)
+
+    def test_it_never_follows_a_link_off_this_company_site(self):
+        """An address on somebody else's page belongs to somebody else. This
+        is the whole failure the machine exists to avoid, and a homepage links
+        out to partners, clients and trade bodies constantly."""
+        links = jm._contact_links(
+            "acme.com",
+            '<a href="https://other-company.com/contact">Our client</a>'
+            '<a href="/contact-details">Us</a>')
+        self.assertEqual(links, ["https://acme.com/contact-details"])
+
+    def test_it_does_not_crawl_a_whole_website(self):
+        html = "".join(f'<a href="/contact-{n}">c</a>' for n in range(50))
+        self.assertLessEqual(len(jm._contact_links("acme.com", html)),
+                             jm.MAX_CONTACT_LINKS)
+
+    def test_links_are_not_followed_when_an_address_was_already_found(self):
+        """The fixed paths answered. Fetching more pages would be spending a
+        company's bandwidth to learn nothing."""
+        hit = mock.Mock(status_code=200,
+                        text='jane@acme.com <a href="/contact-us-now">c</a>')
+        with mock.patch.object(jm.requests, "get", return_value=hit) as got, \
+             mock.patch.object(jm.time, "sleep"):
+            emails, _ = jm.scrape_site("acme.com")
+        self.assertIn("jane@acme.com", emails)
+        self.assertNotIn("https://acme.com/contact-us-now",
+                         [c.args[0] for c in got.call_args_list])
+
+
 class TestDiscoverPhoneExtraction(unittest.TestCase):
     def setUp(self):
         self.state = {"jobs": {}}
@@ -3261,23 +3483,68 @@ class TestReopeningListingsWeCanNowAnswer(unittest.TestCase):
 
     def test_a_listing_whose_employer_is_known_goes_back_in_the_queue(self):
         state = self.state()
-        self.assertEqual(jm.rediscover(state), 1)
+        jm.rediscover(state)
         job = state["jobs"]["known"]
         self.assertEqual(job["status"], "scored")
         self.assertIsNone(job["skip_reason"])
         self.assertTrue(job["rediscovered_at"])
 
-    def test_a_listing_we_still_cannot_answer_is_left_alone(self):
-        state = self.state()
-        jm.rediscover(state)
-        self.assertEqual(state["jobs"]["unknown"]["status"], "no_email")
+    def test_a_listing_binned_before_the_search_fallback_is_asked_again(self):
+        """This reverses the old behaviour, deliberately.
 
-    def test_no_real_address_found_is_not_reopened(self):
-        """That company's site was fetched and had no address on it. It is a
-        fact about the site, not a gap in what the machine remembered."""
+        'no domain found' used to be final for a company Clearbit had never
+        heard of, and that was right while Clearbit was the only place the
+        machine looked. It now also searches the web for the company's own
+        website, so the question being asked is genuinely a different one and
+        the listing deserves one more go at it.
+        """
         state = self.state()
         jm.rediscover(state)
-        self.assertEqual(state["jobs"]["no_address"]["status"], "no_email")
+        self.assertEqual(state["jobs"]["unknown"]["status"], "scored")
+
+    def test_no_real_address_found_is_reopened_once_the_scraper_improves(self):
+        """Also reversed, and for the same reason.
+
+        The old note said the site had been fetched and had no address on it -
+        a fact about the site rather than a gap in what the machine
+        remembered. That was true of a scraper which tried eleven guessed
+        paths and stopped. It now follows the site's own contact links, so the
+        binned verdict was a fact about the eleven guesses instead.
+        """
+        state = self.state()
+        jm.rediscover(state)
+        self.assertEqual(state["jobs"]["no_address"]["status"], "scored")
+
+    def test_a_listing_is_not_reopened_again_by_the_same_improvement(self):
+        """The guard that stops this becoming an infinite retry.
+
+        Without it every run would tip the entire backlog back into the queue
+        and spend the whole discovery budget re-asking questions that were
+        settled yesterday, starving listings found this morning.
+        """
+        state = self.state()
+        jm.rediscover(state)
+        for job in state["jobs"].values():
+            if job["status"] == "scored":
+                job["status"] = "no_email"
+                job["skip_reason"] = "no real address found"
+        self.assertEqual(jm.rediscover(state), 0)
+
+    def test_the_freshest_adverts_are_reopened_first(self):
+        """A five-week-old advert is a colder approach than Tuesday's. If the
+        budget only reaches part of the backlog, it should reach the part
+        still worth writing about."""
+        jobs = {}
+        for n, posted in enumerate(["2026-07-01", "2026-09-01", "2026-08-01"]):
+            jobs[str(n)] = {"company": f"Firm {n}", "status": "no_email",
+                            "skip_reason": "no real address found",
+                            "posted_at": posted}
+        state = {"jobs": jobs}
+        with mock.patch.object(jm, "REDISCOVER_PER_RUN", 1):
+            jm.rediscover(state)
+        woken = [j for j in state["jobs"].values() if j["status"] == "scored"]
+        self.assertEqual(len(woken), 1)
+        self.assertEqual(woken[0]["posted_at"], "2026-09-01")
 
     def test_it_never_drags_a_sent_application_backwards(self):
         state = self.state()

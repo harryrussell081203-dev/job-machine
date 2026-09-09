@@ -26,6 +26,7 @@ import re
 import smtplib
 import sys
 import time
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -197,6 +198,21 @@ MAX_SCORED_PER_RUN = env_int("MAX_SCORED_PER_RUN", 120)  # 12 batched calls
 # for discovery and sending.
 SCORE_BUDGET_SECONDS = env_int("SCORE_BUDGET_SECONDS", 900)
 MAX_DISCOVERED_PER_RUN = env_int("MAX_DISCOVERED_PER_RUN", 25)
+
+# Bumped whenever address discovery genuinely gains a new way to find an
+# address - a new source, or a new place it looks on a site. rediscover()
+# re-opens every listing binned by an older generation, so each improvement
+# gets one honest retry at the whole backlog and no more. Bumping it without
+# improving anything just burns the run budget re-asking a settled question.
+#
+#   1  Clearbit autocomplete, eleven fixed paths on the company's site.
+#   2  + keyless web search for the domain, + the site's own contact links.
+DISCOVERY_GENERATION = 2
+
+# How many previously binned listings may re-enter the queue per run. Sized
+# under MAX_DISCOVERED_PER_RUN's daily total across runs so the backlog drains
+# steadily without ever crowding out a listing found this morning.
+REDISCOVER_PER_RUN = env_int("REDISCOVER_PER_RUN", 40)
 PRUNE_AFTER_DAYS = 45            # drop dead listings so state.json stays small
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -2032,6 +2048,9 @@ def find_domain(company, known=None):
                 print(f"[discover] '{company}' -> {domain} "
                       f"(found by asking for '{query}')")
             return domain
+    domain = _search_domain(company, wanted, wanted_tokens)
+    if domain:
+        return domain
     print(f"[discover] no confident domain for '{company}'")
     return None
 
@@ -2087,6 +2106,47 @@ def query_variants(company, limit=3):
     return out[:limit]
 
 
+def name_identifies_company(hit_name, company, wanted, wanted_tokens,
+                            complain=False):
+    """Does `hit_name` name the same company the advert named?
+
+    The single acceptance test for every source of a domain. Clearbit and the
+    web-search fallback both come through here, so a domain found by searching
+    is held to the identical standard as one Clearbit volunteered. That is
+    deliberate: the fallback exists to ask the question in more places, never
+    to lower the bar for what counts as an answer.
+    """
+    hit_key = company_key(hit_name or "")
+    if hit_key and hit_key == wanted:
+        return True
+    # A one-word company name is not enough to identify anybody. The subset
+    # rule below is satisfied by ANY firm containing that word, which matched
+    # the housing association 'Sanctuary' to Sanctuary Clothing in California
+    # - and to a named individual there, so an application was one run away
+    # from landing in a stranger's inbox at an unrelated company on another
+    # continent. Same family of mistake as Wood and Woodforest National Bank,
+    # through a different door. For a single-token name, nothing but an exact
+    # match will do.
+    if len(wanted_tokens) < 2:
+        return False
+    # Every word Harry's listing gave us must be a whole word in the match -
+    # 'wood' must not match 'woodforest'. And whatever the match adds on top
+    # has to be an ordinary corporate word.
+    #
+    # Subset alone is not enough: 'Grace May', a recruiter, matched 'Grace and
+    # May Home' and an IT Support application went to a home furnishings shop.
+    # The extra word tells you which it is. 'Baker Hughes Company' adds
+    # 'company' and is the same firm; 'Grace and May Home' adds 'home' and is
+    # a different one.
+    hit_tokens = name_tokens(hit_name or "")
+    if wanted_tokens <= hit_tokens:
+        if (hit_tokens - wanted_tokens) <= CORPORATE_WORDS:
+            return True
+        if complain:
+            print(f"[discover] '{hit_name}' is not '{company}'")
+    return False
+
+
 def _clearbit_match(query, company, wanted, wanted_tokens):
     """One Clearbit lookup, returning a domain only on a confident match.
 
@@ -2105,41 +2165,175 @@ def _clearbit_match(query, company, wanted, wanted_tokens):
             domain = hit.get("domain")
             if not domain or not plausible_domain(domain):
                 continue
-            hit_key = company_key(hit.get("name", ""))
-            if hit_key == wanted:
+            if name_identifies_company(hit.get("name", ""), company, wanted,
+                                       wanted_tokens, complain=True):
                 return domain
-            # A one-word company name is not enough to identify anybody. The
-            # subset rule below is satisfied by ANY firm containing that word,
-            # which matched the housing association 'Sanctuary' to Sanctuary
-            # Clothing in California - and to a named individual there, so an
-            # application was one run away from landing in a stranger's inbox
-            # at an unrelated company on another continent. Same family of
-            # mistake as Wood and Woodforest National Bank, through a
-            # different door. For a single-token name, nothing but an exact
-            # match will do.
-            if len(wanted_tokens) < 2:
-                continue
-            # Every word Harry's listing gave us must be a whole word in the
-            # match - 'wood' must not match 'woodforest'. And whatever the
-            # match adds on top has to be an ordinary corporate word.
-            #
-            # Subset alone is not enough: 'Grace May', a recruiter, matched
-            # 'Grace and May Home' and an IT Support application went to a
-            # home furnishings shop. The extra word tells you which it is.
-            # 'Baker Hughes Company' adds 'company' and is the same firm;
-            # 'Grace and May Home' adds 'home' and is a different one.
-            hit_tokens = name_tokens(hit.get("name", ""))
-            if wanted_tokens <= hit_tokens:
-                if (hit_tokens - wanted_tokens) <= CORPORATE_WORDS:
-                    return domain
-                print(f"[discover] '{hit.get('name')}' is not '{company}'")
     except Exception as e:
         print(f"[discover] clearbit '{query}': {e}")
     return None
 
 
-SCRAPE_PATHS = ("", "/contact", "/contact-us", "/careers", "/jobs",
-                "/join-us", "/about", "/about-us", "/team", "/our-team", "/people")
+# Sites that answer a search for ANY company name and are never that
+# company's own website.
+#
+# The second group is the important one. RocketReach, Lusha, LeadIQ, ZoomInfo,
+# Apollo, SignalHire, ContactOut and Hunter will all cheerfully hand over "the
+# email address" for any company on earth, and a search for a firm's contact
+# details puts them on the first page. Their product is INFERRED: they take a
+# domain, work out that the company tends to use first.last@, and generate the
+# rest. That is a guess with a logo on it, and a guessed address is the one
+# thing this machine must never send to - so they are blocked here by name
+# rather than left to luck. An address is only ever real if the company
+# published it themselves.
+NOT_A_COMPANY_SITE = frozenset({
+    # aggregators, socials, reference
+    "linkedin.com", "indeed.com", "glassdoor.com", "glassdoor.co.uk",
+    "facebook.com", "twitter.com", "x.com", "instagram.com", "youtube.com",
+    "tiktok.com", "wikipedia.org", "crunchbase.com", "bloomberg.com",
+    "reuters.com", "trustpilot.com", "yell.com", "yelp.com", "pinterest.com",
+    # contact-data vendors that generate addresses from a pattern
+    "rocketreach.co", "lusha.com", "leadiq.com", "zoominfo.com", "apollo.io",
+    "signalhire.com", "contactout.com", "hunter.io", "snov.io", "clearbit.com",
+    "ukcom.biz", "endole.co.uk", "opencorporates.com", "duedil.com",
+    # job boards - the advert is there, the company is not
+    "adzuna.co.uk", "reed.co.uk", "totaljobs.com", "cv-library.co.uk",
+    "monster.co.uk", "jobsite.co.uk", "cwjobs.co.uk", "jobserve.com",
+    "s1jobs.com", "myjobscotland.gov.uk", "findajob.dwp.gov.uk",
+    # registries and the search engines themselves
+    "gov.uk", "service.gov.uk", "google.com", "bing.com", "duckduckgo.com",
+})
+
+
+def _is_company_site(domain):
+    """False for aggregators and address-guessing directories."""
+    d = (domain or "").lower().lstrip(".")
+    if d.startswith("www."):
+        d = d[4:]
+    parts = d.split(".")
+    # Check the domain and each parent, so uk.linkedin.com and
+    # find-and-update.company-information.service.gov.uk are both caught.
+    for i in range(len(parts) - 1):
+        if ".".join(parts[i:]) in NOT_A_COMPANY_SITE:
+            return False
+    return True
+
+
+def _search_hits(query):
+    """[(title, domain)] from a keyless web search, best first.
+
+    DuckDuckGo's HTML endpoint needs no key, no account and no quota, which is
+    what keeps this machine free to run. It is a fallback and it is allowed to
+    fail: every caller treats an empty list as "no answer", which is where the
+    listing was already heading.
+    """
+    out = []
+    try:
+        r = requests.post("https://html.duckduckgo.com/html/",
+                          data={"q": query}, headers=UA, timeout=20)
+        if not r.ok:
+            return out
+        for href, title in re.findall(
+                r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+                r.text, re.S | re.I):
+            # Results are wrapped in a redirect: /l/?uddg=<url-encoded>
+            m = re.search(r"[?&]uddg=([^&]+)", href)
+            if m:
+                href = urllib.parse.unquote(m.group(1))
+            host = urllib.parse.urlparse(
+                href if "//" in href else "https://" + href).netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            if host:
+                out.append((strip_html(title).strip(), host))
+    except Exception as e:
+        print(f"[discover] search '{query}': {e}")
+    return out
+
+
+def domain_carries_company_name(company, domain):
+    """Does this domain visibly belong to this company?
+
+    The one check that does not depend on having thought of the right sites to
+    distrust. NOT_A_COMPANY_SITE is a denylist, and a denylist only ever
+    protects against what its author remembered: replaying the 315 real
+    employers in the backlog against the title test showed 311 wrong titles
+    getting through it, because "Innserve Ltd | LinkedIn" splits into
+    "Innserve Ltd" and matches perfectly. Every unlisted directory, scraper
+    and company-profile site would have walked straight in behind them.
+
+    So the domain has to earn it. The company's name, letters only, must
+    actually appear in the domain root - innserve in innserveltd.co.uk,
+    ernestgordon in ernestgordonrecruitment.com. bizapedia.com does not carry
+    'ernestgordon' and never will, whoever's page it is hosting.
+
+    This refuses real companies whose domain is an abbreviation - Northern
+    Lighthouse Board at nlb.org.uk would not pass. That is the right way to be
+    wrong. A refusal costs one letter that was never going to be sent anyway;
+    the other kind of mistake puts Harry's CV in a stranger's inbox, and this
+    machine has done that twice.
+    """
+    if not company or not domain:
+        return False
+    root = domain.lower().split(".")[0]
+    root = re.sub(r"[^a-z0-9]", "", root)
+    key = re.sub(r"[^a-z0-9]", "", company_key(company) or "")
+    if not root or not key:
+        return False
+    if key in root or root in key:
+        return True
+    # A company that leads with its distinguishing word: 'Ernest Gordon
+    # Recruitment Limited' keys to 'ernest gordon', and ernestgordon.com is
+    # plainly theirs even though the key is longer than the root.
+    tokens = [t for t in (company_key(company) or "").split() if len(t) >= 4]
+    return bool(tokens) and "".join(tokens[:2]) in root
+
+
+def _search_domain(company, wanted, wanted_tokens):
+    """The company's own website, found by searching, or None.
+
+    Reached only once Clearbit has failed every variant of the name. Clearbit's
+    autocomplete is built from a company database that is thin on the UK SMEs
+    Harry actually applies to - 423 listings died at "no domain found", and a
+    good share of those firms have a perfectly ordinary website that any search
+    engine returns first.
+
+    What this does NOT do is read an address off a search result. It finds the
+    company's front door; the address still has to be published on the site
+    itself. The acceptance test is name_identifies_company(), the same one
+    Clearbit hits face, applied to the result's title - so this widens where
+    the machine looks without changing what it will believe.
+    """
+    for hit_title, domain in _search_hits(f"{company} official website"):
+        if not plausible_domain(domain) or not _is_company_site(domain):
+            continue
+        if not domain_matches_company(company, domain):
+            continue
+        # The check that does not rely on a denylist being complete.
+        if not domain_carries_company_name(company, domain):
+            continue
+        # A page title is messier than a company record: "Innserve Ltd |
+        # Vending & Dispense". Each segment is offered separately, and each
+        # still has to pass the full test on its own.
+        for part in [hit_title] + re.split(r"\s*[|–—:_-]\s*", hit_title):
+            if name_identifies_company(part, company, wanted, wanted_tokens):
+                print(f"[discover] '{company}' -> {domain} (found by search)")
+                return domain
+    return None
+
+
+SCRAPE_PATHS = ("", "/contact", "/contact-us", "/contact-us/", "/contactus",
+                "/contact/", "/get-in-touch", "/enquiries", "/careers",
+                "/careers/", "/jobs", "/join-us", "/work-for-us",
+                "/recruitment", "/about", "/about-us", "/team", "/our-team",
+                "/people")
+
+# Links worth following off the homepage when the fixed paths above found
+# nothing. A site that keeps its contact page at /cy/cysylltu or
+# /company/contact-details is not unusual; guessing more paths does not scale,
+# but every one of those sites links to the page from its own front door.
+CONTACT_LINK_RE = re.compile(
+    r"contact|get-?in-?touch|enquir|careers?|vacanc|job|work-?(for|with)-?us|"
+    r"join-?us|about|our-?team|people|recruit", re.I)
 
 
 def scrape_site(domain):
@@ -2150,21 +2344,82 @@ def scrape_site(domain):
     here is only ever trusted by the caller when this same domain's email
     search also succeeded - scrape_site itself does not know or care, it
     just reports everything real it saw."""
-    raw, phones = [], []
+    raw, phones, home_html = [], [], ""
+
+    def harvest(html):
+        raw.extend(EMAIL_RE.findall(html))
+        raw.extend(m.replace("%40", "@") for m in
+                   re.findall(r"mailto:([^\"'?>\s]+)", html))
+        phones.extend(find_phones(html))
+
     for path in SCRAPE_PATHS:
         for scheme in ("https", "http"):
             try:
                 r = requests.get(f"{scheme}://{domain}{path}", headers=UA, timeout=12)
                 if r.status_code == 200:
-                    raw += EMAIL_RE.findall(r.text)
-                    raw += [m.replace("%40", "@") for m in
-                            re.findall(r"mailto:([^\"'?>\s]+)", r.text)]
-                    phones += find_phones(r.text)
+                    harvest(r.text)
+                    if path == "":
+                        home_html = r.text
                 break
             except Exception:
                 continue
         time.sleep(0.5)  # be polite to small company sites
+
+    # Nothing on any of the usual paths. Before giving up, follow the site's
+    # own contact links - 230 listings were binned as "no real address found"
+    # off a fixed list of eleven guesses at where a contact page lives, which
+    # is a fact about that list rather than about the company. A site that
+    # links to /cy/cysylltu or /company/contact-details from its front page
+    # has published an address; the machine simply never opened the door.
+    if not clean_emails(raw, domain) and home_html:
+        for url in _contact_links(domain, home_html):
+            try:
+                r = requests.get(url, headers=UA, timeout=12)
+                if r.status_code == 200:
+                    harvest(r.text)
+            except Exception:
+                pass
+            time.sleep(0.5)
+            if clean_emails(raw, domain):
+                break
+
     return clean_emails(raw, domain), phones
+
+
+MAX_CONTACT_LINKS = 8
+
+
+def _contact_links(domain, html):
+    """Contact-ish URLs on this company's own site, from its homepage.
+
+    Same-host only. An off-site link is somebody else's page, and an address
+    found on it belongs to somebody else - which is the entire failure this
+    machine is built to avoid. Capped, because a homepage can carry hundreds
+    of links and a job application is not worth crawling a website for.
+    """
+    base = f"https://{domain}/"
+    out, seen = [], set()
+    for href in re.findall(r'href=["\']([^"\'#]+)["\']', html, re.I):
+        if href.lower().startswith(("mailto:", "tel:", "javascript:")):
+            continue
+        if not CONTACT_LINK_RE.search(href):
+            continue
+        url = urllib.parse.urljoin(base, href)
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            continue
+        host = parsed.netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if host != domain and not host.endswith("." + domain):
+            continue
+        if url in seen or parsed.path in SCRAPE_PATHS:
+            continue
+        seen.add(url)
+        out.append(url)
+        if len(out) >= MAX_CONTACT_LINKS:
+            break
+    return out
 
 
 def fetch_listing_text(job):
@@ -2250,12 +2505,14 @@ def discover(state):
                 continue
             domain = find_domain(company, known)
             if not domain:
-                job.update({"status": "no_email", "skip_reason": "no domain found"})
+                job.update({"status": "no_email", "skip_reason": "no domain found",
+                            "discovery_gen": DISCOVERY_GENERATION})
                 continue
             job["company_domain"] = domain
             known.setdefault(company_key(company), domain)
             if not has_mx(domain):
-                job.update({"status": "no_email", "skip_reason": "domain has no MX"})
+                job.update({"status": "no_email", "skip_reason": "domain has no MX",
+                            "discovery_gen": DISCOVERY_GENERATION})
                 continue
             scraped_emails, scraped_phones = scrape_site(domain)
             email_addr, name, tier = best_email(scraped_emails)
@@ -2272,7 +2529,8 @@ def discover(state):
 
         # 3) nothing real found -> do not send. No guessing, ever.
         if not email_addr or tier < 1:
-            job.update({"status": "no_email", "skip_reason": "no real address found"})
+            job.update({"status": "no_email", "skip_reason": "no real address found",
+                        "discovery_gen": DISCOVERY_GENERATION})
             continue
         if not has_mx(email_addr.split("@")[1]):
             job.update({"status": "no_email", "skip_reason": "address domain has no MX"})
@@ -4071,36 +4329,66 @@ def rescore(state, floor=55):
 
 
 def rediscover(state):
-    """Re-open listings binned for "no domain found" that we can now answer.
+    """Re-open no_email listings that address discovery can now answer.
 
     Same argument as rescore(): a listing parked on a judgement the machine
-    has since improved on should not stay parked. The difference is that this
-    one is not a judgement call at all - these listings were binned for want
-    of a domain this machine already held, so re-opening them asks nothing new
-    of anybody.
+    has since improved on should not stay parked.
 
-    Only listings whose company is in known_domains() are woken. The rest
-    genuinely have no domain, and putting them back would spend the discovery
-    budget re-asking Clearbit the same question and getting the same answer.
+    Two kinds get woken.
 
-    'no real address found' is deliberately left alone: that company's site
-    was fetched and had no address on it, which is a fact about the site
-    rather than a gap in what this machine remembered.
+    The first needs nothing new: the listing was binned for want of a domain
+    this machine already held under another spelling of the name, so
+    known_domains() answers it outright.
+
+    The second is what DISCOVERY_GENERATION is for. 'no real address found'
+    used to be left alone on the grounds that the company's site had been
+    fetched and had no address on it - a fact about the site rather than a gap
+    in what the machine remembered. That reasoning was sound and is now out of
+    date: the site was fetched at eleven guessed paths and the machine never
+    followed the site's own contact links. Bumping the generation says "the
+    question is genuinely different now" and lets each listing be asked again
+    exactly once per improvement, rather than every run forever.
+
+    Bounded per run. There are hundreds of these and the discovery budget is
+    MAX_DISCOVERED_PER_RUN; tipping the whole backlog in at once would spend
+    every run on stale adverts while today's listings queued behind them. The
+    backlog drains over a fortnight instead, and fresh work always gets in.
     """
     known = known_domains(state)
     woken = 0
+
+    def wake(job, why):
+        nonlocal woken
+        job.update({"status": "scored", "skip_reason": None,
+                    "discovery_gen": DISCOVERY_GENERATION,
+                    "rediscovered_at": now(), "rediscover_reason": why})
+        woken += 1
+
+    stale = []
     for job in state["jobs"].values():
         if job.get("status") != "no_email":
             continue
-        if job.get("skip_reason") != "no domain found":
+        reason = job.get("skip_reason")
+        if (reason == "no domain found"
+                and company_key(job.get("company") or "") in known):
+            wake(job, "employer's domain was already known")
             continue
-        if company_key(job.get("company") or "") not in known:
-            continue
-        job.update({"status": "scored", "skip_reason": None,
-                    "rediscovered_at": now()})
-        woken += 1
-    print(f"[rediscover] {woken} listing(s) put back in the queue - their "
-          f"employer's domain was already known")
+        # Anything binned by an older, weaker version of discovery.
+        if (reason in ("no domain found", "no real address found")
+                and (job.get("discovery_gen") or 0) < DISCOVERY_GENERATION):
+            stale.append(job)
+
+    # Freshest adverts first: a five-week-old listing is a colder approach
+    # than one posted on Tuesday, so if the budget only reaches part of the
+    # backlog it should reach the part still worth writing about.
+    stale.sort(key=lambda j: j.get("posted_at") or j.get("found_at") or "",
+               reverse=True)
+    for job in stale[:REDISCOVER_PER_RUN]:
+        wake(job, "discovery has improved since this was binned")
+
+    waiting = max(0, len(stale) - REDISCOVER_PER_RUN)
+    print(f"[rediscover] {woken} listing(s) put back in the queue"
+          + (f", {waiting} still queued for a later run" if waiting else ""))
     return woken
 
 
