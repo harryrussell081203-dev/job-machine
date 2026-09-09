@@ -77,16 +77,48 @@ GMAIL_APP_PASSWORD = env_str("GMAIL_APP_PASSWORD")
 # TEST_MODE=1 (or export TEST_MODE=1 locally) to route everything back to
 # Harry's own inbox instead.
 TEST_MODE = env_flag("TEST_MODE", False)
+# Harry's guideline, in his words: "a target of 10 good application emails a
+# day... this isnt set in stone just a guidline". These are ceilings, not
+# targets, and the distinction matters: the queue runs EMPTY most days, so
+# what is sent is decided by how many qualifying listings with a real address
+# exist, never by these numbers. Raising them alone would have changed nothing
+# and it would have looked like something had been done.
+#
+# 10 a run rather than 7 because GitHub cron drops slots - three runs a weekday
+# is the schedule and two is a normal Tuesday, so a single good run has to be
+# able to carry the day's target on its own.
 DAILY_SEND_CAP = env_int("DAILY_SEND_CAP", 20)
-PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 7)
+PER_RUN_SEND_CAP = env_int("PER_RUN_SEND_CAP", 10)
 # Outside the best send window the queue holds back, so the strongest leads
 # land when they are most likely to be read. Anything genuinely fresh ignores
 # this - see the comment in send_batch.
 OFF_PEAK_SEND_CAP = env_int("OFF_PEAK_SEND_CAP", 3)
 BRAND_NEW_HOURS = env_int("BRAND_NEW_HOURS", 14)
+# Where to look. This used to be five Scottish cities at 25 miles, which was
+# far narrower than what Harry actually said he would take: he will relocate to
+# Edinburgh or the Central Belt, take UK-wide contract work with digs paid and
+# home at weekends, and go offshore or rotational anywhere - his own profile
+# says a role in Rosyth, Bristol, Norway or the Gulf is worth as much as one in
+# Aberdeen and often more.
+#
+# That mismatch was the binding constraint on output. The send queue runs
+# empty every day: the machine already sends everything it has and then stops,
+# so the daily cap was never what limited it. Supply was.
+#
+# The added places are where this trade concentrates - the southern North Sea,
+# Teesside, the naval yards - plus a UK-wide sweep for the contract and
+# rotational work that is advertised nationally and never appears in a city
+# search. Scoring still decides; this only decides what gets looked at.
 SEARCH_LOCATIONS = env_list(
-    "SEARCH_LOCATIONS", ["Aberdeen", "Dundee", "Edinburgh", "Glasgow", "Inverness"])
-SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 25)
+    "SEARCH_LOCATIONS",
+    ["Aberdeen", "Dundee", "Edinburgh", "Glasgow", "Inverness",
+     "United Kingdom",
+     "Great Yarmouth", "Middlesbrough", "Newcastle upon Tyne",
+     "Rosyth", "Bristol", "Plymouth", "Barrow-in-Furness"])
+# 40 rather than 25. He does not drive, so the radius is not about a commute -
+# it is about not missing a rotational or digs-paid job three towns over that
+# he would happily take.
+SEARCH_RADIUS_MILES = env_int("SEARCH_RADIUS_MILES", 40)
 SCORE_THRESHOLD = env_int("SCORE_THRESHOLD", 70)
 
 # The floor. Harry is employed - Technician at Hydro Group from 24 August 2026,

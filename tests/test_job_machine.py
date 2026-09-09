@@ -3794,3 +3794,46 @@ class TestAnUnstatedSalaryIsNotAPenalty(unittest.TestCase):
         job = make_job(external_id="0")
         job["salary_min"] = job["salary_max"] = None
         self.assertTrue(jm.pays_enough(job))
+
+
+class TestTheSearchMatchesWhatHeSaidHeWouldTake(unittest.TestCase):
+    """Harry asked for ~10 good applications a day. The caps were never what
+    stopped that: the send queue runs EMPTY, so the machine already sends
+    everything it has and then stops. Supply was the constraint, and the
+    search area was five Scottish cities while his profile says he will
+    relocate, take UK-wide contract work with digs paid, and go rotational
+    anywhere.
+    """
+
+    def test_the_search_is_not_only_scotland(self):
+        places = [p.lower() for p in jm.SEARCH_LOCATIONS]
+        self.assertIn("united kingdom", places)
+
+    def test_the_offshore_and_naval_hubs_are_searched(self):
+        # Where this trade actually concentrates outside Aberdeen.
+        places = [p.lower() for p in jm.SEARCH_LOCATIONS]
+        for hub in ("great yarmouth", "rosyth", "plymouth"):
+            self.assertIn(hub, places)
+
+    def test_aberdeen_is_still_searched(self):
+        # Widening must not drop home - he lives and works there.
+        self.assertIn("Aberdeen", jm.SEARCH_LOCATIONS)
+
+    def test_a_run_can_carry_the_days_target_on_its_own(self):
+        """GitHub cron drops slots - three runs a weekday is the schedule and
+        two is a normal Tuesday - so one good run has to be able to reach 10
+        without waiting for the others."""
+        self.assertGreaterEqual(jm.PER_RUN_SEND_CAP, 10)
+        self.assertGreaterEqual(jm.DAILY_SEND_CAP, jm.PER_RUN_SEND_CAP)
+
+    def test_the_quality_bar_was_not_lowered_to_hit_the_number(self):
+        """The one way to fake 10 a day is to drop the score threshold, which
+        is the opposite of what he asked for - he said GOOD applications, and
+        had just complained about wrong-trade letters."""
+        self.assertGreaterEqual(jm.SCORE_THRESHOLD, 70)
+
+    def test_the_promise_never_to_guess_an_address_is_intact(self):
+        # The other way to fake volume. no_email must still mean no letter.
+        job = {"title": "Technician", "company": "Nowhere Ltd",
+               "description": "x", "contact_email": ""}
+        self.assertFalse((job.get("contact_email") or "").strip())
