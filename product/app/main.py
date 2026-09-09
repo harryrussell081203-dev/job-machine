@@ -17,7 +17,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Request, Response
 from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
                                RedirectResponse)
 from fastapi.staticfiles import StaticFiles
@@ -727,6 +727,37 @@ def status(request: Request):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+# The pages a search engine may have, and the ones it may not. The allow-list
+# is explicit rather than "everything except": a new signed-in screen added
+# later is private by default that way round, and public by default the other,
+# and the wrong default here puts somebody's drafts in Google.
+PUBLIC_PAGES = ("/", "/find", "/playbook", "/terms", "/privacy", "/login")
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots():
+    lines = ["User-agent: *"]
+    # Disallow by prefix, so /setup/mail and /applications/3/outcome are
+    # covered without listing every route that will ever exist.
+    for path in ("/dashboard", "/drafts", "/applications", "/setup", "/profile",
+                 "/account", "/admin", "/cv", "/auth", "/billing", "/status"):
+        lines.append(f"Disallow: {path}")
+    lines.append(f"Sitemap: {config.BASE_URL}/sitemap.xml")
+    return "\n".join(lines) + "\n"
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    from xml.sax.saxutils import escape
+    urls = "".join(
+        f"<url><loc>{escape(config.BASE_URL + p)}</loc></url>"
+        for p in PUBLIC_PAGES)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f'{urls}</urlset>')
+    return Response(content=xml, media_type="application/xml")
 
 
 @app.get("/admin", response_class=HTMLResponse)

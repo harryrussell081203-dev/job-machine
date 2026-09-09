@@ -96,3 +96,30 @@ class TheFreeTool(AppTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheResultCanBeShared(AppTestCase):
+    """Somebody who has just watched the tool work on their own advert is the
+    most convinced this product will ever make anyone. Until now there was
+    nothing for them to do about it."""
+
+    def _result_page(self):
+        return self.client.post("/find", data={
+            "advert": "Field service engineer. CV to hannah.doyle@example.com"
+        }).text
+
+    def test_a_share_control_is_offered_on_a_result(self):
+        self.assertIn('id="shareit"', self._result_page())
+
+    def test_it_is_hidden_until_the_browser_can_actually_share(self):
+        # A button that does nothing when pressed is worse than no button, and
+        # neither navigator.share nor the clipboard exists everywhere.
+        page = self._result_page()
+        self.assertIn('id="shareit" hidden', page)
+        self.assertIn("navigator.share", page)
+        self.assertIn("navigator.clipboard", page)
+
+    def test_the_shared_link_points_at_the_free_tool(self):
+        # Not the pricing page. The tool is what converts, because it is the
+        # thing the recommender just watched work.
+        self.assertIn('"/find"', self._result_page())
