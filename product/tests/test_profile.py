@@ -229,3 +229,57 @@ class TestWizardRoundTrip(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestASearchTermHasToBeSearchable(unittest.TestCase):
+    """The failure this class exists for produced no error at all.
+
+    A real profile carried locations = ["United Kingdom europe oil hotspots"].
+    It went to Adzuna as `where=United+Kingdom+europe+oil+hotspots`, matched
+    nothing, and one letter came out of 119 listings. Nothing logged, nothing
+    raised. It reads exactly like a quiet market, which is why it survived
+    long enough to be believed.
+    """
+
+    def test_the_sentence_that_caused_this(self):
+        with self.assertRaises(ProfileError) as ctx:
+            Profile(**good(locations=["United Kingdom europe oil hotspots"]))
+        self.assertIn("reads like a sentence", str(ctx.exception))
+
+    def test_real_places_are_not_collateral_damage(self):
+        # The rule is shape, not a list of known towns - a gazetteer would
+        # reject the village nobody remembered to add, and blocking a real
+        # search is worse than allowing an odd one.
+        for place in ("Aberdeen", "United Kingdom", "Newcastle upon Tyne",
+                      "Kingston upon Thames", "Stoke-on-Trent", "Isle of Man",
+                      "Bury St Edmunds"):
+            Profile(**good(locations=[place]))
+
+    def test_several_places_are_fine(self):
+        Profile(**good(locations=["Aberdeen", "Edinburgh", "Glasgow"]))
+
+    def test_a_blank_location_is_refused(self):
+        with self.assertRaises(ProfileError):
+            Profile(**good(locations=["   "]))
+
+    def test_a_job_title_that_is_really_a_sentence_is_refused(self):
+        with self.assertRaises(ProfileError) as ctx:
+            Profile(**good(target_roles=[
+                "something in engineering where I can travel and earn more"]))
+        self.assertIn("job title", str(ctx.exception))
+
+    def test_ordinary_job_titles_still_pass(self):
+        for title in ("field service engineer", "maintenance technician",
+                      "instrumentation and control technician",
+                      "installation and commissioning engineer",
+                      "HGV class 2 driver"):
+            Profile(**good(target_roles=[title]))
+
+    def test_the_message_says_what_to_type_instead(self):
+        # An error that only says "invalid" leaves somebody typing variations
+        # of the same wrong thing.
+        with self.assertRaises(ProfileError) as ctx:
+            Profile(**good(locations=["anywhere I can get to on the train"]))
+        message = str(ctx.exception)
+        self.assertIn("One place per line", message)
+        self.assertIn("Aberdeen", message)

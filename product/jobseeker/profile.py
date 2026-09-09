@@ -40,6 +40,55 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # licenses the "I am not desperate" note in a follow-up.
 SITUATIONS = ("employed", "unemployed", "notice_period", "student")
 
+# The real case this was written for: somebody typed
+#
+#     locations = ["United Kingdom europe oil hotspots"]
+#
+# which went to Adzuna as `where=United+Kingdom+europe+oil+hotspots`, matched
+# nothing, and produced one letter from a hundred and nineteen listings. No
+# error anywhere. It reads as "there are no jobs".
+#
+# The test is shape, not a gazetteer. Checking entries against a list of real
+# places would reject the Scottish village nobody put in the list, and being
+# wrong in that direction is worse - it blocks a legitimate search rather than
+# a nonsensical one. Word count catches a description; a place is short.
+# "Newcastle upon Tyne" and "Kingston upon Thames" are three, so four is the
+# ceiling and the sentence above is five.
+MAX_PLACE_WORDS = 4
+MAX_PLACE_CHARS = 40
+PLACE_CHARS_RE = re.compile(r"^[A-Za-z0-9 ,.'’()/-]+$")
+
+# A job title is a title. A sentence in this box is somebody describing the
+# work they want rather than naming it, and it searches just as badly.
+MAX_TITLE_WORDS = 6
+MAX_TITLE_CHARS = 60
+
+
+def _not_a_place(value: str) -> str:
+    """Why this is not a searchable place, or '' if it is fine."""
+    text = (value or "").strip()
+    if not text:
+        return "is blank"
+    if len(text) > MAX_PLACE_CHARS:
+        return f"is {len(text)} characters, and a place name is not that long"
+    if not PLACE_CHARS_RE.match(text):
+        return "has characters a place name would not"
+    if len(text.split()) > MAX_PLACE_WORDS:
+        return "reads like a sentence rather than a place"
+    return ""
+
+
+def _not_a_job_title(value: str) -> str:
+    """Why this is not a job title, or '' if it is fine."""
+    text = (value or "").strip()
+    if not text:
+        return "is blank"
+    if len(text) > MAX_TITLE_CHARS:
+        return f"is {len(text)} characters, and a job title is not that long"
+    if len(text.split()) > MAX_TITLE_WORDS:
+        return "reads like a sentence rather than a job title"
+    return ""
+
 
 class ProfileError(ValueError):
     """A profile that would produce wrong letters. Always fatal."""
@@ -164,6 +213,31 @@ class Profile:
                 "history is empty - the letters have no proof points to make")
         if not self.locations:
             problems.append("locations is empty - nowhere to search")
+
+        # Each of these goes to a job board as a literal query parameter, so a
+        # sentence in the box is not a cosmetic problem: it is a search that
+        # cannot match anything, and the failure is silent. It looks exactly
+        # like a quiet market.
+        #
+        # This is here rather than in the web form on purpose. A profile can
+        # arrive from the form, from a JSON file, or prefilled by a model
+        # reading a CV, and all three have to be held to the same rule - the
+        # pipeline is what cannot cope, so the pipeline's own type is where it
+        # belongs.
+        for place in self.locations:
+            why = _not_a_place(place)
+            if why:
+                problems.append(
+                    f"location {place!r} {why}. One place per line - "
+                    "'Aberdeen', 'Edinburgh', 'United Kingdom' - not a "
+                    "description of where you would like to work")
+        for role in self.target_roles:
+            why = _not_a_job_title(role)
+            if why:
+                problems.append(
+                    f"target role {role!r} {why}. Use the job title an "
+                    "employer would advertise - 'field service engineer', "
+                    "'maintenance technician'")
 
         if problems:
             raise ProfileError(
