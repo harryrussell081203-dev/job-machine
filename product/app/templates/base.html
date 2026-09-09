@@ -6,6 +6,31 @@
 <title>{% block title %}Recruited{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css">
 
+{# What a link to this site looks like when somebody shares it.
+   Without these it is a bare grey URL with no title and no picture - on
+   Reddit, WhatsApp, iMessage, a TikTok bio, anywhere. That is the first
+   impression on every single share, and the launch is made of shares.
+   The card is rendered from the site's own stylesheet rather than drawn, so
+   it cannot drift away from the design it is advertising. #}
+{# Context variables rather than blocks: a declared block PRINTS its body
+   where it is declared, so the obvious version leaks the description into
+   the top of the page as loose text. Any view can override by passing
+   og_title / og_description to render(). #}
+{% set _og_title = og_title | default("Recruited - your CV, in front of a human") %}
+{% set _og_desc = og_description | default("A real email address at every company, never guessed. 105 applications, 26 replies, 25%.") %}
+<meta name="description" content="{{ _og_desc }}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Recruited">
+<meta property="og:title" content="{{ _og_title }}">
+<meta property="og:description" content="{{ _og_desc }}">
+<meta property="og:url" content="{{ config.BASE_URL }}{{ request.url.path }}">
+<meta property="og:image" content="{{ config.BASE_URL }}/static/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt"
+      content="Recruited - your CV, in front of a human. 105 applications, 26 replies.">
+<meta name="twitter:card" content="summary_large_image">
+
 <!-- Installable. No store, no review, no fee: this is what makes the app
      appear on a home screen from a plain link. -->
 <link rel="manifest" href="/static/manifest.webmanifest">
