@@ -3026,6 +3026,44 @@ class TestFindingTheCompanyWebsiteBySearching(unittest.TestCase):
             self.assertIsNone(jm.find_domain("Nobody Ever Heard Of Them"))
 
 
+class TestTheBacklogActuallyDrains(unittest.TestCase):
+    """rediscover() was gated behind --rediscover, which only a
+    fire-rediscover branch passes.
+
+    That was right when the stage only re-opened listings whose employer was
+    already known - a one-off repair after a matching bug is fixed. It is now
+    also the only thing that drains the no_email backlog, and a backlog does
+    not drain on a flag nobody remembers to pass.
+
+    The first live run after the address-discovery change is what proved it:
+    669 binned listings went in and 686 came out, with no [rediscover] line in
+    the log at all.
+    """
+
+    def run_main(self, argv):
+        calls = []
+
+        def spy(name, fn, *args):
+            calls.append(name)
+            return None
+        state = {"jobs": {}, "companies_contacted": {}, "send_counts": {}}
+        with mock.patch.object(jm, "stage", side_effect=spy), \
+             mock.patch.object(jm, "load", return_value=state), \
+             mock.patch.object(jm, "save"), \
+             mock.patch.object(jm, "commit_state", create=True):
+            try:
+                jm.main(argv)
+            except SystemExit:
+                pass
+        return calls
+
+    def test_an_ordinary_run_re_opens_the_backlog(self):
+        self.assertIn("rediscover", self.run_main(["--dry-run"]))
+
+    def test_the_flag_still_works(self):
+        self.assertIn("rediscover", self.run_main(["--dry-run", "--rediscover"]))
+
+
 class TestTheDomainItselfHasToCarryTheName(unittest.TestCase):
     """The check that does not depend on a denylist being complete.
 
