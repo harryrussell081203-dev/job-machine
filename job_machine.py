@@ -4540,9 +4540,22 @@ def main(argv=None):
     if args.rescore is not None:
         stage("rescore", rescore, state, args.rescore)
         save(state)
-    if args.rediscover:
-        stage("rediscover", rediscover, state)
-        save(state)
+    # Every run, not only behind --rediscover. The flag made sense when this
+    # re-opened listings whose employer was already known: that is a one-off
+    # repair, run by hand after a matching bug is fixed.
+    #
+    # It is now also how the no_email backlog drains, and a backlog does not
+    # drain on a flag nobody remembers to pass. The first live run after the
+    # address-discovery change proved it - 669 binned listings went in and 686
+    # came out, because the only stage that could re-open them never ran.
+    #
+    # Safe to run always, and that is by design rather than by luck:
+    # DISCOVERY_GENERATION means each listing is re-asked once per genuine
+    # improvement and never again, and REDISCOVER_PER_RUN caps how many
+    # re-enter the queue, freshest advert first. --rediscover is kept because
+    # a fire-rediscover branch is still a useful way to say "do it now".
+    stage("rediscover", rediscover, state)
+    save(state)
     if not args.skip_harvest:
         stage("harvest", harvest, state)
         # Job-alert email from Harry's own inbox. The boards that carry most of

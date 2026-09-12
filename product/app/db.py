@@ -479,9 +479,26 @@ def may_contact(user_id: int, company: str) -> bool:
 # ----------------------------------------------------------------------
 def save_mail_account(user_id: int, *, address: str, host: str, port: int,
                       password: str, kind: str = "own",
-                      reply_to: str = "") -> None:
-    """Store credentials, encrypted. Never call this with a password that has
-    not just been proved to work - see delivery.verify()."""
+                      reply_to: str = "", verified: bool = True) -> None:
+    """Store credentials, encrypted.
+
+    `verified` records whether the password has actually been proved to work.
+    Never pass True without having proved it, and never store one already
+    KNOWN to be bad: a mail server that refuses credentials has given a
+    definite answer and the user must be told to their face.
+
+    verified=False is for the third case, which used to be conflated with the
+    second: we could not reach the mail server to ask. Free hosting blocks
+    outbound SMTP almost everywhere, so on the free plan that is every
+    password, correct ones included. The account is stored unchecked and the
+    sweep - which runs on a host that is not blocked - does the real
+    verification before it sends anything.
+
+    The guarantee this preserves is the one that matters: nothing is ever
+    sent on a password that has not been proved, and the user is never told
+    their letters are going out when they are not. What changes is only WHERE
+    the proof happens.
+    """
     from . import vault
     secret = vault.encrypt(password)
     with connect() as c:
@@ -496,7 +513,20 @@ def save_mail_account(user_id: int, *, address: str, host: str, port: int,
             "verified_at = excluded.verified_at, last_error = NULL, "
             "updated_at = excluded.updated_at",
             (user_id, address.strip().lower(), host.strip(), int(port),
-             secret, kind, (reply_to or "").strip().lower(), now(), now()))
+             secret, kind, (reply_to or "").strip().lower(),
+             now() if verified else None, now()))
+
+
+def mark_mail_verified(user_id: int) -> None:
+    """Record that these credentials have now been proved to work.
+
+    Called by the sweep after it has successfully logged in on a host that is
+    not SMTP-blocked, so a deferred check leaves the same state behind as an
+    immediate one and nothing downstream has to know which happened.
+    """
+    with connect() as c:
+        c.execute("UPDATE mail_accounts SET verified_at = ?, last_error = NULL, "
+                  "updated_at = ? WHERE user_id = ?", (now(), now(), user_id))
 
 
 def get_mail_account(user_id: int):

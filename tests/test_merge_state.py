@@ -194,10 +194,6 @@ class TestKeysNobodyHasWrittenARuleFor(unittest.TestCase):
         self.assertEqual(out["support_asked"]["ssafa"]["at"], "2026-07-01")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestTheAgencyApproachCounter(unittest.TestCase):
     """Agencies, unlike everyone else, may be approached a few times - they
     are paid to place people and a second call about a different role is
@@ -236,10 +232,6 @@ class TestTheAgencyApproachCounter(unittest.TestCase):
 
     def test_it_no_longer_warns_about_an_unknown_key(self):
         self.assertIn("agency_registered", ms.KNOWN)
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
 
 
 class TestTheRediscoveredJobsSurvivingTheMerge(unittest.TestCase):
@@ -329,3 +321,62 @@ class TestNoReopeningEverBeatsALetterAlreadySent(unittest.TestCase):
                     {"jobs": {"a": {"status": "scored",
                                     "rediscovered_at": "2026-09-06T10:00:00"}}})
                 self.assertEqual(out["jobs"]["a"]["status"], "scored")
+
+
+class TestTheHeartbeatSurvivesTheMerge(unittest.TestCase):
+    """The alarm that says the machine has DIED was crying wolf daily.
+
+    'heartbeat' had no merge rule, so carry_unknown() merged it with theirs
+    winning - and theirs is the copy already on main, which had been frozen
+    the same way. last_run could never advance: it sat at 2026-09-08T12:03
+    while the machine ran a dozen more times, so every run measured a
+    multi-day outage that was not happening and raised the alarm for it.
+
+    An alarm that is always going off is one Harry learns to ignore, which is
+    worse than no alarm - the real outage arrives looking exactly like the
+    eleven false ones before it.
+    """
+
+    def test_the_newest_run_stamp_wins(self):
+        out = ms.merge({"heartbeat": {"last_run": "2026-09-08T12:03:35+00:00"}},
+                       {"heartbeat": {"last_run": "2026-09-10T12:17:01+00:00"}})
+        self.assertEqual(out["heartbeat"]["last_run"],
+                         "2026-09-10T12:17:01+00:00")
+
+    def test_it_wins_from_either_side(self):
+        """The run that just finished may be on either side of the merge."""
+        out = ms.merge({"heartbeat": {"last_run": "2026-09-10T12:17:01+00:00"}},
+                       {"heartbeat": {"last_run": "2026-09-08T12:03:35+00:00"}})
+        self.assertEqual(out["heartbeat"]["last_run"],
+                         "2026-09-10T12:17:01+00:00")
+
+    def test_the_newest_alert_stamp_wins_too(self):
+        """alerted_at is what stops a recovered outage being re-reported once
+        an hour. Losing it turns one alarm into a stream of them."""
+        out = ms.merge({"heartbeat": {"alerted_at": "2026-09-01T09:00:00+00:00"}},
+                       {"heartbeat": {"alerted_at": "2026-09-09T12:20:06+00:00"}})
+        self.assertEqual(out["heartbeat"]["alerted_at"],
+                         "2026-09-09T12:20:06+00:00")
+
+    def test_one_side_missing_the_heartbeat_keeps_the_other(self):
+        out = ms.merge({}, {"heartbeat": {"last_run": "2026-09-10T12:17:01+00:00"}})
+        self.assertEqual(out["heartbeat"]["last_run"],
+                         "2026-09-10T12:17:01+00:00")
+        out = ms.merge({"heartbeat": {"last_run": "2026-09-10T12:17:01+00:00"}}, {})
+        self.assertEqual(out["heartbeat"]["last_run"],
+                         "2026-09-10T12:17:01+00:00")
+
+    def test_other_heartbeat_fields_are_not_dropped(self):
+        out = ms.merge({"heartbeat": {"last_run": "2026-09-08T12:03:35+00:00",
+                                      "note": "from main"}},
+                       {"heartbeat": {"last_run": "2026-09-10T12:17:01+00:00"}})
+        self.assertEqual(out["heartbeat"]["note"], "from main")
+
+    def test_it_no_longer_warns_about_the_heartbeat(self):
+        """A key showing up in carry_unknown() is asking for a real rule.
+        This one now has one."""
+        self.assertIn("heartbeat", ms.KNOWN)
+
+
+if __name__ == "__main__":
+    unittest.main()

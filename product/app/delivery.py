@@ -44,6 +44,29 @@ class DeliveryError(RuntimeError):
     pass
 
 
+class DeliveryAuthError(DeliveryError):
+    """The mail server looked at these credentials and refused them.
+
+    A definite answer, and the only one that justifies turning a user away.
+    """
+
+
+class DeliveryUnreachableError(DeliveryError):
+    """We never got to ask. The server was unreachable from here.
+
+    Not the same thing as a bad password, and the difference decides whether
+    a user can use this product at all. Free hosting blocks outbound SMTP
+    almost universally - Render, Oracle and most others shut ports 25, 465
+    and 587 because that is how spam gets sent - so on the free plan this is
+    raised for every correct password in the world.
+
+    Treating it as "wrong password" locked every user out of the one feature
+    the product exists for, while telling them their own credentials were at
+    fault. Kept separate so the caller can say "not checked yet" instead of
+    an accusation it cannot support.
+    """
+
+
 def mailto_link(to_email: str, subject: str, body: str) -> str:
     """A link that opens the user's own mail client with the letter ready.
 
@@ -204,14 +227,14 @@ def _connect_and(host, port, username, password, action):
             s.login(username, password)
             return action(s)
     except smtplib.SMTPAuthenticationError as exc:
-        raise DeliveryError(
+        raise DeliveryAuthError(
             "that mail account rejected the password. If this is Gmail or "
             "Outlook you need an app password rather than the one you type "
             "into the website - your normal password will always be refused "
             "here, even when it is correct."
         ) from exc
     except (OSError, smtplib.SMTPException) as exc:
-        raise DeliveryError(
+        raise DeliveryUnreachableError(
             f"could not reach {host} on port {port}: {exc}") from exc
 
 

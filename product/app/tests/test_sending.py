@@ -800,3 +800,134 @@ class TestTheSaltIsNotABrandName(unittest.TestCase):
             vault._derive("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu"),
             vault._derive("kP9xQvT2mWnR7bYcJ4hLd8Zs5FgA3eVu"))
         os.environ.pop("CREDENTIAL_KEY", None)
+
+
+# ----------------------------------------------------------------------
+class TestDeferredVerification(Base):
+    """Free hosting blocks outbound SMTP, so the setup screen cannot test a
+    password at all.
+
+    Render, Oracle and most others shut ports 25, 465 and 587 because that is
+    how spam gets sent. The old code had two outcomes - accepted, or "that
+    mail account rejected the password" - so on the free plan every correct
+    Gmail app password in the world got the second one. Harry hit it three
+    times in nine minutes and concluded his password was wrong. It was not.
+
+    The fix is a third outcome: could not ask. The account is stored
+    unchecked, the user is told exactly that, and the sweep - which runs on
+    GitHub Actions, where SMTP is not blocked - does the real proof before a
+    single letter goes out.
+
+    The promise that must survive: nothing is ever SENT on a password that
+    has not been proved, and the user is never told letters are going out
+    when they are not. Only the location of the proof moves.
+    """
+
+    def sign_in(self, email="harry@example.com"):
+        link = self.main.auth.make_login_link(email)
+        token = link.split("token=", 1)[1]
+        self.client.get(f"/auth/verify?token={token}", follow_redirects=False)
+
+    def connect_via_screen(self, error=None):
+        """Drive the real setup screen, with verify() behaving as given."""
+        def verify(**kw):
+            if error:
+                raise error
+        self.delivery.verify = verify
+        self.main.delivery.verify = verify
+        self.sign_in()
+        return self.client.post("/setup/mail", data={
+            "address": "harry@gmail.com", "password": "app-password",
+            "host": "smtp.gmail.com", "port": "465"})
+
+    def test_an_unreachable_server_still_saves_the_account(self):
+        self.connect_via_screen(
+            self.delivery.DeliveryUnreachableError("could not reach"))
+        row = self.db.get_mail_account(self.uid)
+        self.assertIsNotNone(row)
+        self.assertFalse(row["verified_at"])
+
+    def test_a_rejected_password_is_still_refused_outright(self):
+        """The one case where we KNOW. This must not soften."""
+        self.connect_via_screen(
+            self.delivery.DeliveryAuthError("rejected the password"))
+        self.assertIsNone(self.db.get_mail_account(self.uid))
+
+    def test_a_working_password_is_marked_verified_immediately(self):
+        self.connect_via_screen()
+        self.assertTrue(self.db.get_mail_account(self.uid)["verified_at"])
+
+    def test_the_sweep_proves_it_before_sending_anything(self):
+        self.db.save_mail_account(self.uid, address="harry@gmail.com",
+                                  host="smtp.gmail.com", port=465,
+                                  password="app-password", verified=False)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        checked = []
+        self.autosend.send_due_for_user(
+            self.uid, sender=self.fake_send,
+            verifier=lambda **kw: checked.append(kw))
+        self.assertEqual(len(checked), 1)
+        self.assertEqual(len(self.sent), 1)
+        self.assertTrue(self.db.get_mail_account(self.uid)["verified_at"])
+
+    def test_a_bad_password_found_by_the_sweep_sends_nothing(self):
+        """The failure this whole design exists to prevent: letters going out
+        on a password nobody ever proved."""
+        self.db.save_mail_account(self.uid, address="harry@gmail.com",
+                                  host="smtp.gmail.com", port=465,
+                                  password="wrong", verified=False)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+
+        def refuse(**kw):
+            raise self.delivery.DeliveryAuthError("rejected the password")
+        report = self.autosend.send_due_for_user(
+            self.uid, sender=self.fake_send, verifier=refuse)
+
+        self.assertEqual(self.sent, [])
+        self.assertIn("rejected the password", report.reason)
+        # and it does not sit there retrying a bad password every sweep
+        self.assertFalse(self.db.get_send_settings(self.uid)["auto_send"])
+        self.assertIn("rejected the password",
+                      self.db.get_mail_account(self.uid)["last_error"])
+
+    def test_still_unreachable_sends_nothing_and_blames_nobody(self):
+        """Nothing is proved either way, so nothing goes out - and automatic
+        sending stays ON, because there is no evidence against the user."""
+        self.db.save_mail_account(self.uid, address="harry@gmail.com",
+                                  host="smtp.gmail.com", port=465,
+                                  password="app-password", verified=False)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+
+        def unreachable(**kw):
+            raise self.delivery.DeliveryUnreachableError("could not reach")
+        report = self.autosend.send_due_for_user(
+            self.uid, sender=self.fake_send, verifier=unreachable)
+
+        self.assertEqual(self.sent, [])
+        self.assertIn("could not check", report.reason)
+        self.assertTrue(self.db.get_send_settings(self.uid)["auto_send"])
+        self.assertFalse(self.db.get_mail_account(self.uid)["verified_at"])
+
+    def test_a_verified_account_is_never_re_checked(self):
+        """One connection, not one per sweep forever."""
+        self.connect_mail()
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        checked = []
+        self.autosend.send_due_for_user(
+            self.uid, sender=self.fake_send,
+            verifier=lambda **kw: checked.append(kw))
+        self.assertEqual(checked, [])
+        self.assertEqual(len(self.sent), 1)
+
+    def test_the_screen_does_not_call_it_connected_until_it_is_proved(self):
+        """Saying "Connected" when we only know "saved" is the exact lie this
+        product is built not to tell."""
+        self.connect_via_screen(
+            self.delivery.DeliveryUnreachableError("could not reach"))
+        page = self.client.get("/setup").text
+        self.assertIn("not checked yet", page)
+        self.assertNotIn("Connected as", page)
