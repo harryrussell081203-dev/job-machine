@@ -49,11 +49,12 @@ class SendReport:
                 f"{self.skipped} skipped")
 
 
-def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
+def send_due_for_user(user_id: int, *, now=None, sender=None,
+                      verifier=None) -> SendReport:
     """Send every draft that is due. Safe to call as often as you like.
 
-    `sender` is injected so the tests exercise this whole path without a mail
-    server. Nothing else in here knows how mail works.
+    `sender` and `verifier` are injected so the tests exercise this whole path
+    without a mail server. Nothing else in here knows how mail works.
     """
     report = SendReport()
     settings = db.get_send_settings(user_id)
@@ -79,6 +80,44 @@ def send_due_for_user(user_id: int, *, now=None, sender=None) -> SendReport:
         db.note_mail_error(user_id, str(exc))
         report.reason = str(exc)
         return report
+
+    # Credentials the web app could not check are proved here instead.
+    #
+    # The setup screen runs on a host whose outbound SMTP is blocked - free
+    # plans shut ports 25, 465 and 587 almost everywhere, because that is how
+    # spam gets sent - so it cannot tell a correct password from a wrong one
+    # and stores it unchecked rather than accusing the user. This runs on
+    # GitHub Actions, which is not blocked, and is therefore the first place
+    # the question can actually be asked.
+    #
+    # It happens before the daily allowance and before the queue is read, so
+    # somebody who has just connected a mailbox gets a definite answer on the
+    # next sweep rather than waiting for a draft to come due. Once verified
+    # it never runs again.
+    if not account["verified_at"]:
+        check = verifier or delivery.verify
+        try:
+            check(host=host, port=port,
+                  username=(config.MANAGED_MAIL_USERNAME
+                            if account["kind"] == "managed" else address),
+                  password=password)
+            db.mark_mail_verified(user_id)
+        except delivery.DeliveryAuthError as exc:
+            # A definite answer, and a bad one. Stop before a single letter,
+            # switch sending off, and leave the reason where the user sees it
+            # - silently retrying a rejected password every sweep is how a
+            # mailbox gets locked.
+            db.note_mail_error(user_id, str(exc))
+            db.save_send_settings(user_id, auto_send=0)
+            report.reason = ("automatic sending was switched off because the "
+                             "mail account rejected the password")
+            return report
+        except delivery.DeliveryError as exc:
+            # Still could not ask. Nothing is proved either way, so nothing is
+            # sent and nothing is blamed on the user. Try again next sweep.
+            db.note_mail_error(user_id, str(exc))
+            report.reason = f"could not check the mail account yet: {exc}"
+            return report
 
     allowance = settings["daily_cap"] - db.sent_today(user_id)
     if allowance <= 0:

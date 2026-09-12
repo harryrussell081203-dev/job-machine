@@ -66,7 +66,24 @@
       every letter waits for you. They are still written, still have your CV
       attached, and you send them one click each from the drafts screen.</div>
   {% elif mail %}
-    <p class="ok">Connected as {{ mail.address }}.</p>
+    {# "Connected" and "proved to work" are different things, and saying the
+       first when we only know the second would be the exact lie this product
+       is built not to tell: somebody believing their letters are going out
+       while nothing happens. #}
+    {% if mail.verified_at %}
+      <p class="ok">Connected as {{ mail.address }}.</p>
+    {% else %}
+      <p class="ok">Saved as {{ mail.address }} &mdash; not checked yet.</p>
+      <div class="note">
+        <p><b>We could not test the password from here.</b> This site cannot
+           open a connection to a mail server, so there is no way to try it on
+           this screen. That is about our hosting, not about your password.</p>
+        <p>The next run checks it properly, from somewhere that can. If it
+           works, letters start going out and this line changes. If it does
+           not, sending is switched off and the reason appears right here
+           &mdash; nothing goes out on a password we have not proved.</p>
+      </div>
+    {% endif %}
     {% if mail.last_error %}
       <div class="note bad">Last send failed: {{ mail.last_error }}</div>
     {% endif %}
