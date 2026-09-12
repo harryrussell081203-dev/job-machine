@@ -931,3 +931,66 @@ class TestDeferredVerification(Base):
         page = self.client.get("/setup").text
         self.assertIn("not checked yet", page)
         self.assertNotIn("Connected as", page)
+
+
+# ----------------------------------------------------------------------
+class TestTheSweepCanSeeEveryoneItShould(Base):
+    """The sweep reported "0 paying users" and sent nothing, for months.
+
+    is_paid() opens the gate three ways: billing switched off,
+    FREE_ACCESS_EMAILS, and a claimed free place. paid_user_ids() selected
+    only subscription_status IN ('active','trialing') - so every user whose
+    access did not come from Stripe was invisible to the sweep.
+
+    On the live database that was three accounts out of four including the
+    founder's. The web app let them in, the setup screen said everything was
+    connected, and the sweep quietly ran for nobody. The log line even read
+    like a billing fact rather than a bug.
+
+    The invariant, and the reason the last test here exists: anyone is_paid()
+    accepts MUST appear in paid_user_ids(). A prefilter narrower than the
+    thing it prefilters for is a second gate nothing re-checks.
+    """
+    env = {"BILLING_ENABLED": "1"}
+
+    def test_a_free_place_holder_is_swept(self):
+        with self.db.connect() as c:
+            c.execute("UPDATE users SET free_spot = 1 WHERE id = ?", (self.uid,))
+        self.assertIn(self.uid, self.db.paid_user_ids())
+
+    def test_a_stripe_subscriber_is_still_swept(self):
+        with self.db.connect() as c:
+            c.execute("UPDATE users SET subscription_status = 'active' "
+                      "WHERE id = ?", (self.uid,))
+        self.assertIn(self.uid, self.db.paid_user_ids())
+
+    def test_letters_actually_go_out_for_a_free_place_holder(self):
+        """The end the user cares about, not the query in the middle."""
+        with self.db.connect() as c:
+            c.execute("UPDATE users SET free_spot = 1 WHERE id = ?", (self.uid,))
+        self.connect_mail()
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        self.autosend.sweep(run=False, sender=self.fake_send)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_the_prefilter_is_never_narrower_than_is_paid(self):
+        """The invariant itself, so a future 'cheap prefilter' cannot
+        reintroduce this by forgetting one of the ways in."""
+        with self.db.connect() as c:
+            c.execute("UPDATE users SET free_spot = 1 WHERE id = ?", (self.uid,))
+            c.execute("INSERT INTO users (email, created_at) VALUES (?, ?)",
+                      ("subscriber@example.com", self.db.now()))
+            c.execute("UPDATE users SET subscription_status = 'trialing' "
+                      "WHERE email = ?", ("subscriber@example.com",))
+            c.execute("INSERT INTO users (email, created_at) VALUES (?, ?)",
+                      ("nobody@example.com", self.db.now()))
+        swept = set(self.db.paid_user_ids())
+        with self.db.connect() as c:
+            everyone = c.execute("SELECT id FROM users").fetchall()
+        for row in everyone:
+            user = self.db.get_user(row["id"])
+            if self.db.is_paid(user):
+                self.assertIn(row["id"], swept,
+                              f"{user['email']} passes is_paid but the sweep "
+                              f"cannot see them")

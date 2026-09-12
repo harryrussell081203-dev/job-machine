@@ -736,19 +736,31 @@ def drafts_due(user_id: int, *, hold_minutes: int, limit: int = 50):
 
 
 def paid_user_ids() -> list:
-    """Everyone the scheduled sweep should run for.
+    """Everyone the scheduled sweep should consider. is_paid() decides.
 
-    Filtered again through is_paid() by the caller, because the SQL here is a
-    cheap prefilter and is_paid is the single source of truth.
+    This used to be a narrower SQL prefilter - subscription_status IN
+    ('active', 'trialing') - with a docstring calling is_paid() the single
+    source of truth. It was not. is_paid() opens the gate three ways: billing
+    switched off, FREE_ACCESS_EMAILS, and a claimed free place. The SQL knew
+    about none of the last two.
+
+    A prefilter NARROWER than the thing it is prefiltering for is not a
+    prefilter. It is a second, stricter gate that nothing re-checks, and it
+    silently excluded every user whose access did not come from Stripe. On the
+    live database that was three accounts out of four, the founder's included:
+    the web app let them in, the sweep reported "0 paying users", and not one
+    letter could ever be sent for any of them. The sweep even said so in the
+    log every run, and it read like a billing fact rather than a bug.
+
+    So the query is now a superset by construction rather than by a list of
+    conditions somebody has to remember to update in two places. Every caller
+    already re-filters through is_paid(), which is where the decision belongs
+    and is now genuinely the only place it is made.
+
+    If this table ever grows enough for the scan to matter, the prefilter that
+    replaces it has to be PROVED a superset of is_paid() - there is a test
+    named for exactly that.
     """
     with connect() as c:
-        if not config.BILLING_ENABLED:
-            # With the paywall off every account is paid, and none of them has
-            # a subscription status to match on. Without this the sweep finds
-            # nobody in exactly the configuration used to demo the product.
-            rows = c.execute("SELECT id FROM users ORDER BY id").fetchall()
-        else:
-            rows = c.execute(
-                "SELECT id FROM users WHERE subscription_status IN "
-                "('active', 'trialing') ORDER BY id").fetchall()
+        rows = c.execute("SELECT id FROM users ORDER BY id").fetchall()
     return [r["id"] for r in rows]
