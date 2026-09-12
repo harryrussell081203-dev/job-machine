@@ -1074,15 +1074,37 @@ async def mail_save(request: Request):
         return again("We do not know the mail server for that address - "
                      "please fill in the server and port yourself.")
 
+    # Three outcomes, not two, and conflating the last two locked every user
+    # out of the product's main feature.
+    #
+    #   proved to work      -> store it, verified
+    #   proved to be wrong  -> refuse, and say so. Unchanged.
+    #   could not be asked  -> store it unchecked, and say THAT
+    #
+    # The third is the common case on free hosting, which blocks outbound
+    # SMTP almost everywhere to stop spam. On this plan a correct Gmail app
+    # password is unreachable-not-wrong every single time, and the old code
+    # told the user their password had been rejected - an accusation it had
+    # no evidence for, about the one step it needs them to get right.
+    #
+    # The sweep runs on GitHub Actions, which is not blocked, so the proof
+    # still happens before a single letter goes out. Only its location moves.
+    # Unreachable is caught FIRST because it is a subclass, and everything
+    # else still refuses exactly as it did before. Only the one failure that
+    # has been positively identified is relaxed; an unrecognised error is not
+    # quietly assumed to be this host's fault.
+    verified = True
     try:
         delivery.verify(host=host, port=port, username=address,
                         password=password)
+    except delivery.DeliveryUnreachableError:
+        verified = False
     except delivery.DeliveryError as exc:
         return again(str(exc))
 
     first_time = not db.get_mail_account(user["id"])
     db.save_mail_account(user["id"], address=address, host=host, port=port,
-                         password=password)
+                         password=password, verified=verified)
     # Connecting a mailbox to a thing whose stated job is to send letters from
     # it IS the decision to let it send. Leaving automatic sending off after
     # that is a second, hidden step that people finish setup without ever

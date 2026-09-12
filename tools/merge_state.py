@@ -141,7 +141,7 @@ def union_earliest(theirs, ours):
 # carry_unknown(), so a new one is never lost while nobody has written its rule.
 KNOWN = {"jobs", "companies_contacted", "support_asked", "send_counts",
          "spec_counts", "call_script_counts", "spec_done", "agency_registered",
-         "last_summary_at"}
+         "last_summary_at", "heartbeat"}
 
 
 def carry_unknown(out, theirs, ours):
@@ -207,6 +207,34 @@ def merge(theirs, ours):
         agencies[key] = merged
     if agencies:
         out["agency_registered"] = agencies
+
+    # "When did this machine last run", and the newest answer is the true one.
+    #
+    # It had no rule, so carry_unknown() merged it with theirs winning - and
+    # "theirs" is the copy already on main, which was itself frozen the same
+    # way. last_run could therefore never advance: it sat at 2026-09-08T12:03
+    # while the machine ran a dozen more times.
+    #
+    # That is not a cosmetic stamp. It is the input to the only alarm that
+    # tells Harry the machine has DIED, and a frozen last_run means the alarm
+    # fires on a healthy machine roughly once a day, forever. An alarm that is
+    # always going off is one he learns to ignore, which is worse than having
+    # no alarm at all - the outage it was built for would arrive looking
+    # exactly like the eleven false ones before it.
+    #
+    # max() on both stamps: the latest run is the one that happened, and the
+    # latest alert is what stops a recovered outage being re-reported.
+    beats = [b for b in (theirs.get("heartbeat"), ours.get("heartbeat"))
+             if isinstance(b, dict)]
+    if beats:
+        merged = {}
+        for beat in beats:
+            merged.update(beat)
+        for field in ("last_run", "alerted_at"):
+            stamps = [str(b[field]) for b in beats if b.get(field)]
+            if stamps:
+                merged[field] = max(stamps)
+        out["heartbeat"] = merged
 
     for counter in ("send_counts", "spec_counts", "call_script_counts"):
         merged = dict(theirs.get(counter, {}))
