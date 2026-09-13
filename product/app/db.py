@@ -288,6 +288,39 @@ def set_outcome(user_id: int, draft_id: int, outcome: str) -> bool:
     return True
 
 
+def drafts_awaiting_reply(user_id: int, limit: int = 500):
+    """Sent letters nobody has answered for yet, so the inbox check knows
+    which addresses to ask about.
+
+    Excludes anything already flagged or already classified: once the user has
+    said what happened, or the machine has already noticed, there is nothing
+    to learn by asking again - and every address dropped here is one fewer
+    question asked of somebody's mailbox.
+    """
+    with connect() as c:
+        return c.execute(
+            "SELECT * FROM drafts WHERE user_id = ? AND status = 'sent' "
+            "AND to_email <> '' AND reply_seen_at IS NULL "
+            "AND (outcome IS NULL OR outcome = '') "
+            "ORDER BY sent_at DESC LIMIT ?",
+            (user_id, limit)).fetchall()
+
+
+def mark_reply_seen(user_id: int, draft_id: int) -> None:
+    """Record that this employer has been in touch.
+
+    Never writes `outcome`. A FROM match proves a message exists and nothing
+    about what it says, and the difference between "they answered" and "their
+    system acknowledged receipt" is the difference between this product's
+    numbers meaning something and not. The user classifies; this only puts the
+    row in front of them.
+    """
+    with connect() as c:
+        c.execute("UPDATE drafts SET reply_seen_at = ? WHERE id = ? "
+                  "AND user_id = ? AND reply_seen_at IS NULL",
+                  (now(), draft_id, user_id))
+
+
 def applications(user_id: int, limit: int = 200):
     """Every letter that actually went, newest first.
 

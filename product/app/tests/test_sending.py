@@ -994,3 +994,113 @@ class TestTheSweepCanSeeEveryoneItShould(Base):
                 self.assertIn(row["id"], swept,
                               f"{user['email']} passes is_paid but the sweep "
                               f"cannot see them")
+
+
+# ----------------------------------------------------------------------
+class TestNoticingAReply(Base):
+    """The tracker used to wait to be told. Now the sweep looks.
+
+    What it is allowed to look at is the whole design. A Gmail app password
+    grants IMAP as well as SMTP, so this asks the user for nothing new - and
+    that is exactly why it has to stay narrow: the credential they handed over
+    to SEND can also read everything they own.
+
+    The other half is honesty about what a FROM match proves. It proves a
+    message exists. It cannot tell a real reply from "thank you for your
+    application, please use our portal", and the landing page promises out
+    loud that autoresponders are not counted. So the machine flags; the person
+    who can actually read it classifies.
+    """
+
+    def sent_application(self, to_email="hr@acme.com", company="Acme"):
+        did = self.db.add_draft(self.uid, job_title="Technician",
+                                company=company, to_email=to_email,
+                                subject="s", body="b")
+        self.db.mark_draft(self.uid, did, "sent")
+        return did
+
+    def verified_mail(self):
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+
+    def test_it_flags_an_employer_who_has_been_in_touch(self):
+        self.verified_mail()
+        did = self.sent_application()
+        from app import replies
+        report = replies.check_for_user(
+            self.uid, finder=lambda **kw: {"hr@acme.com"})
+        self.assertEqual(report.found, 1)
+        row = self.db.get_draft(self.uid, did)
+        self.assertTrue(row["reply_seen_at"])
+
+    def test_it_never_claims_to_know_what_the_message_said(self):
+        """The promise on the landing page. A FROM match is not an outcome."""
+        self.verified_mail()
+        did = self.sent_application()
+        from app import replies
+        replies.check_for_user(self.uid, finder=lambda **kw: {"hr@acme.com"})
+        row = self.db.get_draft(self.uid, did)
+        self.assertEqual(row["outcome"] or "", "")
+
+    def test_it_only_ever_asks_about_employers_already_written_to(self):
+        """The privacy boundary. Nothing else in the mailbox is asked about,
+        so nothing else can be learned."""
+        self.verified_mail()
+        self.sent_application("hr@acme.com")
+        self.sent_application("jobs@beta.com", company="Beta")
+        asked = {}
+
+        def finder(**kw):
+            asked.update(kw)
+            return set()
+        from app import replies
+        replies.check_for_user(self.uid, finder=finder)
+        self.assertEqual(set(asked["addresses"]),
+                         {"hr@acme.com", "jobs@beta.com"})
+
+    def test_an_unreachable_inbox_changes_nothing(self):
+        """A broken connection must not look like a quiet week."""
+        self.verified_mail()
+        did = self.sent_application()
+
+        def refuse(**kw):
+            raise self.delivery.DeliveryUnreachableError("could not reach")
+        from app import replies
+        report = replies.check_for_user(self.uid, finder=refuse)
+        self.assertEqual(report.found, 0)
+        self.assertIn("could not reach", report.reason)
+        self.assertFalse(self.db.get_draft(self.uid, did)["reply_seen_at"])
+
+    def test_an_unverified_mailbox_is_not_probed(self):
+        """Do not spend a second failed login on a mailbox that may be close
+        to locking, for a feature nobody is waiting on."""
+        self.db.save_mail_account(self.uid, address="harry@gmail.com",
+                                  host="smtp.gmail.com", port=465,
+                                  password="app-password", verified=False)
+        self.sent_application()
+        tried = []
+        from app import replies
+        report = replies.check_for_user(
+            self.uid, finder=lambda **kw: tried.append(kw) or set())
+        self.assertEqual(tried, [])
+        self.assertIn("not verified", report.reason)
+
+    def test_an_answer_the_user_already_gave_is_never_asked_about_again(self):
+        self.verified_mail()
+        did = self.sent_application()
+        self.db.set_outcome(self.uid, did, "interview")
+        self.assertEqual(self.db.drafts_awaiting_reply(self.uid), [])
+
+    def test_flagging_does_not_overwrite_what_the_user_said(self):
+        """The machine's weaker signal must never clobber the person's."""
+        self.verified_mail()
+        did = self.sent_application()
+        self.db.set_outcome(self.uid, did, "offer")
+        from app import replies
+        replies.check_for_user(self.uid, finder=lambda **kw: {"hr@acme.com"})
+        self.assertEqual(self.db.get_draft(self.uid, did)["outcome"], "offer")
+
+    def test_gmail_needs_no_new_credential(self):
+        """The whole reason this was cheap to add."""
+        self.assertEqual(self.delivery.guess_imap_host("harry@gmail.com"),
+                         ("imap.gmail.com", 993))
