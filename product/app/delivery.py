@@ -31,6 +31,7 @@ trade-off differently, and is per-user rather than global.
 
 from __future__ import annotations
 
+import imaplib
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -236,6 +237,92 @@ def _connect_and(host, port, username, password, action):
     except (OSError, smtplib.SMTPException) as exc:
         raise DeliveryUnreachableError(
             f"could not reach {host} on port {port}: {exc}") from exc
+
+
+# Reading the mailbox, so the tracker can notice an employer has answered
+# instead of waiting to be told.
+#
+# A Gmail or Outlook app password already grants IMAP as well as SMTP, so this
+# asks the user for nothing they have not already given. That is precisely why
+# it has to be handled carefully: the credential they handed over to SEND can
+# also READ everything they have, and nothing here should come close to
+# exercising that.
+KNOWN_IMAP_HOSTS = {
+    "gmail.com": ("imap.gmail.com", 993),
+    "googlemail.com": ("imap.gmail.com", 993),
+    "outlook.com": ("outlook.office365.com", 993),
+    "hotmail.com": ("outlook.office365.com", 993),
+    "live.co.uk": ("outlook.office365.com", 993),
+    "live.com": ("outlook.office365.com", 993),
+    "yahoo.co.uk": ("imap.mail.yahoo.com", 993),
+    "yahoo.com": ("imap.mail.yahoo.com", 993),
+    "icloud.com": ("imap.mail.me.com", 993),
+    "me.com": ("imap.mail.me.com", 993),
+}
+
+
+def guess_imap_host(address: str):
+    """(host, port) for a well-known provider, or None.
+
+    Derived from the address rather than stored, because the SMTP host was
+    stored before this existed and guessing keeps every account that already
+    connected working without a migration or a re-entered password.
+    """
+    domain = (address or "").split("@")[-1].strip().lower()
+    return KNOWN_IMAP_HOSTS.get(domain)
+
+
+def find_replies(*, host: str, port: int, username: str, password: str,
+                 addresses) -> set:
+    """Which of `addresses` have sent this mailbox anything.
+
+    The narrowest question that answers "did they get back to us", and
+    deliberately the only one asked. For each employer already written to it
+    runs a single SEARCH FROM and looks at whether the result is empty.
+
+    What this never does, and must never start doing: FETCH a message, read a
+    subject, a body or an attachment, or touch any address the user did not
+    already send an application to. The server does the matching and returns
+    message ids; nothing is downloaded. So the blast radius of this function
+    is "the app learns that Acme Ltd emailed you", which is the fact the
+    tracker exists to show, and nothing else in the mailbox is legible to it.
+
+    Unreachable is not "no replies" - it raises, and the caller leaves every
+    draft exactly as it was. Silently reporting an empty set would mean a
+    broken connection looked identical to a quiet week.
+    """
+    found = set()
+    wanted = [a for a in {(a or "").strip().lower() for a in addresses} if a]
+    if not wanted:
+        return found
+    try:
+        box = imaplib.IMAP4_SSL(host, int(port), timeout=30)
+    except (OSError, imaplib.IMAP4.error) as exc:
+        raise DeliveryUnreachableError(
+            f"could not reach {host} on port {port}: {exc}") from exc
+    try:
+        try:
+            box.login(username, password)
+        except imaplib.IMAP4.error as exc:
+            raise DeliveryAuthError(
+                "that mail account rejected the password when reading the "
+                "inbox. If this is Gmail you may need to allow IMAP in "
+                "Settings - See all settings - Forwarding and POP/IMAP."
+            ) from exc
+        box.select("INBOX", readonly=True)
+        for address in wanted:
+            try:
+                status, data = box.search(None, "FROM", f'"{address}"')
+            except imaplib.IMAP4.error:
+                continue          # one bad address must not lose the others
+            if status == "OK" and data and data[0].split():
+                found.add(address)
+    finally:
+        try:
+            box.logout()
+        except Exception:
+            pass
+    return found
 
 
 def mode() -> str:

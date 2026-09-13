@@ -74,6 +74,17 @@
         </form>
       </p>
     {% else %}
+      {# The machine has seen something arrive from this employer but cannot
+         read it, so it says exactly that and asks. Claiming "they replied"
+         off a FROM match would count every "please use our portal"
+         autoresponder as a reply, which is the one number this product
+         promises not to flatter. #}
+      {% if d['reply_seen_at'] %}
+        <p class="outcome outcome-replied"><b>{{ d['company'] }} has been in
+           touch.</b> Something arrived in your inbox from
+           {{ d['to_email'] }} after this went out. We can see that it came,
+           not what it says &mdash; have a look and tell us:</p>
+      {% endif %}
       <div class="actions">
         {% for o in outcomes %}
           <form method="post" action="/applications/{{ d['id'] }}/outcome">
