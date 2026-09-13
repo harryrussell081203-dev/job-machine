@@ -200,6 +200,28 @@ def local_part_for(name: str, fallback: str = "") -> str:
     return local[:40] or "applicant"
 
 
+# A send gets the patient timeout: it is a background job, nobody is watching,
+# and giving up on a slow-but-working server would cost a real letter.
+SEND_TIMEOUT = 30
+
+# A verification gets a short one, because somebody IS watching - they have
+# just pressed a button and are looking at a spinner.
+#
+# Measured, not guessed. Driving the real form in a real browser on a host
+# that blocks SMTP, the user waits 30.7 seconds before anything happens, and
+# Harry's own three attempts are 31 seconds apart in the production logs. Half
+# a minute of nothing, three times over, and then a message telling him his
+# password was wrong.
+#
+# Cutting it short is safe here in a way it would not have been before: an
+# unreachable server no longer rejects the user, it stores the account
+# unverified for the sweep to prove. So the worst case of a too-short timeout
+# is a working mailbox taking the "not checked yet" path and being confirmed a
+# few minutes later - while the best case is the difference between a form
+# that answers and a form that looks broken.
+VERIFY_TIMEOUT = 8
+
+
 def verify(*, host: str, port: int, username: str, password: str) -> None:
     """Prove these credentials work, before anything is stored.
 
@@ -208,10 +230,12 @@ def verify(*, host: str, port: int, username: str, password: str) -> None:
     believes their letters are going out when they are not, which is the worst
     failure this product has.
     """
-    _connect_and(host, port, username, password, lambda s: None)
+    _connect_and(host, port, username, password, lambda s: None,
+                 timeout=VERIFY_TIMEOUT)
 
 
-def _connect_and(host, port, username, password, action):
+def _connect_and(host, port, username, password, action,
+                 timeout: int = SEND_TIMEOUT):
     """One connection routine for both verify() and send, so a working
     verification cannot pass while sending fails on a different code path."""
     try:
@@ -219,12 +243,12 @@ def _connect_and(host, port, username, password, action):
         if int(port) == 587:
             # STARTTLS rather than implicit TLS. Outlook and iCloud only offer
             # this one, and SMTP_SSL against 587 hangs rather than refusing.
-            with smtplib.SMTP(host, int(port), timeout=30) as s:
+            with smtplib.SMTP(host, int(port), timeout=timeout) as s:
                 s.starttls(context=context)
                 s.login(username, password)
                 return action(s)
         with smtplib.SMTP_SSL(host, int(port), context=context,
-                              timeout=30) as s:
+                              timeout=timeout) as s:
             s.login(username, password)
             return action(s)
     except smtplib.SMTPAuthenticationError as exc:

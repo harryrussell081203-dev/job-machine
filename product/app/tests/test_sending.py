@@ -19,6 +19,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1104,3 +1105,135 @@ class TestNoticingAReply(Base):
         """The whole reason this was cheap to add."""
         self.assertEqual(self.delivery.guess_imap_host("harry@gmail.com"),
                          ("imap.gmail.com", 993))
+
+
+# ----------------------------------------------------------------------
+class TestTheRunDoesTheImportantHalfFirst(Base):
+    """The first sweep that ever had a user to work on was killed by the
+    30-minute workflow timeout while still drafting.
+
+    Harvesting listings and scoring them through Gemini is minutes per user.
+    Sending a letter already written and already waiting is milliseconds. The
+    slow optional half stood in front of the fast essential half, so a run
+    that ran out of time delivered nothing - and it starved by position, with
+    user 1's drafting able to consume the whole budget before user 2 ever
+    reached their own send step.
+    """
+
+    def test_sending_happens_before_drafting(self):
+        order = []
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+
+        import types
+        runner = types.ModuleType("app.runner")
+
+        class R:
+            drafted = 0
+
+        def run_for_user(user_id, **kw):
+            order.append("draft")
+            return R()
+        runner.run_for_user = run_for_user
+        sys.modules["app.runner"] = runner
+
+        def sender(**kw):
+            order.append("send")
+        self.autosend.sweep(sender=sender)
+        self.assertEqual(order[0], "send",
+                         "a run cut short must already have sent")
+
+    def test_a_delivered_letter_and_its_log_row_land_together(self):
+        """The gap that lost the first letter this product ever sent."""
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        did = self.draft("Acme")
+        self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
+
+        self.assertEqual(self.db.get_draft(self.uid, did)["status"], "sent")
+        with self.db.connect() as c:
+            rows = c.execute("SELECT * FROM sent_log WHERE draft_id = ?",
+                             (did,)).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ok"], 1)
+
+    def test_the_daily_cap_counts_the_letter_that_just_went(self):
+        """sent_today() reads sent_log. A lost row means the cap is computed
+        from a number that is not true, and the next run can exceed a ceiling
+        the user set."""
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
+        self.assertEqual(self.db.sent_today(self.uid), 1)
+
+
+# ----------------------------------------------------------------------
+class TestTheConnectButtonAnswers(Base):
+    """Driving the real form in a real browser measured 30.7 seconds between
+    pressing "Check and connect" and anything happening.
+
+    Harry's own three attempts are 31 seconds apart in the production logs -
+    half a minute of nothing, three times over, and then a message telling him
+    his password was wrong. Nothing on screen said it was still trying.
+
+    The cause is one timeout doing two jobs. A send is a background job with
+    nobody watching, where giving up on a slow-but-working server costs a real
+    letter. A verification has somebody staring at a spinner.
+    """
+
+    def test_a_verification_gives_up_long_before_a_send_would(self):
+        self.assertLess(self.delivery.VERIFY_TIMEOUT,
+                        self.delivery.SEND_TIMEOUT)
+        self.assertLessEqual(self.delivery.VERIFY_TIMEOUT, 10,
+                             "somebody is watching a spinner")
+
+    def test_verify_asks_for_the_short_one(self):
+        seen = {}
+
+        class FakeSMTP:
+            def __init__(self, host, port, **kw):
+                seen["timeout"] = kw.get("timeout")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def login(self, *a):
+                return None
+
+        with mock.patch.object(self.delivery.smtplib, "SMTP_SSL", FakeSMTP):
+            self.delivery.verify(host="smtp.gmail.com", port=465,
+                                 username="a@b.com", password="x")
+        self.assertEqual(seen["timeout"], self.delivery.VERIFY_TIMEOUT)
+
+    def test_a_real_send_keeps_the_patient_one(self):
+        seen = {}
+
+        class FakeSMTP:
+            def __init__(self, host, port, **kw):
+                seen["timeout"] = kw.get("timeout")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def login(self, *a):
+                return None
+
+            def send_message(self, msg):
+                return None
+
+        with mock.patch.object(self.delivery.smtplib, "SMTP_SSL", FakeSMTP):
+            self.delivery.send_via_smtp(
+                host="smtp.gmail.com", port=465, username="a@b.com",
+                password="x", to_email="c@d.com", subject="s", body="b")
+        self.assertEqual(seen["timeout"], self.delivery.SEND_TIMEOUT)
