@@ -365,13 +365,22 @@ _ADDED_COLUMNS = [
     # employer did about it. Folding them together would mean a reply
     # overwriting the record that it was ever sent.
     #
-    # Empty until the user says otherwise. We cannot detect a reply: on an own
-    # mailbox the answer goes to them, and on a Recruited address Reply-To
-    # sends it to them too - deliberately, so we never hold it. So this is
-    # recorded by the person who actually saw the reply, and the screen says
-    # so rather than implying it is watching.
+    # Empty until the user says otherwise. The machine can now NOTICE that an
+    # employer has been in touch - see reply_seen_at below - but noticing is
+    # not the same as knowing what it was, so this column still only ever
+    # holds what a person said.
     ("drafts", "outcome", "TEXT NOT NULL DEFAULT ''"),
     ("drafts", "outcome_at", "BIGINT"),
+    # When something arrived in the user's inbox FROM the address we wrote to.
+    #
+    # Deliberately not `outcome`. An IMAP search can prove a message exists;
+    # it cannot tell a real reply from "thank you for your application, please
+    # use our portal". The landing page promises out loud that autoresponders
+    # are not counted, and the whole argument for this product is that its
+    # numbers are checkable - so a FROM match sets this, the user taps what it
+    # actually was, and the published reply rate keeps coming from the person
+    # who read the thing.
+    ("drafts", "reply_seen_at", "BIGINT"),
 ]
 
 

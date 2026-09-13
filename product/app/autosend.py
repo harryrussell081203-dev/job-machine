@@ -257,6 +257,17 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
                 totals["drafted"] += report.drafted
             except Exception as exc:
                 totals["errors"].append(f"user {user_id} run: {exc}")
+        # Before sending more, notice what came back from what already went.
+        # Deliberately tolerant and deliberately last-in-line: an inbox that
+        # cannot be read is a worse tracker, not a stopped machine, and it
+        # must never cost anybody their letters going out.
+        try:
+            from . import replies
+            seen = replies.check_for_user(user_id)
+            totals["replies"] = totals.get("replies", 0) + seen.found
+        except Exception as exc:
+            totals["errors"].append(f"user {user_id} inbox: {exc}")
+
         try:
             sent = send_due_for_user(user_id, sender=sender)
             totals["sent"] += sent.sent
