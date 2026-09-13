@@ -217,10 +217,13 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
             continue
 
         consecutive_failures = 0
-        db.mark_draft(user_id, draft["id"], "sent")
+        # One transaction, because a process killed between marking the draft
+        # and logging the letter leaves a delivered application that /numbers
+        # cannot see and the daily cap does not count. That is not a
+        # hypothetical - it is what the first real sweep did.
+        db.record_delivered(user_id, draft_id=draft["id"],
+                            to_email=draft["to_email"], company=company)
         db.record_contacted(user_id, company)
-        db.record_sent(user_id, draft_id=draft["id"],
-                       to_email=draft["to_email"], company=company, ok=True)
         if managed:
             # After the send, not before. Counting an attempt that then failed
             # would spend the shared allowance on letters nobody received.
@@ -246,21 +249,31 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
     from . import runner
     totals = {"users": 0, "drafted": 0, "sent": 0, "failed": 0, "errors": []}
 
-    for user_id in db.paid_user_ids():
-        user = db.get_user(user_id)
-        if not db.is_paid(user):
-            continue
-        totals["users"] += 1
-        if run:
-            try:
-                report = runner.run_for_user(user_id, ai=ai, session=session)
-                totals["drafted"] += report.drafted
-            except Exception as exc:
-                totals["errors"].append(f"user {user_id} run: {exc}")
-        # Before sending more, notice what came back from what already went.
-        # Deliberately tolerant and deliberately last-in-line: an inbox that
-        # cannot be read is a worse tracker, not a stopped machine, and it
-        # must never cost anybody their letters going out.
+    users = [u for u in (db.get_user(i) for i in db.paid_user_ids())
+             if db.is_paid(u)]
+    totals["users"] = len(users)
+
+    # SEND FIRST, DRAFT SECOND, and in two separate passes over everybody.
+    #
+    # This used to be one loop doing both per user, and the first run that
+    # ever had users to work on was killed by the 30-minute workflow timeout
+    # while still drafting. Harvesting listings and scoring them through
+    # Gemini is minutes per user; sending a letter that is already written and
+    # already waiting is milliseconds. So the slow, optional half was standing
+    # in front of the fast, essential half, and a run that ran out of time
+    # delivered nothing at all.
+    #
+    # Worse, it starved by position: user 1's drafting could consume the whole
+    # budget, so users further down the list never reached their own send step
+    # however long their letters had been sitting there.
+    #
+    # Drafting is preparation and can wait for the next run; sending is the
+    # job. If this is ever cut short again, it is cut short having already
+    # done the thing anybody would have chosen to do first.
+    for user in users:
+        user_id = user["id"]
+        # Notice what came back before writing anything new, so the tracker is
+        # current even on a run that gets no further than this.
         try:
             from . import replies
             seen = replies.check_for_user(user_id)
@@ -274,5 +287,14 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
             totals["failed"] += sent.failed
         except Exception as exc:
             totals["errors"].append(f"user {user_id} send: {exc}")
+
+    if run:
+        for user in users:
+            user_id = user["id"]
+            try:
+                report = runner.run_for_user(user_id, ai=ai, session=session)
+                totals["drafted"] += report.drafted
+            except Exception as exc:
+                totals["errors"].append(f"user {user_id} run: {exc}")
 
     return totals
