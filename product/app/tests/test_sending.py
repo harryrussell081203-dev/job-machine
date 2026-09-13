@@ -19,6 +19,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1169,3 +1170,70 @@ class TestTheRunDoesTheImportantHalfFirst(Base):
         self.draft("Acme")
         self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         self.assertEqual(self.db.sent_today(self.uid), 1)
+
+
+# ----------------------------------------------------------------------
+class TestTheConnectButtonAnswers(Base):
+    """Driving the real form in a real browser measured 30.7 seconds between
+    pressing "Check and connect" and anything happening.
+
+    Harry's own three attempts are 31 seconds apart in the production logs -
+    half a minute of nothing, three times over, and then a message telling him
+    his password was wrong. Nothing on screen said it was still trying.
+
+    The cause is one timeout doing two jobs. A send is a background job with
+    nobody watching, where giving up on a slow-but-working server costs a real
+    letter. A verification has somebody staring at a spinner.
+    """
+
+    def test_a_verification_gives_up_long_before_a_send_would(self):
+        self.assertLess(self.delivery.VERIFY_TIMEOUT,
+                        self.delivery.SEND_TIMEOUT)
+        self.assertLessEqual(self.delivery.VERIFY_TIMEOUT, 10,
+                             "somebody is watching a spinner")
+
+    def test_verify_asks_for_the_short_one(self):
+        seen = {}
+
+        class FakeSMTP:
+            def __init__(self, host, port, **kw):
+                seen["timeout"] = kw.get("timeout")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def login(self, *a):
+                return None
+
+        with mock.patch.object(self.delivery.smtplib, "SMTP_SSL", FakeSMTP):
+            self.delivery.verify(host="smtp.gmail.com", port=465,
+                                 username="a@b.com", password="x")
+        self.assertEqual(seen["timeout"], self.delivery.VERIFY_TIMEOUT)
+
+    def test_a_real_send_keeps_the_patient_one(self):
+        seen = {}
+
+        class FakeSMTP:
+            def __init__(self, host, port, **kw):
+                seen["timeout"] = kw.get("timeout")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def login(self, *a):
+                return None
+
+            def send_message(self, msg):
+                return None
+
+        with mock.patch.object(self.delivery.smtplib, "SMTP_SSL", FakeSMTP):
+            self.delivery.send_via_smtp(
+                host="smtp.gmail.com", port=465, username="a@b.com",
+                password="x", to_email="c@d.com", subject="s", body="b")
+        self.assertEqual(seen["timeout"], self.delivery.SEND_TIMEOUT)
