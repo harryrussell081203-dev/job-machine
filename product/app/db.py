@@ -740,6 +740,44 @@ def record_sent(user_id: int, *, draft_id, to_email: str, company: str,
              (error or "")[:300]])
 
 
+def record_delivered(user_id: int, *, draft_id, to_email: str,
+                     company: str) -> None:
+    """Mark the draft sent AND log the letter, in one transaction.
+
+    These were two statements in two transactions, and the gap between them is
+    not theoretical: the first sweep that ever had a user to work on was killed
+    by the workflow timeout in exactly that gap. The draft was marked 'sent' at
+    12:40:44 and the sent_log row for it does not exist, because the process
+    was terminated between the two.
+
+    That gap is the worst place in this codebase to be interrupted, because the
+    two records answer different questions and BOTH are load-bearing:
+
+      - drafts.status stops the same letter going twice
+      - sent_log is what /numbers counts, and what sent_today() uses to hold
+        the daily cap
+
+    So a crash there leaves a letter that was really delivered, invisible to
+    the public figures and uncounted against the cap - which means the next run
+    could exceed a ceiling the user set, using a number it believes is true.
+
+    The ORDER is deliberate where atomicity cannot be had, and this keeps it:
+    the draft is marked first. Of the two ways to be half-finished, "delivered
+    but unlogged" under-reports, while "logged but still marked draft" sends
+    somebody a second copy of the same application. Under-reporting is the one
+    to choose.
+    """
+    with connect() as c:
+        c.execute("UPDATE drafts SET status = ?, sent_at = ? "
+                  "WHERE id = ? AND user_id = ?",
+                  ("sent", now(), draft_id, user_id))
+        insert_returning_id(
+            c, "sent_log",
+            ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
+             "error"],
+            [user_id, draft_id, to_email, company, now(), 1, ""])
+
+
 def sent_today(user_id: int) -> int:
     """How many letters have actually left today, for the daily cap.
 

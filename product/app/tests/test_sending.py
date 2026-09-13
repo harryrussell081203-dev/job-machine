@@ -1104,3 +1104,68 @@ class TestNoticingAReply(Base):
         """The whole reason this was cheap to add."""
         self.assertEqual(self.delivery.guess_imap_host("harry@gmail.com"),
                          ("imap.gmail.com", 993))
+
+
+# ----------------------------------------------------------------------
+class TestTheRunDoesTheImportantHalfFirst(Base):
+    """The first sweep that ever had a user to work on was killed by the
+    30-minute workflow timeout while still drafting.
+
+    Harvesting listings and scoring them through Gemini is minutes per user.
+    Sending a letter already written and already waiting is milliseconds. The
+    slow optional half stood in front of the fast essential half, so a run
+    that ran out of time delivered nothing - and it starved by position, with
+    user 1's drafting able to consume the whole budget before user 2 ever
+    reached their own send step.
+    """
+
+    def test_sending_happens_before_drafting(self):
+        order = []
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+
+        import types
+        runner = types.ModuleType("app.runner")
+
+        class R:
+            drafted = 0
+
+        def run_for_user(user_id, **kw):
+            order.append("draft")
+            return R()
+        runner.run_for_user = run_for_user
+        sys.modules["app.runner"] = runner
+
+        def sender(**kw):
+            order.append("send")
+        self.autosend.sweep(sender=sender)
+        self.assertEqual(order[0], "send",
+                         "a run cut short must already have sent")
+
+    def test_a_delivered_letter_and_its_log_row_land_together(self):
+        """The gap that lost the first letter this product ever sent."""
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        did = self.draft("Acme")
+        self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
+
+        self.assertEqual(self.db.get_draft(self.uid, did)["status"], "sent")
+        with self.db.connect() as c:
+            rows = c.execute("SELECT * FROM sent_log WHERE draft_id = ?",
+                             (did,)).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ok"], 1)
+
+    def test_the_daily_cap_counts_the_letter_that_just_went(self):
+        """sent_today() reads sent_log. A lost row means the cap is computed
+        from a number that is not true, and the next run can exceed a ceiling
+        the user set."""
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
+        self.assertEqual(self.db.sent_today(self.uid), 1)
