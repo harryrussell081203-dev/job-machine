@@ -4028,9 +4028,14 @@ def summary_bodies(data):
     if data["followups"]:
         extras.append("Follow-ups sent: " + ", ".join(
             j.get("company", "?") for j in data["followups"]))
+    # "Found but no real email address" used to sit here. It was a count of
+    # listings looked at and not written to, which is not something Harry can
+    # act on: he cannot conjure an address the employer never published, and
+    # the machine already retries them on its own. A daily number that only
+    # ever goes up and asks nothing of the reader trains them to skim the
+    # whole email.
     extras += [
         f"New listings found: {len(data['found'])}",
-        f"Found but no real email address: {len(data['no_email'])}",
         f"Queued and ready to send: {len(data['queued'])}",
         f"Awaiting a reply (follow-up due in 4 days): {len(data['waiting'])}",
         f"Applications sent all time: {data['lifetime']}",
