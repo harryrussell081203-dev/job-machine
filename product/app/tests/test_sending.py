@@ -81,6 +81,47 @@ class Base(unittest.TestCase):
     def fake_send(self, **kw):
         self.sent.append(kw)
 
+    def no_drafting(self):
+        """Stand in for app.runner, returning the list of users it drafts for.
+
+        sweep() reaches the runner with `from . import runner`, and that reads
+        the ATTRIBUTE off the app package before it ever consults sys.modules
+        - so replacing only the sys.modules entry leaves the real runner in
+        place and this stub is never called. A test asserting the stub was not
+        called then passes for entirely the wrong reason, and one asserting it
+        WAS called fails mysteriously. Both happened. Hence patching both.
+        """
+        import app
+        import types
+        calls = []
+        runner = types.ModuleType("app.runner")
+
+        class R:
+            drafted = 0
+
+        def run_for_user(user_id, **kw):
+            calls.append(user_id)
+            return R()
+        runner.run_for_user = run_for_user
+
+        real_module = sys.modules.get("app.runner")
+        real_attr = getattr(app, "runner", None)
+        sys.modules["app.runner"] = runner
+        app.runner = runner
+
+        def restore():
+            if real_module is None:
+                sys.modules.pop("app.runner", None)
+            else:
+                sys.modules["app.runner"] = real_module
+            if real_attr is None:
+                if hasattr(app, "runner"):
+                    del app.runner
+            else:
+                app.runner = real_attr
+        self.addCleanup(restore)
+        return calls
+
     def draft(self, company, email="a@example.com", age_seconds=7200):
         did = self.db.add_draft(self.uid, job_title="Scaffolder",
                                 company=company, to_email=email,
@@ -256,6 +297,27 @@ class TestLimits(Base):
         self.draft("Acme Ltd")
         self.autosend.send_due_for_user(self.uid, sender=boom)
         self.assertEqual(self.db.sent_today(self.uid), 0)
+
+    def test_sweeping_all_day_sends_no_more_than_sweeping_three_times(self):
+        """The workflow now fires eleven times a weekday instead of three.
+
+        That is safe only because every limit is counted PER LETTER and not
+        per run - the cap against sent_log, the holding window against each
+        draft's own age, the one-letter rule against the contacted table. If
+        any of them were ever reworked to count per run, more runs would mean
+        more letters, and the first anybody would know is a recruiter with
+        eleven copies of the same application.
+
+        Eleven sweeps, a cap of three, plenty of work waiting. Three letters.
+        """
+        for i in range(20):
+            self.draft(f"Company {i} Ltd", email=f"c{i}@example.com")
+        for _ in range(11):
+            self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
+        self.assertEqual(len(self.sent), 3)
+        self.assertEqual(self.db.sent_today(self.uid), 3)
+        self.assertEqual(len({s["to_email"] for s in self.sent}), 3,
+                         "nobody may receive the same letter twice")
 
 
 class TestFailureHandling(Base):
@@ -1127,21 +1189,25 @@ class TestTheRunDoesTheImportantHalfFirst(Base):
         self.db.save_send_settings(self.uid, auto_send=1)
         self.draft("Acme")
 
-        import types
-        runner = types.ModuleType("app.runner")
-
-        class R:
-            drafted = 0
+        # Patched through the shared helper, which replaces the package
+        # attribute as well as the sys.modules entry. This test used to do
+        # only the latter, so the real runner ran and "draft" never reached
+        # `order` - leaving it asserting the order of a list with one item in
+        # it, which is no assertion at all.
+        drafted = self.no_drafting()
+        real_run_for_user = sys.modules["app.runner"].run_for_user
 
         def run_for_user(user_id, **kw):
             order.append("draft")
-            return R()
-        runner.run_for_user = run_for_user
-        sys.modules["app.runner"] = runner
+            return real_run_for_user(user_id, **kw)
+        sys.modules["app.runner"].run_for_user = run_for_user
 
         def sender(**kw):
             order.append("send")
         self.autosend.sweep(sender=sender)
+        self.assertEqual(drafted, [self.uid],
+                         "the drafting half must actually have been reached")
+        self.assertIn("draft", order, "otherwise the order proves nothing")
         self.assertEqual(order[0], "send",
                          "a run cut short must already have sent")
 
@@ -1170,6 +1236,67 @@ class TestTheRunDoesTheImportantHalfFirst(Base):
         self.draft("Acme")
         self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         self.assertEqual(self.db.sent_today(self.uid), 1)
+
+
+# ----------------------------------------------------------------------
+class TestTheCheapSweep(Base):
+    """`--send-only` existed, was documented in the module docstring, and
+    nothing had ever called it.
+
+    It is what makes eleven runs a weekday affordable. A full sweep harvests
+    listings and scores them through Gemini - minutes of work against three
+    free API quotas. A send-only sweep reads the queue, notices replies and
+    posts what is already written: Postgres and Gmail, seconds, no quota.
+
+    So the expensive half stays at three runs a day and the essential half
+    gets ten more chances to happen, which matters because GitHub's free
+    scheduler drops roughly a third of scheduled runs and delivers the rest
+    hours late.
+    """
+
+    def test_send_only_skips_the_expensive_half(self):
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.draft("Acme")
+        drafted = self.no_drafting()
+
+        self.autosend.sweep(run=False, sender=self.fake_send)
+
+        self.assertEqual(drafted, [], "send-only must not go looking for work")
+        self.assertEqual(len(self.sent), 1, "but it must still send")
+
+    def test_the_full_sweep_still_drafts(self):
+        """The other half of the same switch, so a mistake cannot make every
+        run cheap and quietly stop the machine finding any work at all."""
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        drafted = self.no_drafting()
+
+        self.autosend.sweep(sender=self.fake_send)
+
+        self.assertEqual(drafted, [self.uid])
+
+    def test_the_command_line_switch_is_wired_to_it(self):
+        """sweep.py is what the workflow actually runs. The flag being parsed
+        is not the same as the flag reaching autosend.sweep()."""
+        from app import sweep as sweep_cli
+        seen = {}
+
+        def fake_sweep(**kw):
+            seen.update(kw)
+            return {"users": 0, "drafted": 0, "sent": 0, "failed": 0,
+                    "errors": []}
+        self.autosend.sweep, real = fake_sweep, self.autosend.sweep
+        try:
+            sweep_cli.main(["--send-only"])
+            self.assertIs(seen.get("run"), False)
+            seen.clear()
+            sweep_cli.main([])
+            self.assertIs(seen.get("run"), True)
+        finally:
+            self.autosend.sweep = real
 
 
 # ----------------------------------------------------------------------

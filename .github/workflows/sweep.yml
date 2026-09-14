@@ -33,9 +33,40 @@ name: product sweep
 
 on:
   schedule:
-    # 07:10, 11:10 and 15:10 UTC, weekdays. Deliberately not on the hour:
-    # GitHub delays jobs scheduled at popular times, sometimes by a lot.
+    # TWO SCHEDULES, AND THE MINUTE IS WHAT TELLS THEM APART.
+    #
+    # Minute :10 - a FULL sweep. Harvest listings, score them, write drafts,
+    # then send whatever is due. Minutes of work and it spends the free
+    # Adzuna, Reed and Gemini quotas, so three a day is the right number.
+    #
+    # Minute :40 - SEND ONLY. No job boards, no AI, no drafting: just read
+    # the queue, notice replies, and post what is already written and already
+    # past its holding window. It touches Postgres and Gmail and nothing
+    # else, takes seconds, and costs no API quota at all.
+    #
+    # The second schedule exists because GitHub's free scheduler is late and
+    # lossy, and the evidence is this workflow's own history. Every weekday
+    # from 7 to 11 September it was set to run three times and ran TWICE, and
+    # never once at a time in this file - the runs landed around 12:10 and
+    # 18:25 UTC. On Monday 14 September nothing had run by 13:00, while a
+    # finished letter sat in the queue from 23:03 the night before. Fourteen
+    # hours, on a product whose whole promise is that letters go out without
+    # anybody opening it.
+    #
+    # GitHub does not queue a delayed schedule, it drops it, so the answer is
+    # more chances rather than better timing. Eleven a day instead of three
+    # means a letter waits about an hour in the normal case instead of most
+    # of a day, and the run that eventually fires has less to catch up on.
+    #
+    # This CANNOT send more letters than the user asked for. The daily cap is
+    # counted against sent_log, the holding window against each draft's own
+    # age, and one-employer-one-letter against the contacted table - all per
+    # letter, none of them per run. Ten extra sweeps against a cap of twelve
+    # send exactly what three would have sent, just sooner.
+    #
+    # Never on the hour: GitHub delays jobs scheduled at popular times.
     - cron: "10 7,11,15 * * 1-5"
+    - cron: "40 8,9,10,12,13,14,16,17 * * 1-5"
   push:
     # Same idiom the personal machine uses: push a branch to force a run when
     # the Actions UI is not to hand. Deliberately not `branches: [main]` - an
@@ -93,6 +124,10 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # The cron expression that fired this run, empty for a manual run or
+          # a branch push. Read below to pick the mode.
+          FIRED_BY: ${{ github.event.schedule }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           # Without a database this would run against an empty SQLite file on
           # a throwaway runner: no users, no drafts, and a green tick saying
@@ -102,4 +137,21 @@ jobs:
                  "sweep. Add it as a repository secret."
             exit 1
           fi
-          python -m app.sweep ${{ inputs.dry_run && '--dry-run' || '' }}
+
+          # Which of the two schedules woke us. Matched on the MINUTE rather
+          # than the whole expression on purpose: the hours above will get
+          # tuned, and a match on the full string would silently turn every
+          # send-only run into a full one the first time somebody edited them.
+          # A run started by hand or by a fire-sweep/** push has no schedule
+          # at all and gets the full sweep, which is what you want when you
+          # have gone to the trouble of pressing the button.
+          ARGS=""
+          if [ "${DRY_RUN}" = "true" ]; then
+            ARGS="--dry-run"
+          else
+            case "${FIRED_BY}" in
+              "40 "*) ARGS="--send-only" ;;
+            esac
+          fi
+          echo "[sweep] fired by '${FIRED_BY:-manual}' -> app.sweep ${ARGS:-(full)}"
+          python -m app.sweep ${ARGS}
