@@ -35,10 +35,21 @@
 {% endif %}
 
 <div class="panel">
-  <p><small><b>You mark these yourself.</b> Replies go straight to your own
-     inbox and never come to us, so this cannot know what happened until you
-     say. It is two taps and it is what makes the numbers above yours rather
-     than ours.</small></p>
+  {% if stats.detected %}
+    <p><small><b>{{ stats.detected }} of these
+       {% if stats.detected == 1 %}was{% else %}were{% endif %}
+       spotted automatically.</b> With your mailbox connected this checks whether
+       anything has come back from the employers it wrote to &mdash; it can
+       see that a message arrived, never what it says. So some of those will
+       be "apply through our portal". Telling it which is which takes two
+       taps and makes the numbers above yours rather than a guess.</small></p>
+  {% else %}
+    <p><small><b>This watches for answers.</b> With your mailbox connected it
+       notices when an employer it wrote to gets back to you, so the numbers
+       above keep themselves current. It can see that a message arrived,
+       never what it says &mdash; two taps tell it which ones were
+       real.</small></p>
+  {% endif %}
 </div>
 
 {% for item in items %}

@@ -8,9 +8,13 @@ The rules worth protecting:
 
   - a draft is not an application, and a discarded one never was. Counting
     them is how a tracker flatters somebody with a number that means nothing
-  - the outcome is recorded by the person who saw the reply, because replies
-    go to their inbox and never come to us. The screen has to say so rather
-    than implying it is watching
+  - a reply the inbox check noticed counts straight away, because a tracker
+    that waits to be told shows "0 heard back" to somebody who has already
+    had answers - the most discouraging possible lie to tell a job hunter.
+    But it may only ever say a message ARRIVED, never what it said
+  - what the user says wins wherever they have said anything. An explicit
+    "rejected" is hearing back and is not a reply, and no detection may
+    promote it into one
   - it must be correctable. A tracker you cannot undo is one people stop
     trusting after the first mis-tap on a phone
 """
@@ -167,15 +171,25 @@ class TestTheScreen(Base):
         self.application("Fresh", days_ago=0)
         self.assertIn("sent today", self.client.get("/applications").text)
 
-    def test_it_says_the_user_marks_these_rather_than_implying_it_watches(self):
-        """We cannot see replies - on an own mailbox they go to the user, and
-        a Recruited address puts their address on Reply-To precisely so
-        they still do. Implying otherwise would be a lie on the one screen
-        whose whole job is telling the truth about what happened."""
+    def test_it_says_it_watches_without_claiming_to_read(self):
+        """This screen used to say "You mark these yourself... replies never
+        come to us", and that was true when it was written.
+
+        It stopped being true when the inbox check shipped: with the user's
+        mailbox connected the machine does look, and the tracker now counts
+        what it finds. Leaving the old sentence up would have understated
+        what the product does to the one person paying for it.
+
+        The line it must not cross is the other one. It sees that a message
+        arrived from an address it wrote to - never the subject, never the
+        body - so it may say an employer has been in touch and must never say
+        what they said.
+        """
         self.application("Acme")
         body = self.client.get("/applications").text
-        self.assertIn("You mark these yourself", body)
-        self.assertIn("never come to us", body)
+        self.assertIn("This watches for answers", body)
+        self.assertIn("never what it says", body)
+        self.assertNotIn("You mark these yourself", body)
 
     def test_a_long_wait_suggests_a_follow_up(self):
         self.application("Acme", days_ago=20)
@@ -192,3 +206,85 @@ class TestTheScreen(Base):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestADetectedReplyCountsWithoutBeingConfirmed(Base):
+    """The screen said "14 letters sent, 0 heard back, 0% reply rate" on a
+    search that had already had a reply - Octane Recruitment had answered the
+    day before and the inbox check had flagged it.
+
+    The flag was there. The stats simply did not look at it, because
+    heard_back counted only outcomes somebody had tapped. So the one number a
+    person job hunting most needs to be true - is this working? - read zero
+    while the thing was working.
+
+    Counting detections fixes that, and the cost is stated plainly rather
+    than hidden: a FROM match cannot tell a real reply from "apply through
+    our portal", so the screen says how many are unconfirmed and the landing
+    page no longer claims autoresponders are excluded.
+    """
+
+    def detected(self, company="Acme"):
+        did = self.application(company)
+        self.db.mark_reply_seen(self.uid, did)
+        return did
+
+    def test_it_counts_before_anybody_taps(self):
+        self.detected("Octane")
+        stats = self.db.application_stats(self.uid)
+        self.assertEqual(stats["heard_back"], 1)
+        self.assertEqual(stats["reply_rate"], 100)
+        self.assertEqual(stats["detected"], 1)
+
+    def test_it_stops_counting_as_still_waiting(self):
+        """Or the same letter is both answered and outstanding."""
+        self.detected("Octane")
+        self.assertEqual(self.db.application_stats(self.uid)["awaiting"], 0)
+
+    def test_a_rejection_the_user_recorded_is_not_promoted_to_a_reply(self):
+        """The whole point of keeping outcome and reply_seen_at separate.
+
+        A rejection IS hearing back, and is deliberately not a reply, or the
+        headline improves as things go worse. A message arriving is exactly
+        how a rejection turns up, so without this the detection would quietly
+        overturn the user's own answer.
+        """
+        did = self.application("Acme")
+        self.db.mark_reply_seen(self.uid, did)
+        self.db.set_outcome(self.uid, did, "rejected")
+        stats = self.db.application_stats(self.uid)
+        self.assertEqual(stats["heard_back"], 0)
+        self.assertEqual(stats["reply_rate"], 0)
+        self.assertEqual(stats["detected"], 0, "no longer unconfirmed")
+
+    def test_confirming_it_does_not_count_it_twice(self):
+        did = self.detected("Acme")
+        self.db.set_outcome(self.uid, did, "replied")
+        stats = self.db.application_stats(self.uid)
+        self.assertEqual(stats["heard_back"], 1)
+        self.assertEqual(stats["detected"], 0)
+
+    def test_the_screen_says_how_many_nobody_has_checked(self):
+        self.detected("Octane")
+        body = self.client.get("/applications").text
+        self.assertIn("spotted automatically", body)
+        self.assertIn("apply through our portal", body)
+
+    def test_the_public_rate_is_over_every_letter_now(self):
+        """It used to be over letters somebody had come back and marked - a
+        self-selected sample, because people record good news far more often
+        than silence. Every letter is checked now, so every letter counts."""
+        for i in range(4):
+            self.application(f"Company {i}")
+        self.detected("Answered")
+        stats = self.db.public_stats()
+        self.assertEqual(stats["tracked"], 5)
+        self.assertEqual(stats["heard_back"], 1)
+        self.assertEqual(stats["detected"], 1)
+
+    def test_the_public_rate_still_needs_enough_people(self):
+        """One person's diary is not a statistic, detections or not."""
+        self.detected("Acme")
+        stats = self.db.public_stats()
+        self.assertIsNone(stats["reply_rate"])
+        self.assertTrue(stats["rate_withheld"])

@@ -23,17 +23,18 @@ email to the person who actually does the hiring, from your own address.</p>
   {%- endif %}
 </small></p>
 
+{% if record %}
 <div class="stats">
-  <div class="stat"><b>26</b><span>emails sent</span></div>
-  <div class="stat"><b>7</b><span>replies from a person</span></div>
-  <div class="stat"><b>27%</b><span>reply rate</span></div>
+  <div class="stat"><b>{{ record.applications }}</b><span>emails sent</span></div>
+  <div class="stat"><b>{{ record.replies }}</b><span>replies</span></div>
+  <div class="stat"><b>{{ record.reply_rate }}%</b><span>reply rate</span></div>
 </div>
-<p><small>A fortnight in August 2026, one person, engineering and technician
-roles in Scotland. Cold email normally runs 1&ndash;5%.</small></p>
-<p><small><b>Autoresponders are not counted.</b> There was one more &mdash; a
-council saying use the portal. It is not a reply and it is not in the 7.
-Everybody else's numbers include those; ours do not, which is why this one
-looks smaller and is worth more.</small></p>
+<p><small>One person, engineering and technician roles in Scotland, every
+letter since August 2026 &mdash; {{ record.employers }} employers. Cold email
+normally runs 1&ndash;5%. These update themselves: the machine publishes them
+at the end of every run, so this is the running total and not a good
+fortnight picked out of it.</small></p>
+{% endif %}
 
 <h2>Sending more makes it worse</h2>
 <p>Every other tool in this market sells volume. The 2026 numbers say volume
@@ -51,11 +52,13 @@ looks smaller and is worth more.</small></p>
    a hundred applications can only be a hundred untailored ones, and a
    recruiter spots that in under twenty seconds.</p>
 <p><small><b>Not the same measurement as ours, deliberately said out loud.</b>
-   Those are <i>interview</i> rates. The 27% above is a <i>reply</i> rate
-   &mdash; an answer from a human being. They are different things and putting
-   them side by side as one number would be exactly the sort of arithmetic
-   this page exists to avoid. <a href="/numbers">The live numbers, and where
-   each figure comes from.</a></small></p>
+   Those are <i>interview</i> rates.
+   {% if record %}The {{ record.reply_rate }}%{% else %}Ours{% endif %} above
+   is a <i>reply</i> rate &mdash; an answer landing back. They are different
+   things and putting them side by side as one number would be exactly the
+   sort of arithmetic this page exists to avoid.
+   <a href="/numbers">The live numbers, and where each figure comes
+   from.</a></small></p>
 
 <h2>Who you reach decides everything</h2>
 <div class="panel scroll">

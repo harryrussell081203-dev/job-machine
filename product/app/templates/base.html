@@ -17,7 +17,12 @@
    the top of the page as loose text. Any view can override by passing
    og_title / og_description to render(). #}
 {% set _og_title = og_title | default("Recruited - your CV, in front of a human") %}
-{% set _og_desc = og_description | default("A real email address at every company, never guessed. 105 applications, 26 replies, 25%.") %}
+{# The numbers here were typed in by hand and went stale the same week. They
+   come from the published track record now, and the sentence stands on its
+   own when there is none - a description is not worth a blank where a figure
+   should be. #}
+{% set _og_proof %}{% if record %} {{ record.applications }} applications, {{ record.replies }} replies, {{ record.reply_rate }}%.{% endif %}{% endset %}
+{% set _og_desc = og_description | default("A real email address at every company, never guessed." ~ _og_proof) %}
 <meta name="description" content="{{ _og_desc }}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Recruited">
@@ -27,8 +32,11 @@
 <meta property="og:image" content="{{ config.BASE_URL }}/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+{# The card image itself is rendered from the site's own stylesheet and still
+   carries the figures it was generated with, so the alt text describes the
+   picture rather than quoting numbers that would drift away from it. #}
 <meta property="og:image:alt"
-      content="Recruited - your CV, in front of a human. 105 applications, 26 replies.">
+      content="Recruited - your CV, in front of a human.">
 <meta name="twitter:card" content="summary_large_image">
 
 <!-- Installable. No store, no review, no fee: this is what makes the app
@@ -138,6 +146,88 @@ if ("serviceWorker" in navigator) {
   if (no) no.addEventListener("click", function () {
     bar.hidden = true;
     try { localStorage.setItem("jm-install-dismissed", "1"); } catch (e) {}
+  });
+})();
+
+// Show that a pressed button is working.
+//
+// Every form here posts and waits on a server, and some of those waits are
+// long: connecting a mailbox opens an SMTP session, "Look for work now"
+// harvests and scores listings. Until this existed the page looked identical
+// before and after the tap, so the only reasonable conclusion was that the
+// tap had missed - which is exactly what happened with Connect, three times
+// in nine minutes.
+//
+// Progressive enhancement: with no JavaScript every form still submits
+// normally and the only thing lost is the reassurance.
+(function () {
+  // Verbs, not "Loading...". The user pressed a specific button and wants to
+  // know THAT thing is happening, not that something is.
+  // Keys are what the buttons in this app actually say, lowercased. Checked
+  // against the templates rather than guessed - a verb here that matches no
+  // real button is dead code that looks like a feature.
+  var WORKING = {
+    "check and connect": "Connecting",
+    "look for work now": "Looking",
+    "find the contact": "Looking",
+    "upload": "Uploading",
+    "save": "Saving",
+    "save and continue": "Saving"
+  };
+
+  function workingLabel(button) {
+    var said = (button.textContent || "").trim().toLowerCase();
+    if (WORKING[said]) return WORKING[said];
+    // Anything unlisted keeps its own words. A button that said "Discard"
+    // becoming "Working" tells the user less than it did before, and a
+    // generic word on an unknown button is how a label ends up lying.
+    return button.textContent.trim();
+  }
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || form.hasAttribute("data-no-busy")) return;
+    // Bubble phase, not capture, so a handler on the form itself has already
+    // had its say. A "are you sure?" that cancels the submit must not leave a
+    // button spinning at a user who just said no.
+    if (e.defaultPrevented) return;
+    // e.submitter is the button actually pressed; older browsers do not set
+    // it, so fall back to the first submit button in the form.
+    var button = e.submitter ||
+                 form.querySelector("button:not([type=button])");
+    if (!button || button.getAttribute("aria-busy") === "true") return;
+
+    var original = button.textContent;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = workingLabel(button);
+
+    // AFTER the event has finished dispatching, never during it. A submit
+    // button disabled inside its own submit handler is dropped from the form
+    // data by the browser - so a handler that looks like it only changes
+    // appearance silently stops the server seeing which button was pressed.
+    setTimeout(function () { button.disabled = true; }, 0);
+
+    // Restore if navigation never happens. A validation failure, an offline
+    // phone or a cancelled navigation would otherwise leave the button
+    // disabled and the form permanently unusable - a worse bug than the one
+    // this fixes, because the user cannot even retry.
+    setTimeout(function () {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = original;
+    }, 45000);
+  }, false);
+
+  // Coming BACK to a page restores it from the browser's cache exactly as it
+  // was left - mid-submit, with a disabled spinning button. Reset it, or the
+  // back button hands the user a dead form.
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    var busy = document.querySelectorAll('[aria-busy="true"]');
+    for (var i = 0; i < busy.length; i++) {
+      busy[i].disabled = false;
+      busy[i].removeAttribute("aria-busy");
+    }
   });
 })();
 </script>
