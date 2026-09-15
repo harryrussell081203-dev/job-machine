@@ -345,11 +345,26 @@ def application_stats(user_id: int) -> dict:
     """
     rows = applications(user_id, limit=10000)
     sent = len(rows)
-    heard = [r for r in rows if r["outcome"]]
-    positive = [r for r in heard if r["outcome"] in ("replied", "interview",
-                                                     "offer")]
+
+    # A reply the inbox check noticed counts, and counts WITHOUT waiting to be
+    # confirmed. The tracker used to require a tap for every letter, so it
+    # showed "0 heard back, 0% reply rate" on a search that had already had
+    # answers - the most discouraging possible lie, told to somebody who is
+    # job hunting and needs to know the thing is working.
+    #
+    # What the user says still wins where they have said anything. An explicit
+    # "rejected" is hearing back and is deliberately NOT a reply, so a
+    # detection cannot quietly promote it into one and make the numbers
+    # improve as things go worse.
+    def detected(row):
+        return bool(row["reply_seen_at"]) and not row["outcome"]
+
+    heard = [r for r in rows if r["outcome"] or detected(r)]
+    positive = [r for r in rows
+                if r["outcome"] in ("replied", "interview", "offer")
+                or detected(r)]
     stamp = now()
-    waiting = [r for r in rows if not r["outcome"]]
+    waiting = [r for r in rows if not r["outcome"] and not detected(r)]
     return {
         "sent": sent,
         "heard_back": len(positive),
@@ -357,6 +372,9 @@ def application_stats(user_id: int) -> dict:
                            if r["outcome"] in ("interview", "offer")]),
         "reply_rate": round(100 * len(positive) / sent) if sent else 0,
         "awaiting": len(waiting),
+        # How many of the above nobody has confirmed yet. The screen uses it
+        # to say so out loud rather than presenting a detection as a verdict.
+        "detected": len([r for r in rows if detected(r)]),
         # The oldest thing still unanswered, in days. This is the number that
         # tells somebody it is time to chase rather than wait.
         "longest_wait_days": max(
@@ -392,19 +410,43 @@ def public_stats() -> dict:
         letters = int(row["letters"] or 0)
         people = int(row["people"] or 0)
 
-        # Outcomes live on drafts, because that is where the user records
-        # them, so this denominator is letters somebody has actually told us
-        # about - NOT every letter sent. Quoting replies over every letter
-        # would understate it, and quoting it without saying which would be
-        # the kind of number this project refuses to print.
+        # THE DENOMINATOR IS EVERY LETTER NOW, AND THAT IS THE CHANGE.
+        #
+        # It used to be "letters somebody has told us the outcome of",
+        # because the app could not see replies and the only ones it knew
+        # about were the ones a user came back and tapped. That made the rate
+        # a percentage of a self-selected sample - people are far likelier to
+        # come back and record good news - and the page had to spend a
+        # paragraph explaining which letters were in it.
+        #
+        # The inbox check now looks at every letter that went out, so every
+        # letter can be in the denominator and the number means the plain
+        # thing a reader assumes it means. Counted from drafts rather than
+        # sent_log so the numerator and denominator are the same population:
+        # mixing the two would divide answers about one set of letters by the
+        # size of another.
+        tracked = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts "
+            "WHERE status = 'sent'").fetchone()
+        tracked = int(tracked["n"] or 0)
         marked = c.execute(
             "SELECT COUNT(*) AS n FROM drafts "
             "WHERE status = 'sent' AND outcome <> ''").fetchone()
         marked = int(marked["n"] or 0)
+        # A detection counts only where the user has not already answered:
+        # their own "rejected" is hearing back and is not a reply, and must
+        # not be overturned by the fact that something arrived.
         heard = c.execute(
             "SELECT COUNT(*) AS n FROM drafts WHERE status = 'sent' "
-            "AND outcome IN ('replied', 'interview', 'offer')").fetchone()
+            "AND (outcome IN ('replied', 'interview', 'offer') "
+            "     OR (COALESCE(outcome, '') = '' "
+            "         AND reply_seen_at IS NOT NULL))").fetchone()
         heard = int(heard["n"] or 0)
+        detected = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts WHERE status = 'sent' "
+            "AND COALESCE(outcome, '') = '' "
+            "AND reply_seen_at IS NOT NULL").fetchone()
+        detected = int(detected["n"] or 0)
         interviews = c.execute(
             "SELECT COUNT(*) AS n FROM drafts WHERE status = 'sent' "
             "AND outcome IN ('interview', 'offer')").fetchone()
@@ -415,15 +457,18 @@ def public_stats() -> dict:
     return {
         "letters": letters,
         "people": people,
+        "tracked": tracked,
         "marked": marked,
+        "detected": detected,
         "heard_back": heard,
         "interviews": interviews,
         # A rejection is hearing back and belongs in the tracker, but it is
         # not a reply worth boasting about, so it is excluded here exactly as
         # it is in application_stats. One rule, two places.
-        "reply_rate": (round(100 * heard / marked)
-                       if marked and people >= MIN_PEOPLE_FOR_A_RATE else None),
-        "rate_withheld": bool(marked and people < MIN_PEOPLE_FOR_A_RATE),
+        "reply_rate": (round(100 * heard / tracked)
+                       if tracked and people >= MIN_PEOPLE_FOR_A_RATE
+                       else None),
+        "rate_withheld": bool(tracked and people < MIN_PEOPLE_FOR_A_RATE),
         "first_send_at": (int(first["t"]) if first and first["t"] else 0),
         "min_people": MIN_PEOPLE_FOR_A_RATE,
     }

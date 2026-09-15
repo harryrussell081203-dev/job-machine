@@ -224,6 +224,40 @@ button:active, .btn:active { transform: scale(0.975); }
 
 .btn.small { font-size: 14px; padding: 8px 16px; }
 
+/* A button that has been pressed and is waiting on the server.
+ *
+ * The press animation above lasts 120ms. Connecting a mailbox took THIRTY
+ * SECONDS, and for all of it the screen looked exactly as it had before the
+ * tap - so the honest reading was that the tap had missed. Harry pressed it
+ * three times in nine minutes.
+ *
+ * So this is not decoration either. It is the difference between "working"
+ * and "broken", and it is the only difference the user can see.
+ *
+ * Disabled as well as spinning, because the second press was never the
+ * user's mistake: an interface that looks inert invites it. On the send
+ * buttons a double submit is a second copy of somebody's application.
+ */
+button[aria-busy="true"], .btn[aria-busy="true"] {
+  cursor: progress;
+  opacity: .72;
+}
+button[aria-busy="true"]::before, .btn[aria-busy="true"]::before {
+  content: "";
+  width: 14px; height: 14px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: jm-spin .7s linear infinite;
+}
+/* The press cannot also shrink it while it waits, or the button looks stuck
+   mid-tap for the whole thirty seconds. */
+button[aria-busy="true"]:active, .btn[aria-busy="true"]:active {
+  transform: none;
+}
+@keyframes jm-spin { to { transform: rotate(360deg); } }
+
 button.ghost, .btn.ghost {
   background: transparent;
   color: var(--ink);
@@ -558,6 +592,15 @@ footer .legal a { text-decoration: underline; text-underline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
   button:active, .btn:active { transform: none; }
+  /* The spinner stops, so close the gap in the ring - a frozen circle with a
+     missing quarter reads as a rendering fault rather than as progress. The
+     state is still carried by the label, which changes to a working verb,
+     and by the button being disabled. Nobody is left without the signal;
+     only the motion goes. */
+  button[aria-busy="true"]::before, .btn[aria-busy="true"]::before {
+    border-top-color: currentColor;
+    opacity: .5;
+  }
 }
 
 /* --- rules the markup relies on -------------------------------------- */

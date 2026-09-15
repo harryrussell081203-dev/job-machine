@@ -24,12 +24,17 @@
          {{ stats.min_people }} people using it, a percentage is one person's
          diary rather than a statistic, and quoting it as though it were
          evidence would be the exact thing this page exists to prevent.</p>
-    {% elif stats.marked %}
-      <p class="hint">The reply rate is {{ stats.heard_back }} of
-         {{ stats.marked }} letters whose outcome somebody has recorded &mdash;
-         not of all {{ stats.letters }} sent. We cannot see replies: they go to
-         the user's own inbox, so this counts what people have told us. A
-         rejection counts as hearing back but not as a reply, or the number
+    {% elif stats.tracked %}
+      <p class="hint">The reply rate is {{ stats.heard_back }} of every
+         {{ stats.tracked }} letters sent &mdash; not of a chosen few. With
+         the user's permission the machine checks their inbox for answers
+         from the employers it wrote to, so every letter can be in the
+         denominator rather than only the ones somebody came back to record.
+         {% if stats.detected %}{{ stats.detected }} of those
+         {{ stats.heard_back }} the machine spotted itself and nobody has
+         read to us yet, so some will turn out to be "apply through our
+         portal".{% endif %}
+         A rejection counts as hearing back but not as a reply, or the number
          would improve as things went worse.</p>
     {% endif %}
   {% else %}
@@ -84,11 +89,18 @@
 </div>
 
 <h2>Where the founder's own numbers come from</h2>
-<p>The 105 applications and 26 replies quoted elsewhere on this site are
-   Harry's, sent by the machine this product was built out of, from his own
-   mailbox, before there was a product. They are counted from his sent folder
-   and his replies &mdash; not from this database, which is why they are not
-   in the panel at the top.</p>
+<p>The {% if record %}{{ record.applications }} applications and
+   {{ record.replies }} replies{% else %}applications and replies{% endif %}
+   quoted elsewhere on this site are Harry's, sent by the machine this product
+   was built out of, from his own mailbox, before there was a product. They
+   are counted from his sent folder and his replies &mdash; not from this
+   database, which is why they are not in the panel at the top.</p>
+<p>They are no longer typed in by hand. That machine writes them out at the
+   end of every run and this page reads what it wrote, so they are the
+   running total on
+   {%- if record and record.updated_at %} {{ record.updated_at[:10] }}
+   {%- endif %} rather than a good fortnight chosen out of it. They will go
+   down as well as up.</p>
 <p>They also measure a different thing from the table above. Those are
    <b>interview</b> rates. His is a <b>reply</b> rate: an answer from a human
    being at the company. Putting the two side by side as though they were the
