@@ -81,6 +81,17 @@ class Base(unittest.TestCase):
     def fake_send(self, **kw):
         self.sent.append(kw)
 
+    def alerts(self):
+        """Catch the "somebody replied" email instead of sending it.
+
+        Injected everywhere in this file, because without it a found reply
+        tries to open a real SMTP session to a fake host and the suite waits
+        out the timeout - 442 tests went from 22 seconds to 84 before this
+        existed.
+        """
+        self.alerted = []
+        return lambda **kw: self.alerted.append(kw)
+
     def no_drafting(self):
         """Stand in for app.runner, returning the list of users it drafts for.
 
@@ -1086,12 +1097,13 @@ class TestNoticingAReply(Base):
         self.connect_mail()
         self.db.mark_mail_verified(self.uid)
 
+
     def test_it_flags_an_employer_who_has_been_in_touch(self):
         self.verified_mail()
         did = self.sent_application()
         from app import replies
         report = replies.check_for_user(
-            self.uid, finder=lambda **kw: {"hr@acme.com"})
+self.uid, notify=self.alerts(), finder=lambda **kw: {"hr@acme.com"})
         self.assertEqual(report.found, 1)
         row = self.db.get_draft(self.uid, did)
         self.assertTrue(row["reply_seen_at"])
@@ -1101,7 +1113,8 @@ class TestNoticingAReply(Base):
         self.verified_mail()
         did = self.sent_application()
         from app import replies
-        replies.check_for_user(self.uid, finder=lambda **kw: {"hr@acme.com"})
+        replies.check_for_user(
+self.uid, notify=self.alerts(), finder=lambda **kw: {"hr@acme.com"})
         row = self.db.get_draft(self.uid, did)
         self.assertEqual(row["outcome"] or "", "")
 
@@ -1117,7 +1130,8 @@ class TestNoticingAReply(Base):
             asked.update(kw)
             return set()
         from app import replies
-        replies.check_for_user(self.uid, finder=finder)
+        replies.check_for_user(
+self.uid, notify=self.alerts(), finder=finder)
         self.assertEqual(set(asked["addresses"]),
                          {"hr@acme.com", "jobs@beta.com"})
 
@@ -1129,7 +1143,8 @@ class TestNoticingAReply(Base):
         def refuse(**kw):
             raise self.delivery.DeliveryUnreachableError("could not reach")
         from app import replies
-        report = replies.check_for_user(self.uid, finder=refuse)
+        report = replies.check_for_user(
+self.uid, notify=self.alerts(), finder=refuse)
         self.assertEqual(report.found, 0)
         self.assertIn("could not reach", report.reason)
         self.assertFalse(self.db.get_draft(self.uid, did)["reply_seen_at"])
@@ -1144,7 +1159,7 @@ class TestNoticingAReply(Base):
         tried = []
         from app import replies
         report = replies.check_for_user(
-            self.uid, finder=lambda **kw: tried.append(kw) or set())
+self.uid, notify=self.alerts(), finder=lambda **kw: tried.append(kw) or set())
         self.assertEqual(tried, [])
         self.assertIn("not verified", report.reason)
 
@@ -1160,7 +1175,8 @@ class TestNoticingAReply(Base):
         did = self.sent_application()
         self.db.set_outcome(self.uid, did, "offer")
         from app import replies
-        replies.check_for_user(self.uid, finder=lambda **kw: {"hr@acme.com"})
+        replies.check_for_user(
+self.uid, notify=self.alerts(), finder=lambda **kw: {"hr@acme.com"})
         self.assertEqual(self.db.get_draft(self.uid, did)["outcome"], "offer")
 
     def test_gmail_needs_no_new_credential(self):
@@ -1364,3 +1380,165 @@ class TestTheConnectButtonAnswers(Base):
                 host="smtp.gmail.com", port=465, username="a@b.com",
                 password="x", to_email="c@d.com", subject="s", body="b")
         self.assertEqual(seen["timeout"], self.delivery.SEND_TIMEOUT)
+
+
+class TestAnEmployerDoesNotReplyFromTheAddressYouWroteTo(Base):
+    """The reply check searched for the exact address it had written to, and
+    on real mail that is close to useless.
+
+    Written to alex@alexanderjamesrecruiting.co.uk, the answers came from
+    alex@alexanderjamesrecruiting.COM and then rob@alexanderjamesrecruiting.co.uk
+    - a different person at a different domain of the same firm, saying he had
+    tried to ring. Neither was found. The only reply it ever did find was an
+    autoresponder, which is exactly backwards: a robot answers from the inbox
+    you wrote to, a person answers from their own desk.
+    """
+
+    def query_for(self, address):
+        return self.delivery._reply_query(address)
+
+    def test_it_asks_about_the_firm_not_the_one_address(self):
+        self.assertEqual(self.query_for("alex@alexanderjamesrecruiting.co.uk"),
+                         "@alexanderjamesrecruiting")
+        self.assertEqual(self.query_for("rob@alexanderjamesrecruiting.com"),
+                         "@alexanderjamesrecruiting")
+
+    def test_a_public_suffix_is_not_mistaken_for_the_name(self):
+        """co.uk, org.uk, ac.uk all put the real name one label further left,
+        and '@co' would match a large part of anybody's inbox."""
+        for address, expected in (
+                ("a@octanerecruitment.co.uk", "@octanerecruitment"),
+                ("b@someplace.org.uk", "@someplace"),
+                ("c@dept.faculty.university.ac.uk", "@university"),
+                ("d@amcogiffen.co.uk", "@amcogiffen")):
+            self.assertEqual(self.query_for(address), expected, address)
+
+    def test_a_free_provider_keeps_the_exact_address(self):
+        """Searching '@gmail' would return most of the inbox and flag every
+        outstanding application at once."""
+        for address in ("someone@gmail.com", "x@hotmail.co.uk",
+                        "y@outlook.com", "z@yahoo.co.uk", "q@icloud.com"):
+            self.assertEqual(self.query_for(address), address, address)
+
+    def test_a_very_short_name_keeps_the_exact_address(self):
+        """'@bp' is a substring of '@bpost.be' and of plenty else. Too short
+        to identify anybody, so it falls back to the behaviour that is at
+        worst incomplete rather than wrong."""
+        self.assertEqual(self.query_for("a@bp.com"), "a@bp.com")
+
+    def test_nonsense_never_raises(self):
+        for address in ("", "not-an-address", "@", "a@", "@b"):
+            self.query_for(address)          # must not raise
+
+    def test_a_reply_from_a_colleague_now_flags_the_application(self):
+        """The whole point, end to end."""
+        self.verified_mail = lambda: None
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        did = self.db.add_draft(self.uid, job_title="Field Service Engineer",
+                                company="Alexander James Recruiting",
+                                to_email="alex@alexanderjamesrecruiting.co.uk",
+                                subject="s", body="b")
+        self.db.mark_draft(self.uid, did, "sent")
+
+        asked = []
+
+        def finder(*, host, port, username, password, addresses):
+            # Stand in for the IMAP server: Rob replied, from a different
+            # local part, so a search for the firm matches and a search for
+            # the exact address would not.
+            asked.extend(addresses)
+            inbox = ["rob@alexanderjamesrecruiting.co.uk"]
+            hit = set()
+            for address in addresses:
+                query = self.delivery._reply_query(address)
+                if any(query.lstrip("@") in seen for seen in inbox):
+                    hit.add(address)
+            return hit
+
+        from app import replies
+        report = replies.check_for_user(self.uid, notify=self.alerts(),
+                                        finder=finder)
+        self.assertEqual(report.found, 1)
+        self.assertTrue(self.db.get_draft(self.uid, did)["reply_seen_at"])
+
+
+class TestBeingToldThatSomebodyReplied(Base):
+    """A tracker that quietly updates itself is only useful to somebody who
+    happens to open it. Rob replied and then rang, and the first Harry knew of
+    either was being asked about it days later. The alert is the feature.
+    """
+
+    def sent_application(self, company="Acme", to_email="hr@acme-marine.com"):
+        did = self.db.add_draft(self.uid, job_title="Technician",
+                                company=company, to_email=to_email,
+                                subject="s", body="b")
+        self.db.mark_draft(self.uid, did, "sent")
+        return did
+
+    def check(self, found, notify=None):
+        self.connect_mail()
+        self.db.mark_mail_verified(self.uid)
+        from app import replies
+        self.alerted = []
+        return replies.check_for_user(
+            self.uid, finder=lambda **kw: found,
+            notify=notify or (lambda **kw: self.alerted.append(kw)))
+
+    def test_it_emails_the_user_when_somebody_answers(self):
+        self.sent_application("Ganymede Solutions", "hr@acme-marine.com")
+        self.check({"hr@acme-marine.com"})
+        self.assertEqual(len(self.alerted), 1)
+        alert = self.alerted[0]
+        self.assertIn("Ganymede Solutions", alert["subject"])
+        self.assertEqual(alert["to_email"], "harry@gmail.com")
+
+    def test_it_says_it_cannot_read_the_message(self):
+        """Or the user believes the app read their mail."""
+        self.sent_application("Acme", "hr@acme-marine.com")
+        self.check({"hr@acme-marine.com"})
+        self.assertIn("not what it says", self.alerted[0]["body"])
+
+    def test_it_points_at_the_tracker(self):
+        self.sent_application("Acme", "hr@acme-marine.com")
+        self.check({"hr@acme-marine.com"})
+        self.assertIn("/applications", self.alerted[0]["body"])
+
+    def test_nothing_found_means_no_email(self):
+        self.sent_application("Acme", "hr@acme-marine.com")
+        self.check(set())
+        self.assertEqual(self.alerted, [])
+
+    def test_several_employers_are_one_email_not_five(self):
+        for i in range(3):
+            self.sent_application(f"Firm {i}", f"hr@firm{i}-engineering.com")
+        self.check({f"hr@firm{i}-engineering.com" for i in range(3)})
+        self.assertEqual(len(self.alerted), 1)
+        self.assertIn("3 employers", self.alerted[0]["subject"])
+
+    def test_it_is_not_sent_again_on_the_next_sweep(self):
+        """A draft is flagged once and drafts_awaiting_reply excludes anything
+        already flagged, so there is no path by which this repeats. Asserted
+        rather than assumed, because the failure is an email every twenty
+        minutes for ever."""
+        self.sent_application("Acme", "hr@acme-marine.com")
+        self.check({"hr@acme-marine.com"})
+        self.assertEqual(len(self.alerted), 1)
+
+        from app import replies
+        again = []
+        replies.check_for_user(self.uid, finder=lambda **kw: {"hr@acme-marine.com"},
+                               notify=lambda **kw: again.append(kw))
+        self.assertEqual(again, [])
+
+    def test_a_failed_alert_does_not_lose_the_flag(self):
+        """The tracker is the source of truth; the email is a nudge towards
+        it. Losing the reply because the nudge failed would be the wrong way
+        round."""
+        did = self.sent_application("Acme", "hr@acme-marine.com")
+
+        def broken(**kw):
+            raise RuntimeError("smtp is down")
+        report = self.check({"hr@acme-marine.com"}, notify=broken)
+        self.assertEqual(report.found, 1)
+        self.assertTrue(self.db.get_draft(self.uid, did)["reply_seen_at"])

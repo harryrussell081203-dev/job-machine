@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import db, delivery
+from . import config, db, delivery
 from .vault import VaultError
 
 
@@ -45,10 +45,11 @@ class ReplyReport:
         return f"{self.found} new repl(ies) across {self.checked} application(s)"
 
 
-def check_for_user(user_id: int, *, finder=None) -> ReplyReport:
+def check_for_user(user_id: int, *, finder=None, notify=None) -> ReplyReport:
     """Flag every sent application whose employer has been in touch.
 
-    `finder` is injected so the tests exercise this without a mailbox.
+    `finder` and `notify` are injected so the tests exercise this without a
+    mailbox.
     """
     report = ReplyReport()
 
@@ -69,7 +70,7 @@ def check_for_user(user_id: int, *, finder=None) -> ReplyReport:
         return report
 
     try:
-        address, _, _, password = db.mail_login(user_id)
+        address, smtp_host, smtp_port, password = db.mail_login(user_id)
     except VaultError as exc:
         report.reason = str(exc)
         return report
@@ -102,8 +103,58 @@ def check_for_user(user_id: int, *, finder=None) -> ReplyReport:
         return report
 
     report.checked = len(by_address)
+    newly = []
     for address_found in answered:
         for draft in by_address.get(address_found, []):
             db.mark_reply_seen(user_id, draft["id"])
             report.found += 1
+            company = (draft["company"] or "").strip()
+            if company and company not in newly:
+                newly.append(company)
+
+    if newly:
+        _tell_them(user_id, newly, address=address, password=password,
+                   host=smtp_host, port=smtp_port, notify=notify)
     return report
+
+
+def _tell_them(user_id, companies, *, address, password, host, port,
+               notify=None) -> None:
+    """Email the user that somebody has answered.
+
+    A tracker that quietly updates itself is only useful to somebody who
+    happens to open it. Rob at Alexander James replied, and then rang, and the
+    first Harry knew of either was being asked about it days later - so the
+    machine noticing is worth nothing on its own. The alert is the feature.
+
+    Sent from the user's own mailbox to the same mailbox, so it costs nothing,
+    needs no new service, and cannot be mistaken for spam by the one person it
+    is for. It is sent ONCE per employer: a draft is flagged only once and
+    drafts_awaiting_reply excludes anything already flagged, so there is no
+    path by which this repeats every sweep.
+
+    Failing to send it must never lose the flag that has already been
+    recorded. The tracker is the source of truth; this is a nudge towards it.
+    """
+    try:
+        names = ", ".join(companies[:5])
+        if len(companies) > 5:
+            names += f" and {len(companies) - 5} more"
+        one = len(companies) == 1
+        subject = (f"{companies[0]} has been in touch" if one
+                   else f"{len(companies)} employers have been in touch")
+        body = (
+            f"{names} {'has' if one else 'have'} replied to "
+            f"{'an application' if one else 'applications'} you sent.\n\n"
+            # Said plainly, because the alternative is somebody believing the
+            # app read their mail.
+            "This only knows that something arrived from them - not what it "
+            "says. It is in your inbox now; have a look and it is two taps to "
+            "tell the tracker what happened.\n\n"
+            f"{config.BASE_URL}/applications\n")
+        send = notify or delivery.send_via_smtp
+        send(host=host, port=port, username=address, password=password,
+             to_email=address, subject=subject, body=body)
+    except Exception as exc:
+        # An alert that cannot be sent is a worse day, not a lost reply.
+        print(f"[replies] user {user_id}: could not send the alert: {exc}")
