@@ -774,7 +774,83 @@ def save(state, allow_shrink=None):
     with open(tmp, "w") as f:
         json.dump(state, f, indent=1, sort_keys=True)
     os.replace(tmp, STATE_PATH)
+    publish_track_record(state)
     return True
+
+
+# Empty means "beside whatever state file is in use", worked out at the moment
+# of writing rather than at import.
+#
+# That is not tidiness. A fixed path here is wrong the instant STATE_PATH
+# moves, because the summary would then describe one state file while sitting
+# next to another - and the first thing it did was exactly that: a test suite
+# pointing STATE_PATH at a temporary directory published its fixture's numbers
+# straight over the real ones, and the live landing page read back "1000
+# applications, 0 replies, 0%".
+#
+# The published summary belongs to the state it summarises. Deriving it means
+# the two cannot be separated by accident.
+TRACK_RECORD_PATH = env_str("TRACK_RECORD_PATH", "")
+
+
+def track_record_path():
+    if TRACK_RECORD_PATH:
+        return TRACK_RECORD_PATH
+    return os.path.join(os.path.dirname(STATE_PATH), "track_record.json")
+
+
+def publish_track_record(state):
+    """Write the three numbers the website quotes, for the website to read.
+
+    The landing page's evidence is this machine's results, and until now it
+    was three numbers typed into a template by hand - 26 sent, 7 replies,
+    27%, captioned "a fortnight in August 2026". Frozen the day it was
+    written, while the real figures went on climbing without it.
+
+    So the machine that owns the numbers publishes them, rather than the
+    website reaching in for them. That matters for two reasons:
+
+      - state.json is fourteen megabytes and takes a quarter of a second to
+        parse. The site cannot do that on a page view, and certainly not on
+        a free host with half a gigabyte of memory.
+      - it keeps the two machines pointing one way. This writes a file; the
+        product reads it and can do nothing else. No shared database, no
+        shared credentials, and nothing the website does can reach back here.
+
+    Written from lifetime_stats() rather than counted again, because a second
+    counter for the same number is a second number to be wrong. That function
+    already carries the hard-won rule: `sent` DRAINS as answers arrive, so
+    applications_ever = sent + replied is the only one safe to quote.
+
+    Best-effort on purpose. A machine that cannot update the marketing copy
+    has still done its actual job, and failing the run over it would be
+    absurd.
+
+    One known wrinkle, left alone deliberately: two runs finishing at the same
+    moment have their state.json merged by commit-state.sh, but this file is
+    a plain overwrite, so the committed summary can briefly describe one run's
+    state rather than the merged pair. It is out by a letter or two for a few
+    hours and the next run corrects it, which is a better trade than teaching
+    the merge script to recompute a derived file.
+    """
+    stats = lifetime_stats(state)
+    record = {
+        "applications": stats["applications_ever"],
+        "replies": stats["replies"],
+        "reply_rate": stats["reply_rate"],
+        "employers": stats["companies_ever"],
+        "updated_at": now(),
+    }
+    path = track_record_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(record, f, indent=1, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError as exc:
+        print(f"[track] could not publish the track record: {exc}")
+    return record
 
 
 def sends_today(state):

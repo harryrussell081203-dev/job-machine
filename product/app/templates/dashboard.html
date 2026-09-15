@@ -34,18 +34,6 @@
     </div>
   {% endif %}
 
-  {% if outcomes %}
-    <h2>Looked at, not written to</h2>
-    <div class="panel">
-      <ul style="margin:0; padding-left:18px">
-        {% for o in outcomes %}
-          <li class="muted" style="margin-bottom:6px">{{ o["outcome"] }}</li>
-        {% endfor %}
-      </ul>
-      <p style="margin-top:12px"><small>No real address, no letter.</small></p>
-    </div>
-  {% endif %}
-
   <h2>Your search</h2>
   <div class="panel">
     <p><b>{{ profile.get('name') }}</b> &middot; {{ profile.get('location') }}</p>

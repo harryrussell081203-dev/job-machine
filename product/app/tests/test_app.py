@@ -77,20 +77,33 @@ class TestPublicPages(AppTestCase):
     def test_landing_renders_and_shows_the_evidence(self):
         r = self.client.get("/")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("27%", r.text)
         self.assertIn("Get your CV in front of a human", r.text)
 
-    def test_the_headline_number_says_replies_came_from_a_person(self):
-        """The claim is a human reply rate, not a reply rate.
+    def test_the_claim_matches_what_is_actually_counted(self):
+        """The headline used to say "replies from a person" and promise in as
+        many words that autoresponders were not counted. Both were true: the
+        seven were curated by hand, and the one "apply through our portal"
+        was deliberately left out.
 
-        Counting autoresponders is how every other cold-email tool gets to a
-        big number, and it is the first thing a sceptical reader will check.
-        If somebody ever quietly relabels this, the claim stops being the one
-        that was verified against a real mailbox.
+        Neither is true now. The figures are published automatically by the
+        machine at the end of every run, which means nobody is sitting in the
+        middle deciding which answers were human - and an automatic count
+        cannot make that call, because knowing an autoresponder from a reply
+        means reading the message.
+
+        So the wording had to come down with the curation. Keeping "not
+        counted" over a number that no longer excludes them would have been
+        the exact dishonesty the sentence was written to rule out, and it is
+        worse than never having claimed it: it is a promise that used to be
+        kept.
+
+        This test is the guard against it creeping back in on the strength of
+        how good it sounded.
         """
         page = self.client.get("/").text
-        self.assertIn("replies from a person", page)
-        self.assertIn("Autoresponders are not counted", page)
+        self.assertNotIn("Autoresponders are not counted", page)
+        self.assertNotIn("replies from a person", page)
+        self.assertIn("These update themselves", page)
 
     def test_playbook_is_free_and_needs_no_account(self):
         r = self.client.get("/playbook")
@@ -975,3 +988,84 @@ class TestThePublicNumbersCountHonestly(AppTestCase):
         stats = self.main.db.public_stats()
         self.assertEqual(stats["marked"], 2)
         self.assertEqual(stats["heard_back"], 0)
+
+
+class TestThePressedButtonSaysSomething(AppTestCase):
+    """Connecting a mailbox took thirty seconds, and for all of it the screen
+    was identical to before the tap. Harry pressed it three times in nine
+    minutes, which is the correct reading of a button that looks inert.
+
+    Every form here posts and waits on a server, so the fix belongs in the
+    base template rather than on one button.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.page = self.client.get("/dashboard").text
+
+    def test_a_pressed_button_is_marked_busy(self):
+        self.assertIn('setAttribute("aria-busy", "true")', self.page)
+
+    def test_the_spinner_is_styled_for_it(self):
+        css = self.client.get("/static/style.css").text
+        self.assertIn('button[aria-busy="true"]::before', css)
+        self.assertIn("jm-spin", css)
+
+    def test_the_disable_is_deferred_past_the_submit_event(self):
+        """The whole feature is a foot-gun without this line.
+
+        A submit button disabled INSIDE its own submit handler is dropped
+        from the form data by the browser, so the server stops seeing which
+        button was pressed - a change that looks purely cosmetic silently
+        breaks the post underneath it. The disable therefore has to happen on
+        a later tick, and a future edit that "tidies" the setTimeout away
+        would reintroduce it with no visible symptom until somebody's letter
+        failed to send.
+        """
+        self.assertIn("setTimeout(function () { button.disabled = true; }, 0)",
+                      self.page)
+        # And it is genuinely deferred, not merely written with a timeout
+        # somewhere else on the page: nothing disables the button inline.
+        self.assertNotIn("button.disabled = true;\n", self.page)
+
+    def test_a_cancelled_submit_does_not_leave_it_spinning(self):
+        self.assertIn("if (e.defaultPrevented) return;", self.page)
+
+    def test_going_back_does_not_hand_over_a_dead_form(self):
+        """bfcache restores the page mid-submit, disabled button and all."""
+        self.assertIn('"pageshow"', self.page)
+
+    def test_reduced_motion_still_gets_the_signal(self):
+        """The animation goes; the meaning must not go with it."""
+        css = self.client.get("/static/style.css").text
+        reduced = css.split("prefers-reduced-motion")[1]
+        self.assertIn('aria-busy="true"', reduced)
+
+
+class TestTheDashboardDoesNotListWhatItSkipped(AppTestCase):
+    """"Looked at, not written to" listed every rejected listing with its
+    reason. Harry asked for it gone: it was the longest thing on the page,
+    it grew every day whatever happened, and not one line of it was something
+    he could act on.
+
+    The reasons are still recorded - seen_listings keeps them, and that is
+    what stops the same listing being scored twice. They are simply not the
+    dashboard's job.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+        self.main.db.mark_seen(1, "job-1", "no real email address could be "
+                                           "found; nothing is guessed")
+
+    def test_the_section_is_gone(self):
+        page = self.client.get("/dashboard").text
+        self.assertNotIn("Looked at, not written to", page)
+        self.assertNotIn("nothing is guessed", page)
+
+    def test_but_the_reason_is_still_recorded(self):
+        rows = self.main.db.recent_outcomes(1)
+        self.assertEqual(len(rows), 1)
+        self.assertIn("nothing is guessed", rows[0]["outcome"])

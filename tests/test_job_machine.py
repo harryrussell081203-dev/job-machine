@@ -4292,3 +4292,119 @@ class TestTheSearchMatchesWhatHeSaidHeWouldTake(unittest.TestCase):
         job = {"title": "Technician", "company": "Nowhere Ltd",
                "description": "x", "contact_email": ""}
         self.assertFalse((job.get("contact_email") or "").strip())
+
+
+class TestPublishingTheTrackRecord(unittest.TestCase):
+    """The website's headline numbers used to be typed into a template by
+    hand - 26 sent, 7 replies, 27%, captioned "a fortnight in August 2026" -
+    and were frozen from the day they were written while the real figures
+    went on climbing without them.
+
+    The machine that owns the numbers now publishes them and the website
+    reads what it wrote. One direction only: this writes a small file, the
+    product reads it, and there is no path back from the website to the job
+    hunt. No shared database, no shared credentials.
+    """
+
+    def setUp(self):
+        # Only STATE_PATH is redirected, deliberately. The published summary
+        # has to follow the state it summarises without being told to - see
+        # test_the_publication_follows_the_state_file.
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "track_record.json")
+        self.real, jm.STATE_PATH = jm.STATE_PATH, os.path.join(self.dir,
+                                                               "state.json")
+        self.addCleanup(lambda: setattr(jm, "STATE_PATH", self.real))
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def state(self, **counts):
+        jobs, n = {}, 0
+        for status, how_many in counts.items():
+            for _ in range(how_many):
+                n += 1
+                jobs[str(n)] = {"status": status, "company": f"Firm {n}"}
+        return {"jobs": jobs}
+
+    def published(self):
+        with open(self.path) as f:
+            return json.load(f)
+
+    def test_it_writes_the_numbers_the_site_quotes(self):
+        jm.publish_track_record(self.state(sent=86, replied=30))
+        out = self.published()
+        self.assertEqual(out["applications"], 116)
+        self.assertEqual(out["replies"], 30)
+        self.assertEqual(out["reply_rate"], 26)
+
+    def test_it_agrees_with_lifetime_stats_rather_than_counting_again(self):
+        """A second counter for the same number is a second number to be
+        wrong, and this project has already been caught quoting three
+        different figures for how many applications had gone out."""
+        state = self.state(sent=41, replied=17, no_email=300, skipped=9000)
+        stats = jm.lifetime_stats(state)
+        jm.publish_track_record(state)
+        out = self.published()
+        self.assertEqual(out["applications"], stats["applications_ever"])
+        self.assertEqual(out["replies"], stats["replies"])
+        self.assertEqual(out["reply_rate"], stats["reply_rate"])
+        self.assertEqual(out["employers"], stats["companies_ever"])
+
+    def test_it_does_not_fall_when_a_reply_arrives(self):
+        """The published figure inherits the monotonic rule, or the front
+        page goes backwards on the machine's best days."""
+        jm.publish_track_record(self.state(sent=79, replied=23))
+        before = self.published()
+        jm.publish_track_record(self.state(sent=78, replied=24))
+        after = self.published()
+        self.assertEqual(before["applications"], after["applications"])
+        self.assertGreater(after["replies"], before["replies"])
+
+    def test_saving_state_publishes_it(self):
+        """Not a separate step somebody has to remember. This project has
+        already had a stage sit behind a flag nobody passed, doing nothing
+        for a fortnight while being reported as working."""
+        jm.save(self.state(sent=5, replied=1))
+        self.assertEqual(self.published()["applications"], 6)
+
+    def test_the_publication_follows_the_state_file(self):
+        """The bug this caught, which only showed up on the live page.
+
+        The path was a fixed constant while STATE_PATH was a variable, so
+        every test in this suite that saved a fixture published its numbers
+        over the real ones. The landing page read back "1000 applications, 0
+        replies, 0%" - a summary of a throwaway temporary directory, printed
+        to the public as the founder's track record.
+
+        A summary that can be separated from the thing it summarises will be,
+        so it is derived rather than configured.
+        """
+        self.assertEqual(os.path.dirname(jm.track_record_path()),
+                         os.path.dirname(jm.STATE_PATH))
+        jm.publish_track_record(self.state(sent=2, replied=1))
+        self.assertTrue(os.path.exists(self.path),
+                        "published beside the state it describes")
+
+    def test_an_explicit_path_still_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            chosen = os.path.join(tmp, "elsewhere.json")
+            real, jm.TRACK_RECORD_PATH = jm.TRACK_RECORD_PATH, chosen
+            try:
+                jm.publish_track_record(self.state(sent=2, replied=1))
+                self.assertTrue(os.path.exists(chosen))
+            finally:
+                jm.TRACK_RECORD_PATH = real
+
+    def test_an_unwritable_path_does_not_fail_the_run(self):
+        """Best effort on purpose. A machine that cannot update the marketing
+        copy has still done its actual job."""
+        real, jm.TRACK_RECORD_PATH = (jm.TRACK_RECORD_PATH,
+                                      "/proc/nope/track_record.json")
+        try:
+            record = jm.publish_track_record(self.state(sent=3, replied=1))
+        finally:
+            jm.TRACK_RECORD_PATH = real
+        self.assertEqual(record["applications"], 4)     # returned, not raised
+
+    def test_nothing_sent_is_not_a_division_by_zero(self):
+        jm.publish_track_record({"jobs": {}})
+        self.assertEqual(self.published()["reply_rate"], 0)

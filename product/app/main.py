@@ -32,6 +32,7 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
+from . import track_record  # noqa: E402
 
 log = logging.getLogger("recruited")
 
@@ -72,7 +73,12 @@ def render(request: Request, template: str, **ctx):
     return templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
-         "is_admin": bool(user and config.is_admin(user["email"])), **ctx})
+         "is_admin": bool(user and config.is_admin(user["email"])),
+         # Every page, because the meta description in base.html quotes it and
+         # base.html is every page. Cached on the file's mtime, so this is a
+         # dictionary lookup rather than a read. None if nothing is published,
+         # and each template is written to make no claim in that case.
+         "record": track_record.read(), **ctx})
 
 
 def needs_login():
@@ -281,10 +287,7 @@ def dashboard(request: Request):
     return render(request, "dashboard.html", user=user,
                   profile=db.load_profile(user["id"]),
                   counts=db.counts(user["id"]),
-                  drafts=db.list_drafts(user["id"], limit=5),
-                  # Why nothing came through is as important as what did. A
-                  # quiet day with no explanation reads as a broken product.
-                  outcomes=db.recent_outcomes(user["id"], limit=8))
+                  drafts=db.list_drafts(user["id"], limit=5))
 
 
 @app.post("/run")
