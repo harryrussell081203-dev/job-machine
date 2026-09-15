@@ -13,6 +13,49 @@
     <div class="stat"><b>{{ counts.get('discarded', 0) }}</b><span>discarded</span></div>
   </div>
 
+  {# Whether the machine is on, and the last thing it actually did.
+     Deliberately no "next run at 11:10": that schedule is GitHub's, and
+     GitHub delays scheduled workflows under load and drops the ones it
+     cannot place. Printing a time that may not arrive is how a product
+     teaches somebody to stop believing it. #}
+  <div class="panel machine">
+    {% if not machine.mailbox %}
+      <p><b>Not sending yet.</b> Connect a mailbox and letters go out on their
+         own, from your own address.</p>
+      <p><a class="btn small" href="/setup/mail">Connect a mailbox</a></p>
+    {% elif not machine.auto_send %}
+      <p><b>Writing, not sending.</b> Letters are being written for you and
+         are waiting for you to send them.</p>
+      <p><a class="btn small ghost" href="/account">Turn on automatic
+         sending</a></p>
+    {% elif machine.paused %}
+      <p><b>Paused.</b> Nothing will go out until you start it again.</p>
+      <p><a class="btn small ghost" href="/account">Settings</a></p>
+    {% else %}
+      <p><b>On.</b> Letters go out on their own, up to
+         {{ machine.daily_cap }} a day, each one held
+         {{ machine.hold_minutes }} minutes after it is written so you can
+         stop it.</p>
+      <p class="muted">
+        {%- if machine.sent_today -%}
+          {{ machine.sent_today }} sent today, {{ machine.left_today }} left.
+        {%- else -%}
+          Nothing sent today yet &mdash; {{ machine.left_today }} to spend.
+        {%- endif -%}
+        {% if machine.waiting %} {{ machine.waiting }} waiting in the
+          queue.{% endif %}
+      </p>
+    {% endif %}
+    {% if machine.last_looked_at or machine.last_sent_at %}
+      <p class="hint">
+        {%- if machine.last_looked_at %}Last looked for work
+          {{ machine.last_looked_at | ago }}.{% endif %}
+        {%- if machine.last_sent_at %} Last letter went
+          {{ machine.last_sent_at | ago }}.{% endif %}
+      </p>
+    {% endif %}
+  </div>
+
   {# Rendered from the server on load AND updated by polling, so it is correct
      on first paint, survives a refresh, and still tells you something with
      JavaScript switched off. #}

@@ -24,20 +24,37 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 sys.path.insert(0, HERE)
 
+from cryptography.fernet import Fernet  # noqa: E402
 from test_app import AppTestCase  # noqa: E402
 from test_runner import PROFILE  # noqa: E402
+from test_sending import Base as SendingBase  # noqa: E402
 
 
 class Base(AppTestCase):
+    # AppTestCase does not set one, so any test here that connects a mailbox
+    # would fail inside the vault rather than on the thing it is testing.
+    env = {"CREDENTIAL_KEY": Fernet.generate_key().decode()}
+
     def setUp(self):
         super().setUp()
         self.db = self.main.db
+        self.autosend = sys.modules["app.autosend"]
+        self.sent = []
         self.uid = self.db.get_or_create_user("sam@example.com")["id"]
         self.sign_in("sam@example.com")
         # The suite's one valid profile. Profile.from_dict validates far
         # more than save_profile does, so a hand-rolled dict here passes the
         # save and then fails inside the run.
         self.db.save_profile(self.uid, dict(PROFILE, email="sam@example.com"))
+
+    def fake_send(self, **kw):
+        self.sent.append(kw)
+
+    # The same stub the sending suite uses, borrowed rather than
+    # copied: it patches both the sys.modules entry AND the package
+    # attribute, and a second copy of that subtlety is a second
+    # copy to get wrong.
+    no_drafting = SendingBase.no_drafting
 
     def fake_runner(self, work):
         """Replace the pipeline with `work(user_id, on_step)`."""
@@ -383,3 +400,106 @@ class TestScoringReportsItsProgress(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheDashboardSaysWhetherItIsOn(Base):
+    """"Is this thing actually running?" is the question somebody has when
+    they open the app, and until now nothing on the screen answered it.
+
+    Every figure in this panel is something that HAPPENED. The obvious version
+    says "next run at 11:10", and that would be a lie: the schedule is
+    GitHub's, and GitHub delays scheduled workflows under load and drops the
+    ones it cannot place - this repository's own sweep ran twice on a day it
+    was set to run three times, and never at a listed minute.
+    """
+
+    def test_it_says_what_is_stopping_it_in_the_order_it_stops(self):
+        status = self.db.machine_status(self.uid)
+        self.assertFalse(status["mailbox"])
+        self.assertIn("Connect a mailbox", self.client.get("/dashboard").text)
+
+    def test_a_mailbox_without_automatic_sending_says_so(self):
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        page = self.client.get("/dashboard").text
+        self.assertIn("Writing, not sending", page)
+
+    def test_when_it_is_on_it_says_what_it_will_spend(self):
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        self.db.save_send_settings(self.uid, auto_send=1, daily_cap=12,
+                                   hold_minutes=60)
+        page = self.client.get("/dashboard").text
+        self.assertIn("up to\n         12 a day", page.replace("\r", ""))
+        self.assertIn("12 to spend", page)
+
+    def test_it_never_promises_a_time_it_cannot_keep(self):
+        """The rule this panel exists under. GitHub's scheduler is late and
+        lossy, so a printed "next run" is how a product teaches somebody to
+        stop believing it."""
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        self.db.save_send_settings(self.uid, auto_send=1)
+        page = self.client.get("/dashboard").text
+        for promise in ("Next run", "next run", "will run at", "Next sweep"):
+            self.assertNotIn(promise, page)
+
+    def test_it_reports_the_last_thing_it_actually_did(self):
+        self.db.record_sent(self.uid, draft_id=None, to_email="a@b.com",
+                            company="Acme")
+        status = self.db.machine_status(self.uid)
+        self.assertGreater(status["last_sent_at"], 0)
+        self.assertIn("Last letter went", self.client.get("/dashboard").text)
+
+    def test_a_scheduled_sweep_counts_as_looking_for_work(self):
+        """Before this the app could only see runs somebody pressed a button
+        for, so a machine working overnight looked like a machine doing
+        nothing - which is the opposite of the thing worth showing."""
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        drafted = self.no_drafting()
+
+        self.autosend.sweep(sender=self.fake_send)
+
+        self.assertEqual(drafted, [self.uid])
+        self.assertGreater(self.db.machine_status(self.uid)["last_looked_at"],
+                           0)
+
+    def test_a_sweep_is_never_skipped_to_protect_a_progress_row(self):
+        """start_run() refusing means a hand-started run is already in flight.
+        The drafting must still happen; only the bookkeeping steps aside."""
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=1)
+        self.db.start_run(self.uid)          # somebody is already running one
+        drafted = self.no_drafting()
+
+        self.autosend.sweep(sender=self.fake_send)
+
+        self.assertEqual(drafted, [self.uid], "the sweep was dropped")
+
+
+class TestHowLongAgo(Base):
+    """"twenty minutes ago", not "2026-09-15 08:53". A timestamp makes the
+    reader do arithmetic to answer the only question they have."""
+
+    def ago(self, seconds):
+        return self.main._ago(self.db.now() - seconds)
+
+    def test_it_reads_like_a_person_would_say_it(self):
+        self.assertEqual(self.ago(30), "just now")
+        self.assertEqual(self.ago(600), "10 minutes ago")
+        self.assertEqual(self.ago(3600), "about an hour ago")
+        self.assertEqual(self.ago(4 * 3600), "4 hours ago")
+        self.assertEqual(self.ago(26 * 3600), "yesterday")
+        self.assertEqual(self.ago(3 * 86400), "3 days ago")
+
+    def test_nothing_recorded_says_nothing(self):
+        self.assertEqual(self.main._ago(0), "")
+        self.assertEqual(self.main._ago(None), "")
+
+    def test_a_clock_that_ran_backwards_says_nothing_rather_than_nonsense(self):
+        self.assertEqual(self.main._ago(self.db.now() + 600), "")

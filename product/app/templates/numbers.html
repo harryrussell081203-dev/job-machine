@@ -15,7 +15,7 @@
         <div><b>{{ stats.reply_rate }}%</b><span>replied</span></div>
       {% endif %}
       {% if stats.interviews %}
-        <div><b>{{ stats.interviews }}</b><span>interviews</span></div>
+        <div><b>{{ stats.interviews }}</b><span>interview{{ '' if stats.interviews == 1 else 's' }}</span></div>
       {% endif %}
     </div>
 

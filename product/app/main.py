@@ -46,6 +46,36 @@ app = FastAPI(title="Recruited", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 
+
+def _ago(stamp) -> str:
+    """"twenty minutes ago", not "2026-09-15 08:53".
+
+    A timestamp makes the reader do arithmetic to answer the only question
+    they actually have, which is whether this thing is still alive. Rounded
+    deliberately: "about an hour ago" is as much precision as the answer to
+    that question needs, and pretending to more of it from a schedule that
+    runs late anyway would be false confidence.
+    """
+    try:
+        seconds = db.now() - int(stamp or 0)
+    except (TypeError, ValueError):
+        return ""
+    if not stamp or seconds < 0:
+        return ""
+    if seconds < 90:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} minutes ago"
+    hours = minutes // 60
+    if hours < 24:
+        return "about an hour ago" if hours == 1 else f"{hours} hours ago"
+    days = hours // 24
+    return "yesterday" if days == 1 else f"{days} days ago"
+
+
+templates.env.filters["ago"] = _ago
+
 SESSION_COOKIE = "jm_session"
 
 
@@ -289,6 +319,10 @@ def dashboard(request: Request):
                   profile=db.load_profile(user["id"]),
                   counts=db.counts(user["id"]),
                   drafts=db.list_drafts(user["id"], limit=5),
+                  # Whether the machine is actually on, and the last thing it
+                  # did. Every figure something that happened, never a
+                  # prediction - see db.machine_status.
+                  machine=db.machine_status(user["id"]),
                   # Rendered server-side as well as polled, so the panel is
                   # right on first paint and a browser with no JavaScript
                   # still sees where a run has got to on a refresh.
@@ -496,6 +530,8 @@ def applications(request: Request):
     } for r in rows]
     return render(request, "applications.html", user=user, items=items,
                   stats=db.application_stats(user["id"]),
+                  # What their own sending says, rather than what we believe.
+                  working=db.what_is_working(user["id"]),
                   outcomes=db.OUTCOMES)
 
 

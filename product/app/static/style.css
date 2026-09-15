@@ -518,6 +518,15 @@ label.check input:checked::after {
    took a line of its own and dropped "undo" underneath the outcome instead of
    beside it. */
 .outcome { font-weight: 600; margin: 4px 0 12px; }
+/* "Acme has been in touch - something arrived from <address>" quotes a real
+ * email address, and an address is one unbreakable word. A long one
+ * (firstname.surname@somelongcompany.co.uk) is wider than a phone and pushes
+ * the whole page sideways - the reader gets a horizontal scrollbar on every
+ * screen of a list, from one row.
+ *
+ * Found only after importing 135 real applications. Every address in the test
+ * data was short enough to fit, which is the trouble with test data. */
+.outcome, .meta { overflow-wrap: anywhere; }
 .outcome form { display: inline; margin: 0; }
 .outcome form button { margin-left: 10px; }
 .outcome-offer, .outcome-interview { color: var(--good); }

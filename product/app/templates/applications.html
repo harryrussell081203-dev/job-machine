@@ -22,7 +22,7 @@
   <div class="stat"><b>{{ stats.heard_back }}</b><span>heard back</span></div>
   <div class="stat"><b>{{ stats.reply_rate }}%</b><span>reply rate</span></div>
   {% if stats.interviews %}
-    <div class="stat"><b>{{ stats.interviews }}</b><span>interviews</span></div>
+    <div class="stat"><b>{{ stats.interviews }}</b><span>interview{{ '' if stats.interviews == 1 else 's' }}</span></div>
   {% endif %}
 </div>
 
@@ -51,6 +51,45 @@
        real.</small></p>
   {% endif %}
 </div>
+
+{# What their own sending says. Not shown at all until there is enough of it
+   to mean something: a page that puts "100%" next to one letter teaches
+   somebody to distrust everything else on it. #}
+{% if working.enough %}
+  <h2>What is working for you</h2>
+  <div class="panel">
+    {% if working.lesson %}
+      <p><b>Writing to {{ working.lesson.best.name }} is getting you
+         {{ working.lesson.gap }} points more than
+         {{ working.lesson.worst.name }}.</b> That is from your own letters,
+         not from us.</p>
+    {% endif %}
+    {# stacked as well as scroll: four columns do not fit a phone, and .scroll
+       on its own just puts the rate - the column the whole table exists for -
+       off the right-hand edge with nothing to say so. #}
+    <div class="scroll stacked">
+      <table>
+        <tr><th>Who you wrote to</th><th class="num">Sent</th>
+            <th class="num">Heard back</th><th class="num">Rate</th></tr>
+        {% for c in working.contacts %}
+          <tr>
+            <td data-label="Who you wrote to">{{ c.name|capitalize }}</td>
+            <td data-label="Sent" class="num">{{ c.sent }}</td>
+            <td data-label="Heard back" class="num">{{ c.heard }}</td>
+            <td data-label="Rate" class="num">
+              {%- if c.rate is not none %}{{ c.rate }}%
+              {%- else %}&mdash;{% endif -%}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+    <p class="hint">A rate appears once a row has at least
+       {{ working.min_for_a_breakdown }} letters in it. Below that one lucky
+       reply reads as a third, and you would change your search on nothing.
+       A rejection counts as hearing back but not as a reply.</p>
+  </div>
+{% endif %}
 
 {% for item in items %}
   {% set d = item.row %}

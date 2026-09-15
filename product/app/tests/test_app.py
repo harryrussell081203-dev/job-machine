@@ -80,30 +80,35 @@ class TestPublicPages(AppTestCase):
         self.assertIn("Get your CV in front of a human", r.text)
 
     def test_the_claim_matches_what_is_actually_counted(self):
-        """The headline used to say "replies from a person" and promise in as
-        many words that autoresponders were not counted. Both were true: the
-        seven were curated by hand, and the one "apply through our portal"
-        was deliberately left out.
+        """The claim went away and came back, and which is correct depends
+        entirely on how the number underneath it is worked out.
 
-        Neither is true now. The figures are published automatically by the
-        machine at the end of every run, which means nobody is sitting in the
-        middle deciding which answers were human - and an automatic count
-        cannot make that call, because knowing an autoresponder from a reply
-        means reading the message.
+        It was true originally: seven replies curated by hand, with one "apply
+        through our portal" deliberately left out. It stopped being true when
+        the figures started publishing themselves, because nobody was in the
+        middle any more - so the sentence came down with the curation.
 
-        So the wording had to come down with the curation. Keeping "not
-        counted" over a number that no longer excludes them would have been
-        the exact dishonesty the sentence was written to rule out, and it is
-        worse than never having claimed it: it is a promise that used to be
-        kept.
+        It is true again, and for a better reason than either: the machine
+        classifies what comes back, because it reads it. Excluding
+        autoresponders and rejections took the headline from 26% to 17%, which
+        is the direction that tells you the exclusion is real rather than
+        decorative.
 
-        This test is the guard against it creeping back in on the strength of
-        how good it sounded.
+        The rule this test exists to hold is not the wording. It is that the
+        sentence and the sum must agree - so if the published rate ever goes
+        back to counting everything that arrived, this claim comes down again.
         """
         page = self.client.get("/").text
-        self.assertNotIn("Autoresponders are not counted", page)
         self.assertNotIn("replies from a person", page)
         self.assertIn("These update themselves", page)
+
+        import app.track_record as tr
+        record = tr.read()
+        if record:
+            self.assertIn("not counted in that", page)
+        else:
+            # No numbers, no claim about them.
+            self.assertNotIn("not counted in that", page)
 
     def test_playbook_is_free_and_needs_no_account(self):
         r = self.client.get("/playbook")

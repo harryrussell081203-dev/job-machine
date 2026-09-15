@@ -373,6 +373,15 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
 # already-applied migration silently killed every migration after it.
 _ADDED_COLUMNS = [
     ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
+    # Where a row came from when it was not written here. Empty for everything
+    # the product produced itself; the personal machine's own listing id for
+    # an application carried across from the founder's history.
+    #
+    # It exists to make that import repeatable. Without a handle on the row,
+    # running the importer twice doubles somebody's application count and
+    # halves their reply rate, and there is no way to tell the copies apart
+    # afterwards to undo it.
+    ("drafts", "imported_ref", "TEXT NOT NULL DEFAULT ''"),
     ("users", "free_spot", "INTEGER NOT NULL DEFAULT 0"),
     # How this mailbox sends. 'own' is a user's own SMTP credentials and is
     # the default precisely because every row that existed before this column

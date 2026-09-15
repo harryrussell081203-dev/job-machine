@@ -3851,14 +3851,42 @@ def lifetime_stats(state):
     awaiting = count("sent")
     replied = count("replied")
     ever = awaiting + replied
+
+    # A REPLY IS NOT EVERY MESSAGE THAT CAME BACK.
+    #
+    # `status == "replied"` means something arrived. Of the 31 that had, five
+    # were "thank you for your application, we will be in touch" and five were
+    # rejections - so the 26% the website printed was a third made of an
+    # autoresponder and a no.
+    #
+    # This machine classifies replies, because it reads them. That is
+    # knowledge the product could never work out for itself, and spending it
+    # on a headline rather than an honest one would be the exact flattery the
+    # site is built not to do. A rejection is hearing back and is deliberately
+    # not a reply here, on the same rule the product already applies: fold it
+    # in and the number improves as things go worse.
+    #
+    # An unclassified reply still counts. It is a real message from a human
+    # that nobody has categorised, and dropping it would understate by nine.
+    jobs_replied = [j for j in jobs if j.get("status") == "replied"]
+    not_a_reply = ("auto_acknowledgement", "rejection")
+    real_replies = sum(1 for j in jobs_replied
+                       if j.get("reply_category") not in not_a_reply)
+    autoresponders = sum(1 for j in jobs_replied
+                         if j.get("reply_category") == "auto_acknowledgement")
     binned = collections.Counter(
         j.get("skip_reason") or "unexplained"
         for j in jobs if j.get("status") == "no_email")
     return {
         # monotonic - safe to quote
         "applications_ever": ever,
-        "replies": replied,
-        "reply_rate": round(100 * replied / ever) if ever else 0,
+        # The one worth printing: messages from a human that were not a no.
+        "replies": real_replies,
+        "reply_rate": round(100 * real_replies / ever) if ever else 0,
+        # Kept and labelled rather than dropped, so the difference between
+        # "something came back" and "somebody answered" stays visible.
+        "heard_back": replied,
+        "autoresponders": autoresponders,
         "speculative_notes": count("spec_sent"),
         "portal_submitted": count("portal_submitted"),
         "support_letters": len(state.get("support_asked") or {}),
