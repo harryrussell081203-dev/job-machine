@@ -195,7 +195,7 @@ def parse_scores(raw, batch_size: int) -> dict:
 
 
 def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
-          batch_size: int = BATCH_SIZE) -> dict:
+          batch_size: int = BATCH_SIZE, on_batch=None) -> dict:
     """Score every listing. Returns {"passed": [...], "rejected": [...]}.
 
     `ai` is any callable taking a prompt and returning the model's text. Kept
@@ -204,6 +204,11 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
 
     Each returned listing carries `.score` and `.score_reason`, so a user can
     always be told why something did or did not reach them.
+
+    `on_batch(done, total)` is called after each batch comes back. This is by
+    far the slowest part of a run - a free-tier model answers one batch at a
+    time with seconds between calls - so it is the part a person watching most
+    needs to see moving. Optional, and the scheduled sweep passes nothing.
     """
     passed, rejected = [], []
     to_score = []
@@ -221,8 +226,20 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
         else:
             to_score.append(listing)
 
+    def report(done):
+        if on_batch:
+            try:
+                on_batch(done, len(to_score))
+            except Exception:
+                # Never let the commentary break the scoring it describes.
+                pass
+
+    report(0)
     for start in range(0, len(to_score), batch_size):
         batch = to_score[start:start + batch_size]
+        # Reported before the call, not after: the whole point is to say what
+        # is happening DURING the wait, and the wait is the call itself.
+        report(start)
         try:
             scores = parse_scores(ai(build_prompt(batch, profile)), len(batch))
         except Exception as exc:
@@ -244,5 +261,6 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
                 listing.skipped = f"scored {value}: {reason}"
                 rejected.append(listing)
 
+    report(len(to_score))
     passed.sort(key=lambda l: l.score, reverse=True)
     return {"passed": passed, "rejected": rejected}

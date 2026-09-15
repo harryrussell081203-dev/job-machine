@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -287,23 +288,74 @@ def dashboard(request: Request):
     return render(request, "dashboard.html", user=user,
                   profile=db.load_profile(user["id"]),
                   counts=db.counts(user["id"]),
-                  drafts=db.list_drafts(user["id"], limit=5))
+                  drafts=db.list_drafts(user["id"], limit=5),
+                  # Rendered server-side as well as polled, so the panel is
+                  # right on first paint and a browser with no JavaScript
+                  # still sees where a run has got to on a refresh.
+                  progress=db.run_progress(user["id"]))
 
 
 @app.post("/run")
 def run_now(request: Request):
-    """Look for work now, rather than waiting for the next scheduled sweep."""
+    """Look for work now, rather than waiting for the next scheduled sweep.
+
+    Starts the work and returns straight away, rather than holding the request
+    open until it finishes. A run is minutes long - the job boards, then a
+    free-tier model reading every listing a batch at a time - and the old
+    version simply did not answer for all of it. On a phone that is a white
+    screen with a spinner, then very often a proxy timeout and an error page
+    for a run that actually worked.
+
+    Returning immediately also means the person can leave. Lock the phone,
+    come back, and the dashboard picks the progress back up, because it lives
+    in the database rather than in this request.
+    """
     user = current_user(request)
     if not user:
         return needs_login()
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
 
-    # A person is watching this page, so rate limits must not be waited out.
-    report = runner.run_for_user(user["id"], interactive=True)
-    print(f"[run] user {user['id']}: {report.summary()}")
-    return RedirectResponse("/drafts" if report.drafted else "/dashboard",
-                            status_code=303)
+    user_id = user["id"]
+    if not db.start_run(user_id):
+        # Already going. Not an error and not a second run - two taps half a
+        # second apart on a phone is the normal case, not the odd one.
+        return RedirectResponse("/dashboard", status_code=303)
+
+    def work():
+        try:
+            # A person is watching, so rate limits must not be waited out.
+            report = runner.run_for_user(
+                user_id, interactive=True,
+                on_step=lambda text, **counts: db.set_run_step(
+                    user_id, text, **counts))
+            print(f"[run] user {user_id}: {report.summary()}")
+            db.finish_run(user_id, result=report.summary(),
+                          drafted=report.drafted)
+        except Exception as exc:
+            # This thread is nobody's caller, so an exception here would
+            # otherwise vanish into the log and leave the page waiting for a
+            # run that has already died.
+            print(f"[run] user {user_id} failed: {exc}")
+            db.finish_run(user_id, result=f"It stopped: {exc}", ok=False)
+
+    threading.Thread(target=work, daemon=True,
+                     name=f"run-{user_id}").start()
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@app.get("/run/progress")
+def run_progress(request: Request):
+    """What the run is doing, for the bar on the dashboard to read.
+
+    Deliberately small and deliberately boring: it is polled every couple of
+    seconds by anybody watching a run, so it does one indexed lookup by
+    primary key and returns a handful of fields.
+    """
+    user = current_user(request)
+    if not user:
+        return JSONResponse({"state": "none"}, status_code=401)
+    return JSONResponse(db.run_progress(user["id"]) or {"state": "none"})
 
 
 @app.get("/profile", response_class=HTMLResponse)

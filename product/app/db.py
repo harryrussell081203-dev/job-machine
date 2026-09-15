@@ -774,6 +774,122 @@ def save_send_settings(user_id: int, **fields) -> None:
              int(current["search_days"]), current["paused_until"], now()))
 
 
+# ----------------------------------------------------------------------
+# what a run is doing while somebody watches
+# ----------------------------------------------------------------------
+# A run that has said nothing for this long is treated as dead.
+#
+# The background thread can be killed without getting the chance to write
+# anything - the host restarts, the container is recycled, the process runs
+# out of memory. Without this the page would show a bar creeping nowhere for
+# ever, which is a worse failure than an error, because an error at least
+# tells somebody to press the button again.
+#
+# Generous, because the slow step is Gemini on a free tier answering one
+# listing at a time with six seconds between calls, and declaring a working
+# run dead is its own kind of lie.
+RUN_STALE_AFTER = 300
+
+
+def start_run(user_id: int) -> bool:
+    """Claim the right to run for this user. False if one is already going.
+
+    The claim and the check are one statement, because two taps on a phone
+    half a second apart are not hypothetical and the second must lose. The
+    condition is in the WHERE of the UPDATE rather than in a read followed by
+    a write, so the database decides rather than two racing requests.
+    """
+    stamp = now()
+    with connect() as c:
+        row = c.execute("SELECT state, updated_at FROM run_progress "
+                        "WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row["state"] == "running" and (
+                stamp - int(row["updated_at"] or 0)) < RUN_STALE_AFTER:
+            return False
+        c.execute(
+            "INSERT INTO run_progress (user_id, state, step, done, total, "
+            "drafted, result, started_at, updated_at) "
+            "VALUES (?, 'running', ?, 0, 0, 0, '', ?, ?) "
+            "ON CONFLICT (user_id) DO UPDATE SET state = 'running', "
+            "step = excluded.step, done = 0, total = 0, drafted = 0, "
+            "result = '', started_at = excluded.started_at, "
+            "updated_at = excluded.updated_at",
+            (user_id, "Getting started", stamp, stamp))
+    return True
+
+
+def set_run_step(user_id: int, step: str, *, done: int | None = None,
+                 total: int | None = None, drafted: int | None = None) -> None:
+    """Say what is happening now. Never raises: progress is not the work.
+
+    A failure to report must not take down the run it is reporting on. The
+    person loses the commentary and still gets their letters, which is the
+    right way round.
+    """
+    try:
+        sets = ["step = ?", "updated_at = ?"]
+        values = [step[:200], now()]
+        for name, value in (("done", done), ("total", total),
+                            ("drafted", drafted)):
+            if value is not None:
+                sets.insert(0, f"{name} = ?")
+                values.insert(0, int(value))
+        values.append(user_id)
+        with connect() as c:
+            c.execute(f"UPDATE run_progress SET {', '.join(sets)} "
+                      f"WHERE user_id = ?", tuple(values))
+    except Exception:
+        pass
+
+
+def finish_run(user_id: int, *, result: str, ok: bool = True,
+               drafted: int = 0) -> None:
+    try:
+        with connect() as c:
+            c.execute("UPDATE run_progress SET state = ?, step = '', "
+                      "result = ?, drafted = ?, updated_at = ? "
+                      "WHERE user_id = ?",
+                      ("done" if ok else "failed", (result or "")[:300],
+                       int(drafted), now(), user_id))
+    except Exception:
+        pass
+
+
+def run_progress(user_id: int) -> dict | None:
+    """What to show the person watching, or None if they have never run one."""
+    with connect() as c:
+        row = c.execute("SELECT * FROM run_progress WHERE user_id = ?",
+                        (user_id,)).fetchone()
+    if not row:
+        return None
+
+    state = row["state"]
+    stamp = now()
+    age = stamp - int(row["updated_at"] or 0)
+    if state == "running" and age >= RUN_STALE_AFTER:
+        # Nothing has reported in for minutes, so the thread doing the work is
+        # gone and nobody is coming back to say so. Say it stopped rather than
+        # animating a bar at somebody indefinitely.
+        state = "failed"
+
+    done, total = int(row["done"] or 0), int(row["total"] or 0)
+    return {
+        "state": state,
+        "step": row["step"] or "",
+        "done": done, "total": total,
+        "drafted": int(row["drafted"] or 0),
+        # None, not 0, when there is nothing to base a fraction on. The bar
+        # shows an indeterminate stripe for that rather than sitting at 0%,
+        # which reads as broken when it only means "counting".
+        "percent": round(100 * done / total) if total else None,
+        "result": row["result"] or ("It stopped part way through. "
+                                    "Press the button again."
+                                    if state == "failed" and not row["result"]
+                                    else ""),
+        "seconds": max(0, stamp - int(row["started_at"] or stamp)),
+    }
+
+
 def record_sent(user_id: int, *, draft_id, to_email: str, company: str,
                 ok: bool = True, error: str = "") -> None:
     with connect() as c:

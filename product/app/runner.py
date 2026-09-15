@@ -56,14 +56,29 @@ def credentials() -> harvest.Credentials:
 
 def run_for_user(user_id: int, *, ai=None, session=None,
                  cap: int = DEFAULT_DRAFT_CAP, delay: float | None = None,
-                 interactive: bool = False) -> RunReport:
+                 interactive: bool = False, on_step=None) -> RunReport:
     """Produce drafts for one user. Never raises for one bad listing.
 
     `interactive` says a person is waiting on this. It picks the model caller
     that refuses to sit out a rate limit, because the server has one worker
     and a sleeping request blocks the whole app.
+
+    `on_step(text, done=, total=, drafted=)` is called as the run moves
+    between stages, so a screen can say what is happening. A callback rather
+    than anything this module knows about: the scheduled sweep passes nothing
+    and behaves exactly as it always has, and nothing in here has to learn
+    what a web page is.
     """
     report = RunReport()
+
+    def step(text, **counts):
+        if on_step:
+            try:
+                on_step(text, **counts)
+            except Exception:
+                # Reporting is not the work. If the commentary breaks, the
+                # letters still get written.
+                pass
 
     raw = db.load_profile(user_id)
     if not raw:
@@ -86,6 +101,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     # ago has three hundred - but a new account with an empty queue has every
     # reason to widen it once and catch up on what it missed.
     settings = db.get_send_settings(user_id)
+    step(f"Searching the job boards for the last "
+         f"{settings['search_days']} days")
     found = harvest.harvest(profile, credentials(), session=session,
                             known_ids=seen,
                             exclude_titles=profile.exclude_titles,
@@ -98,6 +115,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     # Drop anything belonging to an employer already written to, or blocked,
     # BEFORE scoring. There is no sense paying a model to judge a listing that
     # could never be sent.
+    step(f"Found {report.harvested} listings. Setting aside employers you "
+         f"have already written to")
     candidates = []
     for listing in found["keep"]:
         if db.is_blocked(user_id, listing.company):
@@ -111,14 +130,24 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         else:
             candidates.append(listing)
 
-    judged = scoring.score(candidates, profile, ai)
+    judged = scoring.score(
+        candidates, profile, ai,
+        on_batch=lambda done, total: step(
+            f"Scoring {total} job{'' if total == 1 else 's'} against your "
+            f"profile", done=done, total=total))
     for listing in judged["rejected"]:
         report.scored_out += 1
         db.mark_seen(user_id, listing.external_id, listing.skipped)
 
-    for listing in judged["passed"]:
+    shortlist = judged["passed"][:cap]
+    for i, listing in enumerate(shortlist):
         if report.drafted >= cap:
             break
+        # Named, because "Writing to Kestrel Foods" is the moment somebody
+        # watching stops wondering whether it works. A bare percentage never
+        # does that.
+        step(f"Finding a real address at {listing.company or 'the employer'}",
+             done=i, total=len(shortlist), drafted=report.drafted)
         try:
             _draft_one(user_id, listing, profile, ai, session, report, **kwargs)
         except Exception as exc:
@@ -126,6 +155,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
             report.errors.append(f"{listing.external_id}: {exc}")
             db.mark_seen(user_id, listing.external_id, f"error: {exc}"[:200])
 
+    step("Finishing up", done=len(shortlist), total=len(shortlist),
+         drafted=report.drafted)
     return report
 
 

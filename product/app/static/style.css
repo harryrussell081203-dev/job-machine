@@ -258,6 +258,46 @@ button[aria-busy="true"]:active, .btn[aria-busy="true"]:active {
 }
 @keyframes jm-spin { to { transform: rotate(360deg); } }
 
+/* "Look for work now" takes minutes: the job boards, then a free-tier model
+ * reading every listing a batch at a time. A bar on its own would not be
+ * worth much - what somebody waiting actually wants to know is that it is
+ * still going and what it is doing, so the SENTENCE is the feature and the
+ * bar is the supporting act.
+ */
+.run .runstep { font-weight: 500; margin: 0 0 10px; }
+.run .runmeta { font-size: 13px; margin: 8px 0 0; }
+.run .runmeta:empty { display: none; }
+
+.runbar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.runbar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  /* Eased, because a bar that jumps in steps reads as a series of stalls. */
+  transition: width .45s ease;
+}
+
+/* Nothing yet knows how many listings there are - the job boards have not
+ * answered. A bar sitting at 0% reads as broken when it only means
+ * "counting", so it sweeps instead and claims no number at all.
+ */
+.runbar[data-unsure="1"] > span {
+  width: 35% !important;
+  transition: none;
+  animation: jm-sweep 1.4s ease-in-out infinite;
+}
+@keyframes jm-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
 button.ghost, .btn.ghost {
   background: transparent;
   color: var(--ink);
@@ -600,6 +640,13 @@ footer .legal a { text-decoration: underline; text-underline-offset: 2px; }
   button[aria-busy="true"]::before, .btn[aria-busy="true"]::before {
     border-top-color: currentColor;
     opacity: .5;
+  }
+  /* The sweep stops, so a 35% stub would sit there looking like a real and
+     wrong measurement. Fill it and fade it instead: clearly "working, no
+     number yet" rather than "just over a third done". */
+  .runbar[data-unsure="1"] > span {
+    width: 100% !important;
+    opacity: .35;
   }
 }
 
