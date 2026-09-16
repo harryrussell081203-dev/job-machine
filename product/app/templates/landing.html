@@ -29,11 +29,22 @@ email to the person who actually does the hiring, from your own address.</p>
   <div class="stat"><b>{{ record.replies }}</b><span>replies</span></div>
   <div class="stat"><b>{{ record.reply_rate }}%</b><span>reply rate</span></div>
 </div>
-<p><small>One person, engineering and technician roles in Scotland, every
-letter since August 2026 &mdash; {{ record.employers }} employers. Cold email
-normally runs 1&ndash;5%. These update themselves: the machine publishes them
-at the end of every run, so this is the running total and not a good
-fortnight picked out of it.</small></p>
+{# The evidence is one person's, and saying whose is what makes it checkable.
+   But naming his trade as the ONLY proof on the page quietly tells everybody
+   in a different line of work that this is not for them - and they would be
+   wrong, because nothing in the method knows or cares what the job is. It
+   reads the advert you give it. So: whose numbers these are, and then, in the
+   same breath, why that does not limit who they apply to. #}
+<p><small>Those are the founder's own, every letter since August 2026 across
+{{ record.employers }} employers &mdash; engineering and technician work,
+because his is the only search that has run long enough to count.
+<b>Nothing in it is built around a trade.</b> It reads the advert you paste
+in, scores it against the job you actually want, and digs out a real person
+to write to. A carer, a driver, a bookkeeper and a welder all get the same
+machine. Cold email normally runs 1&ndash;5%.
+These figures update themselves at the end of every run,
+so this is the running total and not a good fortnight picked out of
+it.</small></p>
 <p><small><b>Autoresponders and rejections are not counted in that
 {{ record.reply_rate }}%.</b> The machine reads what comes back and sorts it,
 so "thank you for your application, we will be in touch" is not a reply and
@@ -82,8 +93,11 @@ rate. Finding that person is the part this does for you.</p>
 
 <h2>What it does</h2>
 <div class="panel">
+{# "your trade" reads as skilled manual work. A bookkeeper, a carer or a
+   receptionist does not see themselves in it, and there is no reason they
+   should not - the matching has never cared what the job is. #}
 <p><b>Finds the jobs.</b> Fresh listings only, under 48 hours old, matched to
-your trade and your patch.</p>
+the work you actually want and how far you can travel.</p>
 <p><b>Scores them against you.</b> Below your pay floor never reaches you.
 If you are in work, a sideways move counts for nothing.</p>
 <p><b>Digs out a real address.</b> From the advert, then the company's own

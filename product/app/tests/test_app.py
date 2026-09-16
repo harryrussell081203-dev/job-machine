@@ -100,7 +100,10 @@ class TestPublicPages(AppTestCase):
         """
         page = self.client.get("/").text
         self.assertNotIn("replies from a person", page)
-        self.assertIn("These update themselves", page)
+        # Asserted on the claim, not the sentence: the wording around it
+        # gets edited, and a test that breaks on a comma teaches people to
+        # change the test rather than think about it.
+        self.assertIn("update themselves", page)
 
         import app.track_record as tr
         record = tr.read()
@@ -1074,3 +1077,44 @@ class TestTheDashboardDoesNotListWhatItSkipped(AppTestCase):
         rows = self.main.db.recent_outcomes(1)
         self.assertEqual(len(rows), 1)
         self.assertIn("nothing is guessed", rows[0]["outcome"])
+
+
+class TestThePageIsNotNarrowerThanTheProduct(AppTestCase):
+    """The evidence on the landing page is one person's, and saying whose is
+    what makes it checkable. But for a while his trade was the ONLY thing on
+    the page describing who it was for, which quietly told everybody in a
+    different line of work that this was not for them.
+
+    They would have been wrong. scoring.py's own docstring is explicit that
+    the rubric is derived from the profile rather than written about one man,
+    "so the same code scores a Sheffield fitter and a Bristol lab technician
+    correctly without either of them editing a prompt". It reads the advert it
+    is given and has never known what the job is.
+
+    Harry made the point himself: the audience is anyone out of work.
+    """
+
+    def test_it_says_the_method_is_not_built_around_a_trade(self):
+        page = self.client.get("/").text
+        self.assertIn("Nothing in it is built around a trade", page)
+
+    def test_it_names_somebody_other_than_an_engineer(self):
+        """One concrete non-technical example does more than any amount of
+        "for everybody", which reads as marketing and persuades nobody."""
+        page = self.client.get("/").text
+        self.assertTrue(
+            any(job in page for job in ("carer", "driver", "bookkeeper")),
+            "the only worked example is still a trade")
+
+    def test_it_does_not_promise_only_your_trade(self):
+        """'your trade' reads as skilled manual work, and a receptionist does
+        not see themselves in it."""
+        for path in ("/", "/find"):
+            self.assertNotIn("your trade", self.client.get(path).text, path)
+
+    def test_the_evidence_still_says_whose_it_is(self):
+        """Widening must not become hiding. The numbers are one person's and
+        the page has to keep saying so, or it stops being checkable - which is
+        the only reason to print them."""
+        page = self.client.get("/").text
+        self.assertIn("the founder's own", page)
