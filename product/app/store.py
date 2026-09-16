@@ -263,6 +263,24 @@ CREATE TABLE IF NOT EXISTS rate_hits (
     hits       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (bucket, window_at)
 );
+
+-- How many people reached each page. A tally and nothing else: no cookie, no
+-- address, no marker of any kind that could pick one reader out of it or
+-- follow them from one page to the next. See views.py for why that limit is
+-- deliberate and what it costs.
+CREATE TABLE IF NOT EXISTS page_views (
+    path       TEXT    NOT NULL,
+    -- The referring HOST, or '' for an app tap with no referrer, or 'self'
+    -- for moving around inside the site.
+    source     TEXT    NOT NULL DEFAULT '',
+    -- 'person' or 'robot'. Every share is fetched by a link preview before a
+    -- human sees it, so a page that did not separate them would report a
+    -- crawler as an audience.
+    kind       TEXT    NOT NULL DEFAULT 'person',
+    hour_at    BIGINT  NOT NULL,
+    views      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (path, source, kind, hour_at)
+);
 """
 
 

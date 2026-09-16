@@ -41,6 +41,13 @@
   .chart .stalk.empty { background: var(--line); }
   .chart .tick { font-size: 11px; color: var(--muted); }
   .chart .cnt { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* The signups chart has eight columns and room to breathe. The hourly one
+     has twenty-four, and at an 8px gap on a phone that is 184px of gap in a
+     342px row - the bars shrink to hairlines and the whole thing reads as a
+     rendering fault rather than as a quiet night. */
+  .chart.hours { gap: 2px; }
+  .chart.hours .stalk { border-radius: 2px 2px 0 0; }
 </style>
 
 <h1>Admin</h1>
@@ -65,6 +72,76 @@
       landing page is asking for money again.{% endif %}
   </p>
 {% endif %}
+
+{# The half of the funnel that used to be invisible. Everything below starts
+   at "Signed up", which cannot tell "nobody tapped the link" from "they
+   tapped it, landed, and left" - and those need opposite fixes. #}
+<h2>Before they sign up</h2>
+<div class="panel">
+  {% set seen = traffic_today.people %}
+  {% set robots = traffic_today.robots %}
+  <div class="stats" style="margin-bottom:18px">
+    <div class="stat"><b>{{ traffic_today.total }}</b><span>page views, 24h</span></div>
+    <div class="stat"><b>{{ seen.get('/', 0) }}</b><span>front page</span></div>
+    <div class="stat"><b>{{ seen.get('/find', 0) }}</b><span>free tool</span></div>
+  </div>
+
+  {% if traffic_today.total %}
+    <div class="chart hours" style="height:80px">
+      {% for h in traffic_hours %}
+        <div class="col">
+          <span class="stalk {% if not h.count %}empty{% endif %}"
+                style="height: {{ h.height }}%"
+                title="{{ h.count }} view{{ '' if h.count == 1 else 's' }}"></span>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="muted" style="margin:4px 0 18px"><small>Last 24 hours, one bar an
+      hour, oldest on the left.</small></p>
+
+    <div class="scroll">
+    <table>
+      <tr><th>Page</th><th class="num">People</th><th class="num">Robots</th></tr>
+      {% for path, n in seen.items() %}
+        <tr><td><code>{{ path }}</code></td><td class="num">{{ n }}</td>
+            <td class="num muted">{{ robots.get(path, 0) or '' }}</td></tr>
+      {% endfor %}
+      {% for path, n in robots.items() if path not in seen %}
+        <tr><td><code>{{ path }}</code></td><td class="num">0</td>
+            <td class="num muted">{{ n }}</td></tr>
+      {% endfor %}
+    </table>
+    </div>
+
+    {% if traffic_today.sources %}
+      <h3 style="margin-top:20px">Where they came from</h3>
+      <div class="scroll">
+      <table>
+        <tr><th>Source</th><th class="num">Views</th></tr>
+        {% for name, n in traffic_today.sources.items() %}
+          <tr><td>{{ name }}</td><td class="num">{{ n }}</td></tr>
+        {% endfor %}
+      </table>
+      </div>
+      <p class="muted" style="margin-top:8px"><small>A tap from inside an app
+        &mdash; Snapchat, Instagram, a WhatsApp message &mdash; usually arrives
+        with no referrer at all, so it shows as
+        <b>direct or an app</b>.</small></p>
+    {% endif %}
+  {% else %}
+    <p class="muted">Nothing in the last 24 hours.
+      {% if traffic_week.total %}{{ traffic_week.total }} in the last week.
+      {% else %}Nothing in the last week either.{% endif %}</p>
+  {% endif %}
+
+  <p style="margin-top:14px"><small class="muted"><b>Views, not people.</b>
+  Nothing here identifies anybody &mdash; no cookie, no address, no marker of
+  any kind &mdash; which is deliberate, and the price is that one person
+  refreshing four times counts as four. Robots are counted separately because
+  every share is fetched by a link preview before a human sees it, and a
+  number that was all crawler would read exactly like good
+  news.</small></p>
+</div>
 
 <h2>How far people get</h2>
 <div class="panel">
