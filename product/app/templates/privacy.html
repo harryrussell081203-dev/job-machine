@@ -10,6 +10,17 @@ get rid of it. Written from what the code actually does.</p>
 <div class="panel">
 <p>{{ config.CONTROLLER_NAME }}, based in {{ config.CONTROLLER_LOCATION }}, is
 the data controller for everything described here.</p>
+{# Printed because it is checkable, which is the only reason anything on this
+   site is printed. Somebody deciding whether to hand over a CV and a mailbox
+   password can put this number into the ICO's public register and confirm the
+   registration is real - and a reader who does not care loses nothing. Hidden
+   entirely when unset, rather than shown as a placeholder. #}
+{% if config.ICO_REGISTRATION %}
+<p>Registered with the Information Commissioner's Office,
+   reference <b>{{ config.ICO_REGISTRATION }}</b> &mdash;
+   <a href="https://ico.org.uk/ESDWebPages/Search" rel="noopener">checkable on
+   the public register</a>.</p>
+{% endif %}
 {% if config.CONTACT_EMAIL %}
 <p>Contact: <a href="mailto:{{ config.CONTACT_EMAIL }}">{{ config.CONTACT_EMAIL }}</a>.
    Questions about your data go to the same address as everything else — there

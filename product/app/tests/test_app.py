@@ -1268,3 +1268,40 @@ class TestThePrivacyNoticeMatchesWhatIsDone(AppTestCase):
         page = self.client.get("/privacy").text
         self.assertIn("no tracking pixel", page)
         self.assertIn("third-party script", page)
+class TestTheICORegistration(AppTestCase):
+    """Printed only when it is real, because its only value is being checkable.
+
+    A number a reader can put into the ICO's public register is evidence. A
+    placeholder on a page asking for a CV and a mailbox password is the
+    opposite - it is the same rule as never guessing an email address, turned
+    on a claim about ourselves.
+    """
+
+    def test_it_is_shown_and_can_be_looked_up(self):
+        self.main.config.ICO_REGISTRATION = "ZB999999"
+        try:
+            page = self.client.get("/privacy").text
+            self.assertIn("ZB999999", page)
+            self.assertIn("ico.org.uk", page)
+            self.assertIn("public register", page)
+        finally:
+            self.main.config.ICO_REGISTRATION = ""
+
+    def test_nothing_is_claimed_when_there_is_no_number(self):
+        self.main.config.ICO_REGISTRATION = ""
+        page = self.client.get("/privacy").text
+        self.assertNotIn("Registered with the Information", page)
+        # The page still has to render, and still has to say who the
+        # controller is - that duty does not depend on the fee being paid.
+        self.assertIn("data controller", page)
+
+    def test_the_complaints_route_is_there_either_way(self):
+        """Telling somebody where to complain is a separate duty from being
+        registered, and must not disappear with the number."""
+        for value in ("", "ZB999999"):
+            self.main.config.ICO_REGISTRATION = value
+            try:
+                self.assertIn("make-a-complaint",
+                              self.client.get("/privacy").text, value)
+            finally:
+                self.main.config.ICO_REGISTRATION = ""
