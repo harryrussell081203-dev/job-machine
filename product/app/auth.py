@@ -88,10 +88,24 @@ SUBJECT = "Your sign-in link"
 
 
 def _body(link: str) -> str:
-    return ("Here is your sign-in link. It works once and expires in fifteen "
-            f"minutes.\n\n{link}\n\n"
-            "If you did not ask for this, ignore it - nobody can sign in without "
-            "the link, and it will expire on its own.\n")
+    """Written for somebody who tapped a link on their phone two minutes ago.
+
+    The old version opened with "Here is your sign-in link", which assumes the
+    reader already knows what Recruited is. Plenty do not: they came off a
+    story or a forwarded message, gave an address, and are now looking at an
+    email from a name they have seen once. Saying what it is, in the first
+    line, is the difference between a tap and a report-as-spam - and a spam
+    complaint on a young sending domain costs every other customer's link too.
+    """
+    return ("Tap the link below and you are signed in to Recruited. There is "
+            "no password to make up.\n\n"
+            f"{link}\n\n"
+            "It works once, and it runs out after fifteen minutes. If that "
+            "happens, just ask for another one - they are free.\n\n"
+            "Recruited finds the real person hiring at a company and writes "
+            "to them for you, from your own email address.\n\n"
+            "If you did not ask for this, you can ignore it. Nobody can get "
+            "in without the link, and it expires on its own.\n")
 
 
 def _send_over_https(address: str, body: str) -> None:

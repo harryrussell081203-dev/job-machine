@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from . import admin as adminlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
 from . import track_record  # noqa: E402
+from . import views  # noqa: E402
 
 log = logging.getLogger("recruited")
 
@@ -101,6 +103,26 @@ def render(request: Request, template: str, **ctx):
     user = ctx.pop("user", None)
     if user is None:
         user = current_user(request)
+    # Counted here rather than in middleware because this is already the one
+    # door every HTML page goes through, which means static files, redirects
+    # and the health check cannot accidentally be counted as readers.
+    #
+    # GET only, deliberately. render() also answers a POST - /find returns its
+    # results through it - and counting those would make one person who pasted
+    # an advert look like two arrivals, inflating the exact number this exists
+    # to measure honestly.
+    #
+    # Guarded at both ends of the chain, like the progress bar. record() keeps
+    # its own failures to itself, but the path and header reads happen out
+    # here, and a counter is never worth a blank page.
+    if request.method == "GET":
+        try:
+            views.record(request.url.path,
+                         user_agent=request.headers.get("user-agent", ""),
+                         referer=request.headers.get("referer", ""),
+                         host=request.headers.get("host", ""))
+        except Exception:
+            pass
     return templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
@@ -212,7 +234,7 @@ def numbers(request: Request):
 # ----------------------------------------------------------------------
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return render(request, "login.html")
+    return render(request, "login.html", spots_left=db.free_spots_left())
 
 
 # Deliberately generous for a real person and useless for a script. An honest
@@ -224,7 +246,9 @@ LOGIN_PER_IP = (20, 3600)        # 20 an hour from any one machine
 @app.post("/login", response_class=HTMLResponse)
 def login_submit(request: Request, email: str = Form("")):
     if not auth.valid_email(email):
-        return render(request, "login.html", error="That is not an email address.")
+        return render(request, "login.html", spots_left=db.free_spots_left(),
+                      error="That does not look like an email address. It "
+                            "needs an @ in it, like you@example.com.")
 
     address = email.strip().lower()
     limit, window = LOGIN_PER_EMAIL
@@ -244,10 +268,23 @@ def login_submit(request: Request, email: str = Form("")):
         # be able to tell a rejected password from a blocked port. Without
         # this the only symptom is a red box and an empty log.
         log.exception("sign-in email could not be sent")
-        return render(request, "login.html",
-                      error="The sign-in email could not be sent. Try again shortly.")
+        return render(request, "login.html", spots_left=db.free_spots_left(),
+                      error="Something went wrong sending that email. It is "
+                            "our end, not yours. Try again in a minute.")
     # Always the same reply, whether or not the address has an account: the
     # response must not reveal who is a customer.
+    #
+    # What changed is only the WORDING. It used to hedge - "if that address
+    # has an account, a link is on its way" - which is the standard phrasing
+    # for a product where signing up and signing in are separate acts. Here
+    # they are the same act: a link goes to any valid address, and tapping it
+    # makes the account. So the hedge protected nothing and cost a great deal,
+    # because the person most likely to read it is the one who has just
+    # arrived, knows perfectly well they have no account, and reasonably
+    # concludes that nothing was sent to them.
+    #
+    # The property that actually matters - an identical response either way -
+    # is untouched, and asserted in the tests.
     return render(request, "login.html", sent=email.strip())
 
 
@@ -280,9 +317,10 @@ def verify(request: Request, token: str = ""):
         user = current_user(request)
         if user:
             return RedirectResponse(_landing_for(user), status_code=303)
-        return render(request, "login.html",
-                      error="That link has expired or was already used. "
-                            "Here is a fresh one.")
+        return render(request, "login.html", spots_left=db.free_spots_left(),
+                      error="That link has already been used, or it is more "
+                            "than fifteen minutes old. Pop your email in "
+                            "again and we will send a fresh one.")
     existed = db.get_user_by_email(email) is not None
     user = db.get_or_create_user(email)
     # A free launch place is taken by a new account, not by anybody who signs
@@ -880,9 +918,15 @@ def admin(request: Request):
     if not user or not config.is_admin(user["email"]):
         return PlainTextResponse("Not found", status_code=404)
     rows = db.overview()
+    now = time.time()
     return render(request, "admin.html", user=user, rows=rows,
                   ago=adminlib.ago, spots_left=db.free_spots_left(),
-                  **adminlib.summarise(rows))
+                  # The half of the funnel that happens before anybody signs
+                  # up, which every stage below is otherwise blind to.
+                  traffic_today=views.totals(since=now - 86400, now=now),
+                  traffic_week=views.totals(since=now - 7 * 86400, now=now),
+                  traffic_hours=views.by_hour(hours=24, now=now),
+                  **adminlib.summarise(rows, now=now))
 
 
 # ----------------------------------------------------------------------

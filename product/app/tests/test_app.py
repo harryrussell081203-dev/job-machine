@@ -196,15 +196,33 @@ class TestPublicPages(AppTestCase):
 class TestSignIn(AppTestCase):
     def test_a_bad_address_is_rejected(self):
         r = self.client.post("/login", data={"email": "not-an-email"})
-        self.assertIn("not an email address", r.text)
+        self.assertIn("does not look like an email address", r.text)
+        # Says what to do about it, not just that it is wrong.
+        self.assertIn("@", r.text)
 
     def test_the_reply_does_not_reveal_who_has_an_account(self):
-        # Same response either way, or the form becomes a customer-list oracle.
+        """Same response either way, or the form is a customer-list oracle.
+
+        Asserted as an exact match rather than by looking for a phrase. The
+        wording here changed once already - it used to hedge, "if that address
+        has an account, a link is on its way", which protected nothing (a link
+        goes to any valid address; tapping it makes the account) and cost the
+        new arrival, who reads it, knows they have no account, and concludes
+        nothing was sent. A phrase match would have let the next rewrite
+        introduce a real difference while still passing.
+        """
         a = self.client.post("/login", data={"email": "stranger@example.com"})
         self.sign_in("known@example.com")
+        # Signing in to create the account also leaves a session cookie on the
+        # client, which renders a different navbar. That is a difference in
+        # who is ASKING, not in which address was asked about, so comparing
+        # with it still attached would fail for the wrong reason - and worse,
+        # would keep passing if a real leak appeared.
+        self.client.cookies.clear()
         b = self.client.post("/login", data={"email": "known@example.com"})
-        self.assertIn("on its way", a.text)
-        self.assertIn("on its way", b.text)
+        self.assertEqual(a.text.replace("stranger@", "known@"), b.text,
+                         "the response differs for an address that has an "
+                         "account, which makes the form a customer list")
 
     def test_a_valid_link_signs_you_in(self):
         r = self.sign_in()
@@ -240,7 +258,7 @@ class TestSignIn(AppTestCase):
         second = self.client.get(f"/auth/verify?token={token}",
                                  follow_redirects=False)
         self.assertEqual(second.status_code, 200)
-        self.assertIn("expired or was already used", second.text)
+        self.assertIn("already been used", second.text)
 
     def test_tapping_the_same_link_again_while_signed_in_just_goes_in(self):
         # The real complaint behind "an email link every time". Somebody goes
@@ -276,7 +294,7 @@ class TestSignIn(AppTestCase):
     def test_a_forged_token_is_refused(self):
         r = self.client.get("/auth/verify?token=made.up.token",
                             follow_redirects=False)
-        self.assertIn("expired or was already used", r.text)
+        self.assertIn("already been used", r.text)
 
     def test_signed_out_users_are_sent_to_login(self):
         for path in ("/dashboard", "/profile", "/drafts", "/account"):
@@ -542,13 +560,13 @@ class TestLoginRateLimit(AppTestCase):
 
         for _ in range(5):
             r = self.client.post("/login", data={"email": "victim@example.com"})
-            self.assertIn("on its way", r.text)
+            self.assertIn("Check your email", r.text)
         self.assertEqual(len(sent), 5)
 
         # Sixth is silently dropped - and looks identical, so an abuser
         # learns nothing and a real user is not told their address exists.
         r = self.client.post("/login", data={"email": "victim@example.com"})
-        self.assertIn("on its way", r.text)
+        self.assertIn("Check your email", r.text)
         self.assertEqual(len(sent), 5, "a 6th email escaped the limit")
 
     def test_one_machine_cannot_walk_a_list_of_addresses(self):
@@ -1118,3 +1136,104 @@ class TestThePageIsNotNarrowerThanTheProduct(AppTestCase):
         the only reason to print them."""
         page = self.client.get("/").text
         self.assertIn("the founder's own", page)
+
+
+class TestGettingIn(AppTestCase):
+    """The two screens and one email between tapping a link and being inside.
+
+    This is where the funnel actually leaked. Five accounts existed and four
+    of them had never got past it, while 500 people were shown the link and
+    one signed up. Nothing here is a guess about taste - each test names the
+    specific thing that stopped somebody.
+    """
+
+    env = {"FREE_SPOTS": "25"}
+
+    def test_it_does_not_ask_a_newcomer_to_sign_in_to_an_account_they_lack(self):
+        """Nearly everybody who sees this page has never been here - they just
+        tapped "Take a free place". Heading it "Sign in" tells them they need
+        something they know they do not have, and there is no such thing here:
+        the same box makes the account."""
+        page = self.client.get("/login").text
+        self.assertNotIn("<h1>Sign in</h1>", page)
+        self.assertIn("free place", page.lower())
+
+    def test_it_says_the_same_box_works_either_way(self):
+        """The hesitation this removes is "am I in the right place" - there is
+        no separate sign-up page to be in the wrong one of."""
+        page = self.client.get("/login").text
+        self.assertIn("New here or coming back", page)
+
+    def test_the_check_your_email_screen_says_what_to_look_for(self):
+        """Somebody staring at this screen has one job - find the email - and
+        the old version gave them nothing to search for."""
+        page = self.client.post("/login", data={"email": "new@example.com"}).text
+        self.assertIn("Check your email", page)
+        self.assertIn("Recruited", page)
+        self.assertIn("Your sign-in link", page, "the subject is not quoted")
+
+    def test_it_warns_about_spam_before_they_give_up(self):
+        """A young sending domain lands in spam constantly, and somebody who
+        does not know to look there concludes it is broken."""
+        page = self.client.post("/login", data={"email": "new@example.com"}).text
+        self.assertIn("spam", page.lower())
+
+    def test_it_does_not_hedge_about_whether_anything_was_sent(self):
+        """The wording that cost the most: "if that address has an account, a
+        link is on its way", read by somebody who knows they have no account.
+        A link goes to any valid address, so the hedge described a rule that
+        does not exist."""
+        page = self.client.post("/login", data={"email": "new@example.com"}).text
+        self.assertNotIn("has an account", page)
+
+    def test_a_typo_is_told_what_a_valid_address_looks_like(self):
+        page = self.client.post("/login", data={"email": "harry"}).text
+        self.assertIn("@", page)
+        self.assertNotIn("<h1>Check your email</h1>", page)
+
+    def test_the_email_says_what_it_is_not_just_here_is_your_link(self):
+        """It arrives from a name the reader has seen once, two minutes ago.
+        A spam complaint on a young domain costs every other customer's link
+        as well as this one."""
+        body = self.main.auth._body("http://testserver/auth/verify?token=x")
+        self.assertIn("Recruited", body)
+        self.assertIn("no password", body.lower())
+        # What the product actually does, for somebody who is not sure.
+        self.assertIn("real person", body.lower())
+
+    def test_the_email_still_says_how_to_ignore_it(self):
+        """Somebody else's address can be typed into that box. They have to be
+        told they are not required to do anything."""
+        body = self.main.auth._body("http://testserver/auth/verify?token=x")
+        self.assertIn("did not ask for this", body)
+
+
+class TestSetupDoesNotReadAsAWall(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+
+    def page(self):
+        return self.client.get("/setup").text
+
+    def test_it_leads_with_what_is_needed_not_how_long_it_takes(self):
+        """"Four things, about ten minutes" counts the work before saying what
+        any of it is for - and two of the four are not needed at all to get
+        letters written."""
+        page = self.page()
+        self.assertNotIn("Four things", page)
+        self.assertIn("Two things", page)
+
+    def test_the_optional_steps_say_they_are_optional(self):
+        """Without this the screen reads as four compulsory chores, and the
+        two that matter are buried among them."""
+        self.assertEqual(self.page().count("optional"), 2)
+
+    def test_it_says_which_single_thing_to_do_first(self):
+        page = self.page()
+        self.assertIn("Start with your CV", page)
+
+    def test_it_does_not_call_it_your_trade(self):
+        """Same correction as the landing page and /find, which this screen
+        was left out of."""
+        self.assertNotIn("Your trade", self.page())

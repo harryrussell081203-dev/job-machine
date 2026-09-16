@@ -2,8 +2,29 @@
 {% block title %}Set up &middot; Recruited{% endblock %}
 {% block content %}
 
+{# "Four things, about ten minutes" was the first line somebody read after
+   signing up, and it is a wall: it counts the work before saying what any of
+   it is for, and ten minutes is a long time to somebody who has not decided
+   yet. Two of the four are not even needed to get letters written.
+
+   So: what they get, then how close they are, then the steps. #}
 <h1>Get it running</h1>
-<p class="lede">Four things, about ten minutes.</p>
+<p class="lede">Two things and it starts looking for work. Upload your CV and
+  say what you are after &mdash; about three minutes.</p>
+
+{% set done = (1 if cv else 0) + (1 if profile else 0) %}
+{% if done < 2 %}
+  <div class="note{% if done %} good{% endif %}">
+    {%- if done == 0 %}<b>Start with your CV.</b> It fills in most of the next
+      step on its own, so this is the quickest way through.
+    {%- else %}<b>One to go.</b> Your CV is in &mdash; now tell it what work
+      you are looking for.{% endif %}
+  </div>
+{% else %}
+  <div class="note good"><b>You are set up.</b> It is already looking for work
+    for you. Everything below this is fine-tuning.
+    <a href="/dashboard">Go to your dashboard</a>.</div>
+{% endif %}
 
 {% if request.query_params.get('e') == 'nofile' %}
   <div class="note bad">Choose a file first.</div>
@@ -47,8 +68,11 @@
        {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}.</p>
     <p><a class="btn small" href="/profile">Change it</a></p>
   {% else %}
-    <p>Your trade, where you will travel, and the least you will work
-       for.</p>
+    {# "Your trade" reads as skilled manual work, and this product does not
+       care what the job is - the same correction already made on the landing
+       page and /find, which this screen was missed out of. #}
+    <p>What work you are after, how far you will travel, and the least you
+       will work for.</p>
     <div class="actions">
       {% if cv %}<a class="btn" href="/setup/from-cv">Fill it in from my CV</a>{% endif %}
       <a class="{% if cv %}link{% else %}btn{% endif %}" href="/profile">
@@ -59,7 +83,12 @@
 
 <!-- 3 ---------------------------------------------------------------- -->
 <div class="panel step {% if mail %}done{% endif %}">
-  <h2><span class="num">3</span> How letters go out</h2>
+  <h2><span class="num">3</span> How letters go out
+    <small class="muted" style="font-weight:400">&mdash; optional</small></h2>
+  {# Steps 3 and 4 both have working defaults, and saying so is what stops
+     this screen reading as four compulsory chores. Without a mailbox the
+     letters are still written and still have the CV attached; they simply
+     wait on the drafts screen for a tap. #}
 
   {% if not vault_ready %}
     <div class="note">Automatic sending is switched off at the moment, so
@@ -99,7 +128,10 @@
 
 <!-- 4 ---------------------------------------------------------------- -->
 <div class="panel step">
-  <h2><span class="num">4</span> Sending rules</h2>
+  <h2><span class="num">4</span> Sending rules
+    <small class="muted" style="font-weight:400">&mdash; optional</small></h2>
+  <p class="hint" style="margin-top:0">These are already set sensibly. Change
+    them only if you want to.</p>
   <form method="post" action="/setup/sending">
     <label class="check">
       <input type="checkbox" name="auto_send" value="1"
