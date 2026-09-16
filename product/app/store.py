@@ -222,6 +222,36 @@ CREATE TABLE IF NOT EXISTS sent_log (
 
 CREATE INDEX IF NOT EXISTS sent_by_user ON sent_log(user_id, sent_at DESC);
 
+-- What a "Look for work now" run is doing, right now, for one user.
+--
+-- In the database rather than in memory on purpose. The work happens on a
+-- background thread and the person watching it reloads pages, locks their
+-- phone, and comes back - so the progress has to be somewhere any request can
+-- read, not somewhere only the request that started it can see.
+--
+-- One row per user: a user has at most one run in flight, and starting a
+-- second while the first is going is the thing this row exists to prevent.
+CREATE TABLE IF NOT EXISTS run_progress (
+    user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    -- 'running', 'done' or 'failed'. Never a fourth thing: a page that cannot
+    -- tell which of those it is has nothing useful to show.
+    state       TEXT    NOT NULL,
+    -- The sentence shown to the person waiting, in their language, saying
+    -- what is happening now - not a percentage on its own, which tells
+    -- somebody nothing about whether it is stuck.
+    step        TEXT    NOT NULL DEFAULT '',
+    -- Where it has got to. total 0 means "no idea yet", which is honest
+    -- during the harvest: nothing knows how many listings exist until the job
+    -- boards have answered.
+    done        INTEGER NOT NULL DEFAULT 0,
+    total       INTEGER NOT NULL DEFAULT 0,
+    drafted     INTEGER NOT NULL DEFAULT 0,
+    -- What it ended up doing, or what went wrong. Shown once it finishes.
+    result      TEXT    NOT NULL DEFAULT '',
+    started_at  BIGINT  NOT NULL,
+    updated_at  BIGINT  NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS login_tokens (
     jti        TEXT PRIMARY KEY,
     used_at    BIGINT
@@ -343,6 +373,15 @@ def insert_returning_id(conn, table: str, columns, values) -> int:
 # already-applied migration silently killed every migration after it.
 _ADDED_COLUMNS = [
     ("send_settings", "search_days", "INTEGER NOT NULL DEFAULT 2"),
+    # Where a row came from when it was not written here. Empty for everything
+    # the product produced itself; the personal machine's own listing id for
+    # an application carried across from the founder's history.
+    #
+    # It exists to make that import repeatable. Without a handle on the row,
+    # running the importer twice doubles somebody's application count and
+    # halves their reply rate, and there is no way to tell the copies apart
+    # afterwards to undo it.
+    ("drafts", "imported_ref", "TEXT NOT NULL DEFAULT ''"),
     ("users", "free_spot", "INTEGER NOT NULL DEFAULT 0"),
     # How this mailbox sends. 'own' is a user's own SMTP credentials and is
     # the default precisely because every row that existed before this column

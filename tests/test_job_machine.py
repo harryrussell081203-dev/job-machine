@@ -4408,3 +4408,64 @@ class TestPublishingTheTrackRecord(unittest.TestCase):
     def test_nothing_sent_is_not_a_division_by_zero(self):
         jm.publish_track_record({"jobs": {}})
         self.assertEqual(self.published()["reply_rate"], 0)
+
+
+class TestAReplyIsNotEveryMessageThatCameBack(unittest.TestCase):
+    """The website printed 26%, and a third of it was an autoresponder or a
+    rejection.
+
+    `status == "replied"` only means something arrived. This machine READS
+    what comes back and classifies it, which is knowledge the product could
+    never work out for itself - and spending that on a flattering headline
+    rather than an honest one is the exact thing the site claims not to do.
+
+    A rejection is hearing back and is deliberately not a reply, on the rule
+    already applied everywhere else here: fold it in and the number improves
+    as things go worse.
+    """
+
+    def state(self, *categories, sent=0):
+        jobs = {str(i): {"status": "replied", "reply_category": c}
+                for i, c in enumerate(categories)}
+        for i in range(sent):
+            jobs[f"s{i}"] = {"status": "sent"}
+        return {"jobs": jobs}
+
+    def test_an_autoresponder_is_not_a_reply(self):
+        s = jm.lifetime_stats(self.state("auto_acknowledgement", sent=3))
+        self.assertEqual(s["replies"], 0)
+        self.assertEqual(s["autoresponders"], 1)
+
+    def test_a_rejection_is_heard_back_but_is_not_a_reply(self):
+        s = jm.lifetime_stats(self.state("rejection", sent=3))
+        self.assertEqual(s["heard_back"], 1, "it did arrive")
+        self.assertEqual(s["replies"], 0, "and it is not something to boast")
+
+    def test_a_real_answer_counts(self):
+        for category in ("question", "other", "interview_invite"):
+            s = jm.lifetime_stats(self.state(category, sent=3))
+            self.assertEqual(s["replies"], 1, category)
+
+    def test_an_unclassified_reply_still_counts(self):
+        """A real message from a human that nobody categorised. Dropping
+        those would understate by nine on the live data."""
+        s = jm.lifetime_stats(self.state("unclassified", None, sent=2))
+        self.assertEqual(s["replies"], 2)
+
+    def test_the_rate_is_over_every_letter_sent(self):
+        s = jm.lifetime_stats(self.state("question", "auto_acknowledgement",
+                                         "rejection", sent=1))
+        self.assertEqual(s["applications_ever"], 4)
+        self.assertEqual(s["reply_rate"], 25)
+
+    def test_the_published_record_carries_the_honest_one(self):
+        """The landing page reads this file and makes a claim about it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            real, jm.STATE_PATH = jm.STATE_PATH, os.path.join(tmp, "s.json")
+            try:
+                out = jm.publish_track_record(
+                    self.state("question", "auto_acknowledgement", sent=2))
+            finally:
+                jm.STATE_PATH = real
+        self.assertEqual(out["replies"], 1)
+        self.assertEqual(out["applications"], 4)

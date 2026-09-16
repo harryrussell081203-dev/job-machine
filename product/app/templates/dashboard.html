@@ -13,6 +13,83 @@
     <div class="stat"><b>{{ counts.get('discarded', 0) }}</b><span>discarded</span></div>
   </div>
 
+  {# Whether the machine is on, and the last thing it actually did.
+     Deliberately no "next run at 11:10": that schedule is GitHub's, and
+     GitHub delays scheduled workflows under load and drops the ones it
+     cannot place. Printing a time that may not arrive is how a product
+     teaches somebody to stop believing it. #}
+  <div class="panel machine">
+    {% if not machine.mailbox %}
+      <p><b>Not sending yet.</b> Connect a mailbox and letters go out on their
+         own, from your own address.</p>
+      <p><a class="btn small" href="/setup/mail">Connect a mailbox</a></p>
+    {% elif not machine.auto_send %}
+      <p><b>Writing, not sending.</b> Letters are being written for you and
+         are waiting for you to send them.</p>
+      <p><a class="btn small ghost" href="/account">Turn on automatic
+         sending</a></p>
+    {% elif machine.paused %}
+      <p><b>Paused.</b> Nothing will go out until you start it again.</p>
+      <p><a class="btn small ghost" href="/account">Settings</a></p>
+    {% else %}
+      <p><b>On.</b> Letters go out on their own, up to
+         {{ machine.daily_cap }} a day, each one held
+         {{ machine.hold_minutes }} minutes after it is written so you can
+         stop it.</p>
+      <p class="muted">
+        {%- if machine.sent_today -%}
+          {{ machine.sent_today }} sent today, {{ machine.left_today }} left.
+        {%- else -%}
+          Nothing sent today yet &mdash; {{ machine.left_today }} to spend.
+        {%- endif -%}
+        {% if machine.waiting %} {{ machine.waiting }} waiting in the
+          queue.{% endif %}
+      </p>
+    {% endif %}
+    {% if machine.last_looked_at or machine.last_sent_at %}
+      <p class="hint">
+        {%- if machine.last_looked_at %}Last looked for work
+          {{ machine.last_looked_at | ago }}.{% endif %}
+        {%- if machine.last_sent_at %} Last letter went
+          {{ machine.last_sent_at | ago }}.{% endif %}
+      </p>
+    {% endif %}
+  </div>
+
+  {# Rendered from the server on load AND updated by polling, so it is correct
+     on first paint, survives a refresh, and still tells you something with
+     JavaScript switched off. #}
+  <div class="panel run" id="runpanel"
+       {% if not progress or progress.state == 'none' %}hidden{% endif %}
+       data-state="{{ progress.state if progress else 'none' }}">
+    <p class="runstep" id="runstep">
+      {%- if progress and progress.state == 'running' -%}
+        {{ progress.step or 'Getting started' }}
+      {%- elif progress and progress.state == 'failed' -%}
+        {{ progress.result }}
+      {%- elif progress -%}
+        {{ progress.result }}
+      {%- endif -%}
+    </p>
+    {# class="runbar", NOT "bar": the site header is .bar, and reusing the
+       name gave the track the header's flex layout - 23px tall with a fill
+       0px high, so the bar rendered as an empty grey pill that never moved.
+       It looked plausible in the DOM: the width was being set correctly the
+       whole time. #}
+    <div class="runbar" id="runbar"
+         {% if progress and progress.percent is none %}data-unsure="1"{% endif %}>
+      <span id="runfill" style="width: {{ progress.percent or 0 if progress else 0 }}%"></span>
+    </div>
+    <p class="muted runmeta" id="runmeta">
+      {%- if progress and progress.state == 'running' and progress.total -%}
+        {{ progress.done }} of {{ progress.total }}
+      {%- endif -%}
+    </p>
+    <p id="rundone" {% if not progress or progress.state == 'running' %}hidden{% endif %}>
+      <a class="btn small" href="/drafts">See what it found</a>
+    </p>
+  </div>
+
   {% if drafts %}
     <h2>Ready to send</h2>
     {% for d in drafts %}
@@ -44,5 +121,95 @@
     </p>
     <p><a class="btn ghost" href="/profile">Edit</a></p>
   </div>
+
+<script>
+// Follow a run while it happens.
+//
+// The work is on a background thread and its progress is in the database, so
+// this only has to ask. That is also why closing the page is harmless: come
+// back and the panel above is already rendered from the server at whatever
+// stage the run has reached.
+//
+// Without JavaScript the panel still renders on load and a refresh still
+// moves it along; the only thing lost is that it moves by itself.
+(function () {
+  var panel = document.getElementById("runpanel");
+  if (!panel) return;
+  var stepEl = document.getElementById("runstep");
+  var barEl  = document.getElementById("runbar");
+  var fillEl = document.getElementById("runfill");
+  var metaEl = document.getElementById("runmeta");
+  var doneEl = document.getElementById("rundone");
+  var timer = null;
+
+  function show(p) {
+    if (!p || p.state === "none") { panel.hidden = true; return; }
+    panel.hidden = false;
+    panel.setAttribute("data-state", p.state);
+
+    var running = p.state === "running";
+    stepEl.textContent = running ? (p.step || "Getting started")
+                                 : (p.result || "");
+    // A percentage only appears once there is something real to divide by.
+    // Until then the bar sweeps and says no number, because inventing one is
+    // how a progress bar starts lying about a run that is stuck.
+    if (running && p.percent === null) {
+      barEl.setAttribute("data-unsure", "1");
+    } else {
+      barEl.removeAttribute("data-unsure");
+      fillEl.style.width = (running ? (p.percent || 0) : 100) + "%";
+    }
+    metaEl.textContent = (running && p.total)
+      ? p.done + " of " + p.total : "";
+    doneEl.hidden = running;
+    return running;
+  }
+
+  // Two seconds: fast enough that the sentence changes while somebody is
+  // looking at it, slow enough to be nothing next to a run measured in
+  // minutes.
+  function follow() { if (!timer) timer = setInterval(poll, 2000); }
+  function stop()   { if (timer) { clearInterval(timer); timer = null; } }
+
+  function poll() {
+    fetch("/run/progress", { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (p) {
+        // The response decides whether to keep asking, so a finished run
+        // stops the polling by itself and nothing has to remember to.
+        if (show(p)) {
+          panel.dataset.wasRunning = "1";
+          follow();
+          return;
+        }
+        stop();
+        // A run that has just finished leaves the page's counts stale. Reload
+        // once, so "waiting to send" is the number it actually is now.
+        if (p && p.state === "done" && panel.dataset.wasRunning === "1") {
+          panel.dataset.wasRunning = "0";
+          setTimeout(function () { location.reload(); }, 1200);
+        }
+      })
+      // A dropped request is not the end of the run. Say nothing, and let the
+      // interval ask again on the next tick.
+      .catch(function () {});
+  }
+
+  // Ask once on load: a page opened mid-run catches up immediately, and one
+  // opened long after stops showing a stale bar. Everything after that is
+  // driven by what the answer says.
+  if (panel.getAttribute("data-state") === "running") {
+    panel.dataset.wasRunning = "1";
+    follow();
+  }
+  poll();
+
+  // Nothing to follow once the tab is hidden, and a phone in a pocket should
+  // not be polling every two seconds for as long as it is in there.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { stop(); } else { poll(); }
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

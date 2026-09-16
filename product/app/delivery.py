@@ -296,6 +296,52 @@ def guess_imap_host(address: str):
     return KNOWN_IMAP_HOSTS.get(domain)
 
 
+# Domains where the name before the dot says nothing about who the sender is.
+# Searching "@gmail" would return most of anybody's inbox, so an application
+# sent to a free address keeps the strict exact-address match.
+SHARED_MAIL_DOMAINS = frozenset((
+    "gmail", "googlemail", "outlook", "hotmail", "live", "yahoo", "ymail",
+    "icloud", "me", "mac", "aol", "gmx", "protonmail", "proton", "pm",
+    "btinternet", "sky", "talktalk", "virginmedia", "msn", "mail", "zoho",
+    "yandex", "fastmail", "hey", "tutanota", "web", "t-online",
+))
+
+# Below this the registrable name is too short to identify an organisation on
+# its own. "@bp" is a substring of "@bpost.be" and of any address at a domain
+# containing those two letters, which is how a domain match turns into a false
+# reply on somebody's tracker.
+MIN_DOMAIN_ROOT = 5
+
+
+def _reply_query(address: str) -> str:
+    """What to ask the server about, for one address written to.
+
+    The organisation's registrable name where that identifies them, and the
+    whole address where it does not. Returning the address unchanged is always
+    the safe answer: it is what this function used to do for everything, so
+    the worst case of the fallback is the old behaviour rather than a wrong
+    one.
+    """
+    domain = address.rpartition("@")[2]
+    if not domain:
+        return address
+
+    labels = [part for part in domain.split(".") if part]
+    if not labels:
+        return address
+
+    # The registrable name, skipping the public suffix: 'co.uk', 'com.au',
+    # 'org.uk' all put it one label further left than a bare '.com' does.
+    root = labels[0] if len(labels) < 2 else labels[-2]
+    if len(labels) > 2 and labels[-2] in ("co", "com", "org", "net", "ac",
+                                          "gov", "ltd", "plc", "me"):
+        root = labels[-3]
+
+    if root in SHARED_MAIL_DOMAINS or len(root) < MIN_DOMAIN_ROOT:
+        return address
+    return f"@{root}"
+
+
 def find_replies(*, host: str, port: int, username: str, password: str,
                  addresses) -> set:
     """Which of `addresses` have sent this mailbox anything.
@@ -319,6 +365,29 @@ def find_replies(*, host: str, port: int, username: str, password: str,
     wanted = [a for a in {(a or "").strip().lower() for a in addresses} if a]
     if not wanted:
         return found
+    # AN EMPLOYER DOES NOT REPLY FROM THE ADDRESS YOU WROTE TO.
+    #
+    # This searched for the exact address and nothing else, and on real mail
+    # that is close to useless. Written to alex@alexanderjamesrecruiting.co.uk,
+    # the answers came from alex@alexanderjamesrecruiting.COM and then from
+    # rob@alexanderjamesrecruiting.co.uk - a different person at a different
+    # domain of the same firm, saying he had tried to ring. Neither was found.
+    # The only reply the old search ever did find was an autoresponder, which
+    # is exactly backwards: a robot answers from the inbox you wrote to, and a
+    # person answers from their own desk.
+    #
+    # So the question becomes "has anyone at this organisation written to me",
+    # matched on the registrable name with no top-level domain: '@lloydsreg'
+    # finds lloydsreg.com and lloydsreg.co.uk alike.
+    #
+    # It is still narrow, and the narrowness is still the design. The search
+    # is built only from domains this user has already sent an application to,
+    # so nothing else in the mailbox becomes legible - the blast radius grows
+    # from "Acme's info@ emailed you" to "somebody at Acme emailed you", which
+    # is the same fact the tracker exists to show.
+    by_query = {}
+    for address in wanted:
+        by_query.setdefault(_reply_query(address), []).append(address)
     try:
         box = imaplib.IMAP4_SSL(host, int(port), timeout=30)
     except (OSError, imaplib.IMAP4.error) as exc:
@@ -334,13 +403,16 @@ def find_replies(*, host: str, port: int, username: str, password: str,
                 "Settings - See all settings - Forwarding and POP/IMAP."
             ) from exc
         box.select("INBOX", readonly=True)
-        for address in wanted:
+        for query, covered in by_query.items():
             try:
-                status, data = box.search(None, "FROM", f'"{address}"')
+                status, data = box.search(None, "FROM", f'"{query}"')
             except imaplib.IMAP4.error:
                 continue          # one bad address must not lose the others
             if status == "OK" and data and data[0].split():
-                found.add(address)
+                # Every draft written to this organisation is flagged, because
+                # the search deliberately did not ask which person replied and
+                # so cannot say which of them it was about.
+                found.update(covered)
     finally:
         try:
             box.logout()

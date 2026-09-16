@@ -291,10 +291,33 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
     if run:
         for user in users:
             user_id = user["id"]
+            # Recorded exactly as a hand-started run is, so the dashboard can
+            # say "last looked for work an hour ago" about a scheduled sweep
+            # too. Without this the only runs the app could see were the ones
+            # somebody pressed a button for, and a machine that works while
+            # you are asleep is precisely the thing worth showing.
+            #
+            # start_run() refusing means that user already has a run in
+            # flight, so the drafting still happens and only the bookkeeping
+            # is skipped - a sweep must never be silently dropped to protect
+            # a progress row.
+            mine = db.start_run(user_id)
+            if mine:
+                db.set_run_step(user_id, "Looking for work")
             try:
-                report = runner.run_for_user(user_id, ai=ai, session=session)
+                report = runner.run_for_user(
+                    user_id, ai=ai, session=session,
+                    on_step=((lambda text, **counts:
+                              db.set_run_step(user_id, text, **counts))
+                             if mine else None))
                 totals["drafted"] += report.drafted
+                if mine:
+                    db.finish_run(user_id, result=report.summary(),
+                                  drafted=report.drafted)
             except Exception as exc:
                 totals["errors"].append(f"user {user_id} run: {exc}")
+                if mine:
+                    db.finish_run(user_id, result=f"It stopped: {exc}",
+                                  ok=False)
 
     return totals
