@@ -116,8 +116,34 @@ def drawn_figures(path: str = CARD) -> dict | None:
         return None
 
 
-def draw(record: dict, path: str = CARD) -> str:
+FIELDS = ("applications", "replies", "reply_rate")
+
+
+def remember(record: dict, path: str = CARD) -> dict:
+    """Write down what the card was drawn with.
+
+    Separate from draw() so the staleness contract - the part that decides
+    whether anybody is ever told the card is wrong - can be tested without a
+    browser. Drawing needs Playwright, which is not a dependency of this
+    product and should not become one for a tool that runs by hand; the rule
+    it enforces has to be checkable in ordinary CI regardless.
+    """
     import json
+    figures = {k: record[k] for k in FIELDS}
+    with open(sidecar(path), "w") as f:
+        json.dump(figures, f, indent=1, sort_keys=True)
+    return figures
+
+
+def is_stale(record: dict, path: str = CARD) -> bool:
+    """Does the card disagree with the figures it is meant to be showing."""
+    was = drawn_figures(path)
+    if was is None or not os.path.exists(path):
+        return True
+    return was != {k: record[k] for k in FIELDS}
+
+
+def draw(record: dict, path: str = CARD) -> str:
     from playwright.sync_api import sync_playwright
 
     with open(STYLE) as f:
@@ -139,10 +165,7 @@ def draw(record: dict, path: str = CARD) -> str:
                                          "width": WIDTH, "height": HEIGHT})
         browser.close()
 
-    with open(sidecar(path), "w") as f:
-        json.dump({k: record[k] for k in
-                   ("applications", "replies", "reply_rate")}, f,
-                  indent=1, sort_keys=True)
+    remember(record, path)
     return path
 
 
@@ -170,8 +193,7 @@ def main(argv=None) -> int:
             print(f"the card does not say what it was drawn with, so it "
                   f"cannot be checked. Redraw it: {figures}")
             return 1
-        now = {k: record[k] for k in ("applications", "replies", "reply_rate")}
-        if was != now:
+        if is_stale(record, args.out):
             print(f"the card is out of date.\n"
                   f"  it says:      {was['applications']} applications, "
                   f"{was['replies']} replies, {was['reply_rate']}%\n"

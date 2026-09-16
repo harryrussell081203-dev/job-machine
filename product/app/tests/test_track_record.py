@@ -6,6 +6,7 @@ arithmetic: it reads, it never writes, and it never brings the site down or
 prints a mangled figure when the file is missing or wrong.
 """
 
+import importlib.util
 import json
 import os
 import shutil
@@ -166,11 +167,15 @@ class TestTheCardEveryShareShows(unittest.TestCase):
     six days the card said 105 applications and 25% while the page it linked
     to said 125 and 17%. Somebody comparing the two concludes the numbers are
     decorative, and they are the entire argument.
+
+    Almost none of this needs a browser, deliberately. Drawing does; the rule
+    that decides whether anybody is ever TOLD the card is wrong does not, and
+    it would be a poor guard if it only ran on machines with Playwright
+    installed - which is exactly how these tests first failed in CI.
     """
 
     def setUp(self):
-        sys.path.insert(0, os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__)))) + "/product")
+        sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
         from tools import make_og_card
         self.card = make_og_card
         self.dir = tempfile.mkdtemp()
@@ -183,39 +188,31 @@ class TestTheCardEveryShareShows(unittest.TestCase):
         r.update(over)
         return r
 
-    def test_it_draws_a_real_png_at_the_size_every_platform_wants(self):
-        self.card.draw(self.record(), self.out)
-        with open(self.out, "rb") as f:
-            head = f.read(24)
-        self.assertTrue(head.startswith(b"\x89PNG"))
-        width = int.from_bytes(head[16:20], "big")
-        height = int.from_bytes(head[20:24], "big")
-        self.assertEqual((width, height),
-                         (self.card.WIDTH * self.card.SCALE,
-                          self.card.HEIGHT * self.card.SCALE))
+    def pretend_drawn(self, record):
+        """A card on disk, drawn with these figures, without a browser."""
+        with open(self.out, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        self.card.remember(record, self.out)
 
+    # ---- the staleness contract, which must hold everywhere -------------
     def test_it_writes_down_what_it_drew(self):
         """A PNG cannot be asked what it says without OCR, so it says so
         alongside. This is what makes staleness checkable at all."""
-        self.card.draw(self.record(applications=200, replies=40,
-                                   reply_rate=20), self.out)
+        self.pretend_drawn(self.record(applications=200, replies=40,
+                                       reply_rate=20))
         self.assertEqual(self.card.drawn_figures(self.out),
                          {"applications": 200, "replies": 40,
                           "reply_rate": 20})
 
     def test_a_card_that_matches_the_figures_is_not_stale(self):
-        self.card.draw(self.record(), self.out)
-        was = self.card.drawn_figures(self.out)
-        now = {k: self.record()[k] for k in was}
-        self.assertEqual(was, now)
+        self.pretend_drawn(self.record())
+        self.assertFalse(self.card.is_stale(self.record(), self.out))
 
     def test_a_card_drawn_with_different_figures_is_stale(self):
         """The check that would have caught the six days."""
-        self.card.draw(self.record(applications=105, replies=26,
-                                   reply_rate=25), self.out)
-        was = self.card.drawn_figures(self.out)
-        now = {k: self.record()[k] for k in was}
-        self.assertNotEqual(was, now)
+        self.pretend_drawn(self.record(applications=105, replies=26,
+                                       reply_rate=25))
+        self.assertTrue(self.card.is_stale(self.record(), self.out))
 
     def test_staleness_is_figures_and_not_timestamps(self):
         """The personal machine rewrites track_record.json at the end of every
@@ -223,11 +220,19 @@ class TestTheCardEveryShareShows(unittest.TestCase):
         perfectly accurate card as stale several times a day. A warning that
         cries wolf is ignored on the day it is right - the same lesson as the
         heartbeat alarm that fired daily on a healthy machine."""
-        self.card.draw(self.record(), self.out)
-        os.utime(self.card.track_record.PATH, None)      # touched, unchanged
-        was = self.card.drawn_figures(self.out)
-        now = {k: self.record()[k] for k in was}
-        self.assertEqual(was, now, "a touched file must not mean a stale card")
+        self.pretend_drawn(self.record())
+        os.utime(self.card.track_record.PATH, None)     # touched, unchanged
+        self.assertFalse(self.card.is_stale(self.record(), self.out),
+                         "a touched file must not mean a stale card")
+
+    def test_a_missing_card_is_stale(self):
+        self.card.remember(self.record(), self.out)     # note written, no PNG
+        self.assertTrue(self.card.is_stale(self.record(), self.out))
+
+    def test_a_card_that_never_said_what_it_drew_is_stale(self):
+        with open(self.out, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        self.assertTrue(self.card.is_stale(self.record(), self.out))
 
     def test_the_numbers_come_from_the_same_place_the_page_reads(self):
         """Not typed into the generator. One fact, one source."""
@@ -237,6 +242,21 @@ class TestTheCardEveryShareShows(unittest.TestCase):
         for typed in ("105", "125", "26%", "25%"):
             self.assertNotIn(f">{typed}<", source,
                              "a figure is hard-coded into the card")
+
+    # ---- and the one part that really does need a browser ---------------
+    @unittest.skipUnless(
+        importlib.util.find_spec("playwright"),
+        "drawing needs Playwright, which this product does not depend on")
+    def test_it_draws_a_real_png_at_the_size_every_platform_wants(self):
+        self.card.draw(self.record(), self.out)
+        with open(self.out, "rb") as f:
+            head = f.read(24)
+        self.assertTrue(head.startswith(b"\x89PNG"))
+        self.assertEqual(
+            (int.from_bytes(head[16:20], "big"),
+             int.from_bytes(head[20:24], "big")),
+            (self.card.WIDTH * self.card.SCALE,
+             self.card.HEIGHT * self.card.SCALE))
 
 
 if __name__ == "__main__":
