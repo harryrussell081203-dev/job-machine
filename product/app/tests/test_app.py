@@ -80,30 +80,38 @@ class TestPublicPages(AppTestCase):
         self.assertIn("Get your CV in front of a human", r.text)
 
     def test_the_claim_matches_what_is_actually_counted(self):
-        """The headline used to say "replies from a person" and promise in as
-        many words that autoresponders were not counted. Both were true: the
-        seven were curated by hand, and the one "apply through our portal"
-        was deliberately left out.
+        """The claim went away and came back, and which is correct depends
+        entirely on how the number underneath it is worked out.
 
-        Neither is true now. The figures are published automatically by the
-        machine at the end of every run, which means nobody is sitting in the
-        middle deciding which answers were human - and an automatic count
-        cannot make that call, because knowing an autoresponder from a reply
-        means reading the message.
+        It was true originally: seven replies curated by hand, with one "apply
+        through our portal" deliberately left out. It stopped being true when
+        the figures started publishing themselves, because nobody was in the
+        middle any more - so the sentence came down with the curation.
 
-        So the wording had to come down with the curation. Keeping "not
-        counted" over a number that no longer excludes them would have been
-        the exact dishonesty the sentence was written to rule out, and it is
-        worse than never having claimed it: it is a promise that used to be
-        kept.
+        It is true again, and for a better reason than either: the machine
+        classifies what comes back, because it reads it. Excluding
+        autoresponders and rejections took the headline from 26% to 17%, which
+        is the direction that tells you the exclusion is real rather than
+        decorative.
 
-        This test is the guard against it creeping back in on the strength of
-        how good it sounded.
+        The rule this test exists to hold is not the wording. It is that the
+        sentence and the sum must agree - so if the published rate ever goes
+        back to counting everything that arrived, this claim comes down again.
         """
         page = self.client.get("/").text
-        self.assertNotIn("Autoresponders are not counted", page)
         self.assertNotIn("replies from a person", page)
-        self.assertIn("These update themselves", page)
+        # Asserted on the claim, not the sentence: the wording around it
+        # gets edited, and a test that breaks on a comma teaches people to
+        # change the test rather than think about it.
+        self.assertIn("update themselves", page)
+
+        import app.track_record as tr
+        record = tr.read()
+        if record:
+            self.assertIn("not counted in that", page)
+        else:
+            # No numbers, no claim about them.
+            self.assertNotIn("not counted in that", page)
 
     def test_playbook_is_free_and_needs_no_account(self):
         r = self.client.get("/playbook")
@@ -1069,3 +1077,44 @@ class TestTheDashboardDoesNotListWhatItSkipped(AppTestCase):
         rows = self.main.db.recent_outcomes(1)
         self.assertEqual(len(rows), 1)
         self.assertIn("nothing is guessed", rows[0]["outcome"])
+
+
+class TestThePageIsNotNarrowerThanTheProduct(AppTestCase):
+    """The evidence on the landing page is one person's, and saying whose is
+    what makes it checkable. But for a while his trade was the ONLY thing on
+    the page describing who it was for, which quietly told everybody in a
+    different line of work that this was not for them.
+
+    They would have been wrong. scoring.py's own docstring is explicit that
+    the rubric is derived from the profile rather than written about one man,
+    "so the same code scores a Sheffield fitter and a Bristol lab technician
+    correctly without either of them editing a prompt". It reads the advert it
+    is given and has never known what the job is.
+
+    Harry made the point himself: the audience is anyone out of work.
+    """
+
+    def test_it_says_the_method_is_not_built_around_a_trade(self):
+        page = self.client.get("/").text
+        self.assertIn("Nothing in it is built around a trade", page)
+
+    def test_it_names_somebody_other_than_an_engineer(self):
+        """One concrete non-technical example does more than any amount of
+        "for everybody", which reads as marketing and persuades nobody."""
+        page = self.client.get("/").text
+        self.assertTrue(
+            any(job in page for job in ("carer", "driver", "bookkeeper")),
+            "the only worked example is still a trade")
+
+    def test_it_does_not_promise_only_your_trade(self):
+        """'your trade' reads as skilled manual work, and a receptionist does
+        not see themselves in it."""
+        for path in ("/", "/find"):
+            self.assertNotIn("your trade", self.client.get(path).text, path)
+
+    def test_the_evidence_still_says_whose_it_is(self):
+        """Widening must not become hiding. The numbers are one person's and
+        the page has to keep saying so, or it stops being checkable - which is
+        the only reason to print them."""
+        page = self.client.get("/").text
+        self.assertIn("the founder's own", page)

@@ -383,6 +383,85 @@ def application_stats(user_id: int) -> dict:
     }
 
 
+# A breakdown needs this many letters in a bucket before it is shown at all.
+#
+# Eight is not a strong sample, but it is enough that one lucky reply cannot
+# create a headline: at n=3 a single answer reads as 33% and would send
+# somebody off changing their search on nothing. Buckets below it are counted
+# and named, never given a percentage.
+MIN_FOR_A_BREAKDOWN = 8
+
+TIER_NAMES = {
+    3: "a named person",
+    2: "a hiring inbox",
+    1: "a generic inbox",
+    0: "an address of unknown kind",
+}
+
+
+def what_is_working(user_id: int) -> dict:
+    """What this person's own results say, rather than what we believe.
+
+    The product's whole argument is that WHO you write to decides everything,
+    and that has been a claim on the landing page taken from one person's
+    history. This is the same question asked of the reader's own sending, and
+    it is the most useful screen the product can show them: it is theirs, it
+    is checkable, and it tells them what to do differently on Monday.
+
+    A bucket under MIN_FOR_A_BREAKDOWN gets a count and no percentage. A page
+    that puts "100%" next to one letter teaches somebody to distrust
+    everything else on it.
+    """
+    rows = applications(user_id, limit=10000)
+
+    def answered(row):
+        # The same rule the headline uses: a rejection is hearing back and is
+        # deliberately not a reply, or the number improves as things go worse.
+        return (row["outcome"] in ("replied", "interview", "offer")
+                or (not row["outcome"] and row["reply_seen_at"]))
+
+    buckets = {}
+    for row in rows:
+        tier = int(row["contact_tier"] or 0)
+        entry = buckets.setdefault(tier, {"tier": tier, "sent": 0, "heard": 0,
+                                          "name": TIER_NAMES.get(tier,
+                                                                 "unknown")})
+        entry["sent"] += 1
+        entry["heard"] += bool(answered(row))
+
+    contacts = []
+    for entry in sorted(buckets.values(), key=lambda e: -e["tier"]):
+        enough = entry["sent"] >= MIN_FOR_A_BREAKDOWN
+        entry["rate"] = (round(100 * entry["heard"] / entry["sent"])
+                         if enough else None)
+        contacts.append(entry)
+
+    # The single sentence worth acting on, or nothing. Only drawn when two
+    # buckets both clear the bar AND the gap between them is big enough to
+    # survive the noise in samples this size.
+    rated = [c for c in contacts if c["rate"] is not None]
+    lesson = None
+    if len(rated) >= 2:
+        best, worst = rated[0], rated[-1]
+        for c in rated:
+            if c["rate"] > best["rate"]:
+                best = c
+            if c["rate"] < worst["rate"]:
+                worst = c
+        if best["tier"] != worst["tier"] and best["rate"] - worst["rate"] >= 15:
+            lesson = {"best": best, "worst": worst,
+                      "gap": best["rate"] - worst["rate"]}
+
+    total = len(rows)
+    return {
+        "sent": total,
+        "contacts": contacts,
+        "lesson": lesson,
+        "enough": total >= MIN_FOR_A_BREAKDOWN,
+        "min_for_a_breakdown": MIN_FOR_A_BREAKDOWN,
+    }
+
+
 # Below this many people the totals are one person's diary rather than a
 # statistic, so the rate is withheld and the page says why. The raw counts are
 # always shown - they are the honest thing and hiding them would look like
@@ -772,6 +851,176 @@ def save_send_settings(user_id: int, **fields) -> None:
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
              int(current["search_days"]), current["paused_until"], now()))
+
+
+# ----------------------------------------------------------------------
+# what a run is doing while somebody watches
+# ----------------------------------------------------------------------
+# A run that has said nothing for this long is treated as dead.
+#
+# The background thread can be killed without getting the chance to write
+# anything - the host restarts, the container is recycled, the process runs
+# out of memory. Without this the page would show a bar creeping nowhere for
+# ever, which is a worse failure than an error, because an error at least
+# tells somebody to press the button again.
+#
+# Generous, because the slow step is Gemini on a free tier answering one
+# listing at a time with six seconds between calls, and declaring a working
+# run dead is its own kind of lie.
+RUN_STALE_AFTER = 300
+
+
+def start_run(user_id: int) -> bool:
+    """Claim the right to run for this user. False if one is already going.
+
+    The claim and the check are one statement, because two taps on a phone
+    half a second apart are not hypothetical and the second must lose. The
+    condition is in the WHERE of the UPDATE rather than in a read followed by
+    a write, so the database decides rather than two racing requests.
+    """
+    stamp = now()
+    with connect() as c:
+        row = c.execute("SELECT state, updated_at FROM run_progress "
+                        "WHERE user_id = ?", (user_id,)).fetchone()
+        if row and row["state"] == "running" and (
+                stamp - int(row["updated_at"] or 0)) < RUN_STALE_AFTER:
+            return False
+        c.execute(
+            "INSERT INTO run_progress (user_id, state, step, done, total, "
+            "drafted, result, started_at, updated_at) "
+            "VALUES (?, 'running', ?, 0, 0, 0, '', ?, ?) "
+            "ON CONFLICT (user_id) DO UPDATE SET state = 'running', "
+            "step = excluded.step, done = 0, total = 0, drafted = 0, "
+            "result = '', started_at = excluded.started_at, "
+            "updated_at = excluded.updated_at",
+            (user_id, "Getting started", stamp, stamp))
+    return True
+
+
+def set_run_step(user_id: int, step: str, *, done: int | None = None,
+                 total: int | None = None, drafted: int | None = None) -> None:
+    """Say what is happening now. Never raises: progress is not the work.
+
+    A failure to report must not take down the run it is reporting on. The
+    person loses the commentary and still gets their letters, which is the
+    right way round.
+    """
+    try:
+        sets = ["step = ?", "updated_at = ?"]
+        values = [step[:200], now()]
+        for name, value in (("done", done), ("total", total),
+                            ("drafted", drafted)):
+            if value is not None:
+                sets.insert(0, f"{name} = ?")
+                values.insert(0, int(value))
+        values.append(user_id)
+        with connect() as c:
+            c.execute(f"UPDATE run_progress SET {', '.join(sets)} "
+                      f"WHERE user_id = ?", tuple(values))
+    except Exception:
+        pass
+
+
+def finish_run(user_id: int, *, result: str, ok: bool = True,
+               drafted: int = 0) -> None:
+    try:
+        with connect() as c:
+            c.execute("UPDATE run_progress SET state = ?, step = '', "
+                      "result = ?, drafted = ?, updated_at = ? "
+                      "WHERE user_id = ?",
+                      ("done" if ok else "failed", (result or "")[:300],
+                       int(drafted), now(), user_id))
+    except Exception:
+        pass
+
+
+def run_progress(user_id: int) -> dict | None:
+    """What to show the person watching, or None if they have never run one."""
+    with connect() as c:
+        row = c.execute("SELECT * FROM run_progress WHERE user_id = ?",
+                        (user_id,)).fetchone()
+    if not row:
+        return None
+
+    state = row["state"]
+    stamp = now()
+    age = stamp - int(row["updated_at"] or 0)
+    if state == "running" and age >= RUN_STALE_AFTER:
+        # Nothing has reported in for minutes, so the thread doing the work is
+        # gone and nobody is coming back to say so. Say it stopped rather than
+        # animating a bar at somebody indefinitely.
+        state = "failed"
+
+    done, total = int(row["done"] or 0), int(row["total"] or 0)
+    return {
+        "state": state,
+        "step": row["step"] or "",
+        "done": done, "total": total,
+        "drafted": int(row["drafted"] or 0),
+        # None, not 0, when there is nothing to base a fraction on. The bar
+        # shows an indeterminate stripe for that rather than sitting at 0%,
+        # which reads as broken when it only means "counting".
+        "percent": round(100 * done / total) if total else None,
+        "result": row["result"] or ("It stopped part way through. "
+                                    "Press the button again."
+                                    if state == "failed" and not row["result"]
+                                    else ""),
+        "seconds": max(0, stamp - int(row["started_at"] or stamp)),
+    }
+
+
+def machine_status(user_id: int) -> dict:
+    """Is it on, when did it last do anything, and what is left today.
+
+    Every figure here is something that HAPPENED, never a prediction. The
+    obvious version of this panel says "next run at 11:10", and that would be
+    a lie: the schedule is GitHub's, and GitHub delays scheduled workflows
+    under load and drops the ones it cannot place - this workflow's own
+    history has it running twice on a day it was set to run three times, and
+    never once at a listed minute.
+
+    So it reports the last thing it did and what it has left to spend, which
+    are both true and both more use than a time that may not arrive.
+    """
+    settings = get_send_settings(user_id)
+    account = get_mail_account(user_id)
+    progress = run_progress(user_id)
+    sent = sent_today(user_id)
+
+    with connect() as c:
+        last = c.execute(
+            "SELECT MAX(sent_at) AS t FROM sent_log "
+            "WHERE user_id = ? AND ok = 1", (user_id,)).fetchone()
+        waiting = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts "
+            "WHERE user_id = ? AND status = 'draft'", (user_id,)).fetchone()
+
+    return {
+        # The three things that decide whether anything happens at all, in
+        # the order they stop it.
+        "mailbox": bool(account),
+        "mailbox_verified": bool(account and account["verified_at"]),
+        "auto_send": bool(settings["auto_send"]),
+        "paused": bool(settings["paused_until"]
+                       and settings["paused_until"] > now()),
+
+        "sent_today": sent,
+        "daily_cap": settings["daily_cap"],
+        "left_today": max(0, settings["daily_cap"] - sent),
+        "hold_minutes": settings["hold_minutes"],
+        "waiting": int(waiting["n"] or 0),
+
+        "last_sent_at": int(last["t"]) if last and last["t"] else 0,
+        "last_looked_at": _last_run_at(user_id),
+        "running": bool(progress and progress["state"] == "running"),
+    }
+
+
+def _last_run_at(user_id: int) -> int:
+    with connect() as c:
+        row = c.execute("SELECT updated_at FROM run_progress "
+                        "WHERE user_id = ?", (user_id,)).fetchone()
+    return int(row["updated_at"]) if row and row["updated_at"] else 0
 
 
 def record_sent(user_id: int, *, draft_id, to_email: str, company: str,

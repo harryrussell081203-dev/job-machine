@@ -288,3 +288,84 @@ class TestADetectedReplyCountsWithoutBeingConfirmed(Base):
         stats = self.db.public_stats()
         self.assertIsNone(stats["reply_rate"])
         self.assertTrue(stats["rate_withheld"])
+
+
+class TestWhatIsWorkingForYou(Base):
+    """The product's whole argument is that WHO you write to decides
+    everything, and that has been a claim on the landing page taken from one
+    person's history. This asks the same question of the reader's own sending.
+
+    On the founder's 135 imported letters it reads: a generic inbox 3%, a
+    hiring inbox 28%, a named person 24%. That is the most useful screen the
+    product can show somebody, because it is theirs and it is checkable.
+    """
+
+    def letters(self, tier, n, heard=0):
+        for i in range(n):
+            did = self.application(f"Firm {tier}-{i}")
+            with self.db.connect() as c:
+                c.execute("UPDATE drafts SET contact_tier = ? WHERE id = ?",
+                          (tier, did))
+            if i < heard:
+                self.db.set_outcome(self.uid, did, "replied")
+
+    def test_it_says_nothing_until_there_is_enough_to_say(self):
+        self.letters(3, 4, heard=4)
+        working = self.db.what_is_working(self.uid)
+        self.assertFalse(working["enough"])
+        self.assertNotIn("What is working for you",
+                         self.client.get("/applications").text)
+
+    def test_a_thin_row_is_counted_but_given_no_percentage(self):
+        """Three letters and one reply is not 33%. A page that prints that
+        teaches somebody to distrust everything else on it."""
+        self.letters(3, 10, heard=3)
+        self.letters(1, 3, heard=1)
+        rows = {c["tier"]: c for c in
+                self.db.what_is_working(self.uid)["contacts"]}
+        self.assertEqual(rows[3]["rate"], 30)
+        self.assertEqual(rows[1]["sent"], 3)
+        self.assertIsNone(rows[1]["rate"], "too few to put a number on")
+
+    def test_it_draws_the_lesson_when_the_gap_is_real(self):
+        self.letters(3, 20, heard=8)      # 40%
+        self.letters(1, 20, heard=1)      # 5%
+        lesson = self.db.what_is_working(self.uid)["lesson"]
+        self.assertIsNotNone(lesson)
+        self.assertEqual(lesson["best"]["tier"], 3)
+        self.assertEqual(lesson["worst"]["tier"], 1)
+        self.assertEqual(lesson["gap"], 35)
+        self.assertIn("is getting you", self.client.get("/applications").text)
+
+    def test_it_draws_no_lesson_from_a_small_difference(self):
+        """A five-point gap on twenty letters is noise, and telling somebody
+        to change their search on it is worse than saying nothing."""
+        self.letters(3, 20, heard=6)      # 30%
+        self.letters(1, 20, heard=5)      # 25%
+        self.assertIsNone(self.db.what_is_working(self.uid)["lesson"])
+
+    def test_a_detected_reply_counts_here_too(self):
+        """Same rule as the headline, or the two disagree on one screen."""
+        self.letters(3, 10)
+        did = self.application("Seen Co")
+        with self.db.connect() as c:
+            c.execute("UPDATE drafts SET contact_tier = 3 WHERE id = ?", (did,))
+        self.db.mark_reply_seen(self.uid, did)
+        rows = {c["tier"]: c for c in
+                self.db.what_is_working(self.uid)["contacts"]}
+        self.assertEqual(rows[3]["heard"], 1)
+
+    def test_a_rejection_is_not_counted_as_working(self):
+        self.letters(3, 10)
+        did = self.application("No Thanks Ltd")
+        with self.db.connect() as c:
+            c.execute("UPDATE drafts SET contact_tier = 3 WHERE id = ?", (did,))
+        self.db.set_outcome(self.uid, did, "rejected")
+        rows = {c["tier"]: c for c in
+                self.db.what_is_working(self.uid)["contacts"]}
+        self.assertEqual(rows[3]["heard"], 0)
+
+    def test_one_persons_results_are_not_anothers(self):
+        self.letters(3, 10, heard=5)
+        other = self.db.get_or_create_user("someone@example.com")["id"]
+        self.assertFalse(self.db.what_is_working(other)["enough"])
