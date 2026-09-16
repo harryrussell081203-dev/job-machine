@@ -8,6 +8,7 @@ prints a mangled figure when the file is missing or wrong.
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -151,6 +152,91 @@ class TestOnThePage(AppTestCase):
             self.assertNotIn("emails sent", r.text)
         finally:
             tr.PATH, tr._cache = real, cache
+
+
+
+class TestTheCardEveryShareShows(unittest.TestCase):
+    """Post the site anywhere and og.png is what appears. It is seen by
+    everybody shown the link and clicked by only some of them, which makes it
+    the highest-traffic surface the product has and the one nobody looks at
+    twice.
+
+    Which is how it came to be wrong. It was drawn once by hand and the script
+    was thrown away, so when the figures moved it could not be redrawn: for
+    six days the card said 105 applications and 25% while the page it linked
+    to said 125 and 17%. Somebody comparing the two concludes the numbers are
+    decorative, and they are the entire argument.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))) + "/product")
+        from tools import make_og_card
+        self.card = make_og_card
+        self.dir = tempfile.mkdtemp()
+        self.out = os.path.join(self.dir, "og.png")
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def record(self, **over):
+        r = {"applications": 125, "replies": 21, "reply_rate": 17,
+             "employers": 96, "updated_at": ""}
+        r.update(over)
+        return r
+
+    def test_it_draws_a_real_png_at_the_size_every_platform_wants(self):
+        self.card.draw(self.record(), self.out)
+        with open(self.out, "rb") as f:
+            head = f.read(24)
+        self.assertTrue(head.startswith(b"\x89PNG"))
+        width = int.from_bytes(head[16:20], "big")
+        height = int.from_bytes(head[20:24], "big")
+        self.assertEqual((width, height),
+                         (self.card.WIDTH * self.card.SCALE,
+                          self.card.HEIGHT * self.card.SCALE))
+
+    def test_it_writes_down_what_it_drew(self):
+        """A PNG cannot be asked what it says without OCR, so it says so
+        alongside. This is what makes staleness checkable at all."""
+        self.card.draw(self.record(applications=200, replies=40,
+                                   reply_rate=20), self.out)
+        self.assertEqual(self.card.drawn_figures(self.out),
+                         {"applications": 200, "replies": 40,
+                          "reply_rate": 20})
+
+    def test_a_card_that_matches_the_figures_is_not_stale(self):
+        self.card.draw(self.record(), self.out)
+        was = self.card.drawn_figures(self.out)
+        now = {k: self.record()[k] for k in was}
+        self.assertEqual(was, now)
+
+    def test_a_card_drawn_with_different_figures_is_stale(self):
+        """The check that would have caught the six days."""
+        self.card.draw(self.record(applications=105, replies=26,
+                                   reply_rate=25), self.out)
+        was = self.card.drawn_figures(self.out)
+        now = {k: self.record()[k] for k in was}
+        self.assertNotEqual(was, now)
+
+    def test_staleness_is_figures_and_not_timestamps(self):
+        """The personal machine rewrites track_record.json at the end of every
+        run whether or not anything changed, so an mtime comparison reports a
+        perfectly accurate card as stale several times a day. A warning that
+        cries wolf is ignored on the day it is right - the same lesson as the
+        heartbeat alarm that fired daily on a healthy machine."""
+        self.card.draw(self.record(), self.out)
+        os.utime(self.card.track_record.PATH, None)      # touched, unchanged
+        was = self.card.drawn_figures(self.out)
+        now = {k: self.record()[k] for k in was}
+        self.assertEqual(was, now, "a touched file must not mean a stale card")
+
+    def test_the_numbers_come_from_the_same_place_the_page_reads(self):
+        """Not typed into the generator. One fact, one source."""
+        import inspect
+        source = inspect.getsource(self.card)
+        self.assertIn("track_record.read()", source)
+        for typed in ("105", "125", "26%", "25%"):
+            self.assertNotIn(f">{typed}<", source,
+                             "a figure is hard-coded into the card")
 
 
 if __name__ == "__main__":
