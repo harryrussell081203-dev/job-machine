@@ -70,7 +70,11 @@
     {% else %}
       <a href="/find">Free tool</a>
       <a href="/playbook">Playbook</a>
-      <a class="cta" href="/login">Sign in</a>
+      {# The most prominent control on every public page, and it said "Sign
+         in" to an audience that has overwhelmingly never been here. It is the
+         same button either way - there is no separate signup - so it should
+         say the thing a first-time reader can act on. #}
+      <a class="cta" href="/login">{% if config.FREE_SPOTS %}Start free{% else %}Sign in{% endif %}</a>
     {% endif %}
   </nav>
 </header>

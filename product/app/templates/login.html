@@ -1,18 +1,72 @@
 {% extends "base.html" %}
+{% block title %}{% if sent %}Check your email{% else %}Start{% endif %} &middot; Recruited{% endblock %}
 {% block content %}
-<h1>Sign in</h1>
-{% if sent %}
-  <div class="note good">If <b>{{ sent }}</b> has an account, a sign-in link is
-  on its way. It works once and expires in fifteen minutes.</div>
-  <p class="muted">Nothing arriving? Check spam, then try again.</p>
-{% else %}
-  <p class="lede">No password. We email you a link.</p>
-  <form method="post" action="/login">
-    <label for="email">Your email address</label>
-    <input id="email" name="email" type="email" required autofocus
-           autocomplete="email" placeholder="you@example.com">
-    <p style="margin-top:14px"><button type="submit">Email me a link</button></p>
-  </form>
 
+{% if sent %}
+  {# The screen somebody stares at wondering whether it worked. It has one
+     job: get them into their inbox knowing exactly what they are looking
+     for. Vague reassurance is what makes people give up here. #}
+  <h1>Check your email</h1>
+  <div class="note good">
+    <p style="margin-top:0">We have just sent a link to <b>{{ sent }}</b>.
+       Open it and you are in &mdash; there is no password to make up.</p>
+    <p style="margin-bottom:0">It is from <b>Recruited</b> and the subject is
+       <b>&ldquo;Your sign-in link&rdquo;</b>.</p>
+  </div>
+
+  <div class="panel">
+    <p><b>Not there after a minute?</b></p>
+    <ol class="steps">
+      <li><b>Look in spam or junk.</b> This is a new website, so the first
+        email often lands there. Mark it &ldquo;not spam&rdquo; and the next
+        one will not.</li>
+      <li>On Gmail, check the <b>Promotions</b> tab.</li>
+      <li>Search your mail for <b>Recruited</b>.</li>
+    </ol>
+    <p class="hint">The link works once and runs out after fifteen minutes.
+      Past that, just ask for another &mdash; they are free and there is no
+      limit worth worrying about.</p>
+    <p style="margin-bottom:0"><a class="btn ghost" href="/login">Send another
+      link</a></p>
+  </div>
+
+{% else %}
+  {# Headed "Sign in" until now, which is the wrong word for most of the
+     people who see it: nearly everybody arriving here has never been before,
+     having just tapped "Take a free place". Being asked to sign in to an
+     account you know you do not have reads as a wall, and there is not even
+     a wall there - the same box makes the account. #}
+  <h1>{% if spots_left %}Take your free place{% else %}Start{% endif %}</h1>
+  <p class="lede">Put your email in. We send you a link. Tap it and you are
+    in.</p>
+
+  {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+
+  <div class="panel">
+    <form method="post" action="/login">
+      <label for="email">Your email address</label>
+      <input id="email" name="email" type="email" required autofocus
+             autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <p style="margin-top:14px">
+        <button type="submit">Email me a link</button></p>
+    </form>
+    {# Said here rather than on a separate signup page because there is no
+       separate signup page, and people hesitate at a form when they cannot
+       tell which of the two things they are doing. #}
+    <p class="hint" style="margin-bottom:0">New here or coming back &mdash;
+      same box either way. There is no password to remember or lose.</p>
+  </div>
+
+  <p><small class="muted">
+    {%- if spots_left %}Free, and it stays free for the first
+      {{ config.FREE_SPOTS }} people. No card, nothing to cancel.
+    {%- else %}{{ config.PRICE_LABEL }}, cancel any time.{% endif %}
+    By carrying on you agree to the <a href="/terms">terms</a> and the
+    <a href="/privacy">privacy notice</a>.</small></p>
+
+  <p><small class="muted">Not ready for an account?
+    <a href="/find">Try the free tool</a> &mdash; paste a job advert and it
+    finds the real person to write to, no sign-up.</small></p>
 {% endif %}
+
 {% endblock %}

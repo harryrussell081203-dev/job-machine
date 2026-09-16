@@ -170,6 +170,12 @@ p { margin: 0 0 14px; max-width: 62ch; }
 .muted { color: var(--muted); }
 .ok { color: var(--good); font-weight: 500; }
 
+/* A short numbered list of things to try, as on "check your email". The
+   default ol indent hangs the numbers off the edge of a panel on a phone. */
+.steps { margin: 10px 0; padding-left: 20px; }
+.steps li { margin-bottom: 8px; line-height: 1.5; }
+.steps li:last-child { margin-bottom: 0; }
+
 a { color: var(--ink); text-decoration-color: var(--line-strong);
     text-underline-offset: 3px; }
 a:hover { text-decoration-color: currentColor; }
