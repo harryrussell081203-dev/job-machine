@@ -1237,3 +1237,34 @@ class TestSetupDoesNotReadAsAWall(AppTestCase):
         """Same correction as the landing page and /find, which this screen
         was left out of."""
         self.assertNotIn("Your trade", self.page())
+
+
+class TestThePrivacyNoticeMatchesWhatIsDone(AppTestCase):
+    def test_the_view_counter_is_described(self):
+        """The notice said "there is no analytics", and then a page-view
+        counter shipped. It holds nothing about anybody and sets no cookie,
+        which made it tempting to leave the sentence alone - but a privacy
+        notice that is nearly true is the wrong kind, on the one page where
+        somebody decides whether to hand over a CV."""
+        page = self.client.get("/privacy").text
+        self.assertNotIn("no analytics", page)
+        self.assertIn("Counting visits", page)
+        # The two facts that make it harmless, both stated rather than implied.
+        self.assertIn("No cookie is set for it", page)
+        self.assertIn("not stored", page)
+
+    def test_it_says_how_long_the_count_is_kept(self):
+        page = self.client.get("/privacy").text
+        self.assertIn("60 days", page)
+
+    def test_the_retention_claim_matches_the_code(self):
+        """A number typed into a notice drifts away from the one that runs.
+        Asserted against views.KEEP_FOR so the page cannot quietly become a
+        false statement about our own retention."""
+        import app.views as views
+        self.assertEqual(views.KEEP_FOR // 86400, 60)
+
+    def test_no_tracking_pixel_claim_survives(self):
+        page = self.client.get("/privacy").text
+        self.assertIn("no tracking pixel", page)
+        self.assertIn("third-party script", page)
