@@ -2642,7 +2642,7 @@
  },
  "heartbeat": {
   "alerted_at": "2026-09-12T22:56:18.359723+00:00",
-  "last_run": "2026-09-17T00:17:18.690176+00:00"
+  "last_run": "2026-09-17T12:35:15.392862+00:00"
  },
  "inbox": {
   "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
@@ -33889,6 +33889,11 @@
    "posted_at": "2026-08-05T08:27:56+00:00",
    "rediscover_reason": "discovery has improved since this was binned",
    "rediscovered_at": "2026-09-16T18:44:42.353521+00:00",
+   "replied_at": "2026-09-17T12:36:41.280355+00:00",
+   "reply_category": "question",
+   "reply_excerpt": "Hi Harry,\n\nAppreciate the email, although unsure why it's come through to me!  What is the location of the role, and I will look to help or put you in the direction of the appropriate team member?\n\n\n\n\nKind regards\n\nGareth Whyatt\n\n\n\nUK: \u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 +44 1733 391 515\nUSA:\u00a0\u00a0\u00a0\u00a0\u00a0 +1 (630) 423 3341\nUAE:\u00a0\u00a0\u00a0\u00a0\u00a0 +971 600 575 215\n\n\n\n\u00a0\u00a0\u00a0 \u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\n\n               \n\nDISCLAIMER: This e-mail and any files transmitted with it are confidential and intended solely for the use of the individual to whom it is address",
+   "reply_handled_at": "2026-09-17T12:36:41.280370+00:00",
+   "reply_summary": "The recipient of the application is unsure why they received it and asks for the location of the role to help or direct the applicant to the appropriate team member.",
    "salary_max": 50000,
    "salary_min": 50000,
    "score": 75,
@@ -33900,7 +33905,7 @@
    "sent_to": "gareth@thesterlingchoice.com",
    "skip_reason": null,
    "source": "adzuna",
-   "status": "sent",
+   "status": "replied",
    "template_family": "plain",
    "title": "Maintenance Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5828820592?se=HLQrNriQ8RGRle027vtZ2w&utm_medium=api&utm_source=afe77721&v=28B70A03E79AAB6E18B3C88608CAB4D2ECCEB0AA"
