@@ -222,7 +222,10 @@ class TestPressingTheButton(Base):
         self.client.cookies.clear()
         r = self.client.post("/run", follow_redirects=False)
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/login")
+        # The landing page rather than the sign-in form: a stranger who lands
+        # on a private URL needs to be told what this is first. See
+        # main.needs_login for the 27 people who were not.
+        self.assertEqual(r.headers["location"], "/")
 
 
 class TestWatchingIt(Base):
