@@ -99,15 +99,25 @@ def strip_signoff(body: str, profile) -> str:
     return "\n".join(lines).rstrip()
 
 
-def assemble(body: str, greeting: str, profile) -> tuple[str, str]:
-    """Force the exact greeting and sign-off around the model's copy."""
+def assemble(body: str, greeting: str, profile,
+             cv_attached: bool = True) -> tuple[str, str]:
+    """Force the exact greeting and sign-off around the model's copy.
+
+    cv_attached is threaded all the way from the runner rather than assumed,
+    because the sign-off ends "/ CV attached" and that has to be TRUE. A
+    letter that says a CV is attached with nothing attached makes the sender
+    look careless to the one person they were trying to impress, and it is
+    the exact thing this product's own footer promises never to do: never a
+    claim you cannot back.
+    """
     body = normalise(body)
     lines = body.split("\n")
     if lines and lines[0].lower().startswith(("hi", "hello", "dear")):
         lines = lines[1:]
     core = strip_signoff("\n".join(lines).strip(), profile)
     first_name = (profile.name or "").split()[0] if profile.name else ""
-    return f"{greeting}\n\n{core}\n\n{first_name}\n{profile.signoff()}", core
+    return (f"{greeting}\n\n{core}\n\n{first_name}\n"
+            f"{profile.signoff(cv_attached)}"), core
 
 
 # ----------------------------------------------------------------------
@@ -316,7 +326,8 @@ def build_prompt(listing, contact, profile, feedback=()) -> str:
         f"{retry}")
 
 
-def compose(listing, contact, profile, ai, *, attempts: int = 3) -> dict | None:
+def compose(listing, contact, profile, ai, *, attempts: int = 3,
+            cv_attached: bool = True) -> dict | None:
     """A letter that passes every check, or None.
 
     Rejections are fed back into the next attempt, which is what makes this
@@ -346,7 +357,8 @@ def compose(listing, contact, profile, ai, *, attempts: int = 3) -> dict | None:
             continue
 
         subject = normalise(str(raw.get("subject", "")))[:120]
-        body, core = assemble(str(raw.get("body", "")), greeting, profile)
+        body, core = assemble(str(raw.get("body", "")), greeting, profile,
+                              cv_attached)
 
         feedback = problems(subject, core, listing, profile)
         if not feedback:
@@ -377,7 +389,7 @@ def fallback_subject(title: str, company: str) -> str:
     return " ".join(title.split()[:MAX_SUBJECT_WORDS])[:120]
 
 
-def plain_letter(listing, contact, profile) -> dict:
+def plain_letter(listing, contact, profile, cv_attached: bool = True) -> dict:
     """A hand-assembled application, with no model in the loop.
 
     An AI quota is a daily ceiling, and hitting it is a normal Tuesday rather
@@ -420,7 +432,7 @@ def plain_letter(listing, contact, profile) -> dict:
             f"I am applying for the {title} role{where}.\n\n"
             f"{numbered}\n\n"
             f"{ask}\n\n"
-            f"{first_name}\n{profile.signoff()}")
+            f"{first_name}\n{profile.signoff(cv_attached)}")
 
     return {"subject": fallback_subject(title, listing.company), "body": body,
             "to_email": contact.get("email"), "to_name": contact.get("name"),
