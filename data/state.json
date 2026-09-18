@@ -2962,7 +2962,7 @@
  },
  "heartbeat": {
   "alerted_at": "2026-09-12T22:56:18.359723+00:00",
-  "last_run": "2026-09-18T18:08:36.994920+00:00"
+  "last_run": "2026-09-18T19:35:31.793734+00:00"
  },
  "inbox": {
   "<0100019fecb5c780-e3da4d2a-fde2-48da-99c9-d9f58ea8ee3b-000000@email.amazonses.com>": {
@@ -76058,6 +76058,11 @@
    "posted_at": "2026-08-12T21:20:08+00:00",
    "rediscover_reason": "employer's domain was already known",
    "rediscovered_at": "2026-09-14T14:48:54.347192+00:00",
+   "replied_at": "2026-09-18T19:38:00.345973+00:00",
+   "reply_category": "unclassified",
+   "reply_excerpt": "\ufeffI am currently out of the office until Monday.\n\n\n\nPlease contact george.manning@morson-edge.com in my absence.\n\n\n\nThanks,\n\n\n\nCharlie Luck",
+   "reply_handled_at": "2026-09-18T19:38:00.346033+00:00",
+   "reply_summary": null,
    "rescored_at": "2026-08-29T10:16:42.932080+00:00",
    "salary_max": 135200,
    "salary_min": 93600,
@@ -76070,7 +76075,7 @@
    "sent_to": "charlie.luck@morson-edge.com",
    "skip_reason": null,
    "source": "adzuna",
-   "status": "sent",
+   "status": "replied",
    "template_family": "plain",
    "title": "Technical EMT Engineer",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5838729911?se=qNol3gKX8RGEYaK_KET2_g&utm_medium=api&utm_source=afe77721&v=A57D8D4CEE163BF5F806A60A793DC36BC92C67C1"
@@ -92006,6 +92011,11 @@
    "posted_at": "2026-08-17T09:40:05+00:00",
    "rediscover_reason": "employer's domain was already known",
    "rediscovered_at": "2026-09-14T14:48:54.347590+00:00",
+   "replied_at": "2026-09-18T19:41:00.887213+00:00",
+   "reply_category": "unclassified",
+   "reply_excerpt": "\ufeffI am currently out of the office until Monday.\n\n\n\nPlease contact george.manning@morson-edge.com in my absence.\n\n\n\nThanks,\n\n\n\nCharlie Luck",
+   "reply_handled_at": "2026-09-18T19:41:00.887241+00:00",
+   "reply_summary": null,
    "salary_max": 27220.07,
    "salary_min": 27220.07,
    "score": 70,
@@ -92017,7 +92027,7 @@
    "sent_to": "charlie.luck@morson-edge.com",
    "skip_reason": null,
    "source": "adzuna",
-   "status": "sent",
+   "status": "replied",
    "template_family": "agency",
    "title": "Manufacturing Technician",
    "url": "https://www.adzuna.co.uk/jobs/land/ad/5845006948?se=6KPjAxia8RGOUIcJ4rUxCA&utm_medium=api&utm_source=afe77721&v=8B57B7904FB3817AD0ADE0B6D2AD170DA7B1E766"
