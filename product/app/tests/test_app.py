@@ -1399,3 +1399,59 @@ class TestTheFreeToolBringsItsOwnAdvert(AppTestCase):
                 # full stop belongs to the prose. The finder strips it too.
                 self.assertTrue(address.rstrip(".").endswith(".example"),
                                 address)
+
+
+class TestAChangedStylesheetActuallyReachesPeople(AppTestCase):
+    """Twice now, a redesign has shipped correctly and been invisible.
+
+    The service worker caches /static/ cache-first and only drops caches whose
+    key is not the current VERSION, so a stylesheet that changes without a
+    matching bump is never served again to anybody who has already loaded the
+    app. sw.js carried a comment saying exactly that, naming the first time it
+    happened. It happened again anyway, on the very next stylesheet change: a
+    new typeface and a rewritten landing page went live and the phone kept
+    showing the old one.
+
+    A rule that is documented and still missed is not a rule, it is a trap.
+    So the version is derived from the stylesheet rather than typed, and these
+    tests hold the derivation rather than any particular value.
+    """
+
+    def test_the_service_worker_carries_no_unsubstituted_token(self):
+        """The failure this would have as a silent symptom: a literal
+        "__ASSET_VERSION__" is a perfectly valid cache key, so the worker
+        would still work and would still never update."""
+        sw = self.client.get("/sw.js").text
+        self.assertNotIn("__ASSET_VERSION__", sw)
+
+    def test_the_worker_version_matches_the_stylesheet_the_page_asks_for(self):
+        """The two must move together. If the page asks for ?v=123 and the
+        worker's cache key is still the old one, the worker serves a stale
+        file under a URL it has never seen - which is the bug."""
+        version = self.main.ASSET_VERSION
+        self.assertTrue(version and version != "0", "no version derived")
+        self.assertIn(f'"jm-{version}"', self.client.get("/sw.js").text)
+        self.assertIn(f"/static/style.css?v={version}",
+                      self.client.get("/").text)
+
+    def test_the_precached_url_is_the_one_the_page_requests(self):
+        """SHELL pre-caching the bare /static/style.css while the page asks
+        for ?v=... is not a cache hit, it is two different entries and a
+        pointless download on install."""
+        sw = self.client.get("/sw.js").text
+        self.assertIn(f"/static/style.css?v={self.main.ASSET_VERSION}", sw)
+
+    def test_the_worker_itself_is_never_cached(self):
+        """If the thing that invalidates every other cache is itself cached,
+        nothing can ever recover."""
+        r = self.client.get("/sw.js")
+        self.assertEqual(r.headers.get("cache-control"), "no-cache")
+
+    def test_the_version_is_not_a_constant_somebody_has_to_remember(self):
+        """The whole point. A hand-typed version is what failed twice."""
+        import inspect
+        source = inspect.getsource(self.main._asset_version)
+        self.assertIn("st_mtime", source)
+        sw_source = (self.main.HERE / "static" / "sw.js").read_text()
+        self.assertIn("__ASSET_VERSION__", sw_source,
+                      "sw.js has a hard-coded version again")

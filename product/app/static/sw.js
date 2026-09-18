@@ -13,14 +13,22 @@
  * message rather than a stale, possibly-someone-else's screen.
  */
 
-// Bump this on any change to a file in SHELL. The fetch handler below is
-// cache-first for /static/, and activate only clears caches whose key is not
-// this one - so a stylesheet that changes without a bump here is never seen
-// again by anyone who has already loaded the app. The white-and-black redraw
-// was invisible to every returning visitor until this went to v2.
-const VERSION = "jm-v2";
+// Substituted by the /sw.js route from the stylesheet's modification time.
+// NOT a constant to bump by hand, because that is exactly what failed:
+//
+//   v1 -> v2   the white-and-black redraw was invisible to every returning
+//              visitor until somebody noticed and bumped it
+//   v2 -> ???  a new typeface and a rewritten landing page shipped, deployed
+//              correctly, and were invisible again. The comment warning about
+//              it was right here and was still not enough.
+//
+// The fetch handler below is cache-first for /static/, and activate only
+// clears caches whose key is not this one, so a stylesheet that changes
+// without a matching change here is never seen again by anybody who has
+// already loaded the app. That is now impossible: the key IS the stylesheet.
+const VERSION = "jm-__ASSET_VERSION__";
 const SHELL = [
-  "/static/style.css",
+  "/static/style.css?v=__ASSET_VERSION__",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
   "/static/manifest.webmanifest",
