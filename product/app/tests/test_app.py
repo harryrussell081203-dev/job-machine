@@ -1305,3 +1305,58 @@ class TestTheICORegistration(AppTestCase):
                               self.client.get("/privacy").text, value)
             finally:
                 self.main.config.ICO_REGISTRATION = ""
+
+
+class TestTheFreeToolBringsItsOwnAdvert(AppTestCase):
+    """Six people opened /find in a day and not one used it.
+
+    Not a copy problem. Using it requires a job advert already on your
+    clipboard, and nobody who taps a link on a phone has one - so the page
+    asked them to go away, find an advert, copy it and come back, and they did
+    only the first part. The example removes the errand.
+    """
+
+    def advert(self):
+        """The example exactly as the page ships it, pulled out of the
+        template rather than restated here - a copy in the test would keep
+        passing after somebody edited the real one."""
+        import re
+        page = self.client.get("/find").text
+        block = page.split("var EXAMPLE = [", 1)[1].split("].join", 1)[0]
+        lines = re.findall(r'"((?:[^"\\]|\\.)*)"', block)
+        return "\n".join(l.replace('\\"', '"') for l in lines)
+
+    def test_the_button_is_on_the_page(self):
+        self.assertIn('id="tryexample"', self.client.get("/find").text)
+
+    def test_the_example_actually_finds_somebody(self):
+        """The whole point. A demonstration that comes back "nothing found"
+        is worse than no demonstration, because it is a live proof that the
+        thing does not work."""
+        r = self.client.post("/find", data={"advert": self.advert()})
+        self.assertIn("named person", r.text)
+        self.assertIn("fiona.menzies@kestrelfoods.example", r.text)
+
+    def test_it_shows_the_ranking_not_just_a_hit(self):
+        """Two addresses, and which one to write to is the lesson. One result
+        would demonstrate extraction; two demonstrate judgement."""
+        r = self.client.post("/find", data={"advert": self.advert()}).text
+        self.assertIn("hiring inbox", r)
+        self.assertIn("This is the one.", r)
+        self.assertLess(r.find("fiona.menzies"), r.find("careers@"),
+                        "the named person must rank above the generic inbox")
+
+    def test_the_example_company_is_not_real(self):
+        """A real address here would point a stream of strangers' curiosity at
+        some real business's inbox - the exact thing this product exists not
+        to do. .example is reserved by the IETF and can never be registered."""
+        advert = self.advert()
+        import re
+        found = re.findall(r"[\w.+-]+@[\w.-]+", advert)
+        self.assertTrue(found, "the example has no address in it at all")
+        for address in found:
+            with self.subTest(address=address):
+                # rstrip: the advert ends a sentence with one of them, and the
+                # full stop belongs to the prose. The finder strips it too.
+                self.assertTrue(address.rstrip(".").endswith(".example"),
+                                address)
