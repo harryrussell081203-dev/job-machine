@@ -38,9 +38,14 @@ class TheFreeTool(AppTestCase):
         return self.client.post("/find", data={"advert": advert}).text
 
     def test_it_needs_no_account(self):
+        """Asserted on the promise rather than the sentence. The headline and
+        lede here get rewritten - they were rewritten the night the buttons
+        turned out to be below the fold - and a test that breaks on a comma
+        teaches people to edit the test instead of thinking."""
         r = self.client.get("/find")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("Paste any job advert", r.text)
+        self.assertIn("no account", r.text)
+        self.assertIn("advert", r.text.lower())
 
     def test_it_finds_a_named_person(self):
         page = self.find(ADVERT_WITH_A_PERSON)
@@ -94,9 +99,6 @@ class TheFreeTool(AppTestCase):
         self.assertIn('href="/"', page)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestTheResultCanBeShared(AppTestCase):
     """Somebody who has just watched the tool work on their own advert is the
@@ -123,3 +125,53 @@ class TestTheResultCanBeShared(AppTestCase):
         # Not the pricing page. The tool is what converts, because it is the
         # thing the recommender just watched work.
         self.assertIn('"/find"', self._result_page())
+
+
+class TheExampleMustBeReachable(AppTestCase):
+    """The example button worked perfectly and nobody could see it.
+
+    It sat below a rows=10 textarea, which is 280px of empty rectangle. On an
+    iPhone SE you had to scroll 277px to learn there was anything to press; on
+    an iPhone 13, 85px. So somebody landed on a headline and a big blank box
+    with no visible control, and left. Nineteen people did exactly that in one
+    evening, and the fix that was supposed to remove the friction was itself
+    the thing they could not reach.
+
+    Measured in a real mobile browser rather than reasoned about, which is why
+    it was found at all. These tests hold the ORDER, which is what actually
+    decides it: no arithmetic here can predict a font, but an action that
+    comes before the tall box stays above the fold on any phone.
+    """
+
+    def test_the_example_comes_before_the_paste_box(self):
+        page = self.client.get("/find").text
+        example = page.find('id="tryexample"')
+        box = page.find('id="advert"')
+        self.assertNotEqual(example, -1, "the example button is gone")
+        self.assertLess(example, box,
+                        "the example is below the textarea again, which puts "
+                        "it off the bottom of a small phone")
+
+    def test_the_box_is_not_tall_enough_to_push_everything_off_screen(self):
+        """rows=10 was the specific number that did it."""
+        import re
+        page = self.client.get("/find").text
+        rows = re.search(r'id="advert"[^>]*rows="(\d+)"', page) \
+            or re.search(r'rows="(\d+)"[^>]*id="advert"', page)
+        self.assertIsNotNone(rows, "could not find the textarea's rows")
+        self.assertLessEqual(int(rows.group(1)), 7,
+                             "a taller box pushes the submit button off a "
+                             "small screen again")
+
+    def test_the_example_is_the_primary_action(self):
+        """For somebody arriving with nothing in their clipboard it is the
+        only thing they can do, so it must not be the quiet ghost button."""
+        import re
+        page = self.client.get("/find").text
+        tag = re.search(r'<button[^>]*id="tryexample"[^>]*>', page)
+        self.assertIsNotNone(tag)
+        self.assertNotIn("ghost", tag.group(0))
+
+
+if __name__ == "__main__":
+    unittest.main()

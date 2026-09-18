@@ -270,7 +270,7 @@ Nothing on your site proves it the way a genuine inbox does.
 
 ## 10. The 15-second screen recording
 
-Record your phone: open recruited.org.uk/find → tap "Try it on an example" →
+Record your phone: open recruited.org.uk/find → tap "Show me, on an example job" →
 the result appears.
 
 No voiceover needed. Caption:
@@ -278,7 +278,7 @@ No voiceover needed. Caption:
 > It finds the actual person hiring, from the advert. Free, no sign up.
 > recruited.org.uk/find
 
-This is the TikTok and Reels one. The example button exists specifically so
+This is the TikTok and Reels one. The example button is the first thing on the page specifically so
 this recording is possible without you having to find an advert first.
 
 ---
