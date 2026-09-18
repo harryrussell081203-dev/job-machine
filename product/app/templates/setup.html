@@ -8,18 +8,34 @@
    yet. Two of the four are not even needed to get letters written.
 
    So: what they get, then how close they are, then the steps. #}
-<h1>Get it running</h1>
-<p class="lede">Two things and it starts looking for work. Upload your CV and
-  say what you are after. About three minutes.</p>
+{# THE CV IS NOT REQUIRED AND THIS PAGE USED TO SAY IT WAS.
 
-{% set done = (1 if cv else 0) + (1 if profile else 0) %}
-{% if done < 2 %}
-  <div class="note{% if done %} good{% endif %}">
-    {%- if done == 0 %}<b>Start with your CV.</b> It fills in most of the next
-      step on its own, so this is the quickest way through.
-    {%- else %}<b>One to go.</b> Your CV is in. Now tell it what work
-      you are looking for.{% endif %}
+   run_for_user needs a profile. It returns "no profile yet" without one and
+   never asks about a CV at all; autosend sends with attachment=None when
+   there is none. The machine has always worked without one.
+
+   This page opened with "Upload your CV" and "Start with your CV", so that
+   is where people stopped. Nine accounts, one profile, and the profile
+   belongs to the one person who happened to have a CV file to hand. Everybody
+   else arrived on a phone off a link from a mate, and a CV is a document that
+   lives on a laptop or in an old email or nowhere at all.
+
+   So the profile leads, because it is the thing that actually starts the
+   machine, and the CV is plainly optional with the honest cost stated. #}
+<h1>Get it running</h1>
+<p class="lede">Answer a few questions about the work you want and it starts
+  looking. Two minutes, and you do not need a CV to hand.</p>
+
+{% if not profile %}
+  <div class="note">
+    <b>Start here: tell it what you are after.</b> That is the only thing it
+    needs. A CV makes the letters stronger and you can add it any time, from
+    a phone or a laptop.
   </div>
+{% elif not cv %}
+  <div class="note good"><b>It is running.</b> It is looking for work for you
+    now. Add a CV when you can and it goes out with every letter after that.
+    <a href="/dashboard">Go to your dashboard</a>.</div>
 {% else %}
   <div class="note good"><b>You are set up.</b> It is already looking for work
     for you. Everything below this is fine-tuning.
@@ -31,37 +47,8 @@
 {% endif %}
 
 <!-- 1 ---------------------------------------------------------------- -->
-<div class="panel step {% if cv %}done{% endif %}">
-  <h2><span class="num">1</span> Your CV</h2>
-  {% if cv %}
-    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB,
-       attached to every letter.</p>
-    <div class="actions">
-      <a class="btn small" href="/cv">Download it</a>
-      <form method="post" action="/cv/delete">
-        <button class="link danger">Remove</button>
-      </form>
-    </div>
-  {% else %}
-    <p>Attached to every letter. We read it to fill in the next step.</p>
-    {# The accept list carries MIME types as well as extensions. Android's
-       picker greys out cloud files when it cannot match an extension - a file
-       in Drive often arrives with a type and no useful name - so extensions
-       alone are what makes Drive look broken. #}
-    <form method="post" action="/setup/cv" enctype="multipart/form-data"
-          id="cvform">
-      <input type="file" name="cv" id="cvfile" required
-             accept=".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,text/markdown">
-      <button class="btn" id="cvbtn">Upload</button>
-    </form>
-    <p class="hint" id="cvhint">PDF or Word, 5MB limit. Drive and OneDrive are
-       fine.</p>
-  {% endif %}
-</div>
-
-<!-- 2 ---------------------------------------------------------------- -->
 <div class="panel step {% if profile %}done{% endif %}">
-  <h2><span class="num">2</span> Your search</h2>
+  <h2><span class="num">1</span> What work you want</h2>
   {% if profile %}
     <p class="ok">Set up for
        {% if profile.target_roles %}{{ profile.target_roles | join(', ') }}{% else %}your roles{% endif %}
@@ -78,6 +65,36 @@
       <a class="{% if cv %}link{% else %}btn{% endif %}" href="/profile">
         {% if cv %}or do it by hand{% else %}Fill in your search{% endif %}</a>
     </div>
+  {% endif %}
+</div>
+
+<!-- 2 ---------------------------------------------------------------- -->
+<div class="panel step {% if cv %}done{% endif %}">
+  <h2><span class="num">2</span> Your CV <small class="muted" style="font-weight:400">(optional)</small></h2>
+  {% if cv %}
+    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB,
+       attached to every letter.</p>
+    <div class="actions">
+      <a class="btn small" href="/cv">Download it</a>
+      <form method="post" action="/cv/delete">
+        <button class="link danger">Remove</button>
+      </form>
+    </div>
+  {% else %}
+    <p>Attached to every letter, and it makes them a lot stronger. Without one the letters still go, they just have nothing to open.</p>
+    <p class="hint">No CV on your phone? Leave it. You can add it later from anywhere, and every letter after that carries it.</p>
+    {# The accept list carries MIME types as well as extensions. Android's
+       picker greys out cloud files when it cannot match an extension - a file
+       in Drive often arrives with a type and no useful name - so extensions
+       alone are what makes Drive look broken. #}
+    <form method="post" action="/setup/cv" enctype="multipart/form-data"
+          id="cvform">
+      <input type="file" name="cv" id="cvfile" required
+             accept=".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,text/markdown">
+      <button class="btn" id="cvbtn">Upload</button>
+    </form>
+    <p class="hint" id="cvhint">PDF or Word, 5MB limit. Drive and OneDrive are
+       fine.</p>
   {% endif %}
 </div>
 

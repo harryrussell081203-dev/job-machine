@@ -1256,21 +1256,26 @@ class TestSetupDoesNotReadAsAWall(AppTestCase):
         return self.client.get("/setup").text
 
     def test_it_leads_with_what_is_needed_not_how_long_it_takes(self):
-        """"Four things, about ten minutes" counts the work before saying what
-        any of it is for - and two of the four are not needed at all to get
-        letters written."""
+        """"Four things, about ten minutes" counted the work before saying
+        what any of it was for. The replacement said "Two things" - which was
+        shorter and still wrong, because only ONE of them is needed."""
         page = self.page()
         self.assertNotIn("Four things", page)
-        self.assertIn("Two things", page)
+        self.assertNotIn("Two things", page)
+        self.assertIn("Two minutes", page)
 
     def test_the_optional_steps_say_they_are_optional(self):
-        """Without this the screen reads as four compulsory chores, and the
-        two that matter are buried among them."""
-        self.assertEqual(self.page().count("optional"), 2)
+        """Three of the four now: the mailbox, the sending rules, and the CV,
+        which turned out never to have been required by anything."""
+        self.assertEqual(self.page().count("optional"), 3)
 
     def test_it_says_which_single_thing_to_do_first(self):
+        """And it is not the CV. run_for_user needs a profile and nothing
+        else; "Start with your CV" pointed nine accounts at the one step the
+        machine has never asked for."""
         page = self.page()
-        self.assertIn("Start with your CV", page)
+        self.assertNotIn("Start with your CV", page)
+        self.assertIn("Start here", page)
 
     def test_it_does_not_call_it_your_trade(self):
         """Same correction as the landing page and /find, which this screen
@@ -1455,3 +1460,95 @@ class TestAChangedStylesheetActuallyReachesPeople(AppTestCase):
         sw_source = (self.main.HERE / "static" / "sw.js").read_text()
         self.assertIn("__ASSET_VERSION__", sw_source,
                       "sw.js has a hard-coded version again")
+
+
+class TestTheCVIsNotRequired(AppTestCase):
+    """Nine accounts, one profile, and the profile belongs to the one person
+    who happened to have a CV file to hand.
+
+    The machine has never needed one. run_for_user asks for a profile and
+    returns "no profile yet" without it; it never mentions a CV. autosend
+    sends with attachment=None when there is none. Yet the setup screen led
+    with "Upload your CV" and "Start with your CV", so that is where every
+    single person stopped - on a phone, off a link from a mate, with a CV
+    that lives on a laptop or in an old email or nowhere.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sign_in()
+
+    def test_the_runner_asks_for_a_profile_and_not_a_cv(self):
+        """Asserted against the code, because this is the fact the whole
+        screen was contradicting."""
+        import inspect
+        from app import runner
+        source = inspect.getsource(runner.run_for_user)
+        self.assertIn("no profile yet", source)
+        self.assertNotIn("no cv", source.lower())
+
+    def test_the_cv_step_says_it_is_optional(self):
+        page = self.client.get("/setup").text
+        heading = page[page.index("Your CV"):page.index("Your CV") + 160]
+        self.assertIn("optional", heading)
+
+    def test_what_the_machine_needs_comes_first(self):
+        """Order is the instruction. A step numbered 1 is what people do
+        first, whatever the prose around it says."""
+        page = self.client.get("/setup").text
+        self.assertLess(page.index("What work you want"), page.index("Your CV"))
+
+    def test_it_tells_a_phone_user_they_can_skip_it(self):
+        self.assertIn("No CV on your phone", self.client.get("/setup").text)
+
+
+class TestTheLetterNeverClaimsAnAttachmentItLacks(AppTestCase):
+    """The sign-off ends "/ CV attached" and that has to be TRUE.
+
+    signoff(cv_attached=True) defaulted to True and BOTH call sites in
+    compose.py called it with no argument. Nobody has been burned yet only
+    because nobody without a CV has ever reached drafting - which is the very
+    thing this change makes possible. Making the CV optional without this
+    would have started sending real employers letters that announce an
+    attachment and carry none.
+
+    The site's own footer: "Never a claim you cannot back."
+    """
+
+    def profile(self):
+        from jobseeker.profile import Profile
+        return Profile.from_dict({
+            "name": "Sam Wilson", "email": "s@x.com", "phone": "07700900123",
+            "location": "Aberdeen", "target_roles": ["technician"],
+            "locations": ["Aberdeen"], "min_salary_annual": 30000,
+            "history": [{"title": "Technician", "org": "Acme",
+                         "detail": "Kept the lines running"}]})
+
+    def test_it_says_so_when_there_is_one(self):
+        self.assertIn("CV attached", self.profile().signoff(True))
+
+    def test_it_stays_quiet_when_there_is_not(self):
+        line = self.profile().signoff(False)
+        self.assertNotIn("CV", line)
+        # The name and number still have to be there - that is the whole
+        # point of a sign-off.
+        self.assertIn("Sam Wilson", line)
+        self.assertIn("07700900123", line)
+
+    def test_the_runner_decides_it_from_the_database(self):
+        """Not from a default. The default is the dangerous direction."""
+        import inspect
+        from app import runner
+        source = inspect.getsource(runner.run_for_user)
+        self.assertIn("cv_attached = bool(db.get_cv(user_id))", source)
+
+    def test_both_letter_paths_are_told(self):
+        """compose() for the model-written letter and plain_letter() for the
+        fallback when the quota is spent. Missing either one sends the false
+        claim on exactly the days the quota runs out."""
+        import inspect
+        from jobseeker.pipeline import compose
+        for fn in (compose.compose, compose.plain_letter, compose.assemble):
+            with self.subTest(fn=fn.__name__):
+                self.assertIn("cv_attached",
+                              inspect.signature(fn).parameters)
