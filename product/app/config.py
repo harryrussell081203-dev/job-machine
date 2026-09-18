@@ -272,6 +272,16 @@ CONTROLLER_NAME = _env("CONTROLLER_NAME", "the operator of this site")
 CONTACT_EMAIL = _env("CONTACT_EMAIL")
 CONTROLLER_LOCATION = _env("CONTROLLER_LOCATION", "the United Kingdom")
 
+# The ICO data protection register entry, e.g. "ZB123456".
+#
+# Optional, and empty until there is a real one, because the number is the
+# whole value of printing it: anybody can look it up on the ICO's public
+# register and see the registration is genuine. A made-up or placeholder one
+# on a page asking for a CV and a mailbox password would be worse than saying
+# nothing at all - it is the same rule as never guessing an email address,
+# applied to a claim about ourselves.
+ICO_REGISTRATION = _env("ICO_REGISTRATION")
+
 # The date the published terms and privacy notice last changed in substance.
 # Set by hand when they do - a notice that silently rewrites itself is worse
 # than one that is out of date, because nobody can say what they agreed to.
