@@ -139,6 +139,13 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         report.scored_out += 1
         db.mark_seen(user_id, listing.external_id, listing.skipped)
 
+    # Asked once, before the loop, because it cannot change mid-run and the
+    # sign-off has to state it truthfully on every letter. A CV is NOT
+    # required to get this far - run_for_user needs a profile and nothing
+    # else - and the setup screen used to demand one first anyway, which is
+    # where nine accounts out of nine stopped.
+    cv_attached = bool(db.get_cv(user_id))
+
     shortlist = judged["passed"][:cap]
     for i, listing in enumerate(shortlist):
         if report.drafted >= cap:
@@ -149,7 +156,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         step(f"Finding a real address at {listing.company or 'the employer'}",
              done=i, total=len(shortlist), drafted=report.drafted)
         try:
-            _draft_one(user_id, listing, profile, ai, session, report, **kwargs)
+            _draft_one(user_id, listing, profile, ai, session, report,
+                       cv_attached=cv_attached, **kwargs)
         except Exception as exc:
             # One bad listing must never lose the rest of the run.
             report.errors.append(f"{listing.external_id}: {exc}")
@@ -160,7 +168,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     return report
 
 
-def _draft_one(user_id, listing, profile, ai, session, report, **kwargs):
+def _draft_one(user_id, listing, profile, ai, session, report,
+               cv_attached=True, **kwargs):
     contact = discover.discover(listing, profile, session=session, **kwargs)
     if not contact:
         report.no_address += 1
@@ -168,11 +177,12 @@ def _draft_one(user_id, listing, profile, ai, session, report, **kwargs):
                      "no real email address could be found - nothing is guessed")
         return
 
-    letter = compose.compose(listing, contact, profile, ai)
+    letter = compose.compose(listing, contact, profile, ai,
+                             cv_attached=cv_attached)
     if letter is None:
         # A quota is a daily ceiling and hitting it is a normal Tuesday. A
         # plainer letter to a verified address beats no letter at all.
-        letter = compose.plain_letter(listing, contact, profile)
+        letter = compose.plain_letter(listing, contact, profile, cv_attached)
         report.fallback_used += 1
 
     db.add_draft(

@@ -500,7 +500,7 @@ class TestSetupScreens(Base):
         self.sign_in()
         r = self.client.get("/setup")
         self.assertEqual(r.status_code, 200)
-        for heading in ("Your CV", "Your search", "How letters go out",
+        for heading in ("Your CV", "What work you want", "How letters go out",
                         "Sending rules"):
             self.assertIn(heading, r.text)
 
