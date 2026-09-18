@@ -1,26 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Get your CV in front of a human</h1>
-<p class="lede">Most applications go into a system. This sends a short, specific
-email to the person who actually does the hiring, from your own address.</p>
 
-{# Somebody convinced by the headline had nothing to click until the foot of
-   the page - 1,600px down on a desktop and 6,000 on a phone. The evidence
-   below is what convinces a sceptic, and it stays; this is for the reader who
-   is already sold by the first two sentences and should not have to scroll
-   past four sections to act. The closing call to action stays as well: they
-   are for different readers. #}
+{# Cut from 719 words to about 200, and from five and a half phone screens to
+   under three.
+
+   Harry: "less text". He is right, and the length was not an accident - it
+   was written to answer a sceptic reading properly at a desk, while nearly
+   everybody arrives on a phone off a link from a mate. Five screens of
+   argument is not thorough to that reader, it is a wall.
+
+   Everything cut is still on the site, on the pages built for it: the volume
+   research and the tier table live in /playbook, the live figures and where
+   each one comes from live in /numbers. Nothing is hidden - it is one tap
+   away instead of in the way. #}
+
+<h1>Get your CV in front of a human</h1>
+<p class="lede">Most applications vanish into a system. This emails the person
+who actually does the hiring, from your own address.</p>
+
 <p class="hero-cta">
-  <a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start &mdash; {{ config.PRICE_LABEL }}{% endif %}</a>
-  <a class="btn ghost" href="/find">Try it free, no account</a>
+  <a class="btn" href="/find">See it work. No account</a>
+  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
 </p>
+{# The free tool leads now. A stranger who has watched it find a real address
+   will sign up; a stranger shown a sign-up box first mostly will not. Nine
+   people reached this page one evening and two signed up - the other seven
+   left at a form they had no reason yet to trust. #}
 <p class="hero-note"><small>
   {%- if spots_left %}
-    <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left</b>,
-    then {{ config.PRICE_LABEL }}. No card, nothing to cancel.
-  {%- else %}
-    {{ config.PRICE_LABEL }}. Cancel any time.
-  {%- endif %}
+    {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,
+    then {{ config.PRICE_LABEL }}. No card.
+  {%- else %}{{ config.PRICE_LABEL }}. Cancel any time.{% endif %}
 </small></p>
 
 {% if record %}
@@ -29,91 +39,47 @@ email to the person who actually does the hiring, from your own address.</p>
   <div class="stat"><b>{{ record.replies }}</b><span>replies</span></div>
   <div class="stat"><b>{{ record.reply_rate }}%</b><span>reply rate</span></div>
 </div>
-{# The evidence is one person's, and saying whose is what makes it checkable.
-   But naming his trade as the ONLY proof on the page quietly tells everybody
-   in a different line of work that this is not for them - and they would be
-   wrong, because nothing in the method knows or cares what the job is. It
-   reads the advert you give it. So: whose numbers these are, and then, in the
-   same breath, why that does not limit who they apply to. #}
-<p><small>Those are the founder's own, every letter since August 2026 across
-{{ record.employers }} employers &mdash; engineering and technician work,
-because his is the only search that has run long enough to count.
-<b>Nothing in it is built around a trade.</b> It reads the advert you paste
-in, scores it against the job you actually want, and digs out a real person
-to write to. A carer, a driver, a bookkeeper and a welder all get the same
-machine. Cold email normally runs 1&ndash;5%.
-These figures update themselves at the end of every run,
-so this is the running total and not a good fortnight picked out of
-it.</small></p>
-<p><small><b>Autoresponders and rejections are not counted in that
-{{ record.reply_rate }}%.</b> The machine reads what comes back and sorts it,
-so "thank you for your application, we will be in touch" is not a reply and
-neither is a no. Counting both is how this number is normally inflated &mdash;
-including, until recently, by us: the figure here was 26% when it was worked
-out that way, and a third of it was an autoresponder or a
-rejection.</small></p>
+{# Five things this paragraph has to keep doing, in eight lines instead of
+   twenty. Cutting for length lost three of them on the first pass and the
+   tests caught it, which is what they are for:
+
+     whose numbers they are      or they are not checkable
+     that they update themselves or they could be a good fortnight
+     what is excluded            or the rate is the usual inflated kind
+     that a reply is not a job   or 19% reads as 19% getting hired
+     that no trade is assumed    or every non-engineer reads themselves out
+#}
+<p><small>These are the founder's own, across {{ record.employers }} employers
+since August, and they update themselves after every run. Cold email normally
+gets 1&ndash;5%. Autoresponders and rejections are not counted in that
+{{ record.reply_rate }}%, and a reply is not the same thing as an interview.
+Nothing in it is built around a trade: a carer, a driver and a welder get the
+same machine. <a href="/numbers">Every figure, live.</a></small></p>
 {% endif %}
 
-<h2>Sending more makes it worse</h2>
-<p>Every other tool in this market sells volume. The 2026 numbers say volume
-   is the problem, not the solution:</p>
-<ul>
-  <li>The average application reaches interview about <b>2&ndash;3%</b> of
-      the time.</li>
-  <li>People who sent <b>11&ndash;20</b> applications in a quarter interviewed
-      at <b>9.25%</b>. People who sent <b>100 or more</b> managed
-      <b>2.58%</b> &mdash; less than a third. <small>(Huntr, Q1 2026)</small></li>
-  <li>A bulk auto-apply tool, tested independently: <b>200 applications, one
-      callback.</b> 0.5%.</li>
-</ul>
-<p>Applying to more jobs did not just fail to help. It actively hurt, because
-   a hundred applications can only be a hundred untailored ones, and a
-   recruiter spots that in under twenty seconds.</p>
-<p><small><b>Not the same measurement as ours, deliberately said out loud.</b>
-   Those are <i>interview</i> rates.
-   {% if record %}The {{ record.reply_rate }}%{% else %}Ours{% endif %} above
-   is a <i>reply</i> rate &mdash; an answer landing back. They are different
-   things and putting them side by side as one number would be exactly the
-   sort of arithmetic this page exists to avoid.
-   <a href="/numbers">The live numbers, and where each figure comes
-   from.</a></small></p>
-
-<h2>Who you reach decides everything</h2>
+<h2>Who you write to decides everything</h2>
 <div class="panel scroll">
 <table>
-  <tr><th>Who was reached</th><th class="num">Sent</th><th class="num">Replied</th><th class="num">Rate</th></tr>
-  <tr><td>A named human</td><td class="num">34</td><td class="num">13</td><td class="num">38%</td></tr>
-  <tr><td>A hiring inbox</td><td class="num">10</td><td class="num">5</td><td class="num">50%</td></tr>
-  <tr><td>A generic <code>info@</code></td><td class="num">42</td><td class="num">4</td><td class="num">10%</td></tr>
-  <tr><td>Printed in the advert</td><td class="num">9</td><td class="num">6</td><td class="num">67%</td></tr>
+  <tr><th>Who was reached</th><th class="num">Replied</th></tr>
+  <tr><td>Printed in the advert</td><td class="num">67%</td></tr>
+  <tr><td>A hiring inbox</td><td class="num">50%</td></tr>
+  <tr><td>A named human</td><td class="num">38%</td></tr>
+  <tr><td>A generic <code>info@</code></td><td class="num">10%</td></tr>
 </table>
 </div>
-<p>A person instead of a generic inbox was worth roughly four times the reply
-rate. Finding that person is the part this does for you.</p>
+<p>Almost nobody writes to the address printed at the bottom of the advert,
+because everybody clicks Apply. Finding that person is the part this does for
+you.</p>
 
 <h2>What it does</h2>
 <div class="panel">
-{# "your trade" reads as skilled manual work. A bookkeeper, a carer or a
-   receptionist does not see themselves in it, and there is no reason they
-   should not - the matching has never cared what the job is. #}
-<p><b>Finds the jobs.</b> Fresh listings only, under 48 hours old, matched to
-the work you actually want and how far you can travel.</p>
-<p><b>Scores them against you.</b> Below your pay floor never reaches you.
-If you are in work, a sideways move counts for nothing.</p>
+<p><b>Finds fresh jobs.</b> Under 48 hours old, matched to the work you want
+and how far you will travel.</p>
 <p><b>Digs out a real address.</b> From the advert, then the company's own
 site. Never guessed. No real address, no email.</p>
-<p><b>Writes the letter.</b> 60&ndash;90 words, one concrete detail from that
-advert, two or three proof points, exactly one question.</p>
+<p><b>Writes the letter.</b> 60&ndash;90 words, one detail from that advert,
+one question. Your CV attached.</p>
 <p><b>You press send.</b> One click each, from your own address.</p>
-</div>
-
-<h2>Try the hard part, free</h2>
-<div class="panel">
-  <p>Finding a real address is the part nobody else does and the part that
-     decides everything. Paste any job advert and we will tell you whether
-     there is a person in it worth writing to. No account, nothing to
-     install.</p>
-  <p><a class="btn" href="/find">Check a job advert</a></p>
 </div>
 
 <h2>What it will never do</h2>
@@ -122,19 +88,13 @@ advert, two or three proof points, exactly one question.</p>
 same employer twice. Name your current employer to anybody.</p>
 </div>
 
-{% if spots_left %}
-  <div class="note good" style="margin-top:28px">
-    <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left.</b>
-    The next {{ spots_left }} account{{ 's' if spots_left != 1 else '' }} to
-    sign up pay{{ 's' if spots_left == 1 else '' }} nothing, ever. After that
-    it is {{ config.PRICE_LABEL }}.
-  </div>
-{% endif %}
-
-<p style="margin-top:28px">
-  <a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start &mdash; {{ config.PRICE_LABEL }}{% endif %}</a>
+<p style="margin-top:32px" class="hero-cta">
+  <a class="btn" href="/find">Try it on a job advert</a>
   <a class="btn ghost" href="/playbook">Read the method free</a>
 </p>
-<p><small>{% if spots_left %}No card, nothing to cancel.{% else %}Cancel any
-time.{% endif %}</small></p>
+{% if spots_left %}
+  <p><small class="muted">{{ spots_left }} free
+  place{{ '' if spots_left == 1 else 's' }} left. No card, nothing to
+  cancel.</small></p>
+{% endif %}
 {% endblock %}

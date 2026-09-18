@@ -968,13 +968,32 @@ class TestThePublicNumbers(AppTestCase):
             self.assertIn(figure, page)
 
     def test_it_keeps_reply_rate_and_interview_rate_apart(self):
-        """The benchmarks are INTERVIEW rates; Harry's 27% is a REPLY rate.
-        Presenting them as one number would be the exact arithmetic this page
-        exists to prevent."""
-        page = self.client.get("/numbers").text
-        self.assertIn("different thing", page)
+        """A REPLY rate must never be readable as an interview rate.
+
+        This used to assert the sentence "Not the same measurement as ours",
+        which sat under a block of published INTERVIEW benchmarks (Huntr's
+        9.25% and 2.58%) that the landing page no longer carries. With the
+        benchmarks gone there are no longer two measurements side by side,
+        but the confusion they created is not the only route to it: "19%
+        reply rate" on a job-hunting page reads as "19% got hired" all by
+        itself.
+
+        So the assertion moved from the old wording to the rule underneath
+        it, and it is stricter, not looser: the distinction has to be drawn
+        in words, and an interview benchmark may not reappear without one.
+        """
+        self.assertIn("different thing", self.client.get("/numbers").text)
+
         landing = self.client.get("/").text
-        self.assertIn("Not the same measurement as ours", landing)
+        import app.track_record as tr
+        if tr.read():
+            self.assertIn("a reply is not the same thing as an interview",
+                          landing)
+        # And if the interview benchmarks ever come back, the sentence that
+        # told them apart has to come back with them.
+        if "9.25%" in landing or "2.58%" in landing:
+            self.assertIn("interview", landing.lower())
+            self.assertIn("reply", landing.lower())
 
 
 class TestThePublicNumbersCountHonestly(AppTestCase):
