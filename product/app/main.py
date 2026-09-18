@@ -134,8 +134,28 @@ def render(request: Request, template: str, **ctx):
          "record": track_record.read(), **ctx})
 
 
-def needs_login():
-    return RedirectResponse("/login", status_code=303)
+def needs_login(request: Request | None = None):
+    """Where an anonymous visitor goes when they ask for a private screen.
+
+    The landing page, NOT the sign-in form, and the reason is 27 people.
+
+    The Snapchat story linked to /dashboard?utm_source=snapchat - somebody
+    copied the address out of their own browser while signed in and looking at
+    it, which is the most natural mistake there is. Every stranger who tapped
+    that link was bounced straight to a form asking for their email address,
+    for a product they had never heard of, having never seen the front page,
+    the method or a single number. Twenty-seven of them. Three signed up.
+
+    A person who already has an account loses almost nothing: the landing page
+    leads with "Start free", which is the same form one tap later. A person
+    who has never been here gains the entire argument. So the default is the
+    page that explains what this is.
+
+    Kept as a redirect rather than rendering the landing page in place,
+    because the address in the bar has to stop saying /dashboard - otherwise
+    a refresh, a share or a back button lands them right back on the wall.
+    """
+    return RedirectResponse("/", status_code=303)
 
 
 # ----------------------------------------------------------------------

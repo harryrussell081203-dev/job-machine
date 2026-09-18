@@ -296,11 +296,31 @@ class TestSignIn(AppTestCase):
                             follow_redirects=False)
         self.assertIn("already been used", r.text)
 
-    def test_signed_out_users_are_sent_to_login(self):
-        for path in ("/dashboard", "/profile", "/drafts", "/account"):
+    def test_signed_out_users_are_sent_to_the_page_that_explains_this(self):
+        """The landing page, not the sign-in form.
+
+        A Snapchat story linked to /dashboard - the address copied out of a
+        signed-in browser, the most natural mistake there is - and 27 people
+        tapped it. Every one was bounced to a form asking for their email
+        address, for a product they had never heard of, having never seen the
+        front page or a single number.
+
+        The property under test is unchanged: an anonymous visitor cannot
+        reach a private screen. Only where they are put has changed, and it
+        must never go back to a bare form.
+        """
+        for path in ("/dashboard", "/profile", "/drafts", "/account",
+                     "/setup", "/applications"):
             r = self.client.get(path, follow_redirects=False)
             self.assertEqual(r.status_code, 303, path)
-            self.assertEqual(r.headers["location"], "/login", path)
+            self.assertEqual(r.headers["location"], "/", path)
+
+    def test_the_landing_page_they_are_sent_to_can_sign_them_in(self):
+        """The cost of the change, kept small: somebody who does have an
+        account is one tap from the form rather than nought."""
+        r = self.client.get("/dashboard", follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('href="/login"', r.text)
 
 
 class TestPaywall(AppTestCase):
@@ -619,7 +639,7 @@ class TestAccountDeletion(AppTestCase):
         self.client.post("/account/delete", data={"confirm": "delete"},
                          follow_redirects=False)
         r = self.client.get("/dashboard", follow_redirects=False)
-        self.assertEqual(r.headers["location"], "/login")
+        self.assertEqual(r.headers["location"], "/")
 
     def test_confirmation_is_case_and_space_insensitive(self):
         self.client.post("/account/delete", data={"confirm": "  DELETE "},

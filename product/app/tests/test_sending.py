@@ -494,7 +494,7 @@ class TestSetupScreens(Base):
     def test_setup_needs_a_sign_in(self):
         r = self.client.get("/setup", follow_redirects=False)
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/login")
+        self.assertEqual(r.headers["location"], "/")
 
     def test_setup_renders_the_four_steps(self):
         self.sign_in()
