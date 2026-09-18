@@ -1,13 +1,19 @@
 # Posts, ready to paste
 
-Written 18 Sep 2026. Figures: 150 applications, 119 employers, 25 replies, 17%.
-Update them if the site's numbers have moved — recruited.org.uk shows the live ones.
+Updated 18 Sep 2026. **Figures: 166 applications, 135 employers, 31 replies, 19%.**
+They move most days — recruited.org.uk and /numbers show the live ones, and it is
+worth checking before you post, because being able to say "check it yourself" is
+most of why anybody believes the rest.
 
-**One rule throughout: link to `recruited.org.uk/find`, not the front page.**
-The front page asks for an email address. `/find` asks for nothing and now works
-in one tap. Someone who has watched it work will sign up; someone shown a sign-up
-box first mostly will not. Yesterday nine people hit the front page and two signed
-up — the other seven left at a form.
+**Rule one: link to `recruited.org.uk/find`, not the front page.** The front page
+asks for an email address. `/find` asks for nothing and now works in one tap.
+Somebody who has watched it work will sign up; somebody shown a sign-up box first
+mostly will not.
+
+**Rule two: never link a page that needs an account.** The last Snapchat story
+pointed at `/dashboard`. 27 people tapped it and every one was bounced to a login
+form having never seen what the site is. The app now catches that mistake, but the
+rule stands: post `/find`, `/playbook` or the front page and nothing else.
 
 ---
 
@@ -168,3 +174,182 @@ I have no tool that posts to Snapchat, Instagram, TikTok, Facebook or Reddit —
 no connector for any of them exists in this session, and giving me your password
 wouldn't change that (and I wouldn't take it). Writing, research, email drafts
 and the product itself I can do. The tap that publishes has to be yours.
+
+---
+---
+
+# Second batch — more things to post
+
+Ordered roughly by how well I expect them to work for you, not by effort.
+
+---
+
+## 6. The one I would post first: "send me a job and I'll find you the contact"
+
+A story with a reply prompt. This is the best post on the list and it is barely
+a post at all.
+
+> Send me any job you're applying for and I'll tell you the actual email of the
+> person hiring 👀
+>
+> Not the Apply button. A real person.
+>
+> Free, just reply to this
+
+**Why this beats everything else here:** every reply is a conversation, not a
+click. You paste their advert into /find, send back the address, and they have
+watched it work on *their own job* — which is the single most convincing thing
+that can happen to anybody. It costs you thirty seconds each and the people who
+reply are exactly the people who would sign up.
+
+It also survives the thing that killed the last story: there is no link to get
+wrong.
+
+Do it on a weekday evening. Repost the good ones — "found this for X in 10
+seconds" — with the address blurred.
+
+---
+
+## 7. The counterintuitive data post
+
+The strongest hook you have, because it contradicts what everybody believes.
+
+> I tracked all 166 job applications I sent this year.
+>
+> What time you send: makes no difference. None. I checked.
+>
+> Who you send it to: 34% reply if it's a named person. 9% if it's a generic
+> info@ address.
+>
+> An address printed in the advert itself: 70%.
+>
+> Everyone clicks Apply. Almost nobody emails the person whose name is right
+> there at the bottom of the advert.
+
+Works as a story, a carousel, a Reddit post and a LinkedIn post with no changes.
+
+---
+
+## 8. The honest one
+
+Vulnerability outperforms polish with this audience, and it is true.
+
+> 166 applications.
+> 31 replies.
+> 1 interview.
+>
+> That's the real number and I'm not going to dress it up. Job hunting is
+> brutal and anybody telling you their system gets you hired in a week is
+> selling you something.
+>
+> What I can prove is that writing to a person instead of a portal took my
+> reply rate from "silence" to 19%. Cold applications normally get 1–5%.
+>
+> Every figure is public, including the bad months: recruited.org.uk/numbers
+
+**Why post a bad number on purpose:** it is the only reason anybody believes
+the good one. It also pre-empts the obvious reply — "aye but did you get a
+job" — instead of getting caught by it.
+
+---
+
+## 9. Screenshot a real reply
+
+You have 31. Pick the warmest one, blur the company and the sender, leave the
+first line readable.
+
+> This came back 4 hours after I emailed a person directly instead of clicking
+> Apply.
+>
+> That's the whole trick. There isn't a second part.
+
+One real screenshot is worth more than every sentence I have written here.
+Nothing on your site proves it the way a genuine inbox does.
+
+---
+
+## 10. The 15-second screen recording
+
+Record your phone: open recruited.org.uk/find → tap "Show me, on an example job" →
+the result appears.
+
+No voiceover needed. Caption:
+
+> It finds the actual person hiring, from the advert. Free, no sign up.
+> recruited.org.uk/find
+
+This is the TikTok and Reels one. The example button is the first thing on the page specifically so
+this recording is possible without you having to find an advert first.
+
+---
+
+## 11. "Where the email actually hides"
+
+Teach something useful and they'll follow you for the next one.
+
+> Most job adverts DO have a real email on them. It's just never near the
+> Apply button.
+>
+> Scroll to the very bottom. Past the salary, past the benefits, past the
+> equal opportunities line. It's usually in the last paragraph, and it's
+> usually a person.
+>
+> That address replied to me 70% of the time. The Apply button replied about
+> 5%.
+
+Give away the method. The playbook is already free and it has never cost you
+a signup — it is the reason people trust the rest.
+
+---
+
+## 12. The direct ask (not a post, and it converts best)
+
+Message 10 people you know who are job hunting. Individually. Not a broadcast.
+
+> Saw you were looking for work — I built a thing that finds the real email of
+> whoever's hiring so you're not shouting into a portal. It's free, no sign up:
+> recruited.org.uk/find
+>
+> Genuinely tell me if it's rubbish, I'd rather know.
+
+Ten of these will beat another 500-person story, because a story is a broadcast
+and this is a person asking you for a favour. It is also the only one of these
+that gets you honest feedback about why people stop at the CV step.
+
+---
+
+## 13. LinkedIn, if you have one
+
+Different audience, and the data post lands harder there than anywhere. Same
+text as #7, plus one line at the end:
+
+> I'm 22 and job hunting myself. Built the tool because I got sick of portals.
+> The method's free if it's any use to anyone: recruited.org.uk/playbook
+
+Recruiters read LinkedIn. Some of them will be irritated. Some will hire you.
+
+---
+
+## Two things NOT to post
+
+**Don't post the paid product.** Nothing on this list mentions money and that
+is deliberate. You have 8 accounts and 1 active user; the bottleneck is people
+trying it, not people paying. Asking for money now converts nobody and makes
+the free parts look like bait.
+
+**Don't post a link to anything behind a login.** Rule two at the top. It has
+already cost you 27 people once.
+
+---
+
+## The order I would actually do them in
+
+1. **#12, the direct asks.** Ten messages, tonight. Highest conversion per
+   minute of anything here, and the only one that tells you *why* people stop.
+2. **#6, the reply prompt.** No link to get wrong, and every reply is warm.
+3. **#9, the screenshot.** Two minutes, and it is the only real proof you have
+   that isn't a number.
+4. **#7 or #8 on Reddit.** The only route on the list that reaches people who
+   have never heard of you.
+5. **#10, the screen recording**, when you can be bothered — it is the one that
+   keeps working after you post it.
