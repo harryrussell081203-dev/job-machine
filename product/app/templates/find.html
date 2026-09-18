@@ -30,7 +30,7 @@ Free, no account.</p>
   {# rows=10 was 280px of empty rectangle pushing every control off the
      screen. Six still shows it is a big box for a big paste. #}
   <textarea id="advert" name="advert" rows="6" required
-            placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom &mdash; that is usually where the address is">{{ advert or '' }}</textarea>
+            placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom, which is usually where it hides">{{ advert or '' }}</textarea>
   <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. We
     only read what you paste.</p>
   <p style="margin-top:14px" class="actions">
@@ -52,7 +52,7 @@ Free, no account.</p>
             <td class="lead" data-label="Address"><b>{{ c.email }}</b></td>
             <td data-label="What it is">
               {% if c.tier == 3 %}<span class="tag">named person</span>
-                {% if c.name %} &mdash; {{ c.name | title }}{% endif %}
+                {% if c.name %}, {{ c.name | title }}{% endif %}
               {% elif c.tier == 2 %}<span class="tag">hiring inbox</span>
               {% else %}<span class="tag">generic inbox</span>{% endif %}
             </td>
@@ -69,7 +69,7 @@ Free, no account.</p>
 
     <div class="note good">
       <p><b>Write to the top one, not the Apply button.</b> In our own numbers
-      an address printed in the advert replied at 67% &mdash; the best of any
+      an address printed in the advert replied at 67%, the best of any
       source, and almost nobody uses it because everybody clicks Apply.</p>
       <p>Keep it to 60&ndash;90 words: one concrete detail from this advert,
       two proof points, one question. <a href="/playbook">The full method is
@@ -77,12 +77,12 @@ Free, no account.</p>
     </div>
   {% else %}
     <div class="note">
-      <p><b>Nothing in the advert itself.</b> That is the normal answer &mdash;
-      most adverts route you through a portal on purpose.</p>
+      <p><b>Nothing in the advert itself.</b> That is the normal answer. Most
+      adverts route you through a portal on purpose.</p>
       <p>The next place to look is the company's own website: the contact,
       careers and team pages. That is the part we do automatically, on every
       fresh listing in your line of work, every weekday. We never guess an
-      address &mdash; if there is no real one, no letter goes.</p>
+      address. If there is no real one, no letter goes.</p>
     </div>
   {% endif %}
 

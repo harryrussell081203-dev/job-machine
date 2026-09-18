@@ -10,14 +10,14 @@
    So: what they get, then how close they are, then the steps. #}
 <h1>Get it running</h1>
 <p class="lede">Two things and it starts looking for work. Upload your CV and
-  say what you are after &mdash; about three minutes.</p>
+  say what you are after. About three minutes.</p>
 
 {% set done = (1 if cv else 0) + (1 if profile else 0) %}
 {% if done < 2 %}
   <div class="note{% if done %} good{% endif %}">
     {%- if done == 0 %}<b>Start with your CV.</b> It fills in most of the next
       step on its own, so this is the quickest way through.
-    {%- else %}<b>One to go.</b> Your CV is in &mdash; now tell it what work
+    {%- else %}<b>One to go.</b> Your CV is in. Now tell it what work
       you are looking for.{% endif %}
   </div>
 {% else %}
@@ -34,8 +34,8 @@
 <div class="panel step {% if cv %}done{% endif %}">
   <h2><span class="num">1</span> Your CV</h2>
   {% if cv %}
-    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB
-       &mdash; attached to every letter.</p>
+    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB,
+       attached to every letter.</p>
     <div class="actions">
       <a class="btn small" href="/cv">Download it</a>
       <form method="post" action="/cv/delete">
@@ -84,7 +84,7 @@
 <!-- 3 ---------------------------------------------------------------- -->
 <div class="panel step {% if mail %}done{% endif %}">
   <h2><span class="num">3</span> How letters go out
-    <small class="muted" style="font-weight:400">&mdash; optional</small></h2>
+    <small class="muted" style="font-weight:400">(optional)</small></h2>
   {# Steps 3 and 4 both have working defaults, and saying so is what stops
      this screen reading as four compulsory chores. Without a mailbox the
      letters are still written and still have the CV attached; they simply
@@ -102,15 +102,15 @@
     {% if mail.verified_at %}
       <p class="ok">Connected as {{ mail.address }}.</p>
     {% else %}
-      <p class="ok">Saved as {{ mail.address }} &mdash; not checked yet.</p>
+      <p class="ok">Saved as {{ mail.address }}, not checked yet.</p>
       <div class="note">
         <p><b>We could not test the password from here.</b> This site cannot
            open a connection to a mail server, so there is no way to try it on
            this screen. That is about our hosting, not about your password.</p>
         <p>The next run checks it properly, from somewhere that can. If it
            works, letters start going out and this line changes. If it does
-           not, sending is switched off and the reason appears right here
-           &mdash; nothing goes out on a password we have not proved.</p>
+           not, sending is switched off and the reason appears right here.
+           Nothing goes out on a password we have not proved.</p>
       </div>
     {% endif %}
     {% if mail.last_error %}
@@ -129,7 +129,7 @@
 <!-- 4 ---------------------------------------------------------------- -->
 <div class="panel step">
   <h2><span class="num">4</span> Sending rules
-    <small class="muted" style="font-weight:400">&mdash; optional</small></h2>
+    <small class="muted" style="font-weight:400">(optional)</small></h2>
   <p class="hint" style="margin-top:0">These are already set sensibly. Change
     them only if you want to.</p>
   <form method="post" action="/setup/sending">
@@ -137,7 +137,7 @@
       <input type="checkbox" name="auto_send" value="1"
              {% if settings.auto_send %}checked{% endif %}
              {% if not mail %}disabled{% endif %}>
-      <span><b>Send automatically</b> &mdash; letters go out without asking
+      <span><b>Send automatically.</b> Letters go out without asking
         me{% if not mail %} <i>(connect your email first)</i>{% endif %}</span>
     </label>
 
@@ -180,7 +180,7 @@
         did want to talk to you.</p>
       <p>Gmail also cuts a free account off at 500 a day and locks it for 24
         hours; Outlook at 300. And the extra letters go to generic inboxes,
-        which reply at about 10% against 38% for a named person &mdash; so
+        which reply at about 10% against 38% for a named person, so
         past this point you are trading your reputation for a worse reply
         rate.</p>
       <p>Your mailbox, your call. Untick this and anything above
