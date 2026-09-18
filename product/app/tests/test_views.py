@@ -239,3 +239,84 @@ class TestThroughTheApp(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestInAppBrowsersAreNotCrawlers(Base):
+    """Snapchat, Instagram and WhatsApp append their name to an ORDINARY
+    browser user-agent when somebody taps a link inside the app.
+
+    Matching the app name as a bare substring therefore files the reader as a
+    crawler - and these apps are how this product is actually distributed, so
+    the misclassification lands hardest on exactly the traffic worth counting.
+    It was live for a day and hid an unknown number of real Snapchat arrivals
+    on a page built to stop crawlers being mistaken for an audience.
+    """
+
+    # Real strings, shape-accurate: a normal iOS/Android browser UA with the
+    # host app's name appended.
+    IN_APP = {
+        "snapchat": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+                    "Snapchat/12.63.0.44 (like Safari/604.1)",
+        "instagram": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                     "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+                     "Instagram 302.0.0.23.113",
+        "facebook": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+                    "[FBAN/FBIOS;FBAV/441.0.0.32.109]",
+        "whatsapp": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 "
+                    "WhatsApp/2.24.17.79",
+        "tiktok": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                  "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+                  "musical_ly_2023 TikTok",
+    }
+
+    def test_somebody_tapping_from_the_app_is_a_person(self):
+        for app, agent in self.IN_APP.items():
+            with self.subTest(app=app):
+                self.assertFalse(self.views.looks_like_a_robot(agent),
+                                 f"{app}'s in-app browser reads as a crawler")
+
+    def test_they_reach_the_headline_count(self):
+        """The regression that mattered: filed as robots they were recorded,
+        but kept out of the number anybody reads."""
+        self.see("/", user_agent=self.IN_APP["snapchat"],
+                 referer="https://snapchat.com/", host="recruited.org.uk")
+        got = self.counts()
+        self.assertEqual(got["total"], 1)
+        self.assertEqual(got["people"].get("/"), 1)
+        self.assertEqual(got["sources"].get("snapchat.com"), 1)
+
+    def test_no_in_app_name_may_be_a_hard_robot_marker(self):
+        """The guard on the actual mistake. Adding any of these back to the
+        hard list silently re-breaks it, and the symptom - a quiet day - looks
+        exactly like a quiet day."""
+        for name in self.views.IN_APP_BROWSERS:
+            with self.subTest(name=name):
+                self.assertNotIn(name, self.views.HARD_ROBOTS)
+
+    def test_the_preview_fetchers_are_still_robots(self):
+        """The same apps fetch a preview before any human sees the link, and
+        those announce no rendering engine at all. Losing them to the fix
+        would have traded one wrong number for another."""
+        for agent in ("WhatsApp/2.23.20.0", "facebookexternalhit/1.1",
+                      "TelegramBot (like TwitterBot)",
+                      "Slackbot-LinkExpanding 1.0", "Twitterbot/1.0"):
+            with self.subTest(agent=agent):
+                self.assertTrue(self.views.looks_like_a_robot(agent), agent)
+
+    def test_a_crawler_that_dresses_as_a_browser_is_still_a_crawler(self):
+        """Googlebot sends a complete, browser-shaped string on purpose. The
+        shape test must not rescue it."""
+        for agent in (
+            "Mozilla/5.0 (compatible; Googlebot/2.1; "
+            "+http://www.google.com/bot.html)",
+            "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 "
+            "Mobile Safari/537.36 (compatible; Googlebot/2.1)",
+            "Mozilla/5.0 (compatible; bingbot/2.0)",
+            "Mozilla/5.0 (compatible; AhrefsBot/7.0)",
+        ):
+            with self.subTest(agent=agent[:40]):
+                self.assertTrue(self.views.looks_like_a_robot(agent))

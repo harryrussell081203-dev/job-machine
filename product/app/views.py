@@ -58,18 +58,41 @@ HOUR = 3600
 # it - there is nothing here worth keeping for a year.
 KEEP_FOR = 60 * 86400
 
-# Substrings, lowercased. Anything matching is filed as a robot rather than a
-# person. The list covers three separate things that all arrive as traffic:
-# search crawlers, the link-preview fetchers that run on every share, and our
-# own monitoring.
-ROBOTS = (
+# Substrings, lowercased, that mean a robot whatever else the user-agent says.
+# Search crawlers, link-preview fetchers, scripting libraries and our own
+# monitoring. Googlebot sends an otherwise perfectly browser-shaped string, so
+# these have to win over the browser test below.
+HARD_ROBOTS = (
     "bot", "crawl", "spider", "slurp", "scan", "monitor", "uptime",
     "preview", "fetcher", "headless", "python-requests", "httpx", "curl",
     "wget", "pg_net", "go-http-client", "okhttp", "java/", "libwww",
-    "facebookexternalhit", "whatsapp", "telegram", "discord", "slack",
-    "embedly", "quora link", "pinterest", "applebot", "ahrefs", "semrush",
-    "dataprovider", "skypeuripreview", "vkshare", "snapchat",
+    "facebookexternalhit", "embedly", "quora link", "applebot", "ahrefs",
+    "semrush", "dataprovider", "skypeuripreview", "vkshare",
 )
+
+# Apps that BOTH fetch link previews and ship an in-app browser, which is why
+# none of them may ever go in the list above. A test asserts exactly that, and
+# it is the only reason this tuple exists.
+#
+# Putting one there cost a day of Snapchat traffic. "snapchat" was a bare
+# substring in the hard list - and Snapchat's in-app browser sends an ordinary
+# iOS Safari user-agent with "Snapchat/12.63.0.44" appended. So does
+# Instagram's, and WhatsApp's, and every other one. Real people tapping the
+# link from the app that was carrying the launch were recorded as crawlers, on
+# a page built specifically to stop crawlers being mistaken for an audience.
+#
+# Their preview fetchers are not browser-shaped - "WhatsApp/2.23.20.0", no
+# Mozilla, no engine - so the shape test catches those without the name.
+IN_APP_BROWSERS = (
+    "snapchat", "instagram", "whatsapp", "telegram", "discord", "slack",
+    "pinterest", "tiktok", "fban", "fbav", "fb_iab", "line/", "twitter",
+    "linkedinapp", "reddit",
+)
+
+# What every real browser has and no plain HTTP client bothers to fake: the
+# Mozilla prefix kept for compatibility since Netscape, plus a rendering
+# engine. In-app browsers are real browsers and carry both.
+BROWSER_MARKS = ("applewebkit", "gecko", "trident", "khtml")
 
 PERSON, ROBOT = "person", "robot"
 
@@ -78,15 +101,31 @@ MAX_SOURCE = 64
 
 
 def looks_like_a_robot(user_agent: str) -> bool:
-    """A missing user-agent counts as one too.
+    """Decide in this order, because the order is the whole correction.
 
-    Every real browser sends one. Nothing that omits it is a person reading
-    the page, and a scraper that sets none is the commonest sort there is.
+      1. No user-agent at all is a robot. Every real browser sends one, and a
+         scraper that sets none is the commonest sort there is.
+      2. A hard robot marker wins over everything. Googlebot's string is
+         browser-shaped on purpose, so the shape test below cannot be allowed
+         to rescue it.
+      3. Otherwise, a browser-shaped string is a person - INCLUDING one that
+         names an app. That is the fix: Snapchat, Instagram and WhatsApp all
+         append their name to a normal browser user-agent, and matching the
+         app name alone filed their readers as crawlers.
+      4. Anything left announces no rendering engine, which covers both the
+         apps' own preview fetchers ("WhatsApp/2.23.20.0") and every plain
+         HTTP client. Treated as a robot: it costs an occasional obscure
+         client, and the alternative costs an inflated audience, which is the
+         error this page exists to avoid.
     """
     agent = (user_agent or "").strip().lower()
     if not agent:
         return True
-    return any(marker in agent for marker in ROBOTS)
+    if any(marker in agent for marker in HARD_ROBOTS):
+        return True
+    if "mozilla/" in agent and any(m in agent for m in BROWSER_MARKS):
+        return False
+    return True
 
 
 def source_of(referer: str, host: str) -> str:
