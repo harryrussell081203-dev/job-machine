@@ -49,6 +49,34 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 
 
+def _asset_version() -> str:
+    """A token that changes whenever the stylesheet does.
+
+    The typeface and the rewritten landing page went live correctly and Harry
+    still saw the old page, because /static/style.css goes out with no
+    Cache-Control header at all. A browser given no instruction invents one -
+    usually a tenth of the file's age - so a returning visitor keeps the old
+    stylesheet for hours after a deploy, and the newer the file the longer
+    they keep it.
+
+    Appending this to the href means a changed stylesheet is a changed URL,
+    which no cache can match. Nothing else is needed: the content is what
+    versions it, so there is no number for anybody to remember to bump.
+
+    From the file's own modification time rather than a hash, because the
+    whole point is to cost nothing on a cold start, and a deploy rewrites
+    every mtime. Falls back to a constant if the file cannot be stat-ed, in
+    which case caching behaves exactly as it does today rather than breaking.
+    """
+    try:
+        return str(int((HERE / "static" / "style.css").stat().st_mtime))
+    except OSError:
+        return "0"
+
+
+ASSET_VERSION = _asset_version()
+
+
 def _ago(stamp) -> str:
     """"twenty minutes ago", not "2026-09-15 08:53".
 
@@ -131,7 +159,10 @@ def render(request: Request, template: str, **ctx):
          # base.html is every page. Cached on the file's mtime, so this is a
          # dictionary lookup rather than a read. None if nothing is published,
          # and each template is written to make no claim in that case.
-         "record": track_record.read(), **ctx})
+         "record": track_record.read(),
+         # Appended to the stylesheet's URL so a changed file is a changed
+         # URL. See _asset_version for the deploy this was invisible on.
+         "asset_version": ASSET_VERSION, **ctx})
 
 
 def needs_login(request: Request | None = None):
@@ -740,17 +771,37 @@ async def stripe_webhook(request: Request):
 
 @app.get("/sw.js")
 def service_worker():
-    """Served from the root, not from /static/.
+    """Served from the root, not from /static/, and versioned by the code.
 
     A service worker only controls URLs at or below its own path, so one
     living at /static/sw.js could never control /dashboard - it would register
     without error and then do nothing, which is the most annoying kind of
     broken.
+
+    THE VERSION IS SUBSTITUTED HERE RATHER THAN TYPED IN THE FILE.
+
+    sw.js caches /static/ cache-first, and only drops caches whose key is not
+    the current VERSION. So a stylesheet that changes without a matching bump
+    is never seen again by anybody who has already loaded the app. The file
+    said exactly that, in a comment, warning that the last redraw was
+    invisible to every returning visitor until the constant went to v2.
+
+    It was then forgotten the very next time the stylesheet changed - a new
+    typeface and a rewritten landing page shipped, went live correctly, and
+    Harry's phone kept serving the old one. A rule that is documented and
+    still missed is not a rule, it is a trap.
+
+    So the constant is now derived from the stylesheet's own modification
+    time, which a deploy always changes. There is nothing left to remember.
     """
-    from fastapi.responses import FileResponse
-    return FileResponse(
-        HERE / "static" / "sw.js", media_type="application/javascript",
+    from fastapi.responses import Response
+    source = (HERE / "static" / "sw.js").read_text(encoding="utf-8")
+    return Response(
+        source.replace("__ASSET_VERSION__", ASSET_VERSION),
+        media_type="application/javascript",
         headers={"Service-Worker-Allowed": "/",
+                 # Never cache the worker itself, or the mechanism that
+                 # invalidates everything else is the one thing that cannot.
                  "Cache-Control": "no-cache"})
 
 
