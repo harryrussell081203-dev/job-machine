@@ -2,29 +2,39 @@
 {% block title %}Who to write to &middot; Recruited{% endblock %}
 {% block content %}
 
-<h1>Is there a real person on this job advert?</h1>
-<p class="lede">Paste any job advert. We will tell you if there is an address
-in it worth writing to, and what kind. Free, no account.</p>
+<h1>Who do you actually email about this job?</h1>
+<p class="lede">Paste a job advert and we will find the real address in it.
+Free, no account.</p>
 
 {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
 
 <form method="post" action="/find">
-  <label for="advert">The advert</label>
-  <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere, and
-    paste it in. We only read what you paste.</p>
-  <textarea id="advert" name="advert" rows="10" required
+  {# The example button was BELOW the box and below the fold - on an iPhone SE
+     you had to scroll 277px to learn there was anything to press, and on a
+     13 you had to scroll 85. Everybody landed on a headline and a big empty
+     rectangle with no visible control, and left.
+
+     Nineteen people opened this page the night that was true and not one of
+     them pressed anything. The errand was never the whole problem; the button
+     that removed the errand could not be seen.
+
+     So it comes FIRST, above the box, because for somebody arriving with
+     nothing in their clipboard it is the only action they can take. The paste
+     box is for the person who came with an advert, and they will scroll. #}
+  <p class="actions" style="margin:0 0 20px">
+    <button type="button" class="btn" id="tryexample" hidden>Show me, on an
+      example job</button>
+  </p>
+
+  <label for="advert">Or paste your own advert</label>
+  {# rows=10 was 280px of empty rectangle pushing every control off the
+     screen. Six still shows it is a big box for a big paste. #}
+  <textarea id="advert" name="advert" rows="6" required
             placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom &mdash; that is usually where the address is">{{ advert or '' }}</textarea>
+  <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. We
+    only read what you paste.</p>
   <p style="margin-top:14px" class="actions">
     <button type="submit">Find the contact</button>
-    {# Six people opened this page in a day and not one used it. The reason is
-       not the copy: using it requires a job advert already on your clipboard,
-       and nobody scrolling a phone has one. The tool asked them to go away,
-       find an advert, copy it and come back - and they did the first part.
-
-       So it brings its own. One tap, it works in front of them, and THEN they
-       know why they would come back with a real one. #}
-    <button type="button" class="btn ghost" id="tryexample" hidden>Try it on an
-      example</button>
   </p>
 </form>
 
