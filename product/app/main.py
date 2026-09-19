@@ -30,6 +30,10 @@ sys.path.insert(0, str(HERE.parent))          # so `jobseeker` imports
 
 from jobseeker.pipeline import contacts, discover  # noqa: E402
 from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
+# Underscored, and imported anyway on purpose: it is the pipeline's own answer
+# to "is this a searchable place", and seeding a search area out of a CV has to
+# use that answer rather than a second copy of it that can drift from it.
+from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import admin as adminlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
@@ -488,8 +492,12 @@ def profile_form(request: Request):
         return needs_login()
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
+    # Readable text, not merely a file: offering to fill this in from a CV we
+    # cannot read is an offer that ends back on this page with an apology.
+    row = db.get_cv(user["id"])
     return render(request, "profile.html", user=user,
-                  data=db.load_profile(user["id"]) or {})
+                  data=db.load_profile(user["id"]) or {},
+                  cv=bool(row and row["extracted"]))
 
 
 @app.post("/profile", response_class=HTMLResponse)
@@ -1098,13 +1106,38 @@ async def upload_cv(request: Request):
     return answer("/setup")
 
 
+def _seed_from_cv(data: dict, user) -> dict:
+    """A CV reading, plus the few things a CV never states.
+
+    The model is deliberately not asked for any of these. A CV gives an
+    address, not a search area, so `locations` is derived from where it says
+    they live - filtered through the pipeline's own rule for what is a
+    searchable place, because "Currently based in the north east of Scotland"
+    is a real thing to find on a CV and it searches for nothing.
+
+    The pay floor is NOT defaulted and never will be. A guessed floor is how
+    the machine ends up writing to jobs paying less than the user earns now,
+    and it is the one number they have to say out loud.
+    """
+    out = dict(data)
+    out.setdefault("email", user["email"])
+    if not out.get("locations"):
+        out["locations"] = [p for p in _items(out.get("location", ""))
+                            if not _not_a_place(p)][:3]
+    out.setdefault("radius_miles", 25)
+    out.setdefault("situation", "unemployed")
+    return out
+
+
 @app.get("/setup/from-cv", response_class=HTMLResponse)
 def profile_from_cv(request: Request):
-    """The profile form, prefilled from the CV, for the user to correct.
+    """What the CV says, to be checked, plus the two questions it cannot answer.
 
-    Never saved without them pressing save. A model reading a CV gets things
-    wrong, and the two fields it is never allowed to touch - the pay floor and
-    the never-claim list - are exactly the two that must be deliberate.
+    This used to render the full profile form prefilled. That form is seven
+    panels and saves nothing until the bottom of it, and the one user who ever
+    reached it read a correct filling-in of their own CV and left without
+    saving - so the machine never ran for them. Filling a long form in for
+    somebody does not make it a short form. See from_cv.html.
     """
     user, blocked = _gate(request)
     if blocked:
@@ -1112,7 +1145,7 @@ def profile_from_cv(request: Request):
 
     row = db.get_cv(user["id"])
     if not row or not row["extracted"]:
-        return RedirectResponse("/profile", status_code=303)
+        return RedirectResponse("/profile?e=nocv", status_code=303)
 
     from .ai import AIError, gemini_now
     try:
@@ -1121,9 +1154,49 @@ def profile_from_cv(request: Request):
         return RedirectResponse("/profile?e=ai", status_code=303)
     if not data:
         return RedirectResponse("/profile?e=cv", status_code=303)
-    data.setdefault("email", user["email"])
-    return render(request, "profile.html", user=user, data=data,
-                  from_cv=True)
+    return render(request, "from_cv.html", user=user,
+                  data=_seed_from_cv(data, user))
+
+
+@app.post("/setup/from-cv", response_class=HTMLResponse)
+async def profile_from_cv_save(request: Request):
+    """Save the CV's reading, or carry it into the full form.
+
+    Parsed by the same _profile_from_form and validated by the same Profile as
+    the full form, so this shorter screen cannot save something the longer one
+    would have refused.
+    """
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    form = await request.form()
+    data = _profile_from_form(form)
+
+    # "Change something". The whole reading goes into the full form rather
+    # than a link that would land them on a blank one and waste the read.
+    if (form.get("action") or "") == "edit":
+        return render(request, "profile.html", user=user, data=data,
+                      from_cv=True)
+
+    # The one thing this screen asks for, checked here so a person who missed
+    # it gets the short page back rather than being dropped into twenty boxes
+    # over one number.
+    if not (data["min_salary_annual"] or data["min_rate_hourly"]):
+        return render(request, "from_cv.html", user=user, data=data,
+                      error="Put in the least you will work for. A year or an "
+                            "hour, either one is enough.")
+
+    try:
+        Profile.from_dict(data)
+    except ProfileError as exc:
+        # Anything else wrong is in a field this screen does not show, so the
+        # full form is the only place it can be fixed.
+        return render(request, "profile.html", user=user, data=data,
+                      error=str(exc))
+
+    db.save_profile(user["id"], data)
+    return RedirectResponse("/dashboard", status_code=303)
 
 
 @app.post("/setup/sending")
