@@ -60,6 +60,14 @@ SHAPES = {
 }
 SCALE = 2
 
+# TikTok refuses a photo post whose image does not fit inside 1920x1080 or
+# 1080x1920, and refuses PNG outright. A card drawn at the default 2x is
+# 2160x2700, so posting one needs `--scale 1 --format jpeg`; at 1x every
+# shape here is within the box. Written down because the rejection arrives
+# after the upload, sometimes asynchronously, and reads as a server error
+# rather than as a size rule.
+TIKTOK_MAX = (1080, 1920)
+
 # The figures behind the tier table are fixed history: 86 cold emails over
 # four weeks, which is the sample PLAYBOOK.md reports and the only one these
 # percentages are true of. They do NOT move with track_record.json, which
@@ -237,7 +245,8 @@ def sizes(width: int, height: int) -> dict:
         foot=int(25 * k), row=int(22 * k))
 
 
-def draw(name: str, block: dict, shape: str, out_dir: str = OUT) -> str:
+def draw(name: str, block: dict, shape: str, out_dir: str = OUT,
+         scale: int = SCALE, fmt: str = "png") -> str:
     from playwright.sync_api import sync_playwright
 
     width, height = SHAPES[shape]
@@ -248,17 +257,24 @@ def draw(name: str, block: dict, shape: str, out_dir: str = OUT) -> str:
                         **sizes(width, height))
 
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"{name}-{shape}.png")
+    path = os.path.join(out_dir, f"{name}-{shape}.{fmt}")
+    shot = {"path": path, "type": "jpeg" if fmt in ("jpg", "jpeg") else "png",
+            "clip": {"x": 0, "y": 0, "width": width, "height": height}}
+    if shot["type"] == "jpeg":
+        # High but not lossless: these are flat backgrounds and text, where
+        # JPEG artefacts show up around letterforms before they show up
+        # anywhere else.
+        shot["quality"] = 92
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             executable_path=os.environ.get("CHROMIUM",
                                            "/opt/pw-browsers/chromium"),
             args=["--no-sandbox"])
         page = browser.new_context(viewport={"width": width, "height": height},
-                                   device_scale_factor=SCALE).new_page()
+                                   device_scale_factor=scale).new_page()
         page.set_content(html, wait_until="load")
-        page.screenshot(path=path,
-                        clip={"x": 0, "y": 0, "width": width, "height": height})
+        page.screenshot(**shot)
         browser.close()
     return path
 
@@ -269,6 +285,10 @@ def main(argv=None) -> int:
                     help="print what would be drawn, draw nothing")
     ap.add_argument("--shape", choices=sorted(SHAPES),
                     help="only this shape (default: all three)")
+    ap.add_argument("--scale", type=int, default=SCALE,
+                    help="pixel density (default 2; use 1 to post to TikTok)")
+    ap.add_argument("--format", choices=("png", "jpeg"), default="png",
+                    help="png keeps text sharpest; TikTok refuses png")
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args(argv)
 
@@ -280,12 +300,17 @@ def main(argv=None) -> int:
         for name in made:
             for shape in shapes:
                 w, h = SHAPES[shape]
-                print(f"{name}-{shape}.png  {w}x{h} at {SCALE}x")
+                print(f"{name}-{shape}.{args.format}  "
+                      f"{w * args.scale}x{h * args.scale}")
         return 0
 
     for name, block in made.items():
         for shape in shapes:
-            print("drew", draw(name, block, shape, args.out))
+            path = draw(name, block, shape, args.out, args.scale, args.format)
+            w, h = (d * args.scale for d in SHAPES[shape])
+            fits = w <= TIKTOK_MAX[0] and h <= TIKTOK_MAX[1]
+            note = "" if fits else "  (too big for TikTok)"
+            print(f"drew {path}  {w}x{h}{note}")
     return 0
 
 
