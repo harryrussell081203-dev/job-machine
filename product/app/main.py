@@ -36,6 +36,7 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import admin as adminlib  # noqa: E402
+from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
 from . import track_record  # noqa: E402
@@ -246,6 +247,32 @@ async def find_submit(request: Request):
     found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
     return render(request, "find.html", advert=advert, found=found,
                   searched=True)
+
+
+@app.get("/answers", response_class=HTMLResponse)
+def answers_index(request: Request):
+    return render(request, "answers_index.html", answers=answerlib.ANSWERS,
+                  og_title="Straight answers for jobseekers",
+                  og_description="Why applications go unanswered, how to find "
+                                 "a real address, and the numbers behind both.")
+
+
+@app.get("/answers/{slug}", response_class=HTMLResponse)
+def answer_page(request: Request, slug: str):
+    """One question, answered, with the figures behind it.
+
+    An assistant that recommends something is not remembering it - it runs a
+    search as it answers and quotes what comes back. So the page that gets
+    recommended is the one that answers the literal question, which the
+    playbook could not be: it is one address holding five different answers
+    inside a <pre> block. See answers.py.
+    """
+    answer = answerlib.get(slug)
+    if not answer:
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "answer.html", answer=answer,
+                  og_title=answer.question,
+                  og_description=answer.blurb)
 
 
 @app.get("/playbook", response_class=HTMLResponse)
@@ -956,8 +983,8 @@ def healthz():
 # is explicit rather than "everything except": a new signed-in screen added
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
-PUBLIC_PAGES = ("/", "/find", "/playbook", "/numbers", "/terms", "/privacy",
-                "/login")
+PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
+                "/privacy", "/login") + tuple(answerlib.paths())
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
