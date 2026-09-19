@@ -52,96 +52,122 @@ WIDTH, HEIGHT, SCALE = 1080, 1920, 1
 #   "turn"  - the pivot, where it stops being a complaint
 #   "num"   - a figure, set large
 #   "end"   - the address
+#   VOICE
+#
+# First person, and angry. These are written as one unemployed person talking,
+# because that is who is writing them and because the reader is in the middle
+# of the same week.
+#
+# The earlier decks were written in the third person - "they use AI to bin
+# you", "you were never the problem" - and read like a report about
+# jobseekers rather than a message from one. Nobody shares a report. What gets
+# sent to a mate is the thing that says what they have been thinking.
+#
+# So: "I" not "you". A specific grievance rather than a general one; everybody
+# has retyped a CV into a portal after uploading the CV, and nobody has ever
+# had a feeling about "automated screening". Short, flat, bitter sentences.
+#
+# No swearing. Not squeamishness - TikTok suppresses reach on profanity, so it
+# costs the exact thing these exist to get.
+#
+# The anger has to stay true. Every figure is still the real one with its
+# count attached, because a deck that rages and then makes a number up is just
+# another person on the internet shouting.
 DECKS = {
-    # The angle he asked for, and the one that is actually true: employers
-    # screen with software before a person reads anything.
-    "cheat-code": [
-        ("They use AI to bin you", "hook"),
-        ("Before a human reads it", "beat"),
-        ("400 applications. Silence.", "beat"),
-        ("You were never the problem", "turn"),
-        ("So skip the filter", "turn"),
-        ("Email the hiring manager", "beat"),
+    # Everybody has done this. It is the most specific grievance available and
+    # specificity is what makes somebody send it to a friend.
+    "retype": [
+        ("Upload your CV", "hook"),
+        ("Now type your CV again", "beat"),
+        ("Now make an account", "beat"),
+        ("Now answer 30 questions", "beat"),
+        ("Then nothing. Every single time.", "turn"),
+        ("So I emailed a person instead", "turn"),
         ("13 of 34 wrote back", "num"),
-        ("recruited.org.uk", "end"),
     ],
-    # The secret hiding in plain sight. Teaches something usable with no
-    # product in it until the last slide, which is what gets saved and sent on.
+    # The rage one. No method until the end, so it earns the right to mention
+    # anything at all.
+    "four-hundred": [
+        ("400 applications this year", "hook"),
+        ("No human read a single one", "beat"),
+        ("“We’ll keep you on file”", "beat"),
+        ("I’m not sad. I’m furious.", "turn"),
+        ("So I stopped clicking Apply", "turn"),
+        ("13 of 34 wrote back", "num"),
+    ],
+    # The rejection everybody has had, and the detail that gives it away as
+    # automatic. The turn teaches something usable in the same breath.
+    "we-regret": [
+        ("“We regret to inform you”", "hook"),
+        ("Sent at 2am by a bot", "beat"),
+        ("I applied eleven minutes earlier", "beat"),
+        ("Nobody read it. Nobody could.", "turn"),
+        ("That advert had a real email", "turn"),
+        ("Right at the bottom", "beat"),
+        ("6 of 9 wrote back", "num"),
+    ],
+    # Pure method, still in voice. The one that gets saved rather than shared.
     "hidden-email": [
-        ("Job adverts hide an email", "hook"),
+        ("Job adverts hide a real email", "hook"),
         ("Right at the bottom", "beat"),
         ("Past the salary", "beat"),
         ("Past the benefits", "beat"),
-        ("Nobody ever scrolls there", "turn"),
+        ("I never knew. Nobody does.", "turn"),
         ("6 of 9 wrote back", "num"),
         ("Go and look. Tonight.", "end"),
-    ],
-    # Pure pain, no method. Built to be commented on rather than clicked.
-    "not-your-fault": [
-        ("400 applications", "hook"),
-        ("3 replies", "hook"),
-        ("You rewrite the CV again", "beat"),
-        ("Still nothing", "beat"),
-        ("It was never read", "turn"),
-        ("The Apply button eats it", "turn"),
-        ("There is a way round", "end"),
-    ],
-    # The comparison, stripped to numbers. Most screenshot-able.
-    "who-gets-read": [
-        ("Same CV. Four weeks.", "hook"),
-        ("Only one thing changed", "beat"),
-        ("Who actually got it", "turn"),
-        ("Generic info@: 4 of 42", "num"),
-        ("A named person: 13 of 34", "num"),
-        ("In the advert: 6 of 9", "num"),
-        ("Stop clicking Apply", "end"),
     ],
 }
 
 # Caption per deck. TikTok shows the first line or two, so it front-loads and
 # the hashtags sit at the end.
 CAPTIONS = {
-    "cheat-code": (
-        "Most applications are screened by software before a person sees "
-        "them. That is why you hear nothing.\n\n"
-        "I sent 86 cold emails to UK employers over four weeks and kept a "
-        "record. A named person wrote back 13 times out of 34. A generic "
-        "info@ address, 4 out of 42.\n\n"
-        "Same CV both times. The only thing that changed was who received "
-        "it.\n\n"
+    "retype": (
+        "Upload your CV. Then type it all in again. Then make an account you "
+        "will never log into. Then thirty questions about whether you can "
+        "work in the UK, which was on the CV.\n\n"
+        "Then nothing. Not a rejection. Nothing.\n\n"
+        "I stopped doing it and started emailing an actual person at the "
+        "company. 86 of those over four weeks. A named person wrote back 13 "
+        "times out of 34. A generic info@ address, 4 out of 42.\n\n"
+        "Same CV. Same me. The only thing that changed was who got it.\n\n"
         "#jobsearch #ukjobs #jobhunting #unemployed #careertok #jobseekers"),
+    "four-hundred": (
+        "Four hundred. I counted.\n\n"
+        "If you are that deep in with nothing back, I do not think it is your "
+        "CV. An application through a job site is filed, not delivered. "
+        "Nobody is told it arrived and there is no thread for anyone to reply "
+        "to, so even someone who liked it has nothing to reply to.\n\n"
+        "What changed it was emailing a real person instead. 86 cold emails "
+        "to UK employers, 22 came back.\n\n"
+        "#jobsearch #ukjobs #unemployed #jobhunting #careertok #jobseekers"),
+    "we-regret": (
+        "Applied at 1:49am because I could not sleep. Rejected at 2:00am. "
+        "Eleven minutes.\n\n"
+        "Nobody read it. Nobody could have.\n\n"
+        "Here is the bit that got me though. That same advert had a real "
+        "email address printed at the bottom of it, under the salary and the "
+        "benefits, and I had never once scrolled that far.\n\n"
+        "I sent 9 emails to addresses like that and 6 came back. Nine is a "
+        "small sample and I am not going to pretend otherwise. It still beat "
+        "everything else I tried.\n\n"
+        "#jobsearch #ukjobs #jobhunting #unemployed #careeradvice"),
     "hidden-email": (
         "Scroll to the very bottom of the next job advert you see. Past the "
-        "salary, past the benefits, past the equal opportunities paragraph.\n\n"
-        "A lot of them print a real email address down there. I sent 9 and 6 "
-        "came back. Nine is a small sample and I am not pretending otherwise, "
-        "but it beat everything else I tried.\n\n"
-        "Almost nobody uses it, because almost everybody clicks Apply.\n\n"
+        "salary, past the benefits, past the equal opportunities "
+        "paragraph.\n\n"
+        "A lot of them print a real email address down there. I had no idea. "
+        "I had been clicking Apply for months.\n\n"
+        "I sent 9 and 6 came back. Small sample, I know. It still beat "
+        "everything else, and almost nobody uses it because almost everybody "
+        "clicks Apply.\n\n"
         "#jobsearch #ukjobs #jobhunting #careeradvice #jobseekers"),
-    "not-your-fault": (
-        "If you are hundreds of applications in with nothing back, it is "
-        "probably not your CV.\n\n"
-        "An application through a job site is filed, not delivered. Nobody is "
-        "told it arrived and there is no thread for anyone to reply to.\n\n"
-        "What changed it for me was emailing a real person at the company "
-        "instead. 86 cold emails, 22 replies.\n\n"
-        "#jobsearch #ukjobs #unemployed #jobhunting #careertok"),
-    "who-gets-read": (
-        "86 cold emails to UK employers, four weeks, one person, same CV "
-        "every time.\n\n"
-        "Generic info@ address: 4 replies out of 42.\n"
-        "A named human: 13 out of 34.\n"
-        "The address printed in the advert: 6 out of 9.\n\n"
-        "Counts not percentages, because the last row is nine emails and a "
-        "percentage would flatter it.\n\n"
-        "#jobsearch #ukjobs #jobhunting #jobseekers #careeradvice"),
 }
 
 TITLES = {
-    "cheat-code": "They screen you with software. Go round it.",
+    "retype": "Upload your CV. Now type your CV.",
+    "four-hundred": "400 applications. Not one read by a human.",
+    "we-regret": "Rejected eleven minutes after applying, at 2am",
     "hidden-email": "Job adverts hide a real email at the bottom",
-    "not-your-fault": "400 applications and 3 replies is not your CV",
-    "who-gets-read": "Same CV, four weeks: who actually replied",
 }
 
 SLIDE = """
