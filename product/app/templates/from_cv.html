@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}From your CV &middot; Recruited{% endblock %}
+{% block content %}
+
+{# WHY THIS PAGE EXISTS, AND WHY IT IS NOT THE PROFILE FORM.
+
+   Reading a CV into the profile has worked for weeks. It was wired to the
+   wrong screen: it prefilled /profile, which is seven panels and about twenty
+   boxes, and nothing is saved until the person reaches the bottom and presses
+   save.
+
+   One user has ever got this far. They uploaded a CV, landed on the prefilled
+   form, and left. No profile was saved, so nothing ever ran for them. The
+   reading was correct and the machine still did nothing, because filling a
+   form in for somebody does not make it a short form.
+
+   So this screen saves. It shows what was read as plain text to be checked -
+   the qualifications especially, because a model reading a CV is the one
+   thing in this product that can invent a credential - and asks only for what
+   a CV cannot say: the least they will work for, whether they are in a job
+   now, and how far they will go. Everything else rides along hidden and is
+   parsed by the same _profile_from_form the full form uses.
+
+   "Change something" posts the whole reading into the full form, so nobody
+   pays for a second read of the CV to fix one word. #}
+
+<h1>This is what your CV says</h1>
+<p class="lede">Check it, answer three quick things, and it starts looking.</p>
+
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+
+<form method="post" action="/setup/from-cv">
+
+  <div class="panel">
+    <h2 style="margin-top:0">What we read</h2>
+
+    <p><b>{{ data.get('name') or 'No name found' }}</b><br>
+      {{ data.get('location') or 'No town found' }}<br>
+      {{ data.get('phone') or 'No phone number found' }}<br>
+      {{ data.get('email') or '' }}</p>
+
+    <p><b>Jobs it will look for</b><br>
+      {% if data.get('target_roles') %}
+        {{ data.target_roles | join(', ') }}
+      {% else %}<span class="muted">None found. Add them on the next screen.</span>{% endif %}</p>
+
+    {% if data.get('history') %}
+      <p><b>Your last {{ data.history | length }}
+        job{{ '' if data.history | length == 1 else 's' }}</b><br>
+        {% for h in data.history %}
+          {{ h.title }} at {{ h.org }}<br>
+        {% endfor %}</p>
+    {% endif %}
+
+    {% if data.get('qualifications') %}
+      <p><b>Qualifications it will say you hold</b><br>
+        {{ data.qualifications | join(', ') }}</p>
+      <p class="hint">If anything there is wrong, change it before saving. A
+        letter must never claim something you do not hold.</p>
+    {% endif %}
+
+    {# A plain submit, not a link: it carries the reading into the full form.
+       A link would land them on a blank one and waste the read. #}
+    <p><button class="link" type="submit" name="action" value="edit">Change
+      something</button></p>
+  </div>
+
+  {# One panel, not three. This screen exists because a long form loses
+     people, so it does not get to be a long form itself. #}
+  <div class="panel">
+    <h2 style="margin-top:0">What it cannot tell us</h2>
+
+    <label for="min_salary_annual">The least you will work for, a year</label>
+    <input id="min_salary_annual" name="min_salary_annual" type="number"
+           min="0" inputmode="numeric" placeholder="35000"
+           value="{{ data.get('min_salary_annual') or '' }}">
+
+    <label for="min_rate_hourly">Or an hour, on a contract</label>
+    <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0"
+           inputmode="numeric" placeholder="18"
+           value="{{ data.get('min_rate_hourly') or '' }}">
+    <p class="hint">Either one is enough. Anything paying less is refused.</p>
+
+    <label for="radius_miles">How far you will travel</label>
+    <select id="radius_miles" name="radius_miles">
+      {% for m in [10, 25, 50, 100, 200] %}
+        <option value="{{ m }}"
+          {% if (data.get('radius_miles') or 25) == m %}selected{% endif %}>
+          {{ m }} miles</option>
+      {% endfor %}
+    </select>
+
+    <label for="situation">Working now?</label>
+    <select id="situation" name="situation">
+      {% for value, label in [("unemployed", "No, looking for work"),
+                              ("employed", "Yes, in a job"),
+                              ("notice_period", "Working my notice"),
+                              ("student", "Studying")] %}
+        <option value="{{ value }}"
+          {% if (data.get('situation') or 'unemployed') == value %}selected{% endif %}>
+          {{ label }}</option>
+      {% endfor %}
+    </select>
+
+    {# Visible in the markup and hidden by the script below, never the other
+       way round. Hidden in the markup would mean somebody with no JavaScript
+       who picks "in a job" has no box to put the figure in, and the profile
+       is then refused for the missing number with nowhere to fix it. #}
+    <div id="earnings">
+      <label for="current_salary">If you are in a job, what it pays a year</label>
+      <input id="current_salary" name="current_salary" type="number" min="0"
+             inputmode="numeric" value="{{ data.get('current_salary') or '' }}">
+      <p class="hint">So a job paying the same is not offered to you as a move.</p>
+    </div>
+  </div>
+
+  {# Everything read from the CV, carried through the post. A textarea for the
+     one field parsed by line, because a newline does not survive an input's
+     value attribute reliably; the comma-separated fields are parsed by comma
+     as well as by line, so an input is safe for those. #}
+  <input type="hidden" name="name" value="{{ data.get('name','') }}">
+  <input type="hidden" name="location" value="{{ data.get('location','') }}">
+  <input type="hidden" name="phone" value="{{ data.get('phone','') }}">
+  <input type="hidden" name="email" value="{{ data.get('email','') }}">
+  <input type="hidden" name="target_roles"
+         value="{{ (data.get('target_roles') or []) | join(', ') }}">
+  <input type="hidden" name="locations"
+         value="{{ (data.get('locations') or []) | join(', ') }}">
+  {% for p in data.get('priorities') or [] %}
+    <input type="hidden" name="priorities" value="{{ p }}">
+  {% endfor %}
+  {% for h in data.get('history') or [] %}
+    <input type="hidden" name="h_title" value="{{ h.get('title','') }}">
+    <input type="hidden" name="h_org" value="{{ h.get('org','') }}">
+    <input type="hidden" name="h_detail" value="{{ h.get('detail','') }}">
+  {% endfor %}
+  <textarea name="qualifications" hidden>{{ (data.get('qualifications') or []) | join('\n') }}</textarea>
+  <textarea name="never_claim" hidden>{{ (data.get('never_claim') or []) | join('\n') }}</textarea>
+
+  <p><button class="btn" type="submit">Save and start looking</button></p>
+</form>
+
+<script>
+// Ask what somebody earns only when they have said they are earning. The
+// field is in the markup and hidden here, so with no JavaScript the question
+// is simply always asked - which is the behaviour this replaces.
+(function () {
+  var pick = document.getElementById("situation");
+  var box = document.getElementById("earnings");
+  if (!pick || !box) return;
+  function show() { box.hidden = pick.value !== "employed"; }
+  pick.addEventListener("change", show);
+  show();
+})();
+</script>
+{% endblock %}
