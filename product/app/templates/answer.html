@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ answer.question }} &middot; Recruited{% endblock %}
+{% block content %}
+
+{# The question as the heading and the answer as the first paragraph, in that
+   order, because that is the shape a machine reading this page looks for. The
+   structured data below says the same thing again in a form a parser does not
+   have to guess at. Both have to agree: a page whose markup claims one answer
+   and whose text gives another is worse than one with no markup at all. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [{
+    "@type": "Question",
+    "name": {{ answer.question | tojson }},
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": {{ answer.answer | tojson }}
+    }
+  }]
+}
+</script>
+
+<h1>{{ answer.question }}</h1>
+<p class="lede">{{ answer.answer }}</p>
+
+{% include "answers/" ~ answer.slug ~ ".html" %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Where these numbers come from</h2>
+  <p>86 cold emails to real UK employers over four weeks, sent by one person
+    looking for work, logged as they went. 22 replies. The full method and
+    every table is in <a href="/playbook">the playbook</a>, free, no account.</p>
+  <p>They are engineering and technician roles in Scotland, so a different
+    trade may behave differently. Where a row is thin it says so on the row.</p>
+  {% if record %}
+    <p>Since then: {{ record.applications }} applications across
+      {{ record.employers }} employers, {{ record.replies }} replies,
+      {{ record.reply_rate }}%. <a href="/numbers">Live, and updated after
+      every run.</a></p>
+  {% endif %}
+</div>
+
+<p class="hero-cta">
+  <a class="btn" href="/find">Paste a job advert, get the real address</a>
+  <a class="btn ghost" href="/answers">Other questions</a>
+</p>
+<p><small class="muted">The address finder is free and needs no account.</small></p>
+{% endblock %}

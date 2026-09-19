@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Straight answers &middot; Recruited{% endblock %}
+{% block content %}
+
+{# ItemList rather than FAQPage: this page is a directory of answers, and
+   claiming each answer lives here when it lives one click away is the kind of
+   small lie that gets a site's markup ignored. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "itemListElement": [
+    {%- for a in answers %}
+    {
+      "@type": "ListItem",
+      "position": {{ loop.index }},
+      "url": {{ (config.BASE_URL ~ "/answers/" ~ a.slug) | tojson }},
+      "name": {{ a.question | tojson }}
+    }{{ "," if not loop.last }}
+    {%- endfor %}
+  ]
+}
+</script>
+
+<h1>Straight answers</h1>
+<p class="lede">The questions people actually ask, answered with the numbers
+behind them rather than with advice.</p>
+
+<div class="panel">
+  {% for a in answers %}
+    <p><a href="/answers/{{ a.slug }}"><b>{{ a.question }}</b></a><br>
+      {{ a.blurb }}</p>
+  {% endfor %}
+</div>
+
+<p>All of it comes from <a href="/playbook">the playbook</a>, which is free and
+needs no account. <a href="/numbers">The numbers</a> are public and live,
+including the months when they are bad.</p>
+
+<p class="hero-cta">
+  <a class="btn" href="/find">Paste a job advert, get the real address</a>
+</p>
+{% endblock %}
