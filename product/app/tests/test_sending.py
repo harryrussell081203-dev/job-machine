@@ -645,8 +645,232 @@ class TestInstallable(Base):
         self.assertEqual(self.client.get("/favicon.ico").status_code, 200)
 
 
-if __name__ == "__main__":
-    unittest.main()
+# ----------------------------------------------------------------------
+class TestFillFromCV(Base):
+    """Reading a CV into a profile, and actually saving it.
+
+    The reading has worked for weeks and was wired to the wrong screen: it
+    prefilled the full profile form, which is seven panels and saves nothing
+    until the bottom. The one person who ever reached it looked at a correct
+    filling-in of their own CV and left. No profile, so the machine never ran
+    for them - which from the outside is indistinguishable from the app not
+    working at all.
+    """
+
+    CV = ("Riley Martin\nAberdeen, Scotland\n07700 900123\n"
+          "riley@example.com\nWarehouse operative at Kestrel Foods\n")
+
+    READING = {
+        "name": "Riley Martin",
+        "location": "Aberdeen, Scotland",
+        "phone": "07700 900123",
+        "email": "riley@example.com",
+        "target_roles": ["warehouse operative", "forklift driver"],
+        "qualifications": ["counterbalance forklift licence"],
+        "history": [{"title": "Warehouse operative", "org": "Kestrel Foods",
+                     "detail": "Picked and packed 300 orders a shift."}],
+    }
+
+    def sign_in(self, email="riley@example.com"):
+        link = self.main.auth.make_login_link(email)
+        token = link.split("token=", 1)[1]
+        self.client.get(f"/auth/verify?token={token}", follow_redirects=False)
+        self.uid = self.db.get_user_by_email(email)["id"]
+
+    def upload(self, text=None):
+        self.client.post(
+            "/setup/cv",
+            files={"cv": ("cv.txt", (text or self.CV).encode(), "text/plain")},
+            follow_redirects=False)
+
+    def reading(self, **overrides):
+        """The screen, with the model's answer stubbed. Patched on app.ai
+        because the route imports it there at call time."""
+        data = dict(self.READING, **overrides)
+        import json as _json
+        return mock.patch("app.ai.gemini_now",
+                          lambda *a, **k: _json.dumps(data))
+
+    def answers(self, **overrides):
+        """What the short screen posts back: everything it read, hidden, plus
+        the two things a CV cannot say."""
+        form = {
+            "name": "Riley Martin", "location": "Aberdeen, Scotland",
+            "phone": "07700 900123", "email": "riley@example.com",
+            "target_roles": "warehouse operative, forklift driver",
+            "locations": "Aberdeen, Scotland",
+            "qualifications": "counterbalance forklift licence",
+            "h_title": "Warehouse operative", "h_org": "Kestrel Foods",
+            "h_detail": "Picked and packed 300 orders a shift.",
+            "situation": "unemployed", "radius_miles": "25",
+            "min_salary_annual": "26000",
+        }
+        form.update(overrides)
+        return {k: v for k, v in form.items() if v is not None}
+
+    # -- what it shows -------------------------------------------------
+    def test_it_shows_what_was_read_instead_of_a_form_to_check_it_against(self):
+        self.sign_in()
+        self.upload()
+        with self.reading():
+            page = self.client.get("/setup/from-cv").text
+        self.assertIn("Riley Martin", page)
+        self.assertIn("warehouse operative", page)
+        self.assertIn("Kestrel Foods", page)
+        # The dangerous field, shown in words rather than buried in a textarea
+        # twenty boxes down. A model reading a CV inventing a licence is the
+        # one failure this product calls unforgivable, so it has to be
+        # readable at a glance before anything is saved.
+        self.assertIn("counterbalance forklift licence", page)
+
+    def test_the_pay_floor_is_asked_for_and_never_guessed(self):
+        self.sign_in()
+        self.upload()
+        with self.reading(min_salary_annual=48000):
+            page = self.client.get("/setup/from-cv").text
+        self.assertIn('name="min_salary_annual"', page)
+        self.assertNotIn("48000", page)
+
+    # -- what it saves -------------------------------------------------
+    def test_saving_starts_the_machine(self):
+        self.sign_in()
+        self.upload()
+        r = self.client.post("/setup/from-cv", data=self.answers(),
+                             follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/dashboard")
+
+        saved = self.db.load_profile(self.uid)
+        self.assertEqual(saved["name"], "Riley Martin")
+        self.assertEqual(saved["target_roles"],
+                         ["warehouse operative", "forklift driver"])
+        self.assertEqual(saved["history"][0]["org"], "Kestrel Foods")
+        self.assertEqual(saved["min_salary_annual"], 26000)
+
+    def test_it_will_not_save_without_a_floor_and_does_not_punish_the_mistake(self):
+        """Back to the short screen over one missing number, not into the long
+        form. Everything already read stays on the page."""
+        self.sign_in()
+        self.upload()
+        r = self.client.post("/setup/from-cv",
+                             data=self.answers(min_salary_annual=None))
+        self.assertIsNone(self.db.load_profile(self.uid))
+        self.assertIn("least you will work for", r.text)
+        self.assertIn("Riley Martin", r.text)
+        self.assertIn("Kestrel Foods", r.text)
+
+    def test_a_floor_by_the_hour_is_enough(self):
+        self.sign_in()
+        self.upload()
+        r = self.client.post(
+            "/setup/from-cv",
+            data=self.answers(min_salary_annual=None, min_rate_hourly="18"),
+            follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(self.db.load_profile(self.uid)["min_rate_hourly"], 18)
+
+    def test_it_cannot_save_what_the_long_form_would_have_refused(self):
+        """Same parser, same Profile, so the shorter screen is not a shortcut
+        past the rules. A sentence in the locations box searches for nothing
+        and the failure is silent - it reads as an empty job market."""
+        self.sign_in()
+        self.upload()
+        r = self.client.post(
+            "/setup/from-cv",
+            data=self.answers(locations="anywhere in the north of Scotland "
+                                        "really"))
+        self.assertIsNone(self.db.load_profile(self.uid))
+        self.assertIn("location", r.text.lower())
+
+    # -- changing it ---------------------------------------------------
+    def test_change_something_carries_the_reading_into_the_full_form(self):
+        """A link here would land them on a blank form and waste the read."""
+        self.sign_in()
+        self.upload()
+        r = self.client.post("/setup/from-cv",
+                             data=self.answers(action="edit"))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('action="/profile"', r.text)
+        self.assertIn("Riley Martin", r.text)
+        self.assertIn("counterbalance forklift licence", r.text)
+        self.assertIsNone(self.db.load_profile(self.uid))
+
+    # -- where the search area comes from ------------------------------
+    def field(self, page, name):
+        """What the page is carrying in a named hidden input. Read rather than
+        matched as a literal string, so re-wrapping the markup does not fail a
+        test about behaviour."""
+        import re
+        found = re.search(r'name="%s"\s+value="([^"]*)"' % name, page)
+        self.assertIsNotNone(found, f"no {name} field on the page")
+        return found.group(1)
+
+    def test_the_search_area_comes_from_where_the_cv_says_they_live(self):
+        """A CV states an address and never states a search area."""
+        self.sign_in()
+        self.upload()
+        with self.reading():
+            page = self.client.get("/setup/from-cv").text
+        self.assertEqual(self.field(page, "locations"), "Aberdeen, Scotland")
+
+    def test_a_sentence_where_a_town_should_be_is_not_searched_for(self):
+        """Real CVs say things like this where a town should be. Sent to a job
+        board it matches nothing, and the failure is silent: it reads as an
+        empty job market rather than a bad search."""
+        self.sign_in()
+        self.upload()
+        with self.reading(location="currently based in the north east of "
+                                   "Scotland"):
+            page = self.client.get("/setup/from-cv").text
+        self.assertEqual(self.field(page, "locations"), "")
+
+    # -- the ways in ---------------------------------------------------
+    def test_uploading_a_cv_leads_straight_here(self):
+        self.sign_in()
+        self.upload()
+        r = self.client.post(
+            "/setup/cv",
+            files={"cv": ("cv.txt", self.CV.encode(), "text/plain")},
+            follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/setup/from-cv")
+
+    def test_the_profile_form_offers_it_to_anybody_with_a_cv_on_file(self):
+        """Somebody who uploaded a CV last week and came back to /profile by
+        hand should not be typing out what is already on it."""
+        self.sign_in()
+        self.upload()
+        page = self.client.get("/profile").text
+        self.assertIn("/setup/from-cv", page)
+
+    def test_it_is_not_offered_when_there_is_nothing_to_read(self):
+        self.sign_in()
+        self.assertNotIn("/setup/from-cv", self.client.get("/profile").text)
+
+    def test_asking_for_it_with_no_cv_says_so(self):
+        self.sign_in()
+        r = self.client.get("/setup/from-cv", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/profile?e=nocv")
+
+    def test_a_model_that_is_down_does_not_lose_the_cv(self):
+        self.sign_in()
+        self.upload()
+        from app.ai import AIError
+
+        def broken(*a, **k):
+            raise AIError("rate limited")
+
+        with mock.patch("app.ai.gemini_now", broken):
+            r = self.client.get("/setup/from-cv", follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/profile?e=ai")
+        self.assertIsNotNone(self.db.get_cv(self.uid))
+
+    def test_it_needs_a_sign_in(self):
+        r = self.client.get("/setup/from-cv", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/")
+        r = self.client.post("/setup/from-cv", data={}, follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
 
 
 class TestStatusPage(unittest.TestCase):
@@ -1542,3 +1766,7 @@ class TestBeingToldThatSomebodyReplied(Base):
         report = self.check({"hr@acme-marine.com"}, notify=broken)
         self.assertEqual(report.found, 1)
         self.assertTrue(self.db.get_draft(self.uid, did)["reply_seen_at"])
+
+
+if __name__ == "__main__":
+    unittest.main()

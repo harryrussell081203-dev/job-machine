@@ -5,12 +5,20 @@
 
 {% if from_cv %}
   <div class="note good">
-    <p><b>Filled in from your CV.</b> Check every line &mdash; this is a
-       machine's reading, and it is about to write to employers under your
-       name.</p>
-    <p>Your <b>pay floor</b> and your <b>never claim</b> list were left blank
-       on purpose. Both are yours to state.</p>
+    <p><b>Filled in from your CV.</b> Check every line. This is a machine's
+       reading, and it is about to write to employers under your name.</p>
+    <p>Nothing is saved until you press save at the bottom.</p>
   </div>
+{% elif cv and not data %}
+  {# They have a CV on file and an empty profile, and they came straight here.
+     Offer the short way through before they start typing, not after. #}
+  <div class="note">
+    <p><b>You have a CV on file.</b> We can read it and fill most of this in.</p>
+    <p><a class="btn small" href="/setup/from-cv">Fill it in from my CV</a></p>
+  </div>
+{% elif request.query_params.get('e') == 'nocv' %}
+  <div class="note">There is no CV on your account we can read, so this one is
+    by hand. You can <a href="/setup">upload one</a> any time.</div>
 {% elif request.query_params.get('e') == 'ai' %}
   <div class="note">Your CV is saved and there is nothing wrong with it
     &mdash; we just could not read it right now. Try again in a few minutes,
