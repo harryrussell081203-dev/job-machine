@@ -79,3 +79,16 @@ def read() -> dict | None:
     record["updated_at"] = str(raw.get("updated_at") or "")
     _cache = (stamp, record)
     return record
+
+
+def updated_on() -> str:
+    """The published date, as YYYY-MM-DD, or "" if there is none.
+
+    For the sitemap's lastmod, which wants a date and nothing else. Taken
+    from what the machine wrote rather than from the clock, so a page is
+    claimed to have changed only when the figures on it actually did.
+    """
+    record = read() or {}
+    stamp = record.get("updated_at") or ""
+    date = stamp[:10]
+    return date if len(date) == 10 and date[4] == "-" and date[7] == "-" else ""
