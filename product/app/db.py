@@ -1170,3 +1170,34 @@ def paid_user_ids() -> list:
     with connect() as c:
         rows = c.execute("SELECT id FROM users ORDER BY id").fetchall()
     return [r["id"] for r in rows]
+
+
+# ----------------------------------------------------------------------
+# things the site remembers about itself
+# ----------------------------------------------------------------------
+def get_meta(key: str) -> str:
+    """A note a previous process left. Missing is "" rather than an error:
+    every caller here is asking "have I already done this", and the answer
+    before the first time is no."""
+    try:
+        with connect() as c:
+            row = c.execute("SELECT value FROM site_meta WHERE key = ?",
+                            (key,)).fetchone()
+        return (row["value"] if row else "") or ""
+    except Exception:
+        return ""
+
+
+def set_meta(key: str, value: str) -> None:
+    """Failures are swallowed. Nothing stored here is worth a 500 - the worst
+    case is a piece of work repeated, which is what it was before."""
+    try:
+        with connect() as c:
+            c.execute(
+                "INSERT INTO site_meta (key, value, updated_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+                "updated_at = excluded.updated_at",
+                (key, value, now()))
+    except Exception:
+        pass

@@ -44,6 +44,11 @@ def build(**env):
         # that Recruited addresses are NOT offered passed alone and failed
         # in the suite because a previous class had switched them on.
         "MANAGED_MAIL_DOMAIN": "", "MANAGED_MAIL_KEY": "",
+        # And again, for the same reason. The IndexNow key decides whether a
+        # route exists at all, registered at import, so a key left behind by
+        # an earlier class makes a test asserting the file is NOT served fail
+        # in the suite and pass on its own.
+        "INDEXNOW_KEY": "",
     }
     defaults.update(env)
     os.environ.update(defaults)
