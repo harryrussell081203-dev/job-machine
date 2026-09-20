@@ -53,6 +53,16 @@
 <h1>Admin</h1>
 <p class="lede">Everyone who has an account, and how far they got.</p>
 
+{# "Active" now means a page was loaded while signed in. It used to mean a
+   sign-in link was requested, which counted people who never clicked one, and
+   rows written under the old meaning cannot be corrected after the fact. They
+   age out of the 30-day window on their own; until they have, this figure
+   reads high. Stated here rather than quietly, because a number nobody
+   explains is a number somebody plans against. #}
+<p><small class="muted">"Active" means a page loaded while signed in. Accounts
+created before 20 Sep 2026 carry the old meaning, a sign-in link requested,
+so this reads high until they age out.</small></p>
+
 <div class="stats">
   <div class="stat"><b>{{ people }}</b><span>accounts</span></div>
   <div class="stat"><b>{{ active_7d }}</b><span>active this week</span></div>
