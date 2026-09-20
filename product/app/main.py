@@ -129,8 +129,23 @@ app.router.lifespan_context = lifespan
 # helpers
 # ----------------------------------------------------------------------
 def current_user(request: Request):
+    """The signed-in user, and the one place that knows somebody came back.
+
+    The touch lives here rather than in middleware for the same reason the
+    view counter lives in render(): this is the single door every
+    authenticated request already goes through, so static files, redirects
+    and the health check cannot be mistaken for a person using the app.
+
+    It is throttled in db.touch_user, so a screen polled every few seconds
+    costs one write a quarter of an hour rather than one a poll.
+    """
     uid = auth.read_session(request.cookies.get(SESSION_COOKIE))
-    return db.get_user(uid) if uid else None
+    if not uid:
+        return None
+    user = db.get_user(uid)
+    if user:
+        db.touch_user(user["id"], user["last_seen_at"])
+    return user
 
 
 def render(request: Request, template: str, **ctx):

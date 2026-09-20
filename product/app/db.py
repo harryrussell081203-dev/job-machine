@@ -28,17 +28,58 @@ def now() -> int:
 # ----------------------------------------------------------------------
 # users
 # ----------------------------------------------------------------------
+# How stale last_seen_at has to be before a page view rewrites it. Every
+# authenticated request would otherwise be a write, on a database where the
+# busiest screen is read several times a minute. Fifteen minutes is far finer
+# than the day-level buckets anything actually asks of it.
+TOUCH_AFTER = 900
+
+
 def get_or_create_user(email: str):
+    """Called when somebody types their email into the sign-in form.
+
+    It deliberately does NOT touch last_seen_at, and that is the fix rather
+    than an oversight. It used to, which made the column mean "last asked for
+    a sign-in link" while every reader of it - the admin page's "active this
+    week", and me - took it for "last used the app". Those are not the same
+    event and the gap between them is the entire question: somebody who
+    requests a link and never clicks it has not come back, and was being
+    counted as though they had.
+
+    A new row leaves it NULL, so "signed up and never returned" is
+    distinguishable from "returned at some point". Rows created before this
+    carry a sign-in-request timestamp and cannot be corrected after the fact;
+    they age out of the 30-day window on their own.
+    """
     email = email.strip().lower()
     with connect() as c:
         row = c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         if row:
-            c.execute("UPDATE users SET last_seen_at = ? WHERE id = ?",
-                      (now(), row["id"]))
             return row
-        c.execute("INSERT INTO users (email, created_at, last_seen_at) "
-                  "VALUES (?, ?, ?)", (email, now(), now()))
+        c.execute("INSERT INTO users (email, created_at) VALUES (?, ?)",
+                  (email, now()))
         return c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+
+
+def touch_user(user_id: int, last_seen: int | None, at: int | None = None) -> None:
+    """Record that this user is here, at most once every TOUCH_AFTER seconds.
+
+    Caller passes the value it already has rather than this re-reading the
+    row, because it is called from the one function every authenticated
+    request goes through and that function has just loaded the user.
+
+    Failures are swallowed. This is a metric, and a metric is never worth a
+    500 on somebody's dashboard.
+    """
+    at = now() if at is None else at
+    if last_seen and at - last_seen < TOUCH_AFTER:
+        return
+    try:
+        with connect() as c:
+            c.execute("UPDATE users SET last_seen_at = ? WHERE id = ?",
+                      (at, user_id))
+    except Exception:
+        pass
 
 
 def get_user_by_email(email: str):
