@@ -2,6 +2,59 @@
 {% block title %}The numbers &middot; Recruited{% endblock %}
 {% block content %}
 
+{# TWO DATASETS, DECLARED SEPARATELY, BECAUSE THEY ARE TWO DATASETS.
+
+   The site publishes two reply rates - 26% of 86 and the live figure - and
+   they count different events. One catalogue entry covering both would be
+   the same conflation in machine-readable form, and structured data that
+   disagrees with the page is worse than none: it is the reason a parser
+   learns to ignore a site.
+
+   So each carries its own measurementTechnique naming the definition it was
+   measured with, and both point at /numbers.json where the counts sit under
+   the rates. Licence stated, because citation needs one - a dataset nobody
+   is permitted to quote is not a citation hook, it is a decoration. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Dataset",
+      "@id": {{ (config.BASE_URL ~ "/numbers.json#study") | tojson }},
+      "name": "86 cold emails to UK employers, by recipient and by source",
+      "description": "Every cold email sent by one jobseeker to a UK employer over four weeks, logged as it went: 86 sent, 22 replies. Broken down two ways - who the address belonged to (named person, hiring inbox, generic inbox) and where it was found (printed in the advert, or on the employer's own website). Both cuts total the same 86. Thin rows carry their sample size.",
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "creator": {"@id": {{ (config.BASE_URL ~ "/#org") | tojson }}},
+      "isAccessibleForFree": true,
+      "measurementTechnique": "A reply is any message received in return, including automated acknowledgements and rejections.",
+      "spatialCoverage": "United Kingdom",
+      "distribution": {
+        "@type": "DataDownload",
+        "encodingFormat": "application/json",
+        "contentUrl": {{ (config.BASE_URL ~ "/numbers.json") | tojson }}
+      }
+    }{% if record %},
+    {
+      "@type": "Dataset",
+      "@id": {{ (config.BASE_URL ~ "/numbers.json#founder") | tojson }},
+      "name": "A UK job hunt, counted as it happens",
+      "description": "The running total of one jobseeker's applications and replies, republished by the machine that sends them after every run. {{ record.applications }} applications to {{ record.employers }} employers, {{ record.replies }} replies. It goes down as well as up.",
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "creator": {"@id": {{ (config.BASE_URL ~ "/#org") | tojson }}},
+      "isAccessibleForFree": true,
+      "measurementTechnique": "A reply is a message from a human that was not a rejection. Automated acknowledgements and rejections are counted separately and excluded, so this rate is stricter and lower than the study's.",
+      "spatialCoverage": "United Kingdom",
+      {% if record.updated_at %}"dateModified": {{ record.updated_at[:10] | tojson }},{% endif %}
+      "distribution": {
+        "@type": "DataDownload",
+        "encodingFormat": "application/json",
+        "contentUrl": {{ (config.BASE_URL ~ "/numbers.json") | tojson }}
+      }
+    }{% endif %}
+  ]
+}
+</script>
+
 <h1>What this has actually done</h1>
 <p class="lede">Live, from the database, every time you load this page. It goes
    down as well as up, and it says so when the answer is none.</p>
