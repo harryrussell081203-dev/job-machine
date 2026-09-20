@@ -12,7 +12,22 @@ name: tests
 # Neither was hard to find once something looked. Nothing was looking.
 #
 # Free on GitHub's hardware for a public repository, and a couple of minutes
-# a push if this ever goes private.
+# a push if this ever goes private. It did go private, which is why the
+# pull_request trigger is gone.
+#
+# EVERY PUSH TO A BRANCH WITH AN OPEN PR WAS BILLED TWICE.
+#
+# `push` fires on every branch, `pull_request` fires again on the same
+# commit, and each runs both jobs - four billed runs per push, about five
+# minutes, for two suites' worth of information. Fifteen pushes to one branch
+# on 20 September cost seventy-five minutes and told us nothing the push
+# trigger had not already said.
+#
+# `push` alone still covers every branch and every PR, because a PR from this
+# repository is a branch in this repository. The one thing lost is the merge
+# preview a pull_request run tests - main plus the branch, rather than the
+# branch alone. Worth having and not worth double the allowance, on a
+# repository whose branches are short-lived and merged the same day.
 
 on:
   push:
@@ -21,7 +36,6 @@ on:
       # pushed and deleted in the same minute. Testing them is noise.
       - "fire-*/**"
       - "fire-*"
-  pull_request:
   workflow_dispatch: {}
 
 permissions:
