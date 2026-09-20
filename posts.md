@@ -696,3 +696,90 @@ the full 24 hours.
 Product Hunt first. It is the lower-stakes of the two, it warms up the
 backlink, and if the site falls over under load you would rather find that out
 there than on the one HN shot you get.
+
+---
+
+# Fifth batch — backlinks, and which ones are actually worth chasing
+
+## The honest caveat, first
+
+I have no web access from here. Every directory, list and URL in this section
+is from memory, not from checking, and some of them will have changed or died.
+Confirm each one before you spend time on it. The same rule applies as to the
+register URLs in `find_orgs.py`: this is configuration to verify, not fact.
+
+## The best backlinks you can get are already being worked
+
+Not a startup directory. **A `.ac.uk` or `.gov.uk` page.**
+
+University careers services and council employability teams keep pages of
+"useful links for jobseekers". A link from one of those carries more weight
+than twenty listings on tool directories, because it is an institution with
+decades of standing vouching for you to exactly the right audience — and the
+people reading it are jobseekers, not founders looking at other people's
+products.
+
+That is the same list `tools/find_orgs.py` builds and `outreach.py` writes to.
+**The outreach machine is the backlink strategy.** One careers adviser who
+finds the tool useful and adds it to their resources page is worth more than a
+week of directory submissions.
+
+Which is also why the letter asks for nothing. A note saying "here is a free
+thing, pass it on if it helps, no reply needed" gets forwarded and sometimes
+listed. The same note with "please link to us" appended gets deleted, and
+deserves to.
+
+## GitHub lists
+
+Curated "awesome" lists take pull requests adding genuinely free tools, and a
+merged one is a permanent link that crawlers follow. Search GitHub for
+`awesome job search`, `awesome career`, `awesome interview preparation`,
+`awesome remote jobs`.
+
+Read the contributing rules first — most require alphabetical order, a
+one-line description and no marketing language. The entry that gets merged:
+
+> - [Recruited](https://recruited.org.uk/find) - Finds the real contact
+>   address in a job advert and on the employer's site. Never guesses address
+>   patterns. Free, no account.
+
+I cannot open pull requests against other people's repositories from this
+session — GitHub access here is scoped to your repo. I can write each one; you
+click submit.
+
+## Directories, in the order I would bother
+
+1. **Product Hunt** — covered in section 19. Permanent listing, real traffic.
+2. **AlternativeTo** — this is the one that keeps working. People searching
+   "Hunter.io alternative free" are exactly your audience, and the page ranks
+   for years.
+3. **Indie Hackers** — a build-log post rather than a listing. The 166
+   applications story fits that audience.
+4. **Slant, SaaSHub and the smaller aggregators** — low value each, ten
+   minutes each, they add up.
+
+Skip Capterra and G2. They are enterprise software review sites and you would
+be the only free tool on a page of £200-a-month platforms.
+
+## Not worth doing, so you can stop wondering
+
+Paid link packages, guest-post networks, comment links and directory blasts.
+All of them are the same trade: a short spike, then a penalty that is hard to
+undo, on a domain you cannot easily replace. `recruited.org.uk` is the one
+asset here that has to last.
+
+## What is already done on the site
+
+- `/answers`, 15 pages, one per question, each with its answer in the first
+  paragraph and FAQ structured data that says the same thing as the prose.
+- `/numbers.json`, CC BY 4.0, so anyone citing a figure gets the count and the
+  caveat with it.
+- `/llms.txt`, for models reading the site directly.
+- Canonical addresses, so `?utm_source=tiktok` no longer competes with the
+  page it came from.
+- Organization and SoftwareApplication markup, so "Recruited" can be told
+  apart from the recruitment agency of the same name.
+- Sitemap with a `lastmod` that moves only when the figures do.
+
+The crawlers are already coming — 258 robot visits in 48 hours. The pages are
+there for them to find now.
