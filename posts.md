@@ -114,9 +114,10 @@ The pattern was not what I expected.
 >
 > What didn't matter:
 >
-> **When I sent it.** I was convinced Tuesday morning was better. In office
-> hours: 23.5% replies. Outside: 21.2%. That difference is noise — it's not a
-> real effect, it's a coin landing slightly off centre.
+> **When I sent it.** I was convinced Tuesday morning was better. Across all
+> 166 applications: in office hours 21 replies out of 110, outside them 10 out
+> of 56. That's 19.1% against 17.9%, which is noise — not a real effect, just
+> a coin landing slightly off centre.
 >
 > What did matter, a lot:
 >
@@ -452,8 +453,9 @@ Your best-performing slideshow was the data one. This is that, spoken.
 > I sent eighty-six cold emails to UK employers in four weeks and I logged
 > every single one, because I wanted to know what actually moves it.
 >
-> It isn't the CV. It isn't the day you send it — I checked, in-hours was
-> twenty-three percent, out-of-hours twenty-one, that gap is nothing.
+> It isn't the CV. It isn't the day you send it — across everything I've sent
+> that's twenty-one replies out of a hundred and ten in office hours, and ten
+> out of fifty-six outside them. That gap is nothing.
 >
 > It's who opens it.
 >
@@ -585,7 +587,9 @@ that earns the upvote. The tool is one click from there.
 > 50% at scale. The comparison I'd stand behind is the big one — 44 to a human
 > or a hiring inbox against 42 to a generic inbox, about four times the rate.
 >
-> Timing did nothing. In office hours 23.5%, outside 21.2%. That gap is noise.
+> Timing did nothing. Across all 166 applications I've sent, in office hours
+> was 21 replies out of 110 and outside hours 10 out of 56 — 19.1% against
+> 17.9%. That gap is noise.
 >
 > The tool is the address-finding part, free and with no account:
 > https://recruited.org.uk/find — paste an advert, it reads the advert text,
@@ -602,6 +606,12 @@ that earns the upvote. The tool is one click from there.
 > So when nothing real is found it sends nothing. 516 listings ended that way
 > and I count that as a correct outcome, not a failure. I'm aware that makes
 > the product worse on paper than one that always returns an address.
+>
+> All of it is at https://recruited.org.uk/numbers.json, CC BY 4.0, with the
+> counts under every rate and the definition of "reply" next to each one —
+> the fixed 86-email study counts anything that came back, the live counter
+> excludes autoresponders and rejections, so they report different rates and
+> the endpoint says which is which.
 >
 > FastAPI, Jinja2, Postgres, running on a free tier. Happy to answer anything.
 
