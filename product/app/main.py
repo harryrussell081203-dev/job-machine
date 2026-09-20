@@ -39,6 +39,7 @@ from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import runner  # noqa: E402
+from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import views  # noqa: E402
 
@@ -309,6 +310,49 @@ def numbers(request: Request):
                   og_title="What Recruited has actually done",
                   og_description="Every letter sent through Recruited, live. "
                                  "Including when the answer is none.")
+
+
+@app.get("/numbers.json")
+def numbers_json():
+    """The same figures, machine-readable, for anybody who wants to check or
+    cite them without parsing a page.
+
+    The whole argument this site makes is that its numbers can be checked, and
+    a number that can only be checked by a human reading HTML is one a machine
+    will quote without checking. This is the cheap fix: one address, three
+    clearly separated sets of figures, and the definition of a reply printed
+    next to each rate rather than assumed.
+
+    The separation is the point. The 86-email study and the live counter
+    measure different things and report different rates - 26% against 19% -
+    and anybody lifting one of them needs to be told which. See study.py.
+    """
+    return {
+        "source": config.BASE_URL,
+        "licence": "CC BY 4.0 - use it, say where it came from.",
+        # A fixed, finished sample. It will never change again.
+        "study": study.as_dict(),
+        # The founder's own job hunt, still running, published by the machine
+        # that does it. Absent rather than zeroed when there is nothing to
+        # say: a missing key is honest, a zero is a claim.
+        "founder_live": _founder_live(),
+        # What the product itself has sent for its users, which is a different
+        # question again and currently a smaller number.
+        "product_live": db.public_stats(),
+    }
+
+
+def _founder_live():
+    record = track_record.read()
+    if not record:
+        return None
+    return {
+        **record,
+        "reply_definition": "A message from a human that was not a rejection. "
+                            "Automated acknowledgements and rejections are "
+                            "counted separately and excluded here, so this "
+                            "rate is lower than the study's and stricter.",
+    }
 
 
 # ----------------------------------------------------------------------
