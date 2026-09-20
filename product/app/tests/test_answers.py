@@ -154,10 +154,28 @@ class TestAnswerPages(Base):
         for slug, rate, caveat in (
                 ("find-hiring-manager", "67%", "small sample"),
                 ("email-directly", "50%", "ten emails"),
-                ("why-no-reply", "50%", "only ten emails")):
+                ("why-no-reply", "50%", "only ten emails"),
+                ("info-at-address", "50%", "only ten emails"),
+                ("recruitment-agency", "50%", "far too few"),
+                ("good-reply-rate", "50%", "out of ten"),
+                ("no-contact-details", "67%", "small sample")):
             page = self.client.get(f"/answers/{slug}").text
             self.assertIn(rate, page, slug)
             self.assertIn(caveat, page, slug)
+
+    def test_the_timing_rates_reconcile_with_their_own_counts(self):
+        """The timing page is the only one quoting the live 166-application
+        set rather than the fixed 86-email study, so its figures cannot be
+        checked against the playbook. They can be checked against each other,
+        which is the next best thing and catches the failure that actually
+        happens: a rate updated and the count under it left alone."""
+        page = self.client.get("/answers/best-time-to-send").text
+        for sent, replied, rate in ((110, 21, "19.1%"), (56, 10, "17.9%")):
+            self.assertIn(f">{sent}<", page)
+            self.assertIn(f">{replied}<", page)
+            self.assertEqual(f"{100 * replied / sent:.1f}%", rate,
+                             f"{replied}/{sent} is not {rate}")
+            self.assertIn(rate, page)
 
     def test_no_page_tells_anybody_to_guess_an_address(self):
         """The whole differentiator, and the one claim that must never slip.
