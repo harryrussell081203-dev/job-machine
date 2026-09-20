@@ -18,14 +18,22 @@
 <p class="lede">Most applications vanish into a system. This emails the person
 who actually does the hiring, from your own address.</p>
 
-<p class="hero-cta">
-  <a class="btn" href="/find">See it work. No account</a>
-  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
-</p>
 {# The free tool leads now. A stranger who has watched it find a real address
    will sign up; a stranger shown a sign-up box first mostly will not. Nine
    people reached this page one evening and two signed up - the other seven
-   left at a form they had no reason yet to trust. #}
+   left at a form they had no reason yet to trust.
+
+   And it is no longer a LINK to the tool, it is the tool. 122 real people
+   reached this page over a week and 17 went on to /find. The button was not
+   the obstacle - it said "See it work. No account" and was the first thing on
+   the page. The obstacle was that it was a button at all, because a stranger
+   who is not yet sure this is worth a tap does not spend one. #}
+{% include "_finder.html" %}
+
+<p class="hero-cta">
+  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
+  <a class="btn ghost" href="/playbook">Read the method free</a>
+</p>
 <p class="hero-note"><small>
   {%- if spots_left %}
     {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,

@@ -1,0 +1,100 @@
+{# The finder itself, shared by /find and the landing page.
+
+   It is on the landing page because of the gap between two numbers. Over one
+   week 122 real people reached "/" and 17 of them reached "/find", which is
+   14%. The front page already led with "See it work. No account" rather than
+   a sign-up box - that was the right fix for the previous problem and it does
+   not solve this one. A link to a demo is still an errand, and 86% of people
+   did not run it.
+
+   So the demo is not linked from the landing page any more, it is on it. With
+   Show HN and Product Hunt next, the visitor arriving is a stranger deciding
+   whether this works before handing anybody an email address, and every
+   navigation between them and that answer is a place to lose them.
+
+   One copy included twice, because two copies of a form drift and the one on
+   the page nobody tests is the one that rots. The example button and its
+   script travel with it for the same reason: a button without its handler is
+   a control that does nothing when pressed. #}
+<form method="post" action="/find">
+  {# The example button was BELOW the box and below the fold - on an iPhone SE
+     you had to scroll 277px to learn there was anything to press, and on a
+     13 you had to scroll 85. Everybody landed on a headline and a big empty
+     rectangle with no visible control, and left.
+
+     Nineteen people opened this page the night that was true and not one of
+     them pressed anything. The errand was never the whole problem; the button
+     that removed the errand could not be seen.
+
+     So it comes FIRST, above the box, because for somebody arriving with
+     nothing in their clipboard it is the only action they can take. The paste
+     box is for the person who came with an advert, and they will scroll. #}
+  <p class="actions" style="margin:0 0 20px">
+    <button type="button" class="btn" id="tryexample" hidden>Show me, on an
+      example job</button>
+  </p>
+
+  <label for="advert">Or paste your own advert</label>
+  {# rows=10 was 280px of empty rectangle pushing every control off the
+     screen. Six still shows it is a big box for a big paste. #}
+  <textarea id="advert" name="advert" rows="6" required
+            placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom, which is usually where it hides">{{ advert or '' }}</textarea>
+  <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. We
+    only read what you paste.</p>
+  <p style="margin-top:14px" class="actions">
+    <button type="submit">Find the contact</button>
+  </p>
+</form>
+
+<script>
+// The example advert. Deliberately a MADE-UP company with a made-up address:
+// a real one here would send a stream of strangers' curiosity at some real
+// business's inbox, which is the exact thing this product exists not to do.
+//
+// Shaped like a real advert though - the contact buried in the small print at
+// the bottom, after the duties and the benefits, which is where it genuinely
+// lives and the reason people never find it themselves.
+(function () {
+  var btn = document.getElementById("tryexample");
+  var box = document.getElementById("advert");
+  if (!btn || !box) return;
+  btn.hidden = false;                 // no JavaScript, no half-working button
+
+  var EXAMPLE = [
+    "Maintenance Technician - Kestrel Foods Ltd",
+    "Dyce, Aberdeen | GBP 34,000 - 38,000 | Full time, permanent",
+    "",
+    "We are looking for a maintenance technician to join our engineering team",
+    "at our Dyce production site. Reporting to the Engineering Manager, you",
+    "will carry out planned and reactive maintenance across packaging and",
+    "processing lines.",
+    "",
+    "What you will do:",
+    "- Fault-find and repair mechanical and electrical plant",
+    "- Deliver the planned maintenance schedule",
+    "- Work with production to keep downtime to a minimum",
+    "",
+    "What we are looking for:",
+    "- Time-served apprenticeship or equivalent",
+    "- Experience in a manufacturing or food production environment",
+    "- A full driving licence is desirable",
+    "",
+    "We offer 33 days holiday, a company pension, life assurance and an",
+    "on-site canteen.",
+    "",
+    "To apply, send your CV to Fiona Menzies, HR Manager, at",
+    "fiona.menzies@kestrelfoods.example quoting reference MT-0925.",
+    "Informal enquiries to careers@kestrelfoods.example.",
+    "",
+    "Kestrel Foods Ltd is an equal opportunities employer."
+  ].join("\n");
+
+  btn.addEventListener("click", function () {
+    box.value = EXAMPLE;
+    // Submitting for them is the point. Making somebody read a wall of
+    // pretend advert and then find the button is a second chore, and the
+    // chore is what this is removing.
+    box.form.submit();
+  });
+})();
+</script>
