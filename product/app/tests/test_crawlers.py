@@ -96,6 +96,55 @@ class TestWhoThisSiteSaysItIs(Base):
             self.assertNotIn(invented, page)
 
 
+class TestTheDataIsDeclaredAsData(Base):
+    """Dataset markup on /numbers, so a citation can be machine-read.
+
+    The site publishes two reply rates measured differently. One catalogue
+    entry covering both would be that conflation in machine-readable form,
+    and markup disagreeing with the page is the reason a parser learns to
+    ignore a site."""
+
+    def datasets(self):
+        page = self.client.get("/numbers").text
+        for block in re.findall(
+                r'<script type="application/ld\+json">(.*?)</script>',
+                page, re.S):
+            data = json.loads(block)
+            items = data.get("@graph", [data])
+            found = [i for i in items if i.get("@type") == "Dataset"]
+            if found:
+                return found
+        self.fail("no Dataset markup on /numbers")
+
+    def test_it_parses(self):
+        self.assertTrue(self.datasets())
+
+    def test_each_one_says_what_it_counted_as_a_reply(self):
+        """The whole reason there are two. Without it they are two numbers
+        that disagree."""
+        for entry in self.datasets():
+            self.assertIn("measurementTechnique", entry)
+            self.assertGreater(len(entry["measurementTechnique"]), 40)
+
+    def test_the_two_definitions_are_not_the_same_sentence(self):
+        entries = self.datasets()
+        if len(entries) > 1:
+            self.assertNotEqual(entries[0]["measurementTechnique"],
+                                entries[1]["measurementTechnique"])
+
+    def test_every_one_carries_a_licence(self):
+        """A dataset nobody is permitted to quote is not a citation hook."""
+        for entry in self.datasets():
+            self.assertIn("creativecommons.org", entry["license"])
+
+    def test_every_one_points_at_the_machine_readable_copy(self):
+        for entry in self.datasets():
+            self.assertTrue(
+                entry["distribution"]["contentUrl"].endswith("/numbers.json"))
+            self.assertEqual(entry["distribution"]["encodingFormat"],
+                             "application/json")
+
+
 class TestTheFileWrittenForModels(Base):
     def body(self):
         r = self.client.get("/llms.txt")
