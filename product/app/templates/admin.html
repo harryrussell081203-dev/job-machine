@@ -138,6 +138,36 @@ so this reads high until they age out.</small></p>
         with no referrer at all, so it shows as
         <b>direct or an app</b>.</small></p>
     {% endif %}
+
+    {# The machines, split by what they came for. The site is built to be
+       quoted by assistants, and until now the only thing recorded about them
+       was that they were not people. #}
+    {% if traffic_week.crawlers %}
+      <h3 style="margin-top:20px">Which machines are reading, this week</h3>
+      <div class="scroll">
+      <table>
+        <tr><th>Crawler</th><th class="num">Views</th><th>Pages</th></tr>
+        {% for name, n in traffic_week.crawlers.items() %}
+          <tr>
+            <td>{% if name.startswith('ai-answer') %}<b>{{ name }}</b>
+                {% else %}{{ name }}{% endif %}</td>
+            <td class="num">{{ n }}</td>
+            <td class="muted"><small>
+              {%- for path, hits in traffic_week.crawler_pages.get(name, {}).items() -%}
+                {%- if loop.index <= 3 %}<code>{{ path }}</code>&nbsp;{{ hits }}{{ ", " if not loop.last and loop.index < 3 }}{% endif -%}
+              {%- endfor -%}
+            </small></td>
+          </tr>
+        {% endfor %}
+      </table>
+      </div>
+      <p class="muted" style="margin-top:8px"><small><b>ai-answer</b> is the row
+        that matters: a machine fetching a page to answer somebody's question
+        right now. <b>ai-train</b> is collecting for a future model, which pays
+        off in a year rather than this week. Anything unrecognised is
+        <code>other:unnamed</code> &mdash; if that grows, the list in
+        <code>views.py</code> needs a new entry.</small></p>
+    {% endif %}
   {% else %}
     <p class="muted">Nothing in the last 24 hours.
       {% if traffic_week.total %}{{ traffic_week.total }} in the last week.
