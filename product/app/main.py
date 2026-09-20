@@ -38,6 +38,7 @@ from jobseeker.profile import _not_a_place  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
+from . import indexnow  # noqa: E402
 from . import runner  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
@@ -119,6 +120,12 @@ SESSION_COOKIE = "jm_session"
 async def lifespan(_app: FastAPI):
     db.init()
     ratelimit.init()
+    # Told once per deploy that adds pages, or per day the figures move -
+    # never on an ordinary wake from sleep, because the fingerprint has not
+    # changed. See indexnow.submit_if_changed. It cannot raise and it cannot
+    # delay a request: the only caller that pays for it is the first boot
+    # after something actually changed.
+    print(f"[indexnow] {indexnow.submit_if_changed(public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)}")
     yield
 
 
@@ -1046,6 +1053,22 @@ PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
                 "/privacy", "/login") + tuple(answerlib.paths())
 
 
+def public_urls() -> list[str]:
+    """Every public page as an absolute address, for the sitemap's readers
+    and for IndexNow. One list, so a page cannot be in one and not the
+    other."""
+    return [config.BASE_URL + path for path in PUBLIC_PAGES]
+
+
+# Serving the key is what proves the domain is ours, so the route only exists
+# when there is a key to serve. A 404 here and a submission carrying the same
+# key is how a key gets ignored.
+if config.INDEXNOW_KEY:
+    @app.get(f"/{indexnow.key_filename()}", response_class=PlainTextResponse)
+    def indexnow_key():
+        return config.INDEXNOW_KEY
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots():
     lines = ["User-agent: *"]
@@ -1054,6 +1077,25 @@ def robots():
     for path in ("/dashboard", "/drafts", "/applications", "/setup", "/profile",
                  "/account", "/admin", "/cv", "/auth", "/billing", "/status"):
         lines.append(f"Disallow: {path}")
+    # NAMED, THOUGH `*` ALREADY ALLOWS THEM.
+    #
+    # Being quoted by an assistant is the point of the answer pages, so the
+    # agents that do the quoting are listed by name and allowed explicitly.
+    # Two reasons that is worth the lines: a future Disallow added for one
+    # crawler cannot silently widen to all of them, and an operator reading
+    # this file can see the intent rather than inferring it from a wildcard.
+    #
+    # The split matters. The first group fetch a page to answer somebody's
+    # question now; the second collect for training. Both are welcome here -
+    # a product with nothing to hide and everything to be cited for - but
+    # they are different decisions and this is where they would be made.
+    for agent in ("OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot",
+                  "Claude-User", "PerplexityBot", "Perplexity-User",
+                  "DuckAssistBot",
+                  "GPTBot", "ClaudeBot", "Google-Extended",
+                  "Applebot-Extended", "CCBot"):
+        lines += ["", f"User-agent: {agent}", "Allow: /"]
+    lines.append("")
     lines.append(f"Sitemap: {config.BASE_URL}/sitemap.xml")
     return "\n".join(lines) + "\n"
 
