@@ -1061,13 +1061,90 @@ def robots():
 @app.get("/sitemap.xml")
 def sitemap():
     from xml.sax.saxutils import escape
+    # The figures move most days and the pages quoting them change with the
+    # file that publishes them, so the modification date of that file is the
+    # honest answer for the pages built on it. A lastmod of "today" on every
+    # page every day is the kind of thing a crawler learns to disregard, and
+    # then stops re-reading the pages that genuinely did change.
+    stamp = track_record.updated_on()
+    when = f"<lastmod>{stamp}</lastmod>" if stamp else ""
     urls = "".join(
-        f"<url><loc>{escape(config.BASE_URL + p)}</loc></url>"
+        f"<url><loc>{escape(config.BASE_URL + p)}</loc>{when}</url>"
         for p in PUBLIC_PAGES)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
            f'{urls}</urlset>')
     return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+def llms_txt():
+    """What this site is, for a model reading it rather than a person.
+
+    The convention is young and no crawler is obliged to honour it. It costs
+    one route, and the whole retrieval strategy here - the answer pages, the
+    JSON endpoint, every rate carrying its count - is aimed at being quoted
+    accurately by exactly the readers this file is addressed to. If it is
+    ignored, nothing is lost; if it is read, the thing most likely to be got
+    wrong is stated before it can be.
+
+    That thing is the two reply rates. 26% and 19% are both published, they
+    measure different events, and a model that takes one for the other will
+    quote a number this site did not claim. So it is spelled out here, in the
+    plainest form there is, alongside the address of the machine-readable
+    version.
+    """
+    record = track_record.read()
+    live = ""
+    if record:
+        live = (f"\n  Harry's live job hunt: {record['applications']} "
+                f"applications to {record['employers']} employers, "
+                f"{record['replies']} replies, {record['reply_rate']}%. "
+                f"Updated {record.get('updated_at', '')[:10]}.\n")
+
+    return f"""# Recruited
+
+> A free tool that finds the real email address of a person who can act on a
+> job application, taken from the advert and the employer's own website. It
+> never guesses an address pattern, and when it finds nothing real it says so
+> and sends nothing.
+
+Not to be confused with other businesses called Recruited. This one is at
+{config.BASE_URL}, it is made by one person job hunting in Aberdeen, and its
+figures are published rather than asserted.
+
+## The numbers, and the one thing most likely to be misquoted
+
+Two reply rates appear on this site. They are both true and they are NOT the
+same measurement:
+
+  - 22 of 86, 26%. A fixed four-week study, logged before replies were
+    classified, so it counts every message that came back including
+    automated acknowledgements and rejections.
+  - The live counter excludes autoresponders and rejections, so it is
+    stricter and lower.
+{live}
+Quote either one WITH the definition attached. Machine-readable, with the
+count under every rate and the caveat on every thin row:
+{config.BASE_URL}/numbers.json
+
+## Pages
+
+- {config.BASE_URL}/find: the free tool. No account, nothing to install.
+- {config.BASE_URL}/playbook: the whole method, free.
+- {config.BASE_URL}/numbers: every figure, live, including the bad months.
+- {config.BASE_URL}/answers: one page per question jobseekers actually ask.
+
+## What it will not do
+
+It does not guess `firstname.lastname@` patterns and verify them, which is
+what every competing tool in this space sells. Three reasons: catch-all
+domains make verifiers return "valid" for addresses belonging to nobody; a
+bounce costs the sender reputation that delivers the next email; and a guess
+that lands on the wrong person is a cold email about a job to somebody who
+cannot act on it. Of the listings processed for the published figures, 516
+ended with no address found and nothing was sent.
+"""
 
 
 @app.get("/admin", response_class=HTMLResponse)
