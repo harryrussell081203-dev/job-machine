@@ -535,3 +535,154 @@ that holds people to the end will keep being shown for days, and a 600-view
 video nobody finishes is a dead end.
 
 Then tell me which one won and I'll write four more in that voice.
+
+---
+
+# Fourth batch — the two channels with a ceiling above a thousand
+
+Everything in the first three batches reaches tens or low hundreds of people
+and depends on you posting again tomorrow. These two are one-shot, free, and
+can do four figures in a day. They are also the two where my writing is most
+of the work and your job is a single click.
+
+Do them on separate days. Both at once and you cannot answer the comments,
+and on both of these the comments are where it is won.
+
+---
+
+## 18. Show HN
+
+Hacker News. Highest ceiling of anything on this list — a Show HN that lands
+does 10,000+ visits — and your project is unusually well shaped for it. They
+are hostile to marketing and warm to somebody who measured something, admits
+where the sample is thin, and can explain a technical decision.
+
+You get one shot per project, so this is the version to use.
+
+**Title** (80 char limit, no exclamation marks, no "revolutionary"):
+
+> Show HN: I logged 86 cold emails to UK employers and published what replied
+
+**URL:** `https://recruited.org.uk/numbers`
+
+Not the front page. HN clicks through to the thing, and the data is the thing
+that earns the upvote. The tool is one click from there.
+
+**First comment — post it yourself, immediately after submitting:**
+
+> I'm 22, job hunting in Aberdeen, and I got tired of applications vanishing
+> into portals. So for four weeks I stopped clicking Apply and emailed a real
+> person at the company instead, and logged all of it.
+>
+> 86 cold emails, 22 replies, 26%. Cold email is usually quoted at 1–5%. The
+> variable that mattered was who received it:
+>
+>     Named person          13 / 34
+>     Hiring inbox          5 / 10
+>     Generic info@         4 / 42
+>
+> Caveat up front: the hiring-inbox row is ten emails and I wouldn't defend
+> 50% at scale. The comparison I'd stand behind is the big one — 44 to a human
+> or a hiring inbox against 42 to a generic inbox, about four times the rate.
+>
+> Timing did nothing. In office hours 23.5%, outside 21.2%. That gap is noise.
+>
+> The tool is the address-finding part, free and with no account:
+> https://recruited.org.uk/find — paste an advert, it reads the advert text,
+> then the company's own site, and tells you what tier each address is.
+>
+> The part I'd most like feedback on is what it refuses to do. Every
+> competitor in this space sells an email-verification API and tells you to
+> guess firstname.lastname@ and verify it. I don't guess patterns, for three
+> reasons: catch-all domains make verifiers return "valid" for addresses that
+> belong to nobody; a bounce costs you sender reputation, so the price of a
+> wrong guess is your *next* email landing in spam; and a guess that hits the
+> wrong person is a cold email about a job to somebody who can't act on it.
+>
+> So when nothing real is found it sends nothing. 516 listings ended that way
+> and I count that as a correct outcome, not a failure. I'm aware that makes
+> the product worse on paper than one that always returns an address.
+>
+> FastAPI, Jinja2, Postgres, running on a free tier. Happy to answer anything.
+
+**Then stay on the thread for three hours.** More Show HNs die from an absent
+author than from a bad idea.
+
+### The questions you will get, and the honest answers
+
+**"How is this different from Hunter.io / Apollo / RocketReach?"**
+> They sell verified guesses at scale for sales teams. This finds published
+> addresses for one advert at a time and refuses when there isn't one. Their
+> tool is better if you want volume. Mine is better if a bounce costs you
+> something, which for a jobseeker it does.
+
+**"n=86, this is anecdote not data."**
+> Correct, and it says so on the page. It's one person's log over four weeks,
+> not a study. I published the counts rather than just the rates so anyone can
+> see how thin each row is.
+
+**"Isn't this GDPR / PECR trouble?"**
+> Business contact addresses published by the company for the purpose of being
+> contacted, used to contact them about that purpose, one message, no
+> follow-up sequence, no list building. That's the narrow end of it. Nothing
+> is scraped into a database for resale and nothing is sent to an address a
+> human didn't publish.
+
+**"Why would a hiring manager want more cold email?"**
+> Fair hit, and it's the reason for the one-per-employer rule and no chasing.
+> The honest answer is 22 of 86 chose to reply, which is a higher signal than
+> a portal gives them.
+
+**"Just use LinkedIn."**
+> Connection requests to strangers are capped and mostly ignored, and
+> InMail is paid. This is free and the reply lands in a normal inbox.
+
+**"Site's down."**
+> Free tier, cold start, give it 50 seconds. (If it does get hugged, say so
+> in the thread rather than going quiet.)
+
+### Timing
+
+Tuesday to Thursday, 07:00–09:00 UK — that's early morning US Eastern, when
+the front page turns over. Never a Friday or a weekend.
+
+---
+
+## 19. Product Hunt
+
+Lower ceiling than HN, softer crowd, and the listing is a permanent backlink
+that crawlers follow — which matters for the answer pages' whole strategy.
+
+**Name:** Recruited
+**Tagline** (60 chars): `Find the real hiring contact on any job advert`
+**Topics:** Career, Hiring, Productivity, Job Search
+
+**Description:**
+
+> Job applications go into a portal and nobody is told they arrived. Recruited
+> reads a job advert, finds the real email address of a person who can act on
+> it — from the advert itself, then the company's own site — and tells you
+> which tier it found. Free, no account.
+>
+> It never guesses an address pattern. When there's nothing real to find it
+> says so and sends nothing, which happened on 516 listings.
+>
+> Built while job hunting. The method and all the numbers behind it are
+> published: 86 cold emails, 22 replies, broken down by who received them.
+
+**Maker's first comment:** the first four paragraphs of the Show HN comment,
+ending with "genuinely tell me if it's rubbish, I'd rather know."
+
+**Gallery:** the four share cards from `make_share_cards.py`, the `/find`
+result screenshot, and the 15-second screen recording from post #10.
+
+**Launch at 00:01 Pacific** (08:01 UK) — the board resets then and you want
+the full 24 hours.
+
+---
+
+## Order
+
+Product Hunt first. It is the lower-stakes of the two, it warms up the
+backlink, and if the site falls over under load you would rather find that out
+there than on the one HN shot you get.
