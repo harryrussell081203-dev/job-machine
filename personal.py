@@ -83,6 +83,52 @@ SEALED = {
 }
 
 
+# --------------------------------------------------------------------------
+# The small hand-maintained files in data/, which are a different problem.
+#
+# state.json is machine output: nobody reads it, so sealing all of it costs
+# nothing. These are the opposite - a dozen small files that Harry edits by
+# hand, each opening with a _README block explaining what it is for. Sealing
+# them wholesale would hide the documentation along with the data and leave
+# him editing ciphertext, which is how a config file stops being maintained.
+#
+# So: named fields only, and _README is never one of them.
+#
+# WHAT IS ACTUALLY IN THEM, HAVING LOOKED.
+#
+# Only two of the fourteen carry anything worth hiding. Every email address
+# and phone number in agencies.json, support_orgs.json, ask_around.json,
+# veteran_employers.json, funding_opportunities.json and networking_targets
+# .json is a switchboard or an info@ that the organisation publishes on its
+# own contact page - and the file records which page, because that was the
+# rule. Encrypting a number off Texo's website protects nobody and costs the
+# ability to read the file. They are deliberately left alone.
+#
+# The exceptions:
+#
+#   answers.json  Harry's own street address, postcode, phone and the email
+#                 address whose local part is his date of birth. This is the
+#                 real exposure in a public repository and it is his, not a
+#                 third party's - which makes it his call and he has made it.
+#
+#   goals.json    One 'source' note recording where a fact came from, and one
+#                 of them names a consultant and prints their direct line,
+#                 taken off a reply signature. Sealing the note keeps the
+#                 provenance rule - every line says where it came from - and
+#                 stops that one line being a published phone number.
+#
+# City, county and country stay in the clear on purpose. "Aberdeen" is in
+# every letter the machine sends, on the face of the CV and in the search
+# configuration; hiding it identifies nobody and makes the file unreadable.
+FILES = {
+    # "" means the file's top-level object is itself the record. Anything
+    # else names a container that is walked one level, exactly as SEALED does.
+    "answers.json": {"": ("email", "phone", "address_line_1", "postcode",
+                          "full_name")},
+    "goals.json": {"goals": ("source",)},
+}
+
+
 class KeyMissing(RuntimeError):
     """No key, and there is sealed data that needs one."""
 
@@ -152,6 +198,78 @@ def has_sealed(state: dict) -> bool:
     return False
 
 
+def _records(data, container: str) -> list:
+    """The dicts a container holds, whether it is a list, a map or the file.
+
+    The small files are hand-written and their shapes differ - answers.json is
+    one flat object, goals.json holds a list under "goals", others hold a map.
+    Rather than three walkers, one that accepts all three and ignores anything
+    it does not recognise, so a file whose shape changes goes unsealed and
+    visibly rather than half-sealed and quietly.
+    """
+    if not isinstance(data, dict):
+        return []
+    if container == "":
+        return [data]
+    held = data.get(container)
+    if isinstance(held, dict):
+        held = list(held.values())
+    if not isinstance(held, list):
+        return []
+    return [r for r in held if isinstance(r, dict)]
+
+
+def _walk_file(name: str, data: dict, cipher, fn) -> dict:
+    for container, fields in FILES.get(os.path.basename(name), {}).items():
+        for record in _records(data, container):
+            for field in fields:
+                if field in record:
+                    record[field] = fn(cipher, record[field])
+    return data
+
+
+def has_sealed_file(name: str, data: dict) -> bool:
+    """Whether this file has fields that need a key to read."""
+    for container, fields in FILES.get(os.path.basename(name), {}).items():
+        for record in _records(data, container):
+            for field in fields:
+                v = record.get(field)
+                if isinstance(v, str) and v.startswith(MARKER):
+                    return True
+    return False
+
+
+def seal_file(name: str, data: dict, key: str | None = None) -> dict:
+    """Seal one of the small data files. No key means leave it alone.
+
+    Same asymmetry as seal(): quiet when there is no key to write with, loud
+    when there is sealed data and no key to read it.
+    """
+    cipher = _cipher(key)
+    if cipher is None:
+        return data
+    return _walk_file(name, data, cipher, _seal_value)
+
+
+def unseal_file(name: str, data: dict, key: str | None = None) -> dict:
+    """Read one of the small data files. Raises rather than half-reading it.
+
+    Less dangerous than unseal() - nothing in the machine loads these, so a
+    silent miss would not write to anybody twice - but the reason to raise is
+    the same. A caller that gets "enc.v1:AAAA..." back as Harry's postcode and
+    carries on has not failed, which is worse than failing.
+    """
+    if not has_sealed_file(name, data):
+        return data
+    cipher = _cipher(key)
+    if cipher is None:
+        raise KeyMissing(
+            f"data/{os.path.basename(name)} has sealed fields and {KEY_ENV} "
+            f"is not set. Run `python3 personal.py show data/"
+            f"{os.path.basename(name)}` with the key in the environment.")
+    return _walk_file(name, data, cipher, _unseal_value)
+
+
 def seal(state: dict, key: str | None = None) -> dict:
     """Encrypt in place, ready to be written to a public repository.
 
@@ -180,5 +298,75 @@ def unseal(state: dict, key: str | None = None) -> dict:
     return _walk(state, cipher, _unseal_value)
 
 
+def _dump(data) -> str:
+    """The exact shape these files are already written in.
+
+    Two spaces, keys in the order they were written, trailing newline. NOT
+    the sorted dump state.json gets, and that matters: these files are read
+    top to bottom by a person and answers.json opens with name, then contact,
+    then address for a reason. Sorting them would turn a five-line seal into a
+    fifty-line diff and put "years_experience" above "address_line_1".
+    """
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _cli(argv=None) -> int:
+    """Read, seal and unseal the small files by hand.
+
+    Sealing a file a person maintains is only acceptable if that person can
+    still open it. These three verbs are that promise:
+
+        python3 personal.py show   data/answers.json   # read it, unsealed
+        python3 personal.py unseal data/answers.json   # open it to edit
+        python3 personal.py seal   data/answers.json   # close it again
+
+    `seal` is what Actions runs after every pipeline, so an edit left open by
+    mistake is closed on the next run rather than sitting in the clear.
+    """
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("verb", choices=("key", "show", "seal", "unseal"))
+    ap.add_argument("paths", nargs="*", help="files under data/")
+    args = ap.parse_args(argv)
+
+    if args.verb == "key":
+        print(make_key())
+        return 0
+    if not args.paths:
+        print(f"{args.verb}: name at least one file", flush=True)
+        return 2
+
+    failed = 0
+    for path in args.paths:
+        name = os.path.basename(path)
+        if name not in FILES:
+            # Not an error. Most of data/ has nothing in it worth sealing and
+            # saying so is more useful than refusing.
+            print(f"{path}: nothing sealed in this file")
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        try:
+            if args.verb == "show":
+                print(_dump(unseal_file(name, data)), end="")
+                continue
+            was = _dump(data)
+            fn = seal_file if args.verb == "seal" else unseal_file
+            data = fn(name, data)
+        except KeyMissing as e:
+            print(f"{path}: {e}", flush=True)
+            failed = 1
+            continue
+        now = _dump(data)
+        if now == was:
+            print(f"{path}: already {args.verb}ed")
+            continue
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(now)
+        print(f"{path}: {args.verb}ed")
+    return failed
+
+
 if __name__ == "__main__":
-    print(make_key())
+    raise SystemExit(_cli())
