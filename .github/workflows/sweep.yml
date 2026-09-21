@@ -65,8 +65,22 @@ on:
     # send exactly what three would have sent, just sooner.
     #
     # Never on the hour: GitHub delays jobs scheduled at popular times.
+    #
+    # CUT FROM ELEVEN A DAY TO SIX, 20 SEP, AND THE REASON IS MINUTES.
+    #
+    # The repository is private, so Actions is capped at 2,000 minutes a
+    # month, and on 20 September it had used 1,942 of them with ten days
+    # left. This workflow was 496 of that - a quarter of the whole allowance
+    # - to send 23 letters in thirty days, because eight of its eleven daily
+    # wake-ups found nothing due and exited, each still paying for a
+    # checkout and a pip install.
+    #
+    # Nothing about what gets sent changes. The comment above is the reason
+    # it can be cut safely: the cap, the holding window and
+    # one-employer-one-letter are all counted per letter, never per run, so
+    # six sweeps send exactly what eleven sent, a little later in the day.
     - cron: "10 7,11,15 * * 1-5"
-    - cron: "40 8,9,10,12,13,14,16,17 * * 1-5"
+    - cron: "40 9,13,16 * * 1-5"
   push:
     # Same idiom the personal machine uses: push a branch to force a run when
     # the Actions UI is not to hand. Deliberately not `branches: [main]` - an

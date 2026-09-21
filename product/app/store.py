@@ -281,6 +281,17 @@ CREATE TABLE IF NOT EXISTS page_views (
     views      INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (path, source, kind, hour_at)
 );
+
+-- One row per fact the site needs to remember about itself between restarts.
+-- Deliberately not a settings table: nothing a human sets belongs here, only
+-- things a process wrote down so a later process does not repeat work. The
+-- first of them is which set of URLs was last submitted to IndexNow, so a
+-- free instance waking from sleep does not resubmit the whole site.
+CREATE TABLE IF NOT EXISTS site_meta (
+    key        TEXT    PRIMARY KEY,
+    value      TEXT    NOT NULL DEFAULT '',
+    updated_at BIGINT  NOT NULL DEFAULT 0
+);
 """
 
 

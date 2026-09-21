@@ -14,18 +14,73 @@
    each one comes from live in /numbers. Nothing is hidden - it is one tap
    away instead of in the way. #}
 
+{# WHO THIS SITE IS, FOR A MACHINE THAT HAS TO TELL US APART.
+
+   "Recruited" is also the name of an unrelated UK recruitment agency, and an
+   assistant asked about "Recruited" has to pick one. Structured identity is
+   the cheapest way to be the other one: a name bound to a URL, a description
+   that says what the thing does rather than what it is called, and the free
+   tool declared as free with a price of zero rather than implied by prose.
+
+   Only facts. No rating, no review count, no invented founding date. An
+   aggregateRating with nobody behind it is the markup that gets a site's
+   structured data ignored entirely, and this site's whole argument is that
+   its claims can be checked. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": {{ (config.BASE_URL ~ "/#org") | tojson }},
+      "name": "Recruited",
+      "url": {{ config.BASE_URL | tojson }},
+      "logo": {{ (config.BASE_URL ~ "/static/icons/icon-192.png") | tojson }},
+      "description": "Finds the real email address of a person who can act on a job application, from the advert and the employer's own website. Never guesses an address pattern.",
+      "areaServed": "GB",
+      "knowsAbout": ["job search", "cold email", "recruitment", "employability"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": {{ (config.BASE_URL ~ "/#site") | tojson }},
+      "url": {{ config.BASE_URL | tojson }},
+      "name": "Recruited",
+      "publisher": {"@id": {{ (config.BASE_URL ~ "/#org") | tojson }}}
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Recruited contact finder",
+      "url": {{ (config.BASE_URL ~ "/find") | tojson }},
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Any, in a web browser",
+      "publisher": {"@id": {{ (config.BASE_URL ~ "/#org") | tojson }}},
+      "description": "Paste a job advert and it returns the real published contact addresses in it and on the employer's site, ranked, or says plainly that there are none. Free, no account.",
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "GBP"}
+    }
+  ]
+}
+</script>
+
 <h1>Get your CV in front of a human</h1>
 <p class="lede">Most applications vanish into a system. This emails the person
 who actually does the hiring, from your own address.</p>
 
-<p class="hero-cta">
-  <a class="btn" href="/find">See it work. No account</a>
-  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
-</p>
 {# The free tool leads now. A stranger who has watched it find a real address
    will sign up; a stranger shown a sign-up box first mostly will not. Nine
    people reached this page one evening and two signed up - the other seven
-   left at a form they had no reason yet to trust. #}
+   left at a form they had no reason yet to trust.
+
+   And it is no longer a LINK to the tool, it is the tool. 122 real people
+   reached this page over a week and 17 went on to /find. The button was not
+   the obstacle - it said "See it work. No account" and was the first thing on
+   the page. The obstacle was that it was a button at all, because a stranger
+   who is not yet sure this is worth a tap does not spend one. #}
+{% include "_finder.html" %}
+
+<p class="hero-cta">
+  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
+  <a class="btn ghost" href="/playbook">Read the method free</a>
+</p>
 <p class="hero-note"><small>
   {%- if spots_left %}
     {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,

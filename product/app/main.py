@@ -38,7 +38,9 @@ from jobseeker.profile import _not_a_place  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
+from . import indexnow  # noqa: E402
 from . import runner  # noqa: E402
+from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import views  # noqa: E402
 
@@ -118,6 +120,12 @@ SESSION_COOKIE = "jm_session"
 async def lifespan(_app: FastAPI):
     db.init()
     ratelimit.init()
+    # Told once per deploy that adds pages, or per day the figures move -
+    # never on an ordinary wake from sleep, because the fingerprint has not
+    # changed. See indexnow.submit_if_changed. It cannot raise and it cannot
+    # delay a request: the only caller that pays for it is the first boot
+    # after something actually changed.
+    print(f"[indexnow] {indexnow.submit_if_changed(public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)}")
     yield
 
 
@@ -128,8 +136,23 @@ app.router.lifespan_context = lifespan
 # helpers
 # ----------------------------------------------------------------------
 def current_user(request: Request):
+    """The signed-in user, and the one place that knows somebody came back.
+
+    The touch lives here rather than in middleware for the same reason the
+    view counter lives in render(): this is the single door every
+    authenticated request already goes through, so static files, redirects
+    and the health check cannot be mistaken for a person using the app.
+
+    It is throttled in db.touch_user, so a screen polled every few seconds
+    costs one write a quarter of an hour rather than one a poll.
+    """
     uid = auth.read_session(request.cookies.get(SESSION_COOKIE))
-    return db.get_user(uid) if uid else None
+    if not uid:
+        return None
+    user = db.get_user(uid)
+    if user:
+        db.touch_user(user["id"], user["last_seen_at"])
+    return user
 
 
 def render(request: Request, template: str, **ctx):
@@ -309,6 +332,49 @@ def numbers(request: Request):
                   og_title="What Recruited has actually done",
                   og_description="Every letter sent through Recruited, live. "
                                  "Including when the answer is none.")
+
+
+@app.get("/numbers.json")
+def numbers_json():
+    """The same figures, machine-readable, for anybody who wants to check or
+    cite them without parsing a page.
+
+    The whole argument this site makes is that its numbers can be checked, and
+    a number that can only be checked by a human reading HTML is one a machine
+    will quote without checking. This is the cheap fix: one address, three
+    clearly separated sets of figures, and the definition of a reply printed
+    next to each rate rather than assumed.
+
+    The separation is the point. The 86-email study and the live counter
+    measure different things and report different rates - 26% against 19% -
+    and anybody lifting one of them needs to be told which. See study.py.
+    """
+    return {
+        "source": config.BASE_URL,
+        "licence": "CC BY 4.0 - use it, say where it came from.",
+        # A fixed, finished sample. It will never change again.
+        "study": study.as_dict(),
+        # The founder's own job hunt, still running, published by the machine
+        # that does it. Absent rather than zeroed when there is nothing to
+        # say: a missing key is honest, a zero is a claim.
+        "founder_live": _founder_live(),
+        # What the product itself has sent for its users, which is a different
+        # question again and currently a smaller number.
+        "product_live": db.public_stats(),
+    }
+
+
+def _founder_live():
+    record = track_record.read()
+    if not record:
+        return None
+    return {
+        **record,
+        "reply_definition": "A message from a human that was not a rejection. "
+                            "Automated acknowledgements and rejections are "
+                            "counted separately and excluded here, so this "
+                            "rate is lower than the study's and stricter.",
+    }
 
 
 # ----------------------------------------------------------------------
@@ -987,6 +1053,22 @@ PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
                 "/privacy", "/login") + tuple(answerlib.paths())
 
 
+def public_urls() -> list[str]:
+    """Every public page as an absolute address, for the sitemap's readers
+    and for IndexNow. One list, so a page cannot be in one and not the
+    other."""
+    return [config.BASE_URL + path for path in PUBLIC_PAGES]
+
+
+# Serving the key is what proves the domain is ours, so the route only exists
+# when there is a key to serve. A 404 here and a submission carrying the same
+# key is how a key gets ignored.
+if config.INDEXNOW_KEY:
+    @app.get(f"/{indexnow.key_filename()}", response_class=PlainTextResponse)
+    def indexnow_key():
+        return config.INDEXNOW_KEY
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots():
     lines = ["User-agent: *"]
@@ -995,6 +1077,25 @@ def robots():
     for path in ("/dashboard", "/drafts", "/applications", "/setup", "/profile",
                  "/account", "/admin", "/cv", "/auth", "/billing", "/status"):
         lines.append(f"Disallow: {path}")
+    # NAMED, THOUGH `*` ALREADY ALLOWS THEM.
+    #
+    # Being quoted by an assistant is the point of the answer pages, so the
+    # agents that do the quoting are listed by name and allowed explicitly.
+    # Two reasons that is worth the lines: a future Disallow added for one
+    # crawler cannot silently widen to all of them, and an operator reading
+    # this file can see the intent rather than inferring it from a wildcard.
+    #
+    # The split matters. The first group fetch a page to answer somebody's
+    # question now; the second collect for training. Both are welcome here -
+    # a product with nothing to hide and everything to be cited for - but
+    # they are different decisions and this is where they would be made.
+    for agent in ("OAI-SearchBot", "ChatGPT-User", "Claude-SearchBot",
+                  "Claude-User", "PerplexityBot", "Perplexity-User",
+                  "DuckAssistBot",
+                  "GPTBot", "ClaudeBot", "Google-Extended",
+                  "Applebot-Extended", "CCBot"):
+        lines += ["", f"User-agent: {agent}", "Allow: /"]
+    lines.append("")
     lines.append(f"Sitemap: {config.BASE_URL}/sitemap.xml")
     return "\n".join(lines) + "\n"
 
@@ -1002,13 +1103,90 @@ def robots():
 @app.get("/sitemap.xml")
 def sitemap():
     from xml.sax.saxutils import escape
+    # The figures move most days and the pages quoting them change with the
+    # file that publishes them, so the modification date of that file is the
+    # honest answer for the pages built on it. A lastmod of "today" on every
+    # page every day is the kind of thing a crawler learns to disregard, and
+    # then stops re-reading the pages that genuinely did change.
+    stamp = track_record.updated_on()
+    when = f"<lastmod>{stamp}</lastmod>" if stamp else ""
     urls = "".join(
-        f"<url><loc>{escape(config.BASE_URL + p)}</loc></url>"
+        f"<url><loc>{escape(config.BASE_URL + p)}</loc>{when}</url>"
         for p in PUBLIC_PAGES)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
            f'{urls}</urlset>')
     return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+def llms_txt():
+    """What this site is, for a model reading it rather than a person.
+
+    The convention is young and no crawler is obliged to honour it. It costs
+    one route, and the whole retrieval strategy here - the answer pages, the
+    JSON endpoint, every rate carrying its count - is aimed at being quoted
+    accurately by exactly the readers this file is addressed to. If it is
+    ignored, nothing is lost; if it is read, the thing most likely to be got
+    wrong is stated before it can be.
+
+    That thing is the two reply rates. 26% and 19% are both published, they
+    measure different events, and a model that takes one for the other will
+    quote a number this site did not claim. So it is spelled out here, in the
+    plainest form there is, alongside the address of the machine-readable
+    version.
+    """
+    record = track_record.read()
+    live = ""
+    if record:
+        live = (f"\n  Harry's live job hunt: {record['applications']} "
+                f"applications to {record['employers']} employers, "
+                f"{record['replies']} replies, {record['reply_rate']}%. "
+                f"Updated {record.get('updated_at', '')[:10]}.\n")
+
+    return f"""# Recruited
+
+> A free tool that finds the real email address of a person who can act on a
+> job application, taken from the advert and the employer's own website. It
+> never guesses an address pattern, and when it finds nothing real it says so
+> and sends nothing.
+
+Not to be confused with other businesses called Recruited. This one is at
+{config.BASE_URL}, it is made by one person job hunting in Aberdeen, and its
+figures are published rather than asserted.
+
+## The numbers, and the one thing most likely to be misquoted
+
+Two reply rates appear on this site. They are both true and they are NOT the
+same measurement:
+
+  - 22 of 86, 26%. A fixed four-week study, logged before replies were
+    classified, so it counts every message that came back including
+    automated acknowledgements and rejections.
+  - The live counter excludes autoresponders and rejections, so it is
+    stricter and lower.
+{live}
+Quote either one WITH the definition attached. Machine-readable, with the
+count under every rate and the caveat on every thin row:
+{config.BASE_URL}/numbers.json
+
+## Pages
+
+- {config.BASE_URL}/find: the free tool. No account, nothing to install.
+- {config.BASE_URL}/playbook: the whole method, free.
+- {config.BASE_URL}/numbers: every figure, live, including the bad months.
+- {config.BASE_URL}/answers: one page per question jobseekers actually ask.
+
+## What it will not do
+
+It does not guess `firstname.lastname@` patterns and verify them, which is
+what every competing tool in this space sells. Three reasons: catch-all
+domains make verifiers return "valid" for addresses belonging to nobody; a
+bounce costs the sender reputation that delivers the next email; and a guess
+that lands on the wrong person is a cold email about a job to somebody who
+cannot act on it. Of the listings processed for the published figures, 516
+ended with no address found and nothing was sent.
+"""
 
 
 @app.get("/admin", response_class=HTMLResponse)
