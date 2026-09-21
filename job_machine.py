@@ -17,6 +17,7 @@ leaves companies unmarked and disables follow-ups.
 """
 import argparse
 import collections
+import copy
 import email.utils
 import glob
 import imaplib
@@ -31,6 +32,8 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import requests
+
+import personal          # sealing the people in state.json
 
 try:
     import dns.resolver
@@ -223,6 +226,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # writing to the real file - the one that holds the only record of who has
 # been written to. No harm done that time; the point is that there was no way
 # to try anything against this file without risking it.
+
 STATE_PATH = env_str("STATE_PATH", os.path.join(ROOT, "data", "state.json"))
 DNC_PATH = os.path.join(ROOT, "data", "do_not_contact.json")
 CV_DIRS = [os.path.join(ROOT, "cv"), ROOT]
@@ -722,6 +726,12 @@ def load():
     if os.path.exists(STATE_PATH):
         with open(STATE_PATH) as f:
             state = json.load(f)
+        # The contacts in this file belong to other people and the repository
+        # is public, so they are stored encrypted. This raises rather than
+        # returning a state with the contacts missing - see personal.py. A
+        # half-read state looks exactly like a state where nobody has been
+        # written to, and the next run would write to every employer twice.
+        state = personal.unseal(state)
     else:
         state = {}
     state.setdefault("jobs", {})
@@ -771,8 +781,12 @@ def save(state, allow_shrink=None):
         return False
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
     tmp = STATE_PATH + ".tmp"
+    # Sealed on the way out, on a COPY. The caller goes on using this state
+    # for the rest of the run and would find its contacts replaced by
+    # ciphertext halfway through otherwise.
     with open(tmp, "w") as f:
-        json.dump(state, f, indent=1, sort_keys=True)
+        json.dump(personal.seal(copy.deepcopy(state)), f, indent=1,
+                  sort_keys=True)
     os.replace(tmp, STATE_PATH)
     publish_track_record(state)
     return True
