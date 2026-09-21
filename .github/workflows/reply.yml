@@ -61,4 +61,11 @@ jobs:
         if: always()
         env:
           TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+          # The merge compares records, and it has to compare them in
+          # plaintext: a sealed record and its plaintext twin tie on every
+          # rule in merge_state.py and the copy already on the branch wins,
+          # which unsealed the whole file on every commit. So the merge
+          # unseals both sides and seals the result, and needs the key here
+          # as well as in the step above. See merge_state.py.
+          STATE_KEY: ${{ secrets.STATE_KEY }}
         run: bash .github/workflows/commit-state.sh "$TARGET" "replies"
