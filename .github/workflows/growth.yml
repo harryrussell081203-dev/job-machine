@@ -1,0 +1,76 @@
+name: growth
+
+# The acquisition engine. One job per agent, each on its own schedule, each
+# committing its state back.
+#
+# FREE, AND NOW GENUINELY SO. The repository is public, which means Actions
+# minutes are unlimited rather than capped at 2,000 a month. That cap is why
+# sweep.yml was cut from eleven wake-ups a day to six on 20 September, and it
+# is the reason this workflow could not have existed a day earlier.
+#
+# NOTHING HERE SENDS ANYTHING. crawl_health reads the live site and writes a
+# file. Agents that reach further - outreach, syndication, submissions - are
+# gated in their own modules and several of them are human-gated by design.
+# See GROWTH.md.
+
+on:
+  schedule:
+    # Not on the hour: GitHub delays jobs scheduled at popular times, and this
+    # workflow has no reason to compete for them.
+    - cron: "25 6 * * *"
+  push:
+    # Push a branch to force a run when the Actions UI is not to hand. The
+    # same idiom the other workflows here use.
+    branches: ["fire-growth/**"]
+  workflow_dispatch: {}
+
+# One at a time. Two runs committing growth/data/ together is a conflict on a
+# file whose whole purpose is being a readable history.
+concurrency:
+  group: growth
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  crawl_health:
+    name: what a machine gets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+
+      - name: Check every URL in the sitemap
+        # Does not fail the workflow on a broken page, and that is
+        # deliberate. A red cross here would mean "somebody else's page is
+        # slow today" and would be ignored within a week. The agent's own
+        # exit code is what distinguishes a run that found problems from one
+        # that could not look at all.
+        run: python -m growth.run crawl_health --base https://recruited.org.uk
+
+      - name: Commit what it found
+        run: |
+          set -e
+          git config user.name "growth"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- growth/data/; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git add growth/data/
+          git commit -m "crawl health $(date -u +%F)"
+          # Rebase rather than merge: this file is a log, the remote's copy is
+          # never the one to keep, and a merge commit per day would bury the
+          # history it exists to show.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "could not push"
+          exit 1
