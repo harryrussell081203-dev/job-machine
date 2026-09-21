@@ -1201,3 +1201,241 @@ def set_meta(key: str, value: str) -> None:
                 (key, value, now()))
     except Exception:
         pass
+
+
+# ----------------------------------------------------------------------
+# the funnel
+# ----------------------------------------------------------------------
+# The transitions worth knowing about, in the order they happen. Written down
+# rather than left implicit because the ORDER is the report: an activation
+# rate is two adjacent entries in this list divided by each other, and a list
+# that drifts out of order produces a rate nobody notices is wrong.
+FUNNEL = ("signed_up", "onboarded", "first_email_sent", "first_reply",
+          "first_interview")
+
+# Not in FUNNEL because it is not a stage somebody passes through - it can
+# happen any number of times to one account, and to an account at any stage.
+REFERRED_USER = "referred_user"
+
+EVENT_KINDS = FUNNEL + (REFERRED_USER,)
+
+
+def record_event(user_id: int, kind: str, *, ref: str = "",
+                 detail: str = "", at: int | None = None) -> bool:
+    """Write down that something happened for the first time.
+
+    True if this is new, False if it had already been recorded. Idempotent by
+    construction rather than by checking first: UNIQUE (user_id, kind, ref)
+    and ON CONFLICT DO NOTHING, so two concurrent sweeps recording the same
+    first send cannot race into two rows.
+
+    That matters more than it looks. Every rate computed from this table has
+    an event count as its numerator, so one duplicated row is an activation
+    rate above 100% - a number that gets explained away rather than
+    investigated.
+
+    Unknown kinds raise. A typo'd event name is invisible otherwise: it
+    inserts cleanly, and the stage it was meant to record silently reads
+    zero for ever.
+    """
+    if kind not in EVENT_KINDS:
+        raise ValueError(f"unknown event kind: {kind!r}")
+    stamp = now() if at is None else at
+    try:
+        with connect() as c:
+            # RETURNING is what makes this honest. ON CONFLICT DO NOTHING
+            # returns a row when this insert landed and nothing when it hit
+            # the unique constraint, so "was this the first" is answered by
+            # the database rather than inferred.
+            #
+            # Inferring it was the first attempt here, by reading the stored
+            # timestamp back and comparing: which reports TRUE twice for two
+            # calls in the same second, because the timestamps are equal. The
+            # cost of that is a referral month paid twice, and the test that
+            # caught it does exactly what a retry does.
+            #
+            # Needs SQLite 3.35 (2021) or Postgres. Both are well past that.
+            row = c.execute(
+                "INSERT INTO events (user_id, kind, ref, at, detail) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING "
+                "RETURNING id",
+                (user_id, kind, ref, stamp, detail)).fetchone()
+        return row is not None
+    except Exception:
+        # An event that cannot be written must never take down the thing that
+        # happened. A send is worth more than the record of it being a first.
+        return False
+
+
+def first_event_at(user_id: int, kind: str) -> int | None:
+    with connect() as c:
+        row = c.execute(
+            "SELECT MIN(at) AS at FROM events WHERE user_id = ? AND kind = ?",
+            (user_id, kind)).fetchone()
+    return int(row["at"]) if row and row["at"] is not None else None
+
+
+def event_counts() -> dict:
+    """How many accounts have ever reached each stage.
+
+    DISTINCT user_id rather than a row count, because referred_user has many
+    rows per account and folding that into a funnel would read as a stage
+    more people reached than signed up.
+    """
+    with connect() as c:
+        rows = c.execute(
+            "SELECT kind, COUNT(DISTINCT user_id) AS n FROM events "
+            "GROUP BY kind").fetchall()
+    return {r["kind"]: int(r["n"]) for r in rows}
+
+
+def users_by_source() -> list[dict]:
+    """Sign-ups grouped by where they came from, and how far each group got.
+
+    The join is to events rather than to cvs or sent_log on purpose: those
+    say what is true NOW, and a user who sent letters and later deleted their
+    account or replaced their CV would silently leave the channel that
+    brought them looking worse than it was.
+    """
+    with connect() as c:
+        rows = c.execute(
+            "SELECT u.utm_source, u.utm_campaign, u.ref_code, "
+            "       COUNT(*) AS signups, "
+            "       SUM(CASE WHEN e.user_id IS NOT NULL THEN 1 ELSE 0 END) "
+            "         AS activated "
+            "FROM users u "
+            "LEFT JOIN events e "
+            "  ON e.user_id = u.id AND e.kind = 'first_email_sent' "
+            "GROUP BY u.utm_source, u.utm_campaign, u.ref_code "
+            "ORDER BY signups DESC").fetchall()
+    out = []
+    for r in rows:
+        source = "referral" if r["ref_code"] else (r["utm_source"] or "direct")
+        out.append({"source": source,
+                    "campaign": r["utm_campaign"] or "",
+                    "signups": int(r["signups"]),
+                    "activated": int(r["activated"] or 0)})
+    return out
+
+
+def set_user_source(user_id: int, source: dict) -> None:
+    """Stamp a brand-new account with where it came from.
+
+    Only ever called for an account that has just been created, and it does
+    not overwrite: a returning user signing in from a different link is the
+    same user, and re-attributing them would move a sign-up between channels
+    weeks after the fact and make last month's report change.
+    """
+    if not source:
+        return
+    try:
+        with connect() as c:
+            c.execute(
+                "UPDATE users SET utm_source = ?, utm_campaign = ?, "
+                "ref_code = ?, landing_path = ? "
+                "WHERE id = ? AND utm_source = '' AND ref_code = ''",
+                (source.get("utm_source", ""), source.get("utm_campaign", ""),
+                 source.get("ref", ""), source.get("landing", ""), user_id))
+    except Exception:
+        pass
+
+
+# ----------------------------------------------------------------------
+# referrals
+# ----------------------------------------------------------------------
+def claim_referral_code(user_id: int, code: str) -> bool:
+    """Take a code if nobody else holds it. False means try another.
+
+    The uniqueness is enforced by the SELECT and the UPDATE together rather
+    than by a constraint, because the column has a DEFAULT '' and every
+    account that has never asked for a code shares that value - a UNIQUE index
+    would refuse the second such account. The loser of a race gets False and
+    picks a different code, which is the behaviour either way.
+    """
+    code = (code or "").strip().lower()
+    if not code:
+        return False
+    with connect() as c:
+        taken = c.execute(
+            "SELECT id FROM users WHERE referral_code = ?", (code,)).fetchone()
+        if taken:
+            return False
+        c.execute("UPDATE users SET referral_code = ? "
+                  "WHERE id = ? AND referral_code = ''", (code, user_id))
+        row = c.execute("SELECT referral_code FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+    return bool(row) and (row["referral_code"] or "") == code
+
+
+def user_by_referral_code(code: str):
+    code = (code or "").strip().lower()
+    if not code:
+        return None
+    with connect() as c:
+        return c.execute("SELECT * FROM users WHERE referral_code = ?",
+                         (code,)).fetchone()
+
+
+def set_referrer(user_id: int, referrer_id: int) -> bool:
+    """Record who brought this account. Once, and never changed after.
+
+    The guard is `referred_by IS NULL`: a second referral link tapped later
+    must not move an account between referrers, because the first reward may
+    already have been paid on it and the second would be paid again.
+    """
+    with connect() as c:
+        c.execute("UPDATE users SET referred_by = ? "
+                  "WHERE id = ? AND referred_by IS NULL",
+                  (referrer_id, user_id))
+        row = c.execute("SELECT referred_by FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+    return bool(row) and row["referred_by"] == referrer_id
+
+
+def referral_months_earned(user_id: int) -> int:
+    with connect() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM events "
+            "WHERE user_id = ? AND kind = ?", (user_id, REFERRED_USER)
+        ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def referral_stats(user_id: int) -> dict:
+    """What to show somebody on their own referral screen.
+
+    `people` counts accounts, `rewards` counts payouts, and they are different
+    numbers on purpose: one person who signs up, uploads a CV and then sends
+    their first letter earns two months. Showing only one of them would make
+    the page either understate the reward or overstate the friends.
+    """
+    with connect() as c:
+        people = c.execute(
+            "SELECT COUNT(*) AS n FROM users WHERE referred_by = ?",
+            (user_id,)).fetchone()
+        rewards = c.execute(
+            "SELECT COUNT(*) AS n FROM events WHERE user_id = ? AND kind = ?",
+            (user_id, REFERRED_USER)).fetchone()
+    return {"people": int(people["n"]) if people else 0,
+            "months": int(rewards["n"]) if rewards else 0}
+
+
+def extend_paid_until(user_id: int, seconds: int) -> int:
+    """Add free access, from now or from whenever they are already paid to.
+
+    Taking the later of the two is the whole of it. Setting it to now+30d
+    would SHORTEN a subscriber who is paid up for a year, turning a reward
+    into a punishment for the only people already giving us money.
+    """
+    if seconds <= 0:
+        return 0
+    with connect() as c:
+        row = c.execute("SELECT paid_until FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+        if row is None:
+            return 0
+        base = max(int(row["paid_until"] or 0), now())
+        until = base + seconds
+        c.execute("UPDATE users SET paid_until = ? WHERE id = ?",
+                  (until, user_id))
+    return until

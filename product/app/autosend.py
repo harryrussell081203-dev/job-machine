@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import config, db, delivery
+from . import config, db, delivery, funnel
 from .vault import VaultError
 
 MAX_CONSECUTIVE_FAILURES = 3
@@ -224,6 +224,12 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
         db.record_delivered(user_id, draft_id=draft["id"],
                             to_email=draft["to_email"], company=company)
         db.record_contacted(user_id, company)
+        # The moment this account became a working one: a real letter, to a
+        # real employer, out of their own mailbox. Called on every send rather
+        # than guarded by "is this the first" - the event table answers that,
+        # and a guard here would be a query that can race with a concurrent
+        # sweep. Cannot raise; see funnel.py.
+        funnel.reached(user_id, "first_email_sent", detail=company)
         if managed:
             # After the send, not before. Counting an attempt that then failed
             # would spend the shared allowance on letters nobody received.
