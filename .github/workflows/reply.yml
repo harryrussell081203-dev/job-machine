@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install requests dnspython
+      - run: pip install requests dnspython cryptography
 
       - name: Check and handle replies
         env:
@@ -40,6 +40,10 @@ jobs:
           # like a hang and was really an empty buffer.
           PYTHONUNBUFFERED: "1"
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Without this the machine cannot read the contacts in
+          # state.json, and personal.py raises rather than carrying on
+          # half-blind. See personal.py.
+          STATE_KEY: ${{ secrets.STATE_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           SMS_API_KEY: ${{ secrets.SMS_API_KEY }}

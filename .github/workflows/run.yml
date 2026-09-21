@@ -67,7 +67,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install requests dnspython reportlab
+      - run: pip install requests dnspython reportlab cryptography
 
       - name: Run pipeline
         env:
@@ -82,6 +82,10 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Without this the machine cannot read the contacts in
+          # state.json, and personal.py raises rather than carrying on
+          # half-blind. See personal.py.
+          STATE_KEY: ${{ secrets.STATE_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           SMS_API_KEY: ${{ secrets.SMS_API_KEY }}
