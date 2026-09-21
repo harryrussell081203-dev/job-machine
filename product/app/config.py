@@ -326,3 +326,14 @@ def managed_mail_available() -> bool:
     than presenting a choice that fails later.
     """
     return bool(MANAGED_MAIL_DOMAIN and MANAGED_MAIL_KEY)
+
+
+# IndexNow: an open protocol for telling Bing, Yandex and Seznam that a page
+# changed, instead of waiting for a crawl. No account and no registration -
+# the key is any 8-128 character hex string you choose, served as
+# <key>.txt at the site root so the engine can confirm you own the domain.
+#
+#   python -c "import secrets; print(secrets.token_hex(16))"
+#
+# Unset, the whole feature is simply absent: no key file, no submissions.
+INDEXNOW_KEY = _env("INDEXNOW_KEY")

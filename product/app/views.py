@@ -96,6 +96,82 @@ BROWSER_MARKS = ("applewebkit", "gecko", "trident", "khtml")
 
 PERSON, ROBOT = "person", "robot"
 
+# WHICH CRAWLER, NOT JUST "A CRAWLER".
+#
+# Until now every robot was recorded as `robot` with an empty source, because
+# a crawler sends no referer and `source` is the referer host. That collapsed
+# 258 visits a week into one number that could not answer the only question
+# worth asking of it: which pages are the assistants actually reading.
+#
+# So for a robot the source column carries the crawler's name instead. No
+# schema change and no migration - the unique key already includes source, so
+# each crawler gets its own row and totals() groups by it for free.
+#
+# The names are prefixed by role, and that distinction is the point:
+#
+#   ai-answer   Fetching a page to answer somebody's question right now.
+#               A hit here means an assistant is citing this page TODAY.
+#               This is the highest-signal number on the whole site.
+#   ai-train    Collecting for a future model. Worth having, but it pays
+#               off in a year rather than this week.
+#   search      Ordinary search indexing.
+#   other       Link previews, SEO tools, our own monitoring.
+#
+# Longest match wins, so "claude-searchbot" is not swallowed by "claudebot".
+# Ordered longest-first at import for exactly that reason.
+CRAWLERS = {
+    # Answering a question now
+    "oai-searchbot": "ai-answer:openai",
+    "chatgpt-user": "ai-answer:openai",
+    "claude-searchbot": "ai-answer:anthropic",
+    "claude-user": "ai-answer:anthropic",
+    "perplexitybot": "ai-answer:perplexity",
+    "perplexity-user": "ai-answer:perplexity",
+    "duckassistbot": "ai-answer:duckduckgo",
+    "mistralai-user": "ai-answer:mistral",
+    # Collecting for training
+    "gptbot": "ai-train:openai",
+    "claudebot": "ai-train:anthropic",
+    "claude-web": "ai-train:anthropic",
+    "anthropic-ai": "ai-train:anthropic",
+    "google-extended": "ai-train:google",
+    "applebot-extended": "ai-train:apple",
+    "meta-externalagent": "ai-train:meta",
+    "bytespider": "ai-train:bytedance",
+    "amazonbot": "ai-train:amazon",
+    "ccbot": "ai-train:commoncrawl",
+    # Ordinary search
+    "googlebot": "search:google",
+    "googleother": "search:google",
+    "bingbot": "search:bing",
+    "applebot": "search:apple",
+    "duckduckbot": "search:duckduckgo",
+    "yandexbot": "search:yandex",
+    # Everything else worth telling apart
+    "ahrefsbot": "other:ahrefs",
+    "semrushbot": "other:semrush",
+    "facebookexternalhit": "other:preview",
+    "pg_net": "other:ours",
+    "uptime": "other:ours",
+}
+
+_CRAWLERS_BY_LENGTH = sorted(CRAWLERS.items(), key=lambda kv: -len(kv[0]))
+
+# A crawler we have no name for. Kept as one bucket rather than recording the
+# raw user-agent: user-agent strings are unbounded, high-cardinality and
+# occasionally carry a URL, and this table is meant to stay small enough to
+# live without a scheduled prune.
+UNKNOWN_CRAWLER = "other:unnamed"
+
+
+def crawler_name(user_agent: str) -> str:
+    """Which crawler this is, as role:operator, or a single unknown bucket."""
+    agent = (user_agent or "").strip().lower()
+    for token, name in _CRAWLERS_BY_LENGTH:
+        if token in agent:
+            return name
+    return UNKNOWN_CRAWLER
+
 MAX_PATH = 64
 MAX_SOURCE = 64
 
@@ -169,6 +245,10 @@ def record(path: str, *, user_agent: str = "", referer: str = "",
     try:
         slot = int(when if when is not None else time.time()) // HOUR * HOUR
         kind = ROBOT if looks_like_a_robot(user_agent) else PERSON
+        # A crawler sends no referer, so `source` would be empty for every one
+        # of them. It carries the crawler's name instead - see CRAWLERS.
+        who = (crawler_name(user_agent) if kind == ROBOT
+               else source_of(referer, host))
         with connect() as c:
             c.execute(
                 "INSERT INTO page_views (path, source, kind, hour_at, views) "
@@ -179,7 +259,7 @@ def record(path: str, *, user_agent: str = "", referer: str = "",
                 # Exactly the trap rate_hits already documents.
                 "ON CONFLICT(path, source, kind, hour_at) DO UPDATE "
                 "SET views = page_views.views + 1",
-                (path[:MAX_PATH], source_of(referer, host), kind, slot))
+                (path[:MAX_PATH], who[:MAX_SOURCE], kind, slot))
             c.execute("DELETE FROM page_views WHERE hour_at < ?",
                       (slot - KEEP_FOR,))
     except Exception:
@@ -192,7 +272,12 @@ def record(path: str, *, user_agent: str = "", referer: str = "",
 def totals(*, since: float, now: float | None = None) -> dict:
     """Views per path over a window, people and robots kept apart."""
     now = time.time() if now is None else now
-    out: dict = {"people": {}, "robots": {}, "sources": {}, "total": 0}
+    # `sources` stays person-only and so does `total`. That separation is the
+    # point of this module - a page read forty times where all forty are
+    # crawlers has told a lie that reads exactly like good news - so the
+    # crawler breakdown gets its own keys rather than being folded in.
+    out: dict = {"people": {}, "robots": {}, "sources": {}, "total": 0,
+                 "crawlers": {}, "crawler_pages": {}}
     try:
         with connect() as c:
             rows = c.execute(
@@ -206,6 +291,11 @@ def totals(*, since: float, now: float | None = None) -> dict:
         n = int(row["n"] or 0)
         bucket = out["people"] if row["kind"] == PERSON else out["robots"]
         bucket[row["path"]] = bucket.get(row["path"], 0) + n
+        if row["kind"] == ROBOT:
+            who = row["source"] or UNKNOWN_CRAWLER
+            out["crawlers"][who] = out["crawlers"].get(who, 0) + n
+            pages = out["crawler_pages"].setdefault(who, {})
+            pages[row["path"]] = pages.get(row["path"], 0) + n
         if row["kind"] == PERSON:
             out["total"] += n
             # "" is a real answer here - an app tap with no referrer - so it
@@ -217,6 +307,11 @@ def totals(*, since: float, now: float | None = None) -> dict:
                                 key=lambda kv: -kv[1]))
     out["robots"] = dict(sorted(out["robots"].items(), key=lambda kv: -kv[1]))
     out["sources"] = dict(sorted(out["sources"].items(), key=lambda kv: -kv[1]))
+    out["crawlers"] = dict(sorted(out["crawlers"].items(), key=lambda kv: -kv[1]))
+    out["crawler_pages"] = {
+        who: dict(sorted(pages.items(), key=lambda kv: -kv[1]))
+        for who, pages in sorted(out["crawler_pages"].items(),
+                                 key=lambda kv: -sum(kv[1].values()))}
     return out
 
 

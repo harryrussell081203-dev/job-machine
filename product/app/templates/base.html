@@ -39,6 +39,19 @@
       content="Recruited - your CV, in front of a human.">
 <meta name="twitter:card" content="summary_large_image">
 
+{# One address per page, whatever was bolted onto the one that was clicked.
+   Every post that has ever gone out carries a tracking parameter - the
+   Snapchat story used ?utm_source=snapchat - and to a crawler "/find" and
+   "/find?utm_source=tiktok" are two pages with identical content. That
+   splits whatever standing the page has earned between however many
+   variants exist, and it is the single most common way a small site
+   competes with itself.
+
+   Built from the path alone rather than from request.url, deliberately: the
+   whole point is to drop the query string, and echoing it back would make
+   this tag agree with the duplicate instead of correcting it. #}
+<link rel="canonical" href="{{ config.BASE_URL }}{{ request.url.path }}">
+
 <!-- Installable. No store, no review, no fee: this is what makes the app
      appear on a home screen from a plain link. -->
 <link rel="manifest" href="/static/manifest.webmanifest">

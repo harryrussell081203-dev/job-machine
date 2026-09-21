@@ -1,6 +1,6 @@
 # Posts, ready to paste
 
-Updated 18 Sep 2026. **Figures: 166 applications, 135 employers, 31 replies, 19%.**
+Updated 19 Sep 2026. **Figures: 166 applications, 135 employers, 31 replies, 19%.**
 They move most days — recruited.org.uk and /numbers show the live ones, and it is
 worth checking before you post, because being able to say "check it yourself" is
 most of why anybody believes the rest.
@@ -24,9 +24,9 @@ picture is doing more than any sentence here.
 
 **Slide 1**
 
-> I sent 150 job applications this year.
+> I sent 166 job applications this year.
 >
-> 25 replies.
+> 31 replies.
 >
 > Here's the bit nobody tells you 👇
 
@@ -36,7 +36,7 @@ picture is doing more than any sentence here.
 >
 > So I started emailing the actual person hiring instead.
 >
-> 17% reply rate. Cold applications normally get 1–5%.
+> 19% reply rate. Cold applications normally get 1–5%.
 
 **Slide 3**
 
@@ -55,7 +55,7 @@ product, and the ask is "try a free thing", not "make an account".*
 
 ## 2. One-slide version, if three is too many
 
-> 150 job applications. 25 replies.
+> 166 job applications. 31 replies.
 >
 > Stopped clicking Apply, started emailing the person actually hiring.
 >
@@ -72,8 +72,8 @@ product, and the ask is "try a free thing", not "make an account".*
 > disappearing into portals.
 >
 > So I started doing it differently: find the actual person doing the hiring at
-> each company, email them directly with my CV. 150 applications across 119
-> employers, 25 replies. That's 17% — cold applications normally run 1–5%.
+> each company, email them directly with my CV. 166 applications across 135
+> employers, 31 replies. That's 19% — cold applications normally run 1–5%.
 >
 > The hard part is finding the right person. So I built a tool that does it, and
 > the basic version is free with no account:
@@ -104,35 +104,47 @@ self-promotion rules first** — several will ban you for a link in the post bod
 Subreddits: r/UKJobs, r/AskUK, r/Aberdeen, r/Scotland, r/UKPersonalFinance
 (only where relevant), r/jobsearchhacks
 
-**Title:** I sent 150 job applications and tracked what actually got replies.
+**Title:** I sent 166 job applications and tracked what actually got replies.
 The pattern was not what I expected.
 
 **Body:**
 
 > I've been job hunting this year and kept a record of every application: who I
-> wrote to, how, and what came back. 150 applications, 119 different employers.
+> wrote to, how, and what came back. 166 applications, 135 different employers.
 >
 > What didn't matter:
 >
-> **When I sent it.** I was convinced Tuesday morning was better. In office
-> hours: 23.5% replies. Outside: 21.2%. That difference is noise — it's not a
-> real effect, it's a coin landing slightly off centre.
+> **When I sent it.** I was convinced Tuesday morning was better. Across all
+> 166 applications: in office hours 21 replies out of 110, outside them 10 out
+> of 56. That's 19.1% against 17.9%, which is noise — not a real effect, just
+> a coin landing slightly off centre.
 >
 > What did matter, a lot:
 >
-> **Who I wrote to.**
-> - A named person or a hiring inbox: 34% replied
-> - A generic info@ address: 9% replied
-> - An address printed in the advert itself: 70% replied
+> **Who I wrote to.** 86 of those went out as direct emails rather than through
+> a portal, and that set breaks down like this:
+> - A named person: 13 replies out of 34
+> - A hiring inbox like careers@ or hr@: 5 out of 10
+> - A generic info@ address: 4 out of 42
 >
-> That last one is the interesting bit. Adverts that print a contact get almost
-> no direct emails, because everybody clicks Apply instead. It's the least
-> competitive route in and most people never look for it.
+> Ten emails is too few to trust that 50%, so the comparison I'd actually
+> stand behind is the big one: 44 emails to a human or a hiring inbox against
+> 42 to a generic inbox, and roughly four times the reply rate.
 >
-> Overall 17% of my applications got a human reply. Cold applications are
-> normally quoted at 1–5%.
+> Splitting the same 86 a different way — by where I found the address rather
+> than who it belonged to:
+> - Printed in the job advert itself: 6 out of 9
+> - Dug out of the company's own website: 16 out of 77
 >
-> Two things worth saying honestly: replies are not interviews (150 → 25 replies
+> Nine is a small sample and I'm not going to pretend 67% holds at scale. But
+> adverts that print a contact get almost no direct emails, because everybody
+> clicks Apply instead. It's the least competitive route in and most people
+> never look for it.
+>
+> Overall 19% of my applications got a human reply, and 26% of the direct
+> emails did. Cold email is normally quoted at 1–5%.
+>
+> Two things worth saying honestly: replies are not interviews (166 → 31 replies
 > → 1 interview invite), and this is one person's data, so treat it as a strong
 > hint rather than proof.
 >
@@ -159,7 +171,7 @@ Don't paste a pitch. One line, genuinely helpful:
 ## What I'd do first, in order
 
 1. **Post the story again with the new angle.** The last one got about 20
-   people to the site out of ~500. Leading with "150 applications, 25 replies"
+   people to the site out of ~500. Leading with "166 applications, 31 replies"
    instead of the app itself should do better, and linking to `/find` removes
    the sign-up wall.
 2. **Send the four emails sitting in your Gmail drafts.** Employment CONNECT
@@ -353,3 +365,421 @@ already cost you 27 people once.
    have never heard of you.
 5. **#10, the screen recording**, when you can be bothered — it is the one that
    keeps working after you post it.
+
+---
+
+# Third batch — four scripts to film
+
+## Why this section exists
+
+Your own profile already answered the question I was guessing at. Three hours
+after posting, side by side on the same account:
+
+| Post | Views |
+| --- | --- |
+| You, talking to camera | 601 |
+| You, talking to camera | 283 |
+| Minecraft clip | 137 |
+| Slideshow — "Who you email decides everything" | 157 |
+| Slideshow — "They use AI to bin you" | 116 |
+
+The two slideshows went out ten minutes apart, so they are a fair test against
+each other — the data one beat the angry one by about a third, which is worth
+knowing. But both of them sit at the bottom of your own range. **Your face
+outperforms my design work by roughly four to one.**
+
+So the highest-value thing I can hand you is not another deck. It is a script.
+Fifteen seconds of you saying the thing, which I cannot film and you can.
+
+Two caveats before these are worth anything:
+
+- **The Community Guidelines strike is still on the account.** That suppresses
+  reach on everything, including these. Appeal it or delete the post first,
+  or you are testing scripts through a closed tap.
+- **Your bio still points at `/dashboard`**, which asks for a login. Change it
+  to `recruited.org.uk/find`. Every view these earn is wasted until you do.
+
+## How to film them
+
+- **Phone at your face, one take, no edit.** The 601-view video was not
+  produced. Do not start producing.
+- **First three words are the whole thing.** Start mid-sentence. No "so
+  basically", no "hey guys", no intro.
+- **Say the numbers out loud with their counts.** "Thirteen out of
+  thirty-four" beats "thirty-eight percent" — it sounds like a person who
+  counted rather than a person who read a statistic.
+- **One on-screen caption at the top**, six words maximum, so it reads with
+  the sound off.
+- **Never say it blasts employers.** It sends one letter per employer, never
+  to a guessed address, and sends nothing when it cannot find a real one. That
+  refusal is the product. Selling volume sells the opposite thing.
+- **One script per account**, same rule as the decks — the angry one on the
+  rage account, the numbers one on the receipts account. Same face is fine;
+  the same words on two accounts is what gets both suppressed.
+
+---
+
+## 14. The angry one (rage account)
+
+**On screen:** `166 applications. 31 replies.`
+
+> One hundred and sixty-six job applications this year. Thirty-one replies.
+> And most of those were a bot telling me at two in the morning that they'd
+> keep me on file.
+>
+> Upload your CV. Then type your CV in again. Then make an account. Then
+> thirty questions about whether you can work in the UK, which was on the CV.
+>
+> Nobody reads it. Nobody can. It doesn't get sent anywhere, it gets filed.
+>
+> So I stopped clicking Apply and started emailing an actual person at the
+> company instead. Eighty-six of those. Thirteen out of thirty-four came back.
+>
+> Same CV. Same me. The only thing that changed was who got it.
+
+**Caption:** Same CV, same me, different recipient. 86 emails over four weeks:
+13 replies out of 34 when it went to a named person, 4 out of 42 when it went
+to a generic info@ address. The method's free and there's no sign up —
+recruited.org.uk/find
+
+---
+
+## 15. The numbers one (receipts account)
+
+Your best-performing slideshow was the data one. This is that, spoken.
+
+**On screen:** `One variable. Four times the replies.`
+
+> I sent eighty-six cold emails to UK employers in four weeks and I logged
+> every single one, because I wanted to know what actually moves it.
+>
+> It isn't the CV. It isn't the day you send it — across everything I've sent
+> that's twenty-one replies out of a hundred and ten in office hours, and ten
+> out of fifty-six outside them. That gap is nothing.
+>
+> It's who opens it.
+>
+> Generic info@ address: four replies out of forty-two. A named human:
+> thirteen out of thirty-four.
+>
+> And cut the same eighty-six a different way, by where I found the address.
+> Nine of them were printed at the bottom of the advert itself. Six of those
+> nine wrote back.
+>
+> Nine is a small sample and I'm not pretending otherwise. But read the advert
+> to the end. Most people never do.
+
+**Caption:** 86 emails, logged. Who receives it was worth about four times
+what's written in it. Full breakdown, including the thin samples, is published
+at recruited.org.uk/numbers
+
+---
+
+## 16. The useful one (tips account)
+
+No complaint, no product for the first twelve seconds. Pure instruction.
+
+**On screen:** `The email is already in the advert`
+
+> Job adverts hide a real email address and almost nobody scrolls far enough
+> to find it.
+>
+> Go past the salary. Past the benefits. Past the equal opportunities
+> paragraph. Down at the bottom, under the reference number, there's often an
+> address — and it's usually a person, not a portal.
+>
+> I sent nine emails to addresses printed in adverts like that. Six of them
+> wrote back. Small sample, I know, but here's why it works: when an employer
+> prints an address, they're telling you how they want to be contacted. And
+> everybody else clicks Apply instead.
+>
+> Go and look at the last advert you applied for. Right now.
+
+**Caption:** Sixty to ninety words. Name the role, one detail from the advert
+that proves you read it, two or three proof points, then exactly one question
+— two questions and they have to compose a reply instead of answering one.
+recruited.org.uk/playbook
+
+---
+
+## 17. The quiet one (pov account)
+
+Different register on purpose. Not angry, not a lecture. Flat, honest, low.
+This is the one that gets saved and sent to a friend.
+
+**On screen:** `it files you. it never sends.`
+
+> It's one in the morning and you're still applying. You've stopped reading
+> them properly. Upload, retype, submit, nothing.
+>
+> And you start thinking it's your CV. Or your degree. Or the eight-month gap.
+>
+> It isn't. There's nobody on the other end. The button doesn't send your
+> application to a person, it files it, and then you sit there waiting for a
+> reply from a filing cabinet.
+>
+> I emailed a person instead and thirteen out of thirty-four of them wrote
+> back to me like a human being.
+>
+> Your CV is probably fine. It's just never been read.
+
+**Caption:** It isn't your CV. There's nobody on the other end of the button.
+86 emails, 22 replies — the whole log is public. recruited.org.uk/find
+
+---
+
+## What to watch after you post them
+
+Post one a night, not four in a night. Same time each night if you can. After
+four nights you have a clean comparison against the two slideshows already up,
+and the thing to compare is **watch-through, not views** — a 15-second video
+that holds people to the end will keep being shown for days, and a 600-view
+video nobody finishes is a dead end.
+
+Then tell me which one won and I'll write four more in that voice.
+
+---
+
+# Fourth batch — the two channels with a ceiling above a thousand
+
+Everything in the first three batches reaches tens or low hundreds of people
+and depends on you posting again tomorrow. These two are one-shot, free, and
+can do four figures in a day. They are also the two where my writing is most
+of the work and your job is a single click.
+
+Do them on separate days. Both at once and you cannot answer the comments,
+and on both of these the comments are where it is won.
+
+---
+
+## 18. Show HN
+
+Hacker News. Highest ceiling of anything on this list — a Show HN that lands
+does 10,000+ visits — and your project is unusually well shaped for it. They
+are hostile to marketing and warm to somebody who measured something, admits
+where the sample is thin, and can explain a technical decision.
+
+You get one shot per project, so this is the version to use.
+
+**Title** (80 char limit, no exclamation marks, no "revolutionary"):
+
+> Show HN: I logged 86 cold emails to UK employers and published what replied
+
+**URL:** `https://recruited.org.uk/numbers`
+
+Not the front page. HN clicks through to the thing, and the data is the thing
+that earns the upvote. The tool is one click from there.
+
+**First comment — post it yourself, immediately after submitting:**
+
+> I'm 22, job hunting in Aberdeen, and I got tired of applications vanishing
+> into portals. So for four weeks I stopped clicking Apply and emailed a real
+> person at the company instead, and logged all of it.
+>
+> 86 cold emails, 22 replies, 26%. Cold email is usually quoted at 1–5%. The
+> variable that mattered was who received it:
+>
+>     Named person          13 / 34
+>     Hiring inbox          5 / 10
+>     Generic info@         4 / 42
+>
+> Caveat up front: the hiring-inbox row is ten emails and I wouldn't defend
+> 50% at scale. The comparison I'd stand behind is the big one — 44 to a human
+> or a hiring inbox against 42 to a generic inbox, about four times the rate.
+>
+> Timing did nothing. Across all 166 applications I've sent, in office hours
+> was 21 replies out of 110 and outside hours 10 out of 56 — 19.1% against
+> 17.9%. That gap is noise.
+>
+> The tool is the address-finding part, free and with no account:
+> https://recruited.org.uk/find — paste an advert, it reads the advert text,
+> then the company's own site, and tells you what tier each address is.
+>
+> The part I'd most like feedback on is what it refuses to do. Every
+> competitor in this space sells an email-verification API and tells you to
+> guess firstname.lastname@ and verify it. I don't guess patterns, for three
+> reasons: catch-all domains make verifiers return "valid" for addresses that
+> belong to nobody; a bounce costs you sender reputation, so the price of a
+> wrong guess is your *next* email landing in spam; and a guess that hits the
+> wrong person is a cold email about a job to somebody who can't act on it.
+>
+> So when nothing real is found it sends nothing. 516 listings ended that way
+> and I count that as a correct outcome, not a failure. I'm aware that makes
+> the product worse on paper than one that always returns an address.
+>
+> All of it is at https://recruited.org.uk/numbers.json, CC BY 4.0, with the
+> counts under every rate and the definition of "reply" next to each one —
+> the fixed 86-email study counts anything that came back, the live counter
+> excludes autoresponders and rejections, so they report different rates and
+> the endpoint says which is which.
+>
+> FastAPI, Jinja2, Postgres, running on a free tier. Happy to answer anything.
+
+**Then stay on the thread for three hours.** More Show HNs die from an absent
+author than from a bad idea.
+
+### The questions you will get, and the honest answers
+
+**"How is this different from Hunter.io / Apollo / RocketReach?"**
+> They sell verified guesses at scale for sales teams. This finds published
+> addresses for one advert at a time and refuses when there isn't one. Their
+> tool is better if you want volume. Mine is better if a bounce costs you
+> something, which for a jobseeker it does.
+
+**"n=86, this is anecdote not data."**
+> Correct, and it says so on the page. It's one person's log over four weeks,
+> not a study. I published the counts rather than just the rates so anyone can
+> see how thin each row is.
+
+**"Isn't this GDPR / PECR trouble?"**
+> Business contact addresses published by the company for the purpose of being
+> contacted, used to contact them about that purpose, one message, no
+> follow-up sequence, no list building. That's the narrow end of it. Nothing
+> is scraped into a database for resale and nothing is sent to an address a
+> human didn't publish.
+
+**"Why would a hiring manager want more cold email?"**
+> Fair hit, and it's the reason for the one-per-employer rule and no chasing.
+> The honest answer is 22 of 86 chose to reply, which is a higher signal than
+> a portal gives them.
+
+**"Just use LinkedIn."**
+> Connection requests to strangers are capped and mostly ignored, and
+> InMail is paid. This is free and the reply lands in a normal inbox.
+
+**"Site's down."**
+> Free tier, cold start, give it 50 seconds. (If it does get hugged, say so
+> in the thread rather than going quiet.)
+
+### Timing
+
+Tuesday to Thursday, 07:00–09:00 UK — that's early morning US Eastern, when
+the front page turns over. Never a Friday or a weekend.
+
+---
+
+## 19. Product Hunt
+
+Lower ceiling than HN, softer crowd, and the listing is a permanent backlink
+that crawlers follow — which matters for the answer pages' whole strategy.
+
+**Name:** Recruited
+**Tagline** (60 chars): `Find the real hiring contact on any job advert`
+**Topics:** Career, Hiring, Productivity, Job Search
+
+**Description:**
+
+> Job applications go into a portal and nobody is told they arrived. Recruited
+> reads a job advert, finds the real email address of a person who can act on
+> it — from the advert itself, then the company's own site — and tells you
+> which tier it found. Free, no account.
+>
+> It never guesses an address pattern. When there's nothing real to find it
+> says so and sends nothing, which happened on 516 listings.
+>
+> Built while job hunting. The method and all the numbers behind it are
+> published: 86 cold emails, 22 replies, broken down by who received them.
+
+**Maker's first comment:** the first four paragraphs of the Show HN comment,
+ending with "genuinely tell me if it's rubbish, I'd rather know."
+
+**Gallery:** the four share cards from `make_share_cards.py`, the `/find`
+result screenshot, and the 15-second screen recording from post #10.
+
+**Launch at 00:01 Pacific** (08:01 UK) — the board resets then and you want
+the full 24 hours.
+
+---
+
+## Order
+
+Product Hunt first. It is the lower-stakes of the two, it warms up the
+backlink, and if the site falls over under load you would rather find that out
+there than on the one HN shot you get.
+
+---
+
+# Fifth batch — backlinks, and which ones are actually worth chasing
+
+## The honest caveat, first
+
+I have no web access from here. Every directory, list and URL in this section
+is from memory, not from checking, and some of them will have changed or died.
+Confirm each one before you spend time on it. The same rule applies as to the
+register URLs in `find_orgs.py`: this is configuration to verify, not fact.
+
+## The best backlinks you can get are already being worked
+
+Not a startup directory. **A `.ac.uk` or `.gov.uk` page.**
+
+University careers services and council employability teams keep pages of
+"useful links for jobseekers". A link from one of those carries more weight
+than twenty listings on tool directories, because it is an institution with
+decades of standing vouching for you to exactly the right audience — and the
+people reading it are jobseekers, not founders looking at other people's
+products.
+
+That is the same list `tools/find_orgs.py` builds and `outreach.py` writes to.
+**The outreach machine is the backlink strategy.** One careers adviser who
+finds the tool useful and adds it to their resources page is worth more than a
+week of directory submissions.
+
+Which is also why the letter asks for nothing. A note saying "here is a free
+thing, pass it on if it helps, no reply needed" gets forwarded and sometimes
+listed. The same note with "please link to us" appended gets deleted, and
+deserves to.
+
+## GitHub lists
+
+Curated "awesome" lists take pull requests adding genuinely free tools, and a
+merged one is a permanent link that crawlers follow. Search GitHub for
+`awesome job search`, `awesome career`, `awesome interview preparation`,
+`awesome remote jobs`.
+
+Read the contributing rules first — most require alphabetical order, a
+one-line description and no marketing language. The entry that gets merged:
+
+> - [Recruited](https://recruited.org.uk/find) - Finds the real contact
+>   address in a job advert and on the employer's site. Never guesses address
+>   patterns. Free, no account.
+
+I cannot open pull requests against other people's repositories from this
+session — GitHub access here is scoped to your repo. I can write each one; you
+click submit.
+
+## Directories, in the order I would bother
+
+1. **Product Hunt** — covered in section 19. Permanent listing, real traffic.
+2. **AlternativeTo** — this is the one that keeps working. People searching
+   "Hunter.io alternative free" are exactly your audience, and the page ranks
+   for years.
+3. **Indie Hackers** — a build-log post rather than a listing. The 166
+   applications story fits that audience.
+4. **Slant, SaaSHub and the smaller aggregators** — low value each, ten
+   minutes each, they add up.
+
+Skip Capterra and G2. They are enterprise software review sites and you would
+be the only free tool on a page of £200-a-month platforms.
+
+## Not worth doing, so you can stop wondering
+
+Paid link packages, guest-post networks, comment links and directory blasts.
+All of them are the same trade: a short spike, then a penalty that is hard to
+undo, on a domain you cannot easily replace. `recruited.org.uk` is the one
+asset here that has to last.
+
+## What is already done on the site
+
+- `/answers`, 15 pages, one per question, each with its answer in the first
+  paragraph and FAQ structured data that says the same thing as the prose.
+- `/numbers.json`, CC BY 4.0, so anyone citing a figure gets the count and the
+  caveat with it.
+- `/llms.txt`, for models reading the site directly.
+- Canonical addresses, so `?utm_source=tiktok` no longer competes with the
+  page it came from.
+- Organization and SoftwareApplication markup, so "Recruited" can be told
+  apart from the recruitment agency of the same name.
+- Sitemap with a `lastmod` that moves only when the figures do.
+
+The crawlers are already coming — 258 robot visits in 48 hours. The pages are
+there for them to find now.
