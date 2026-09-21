@@ -60,10 +60,15 @@ jobs:
           python-version: "3.11"
       - name: Install
         # The root machine has no requirements file - it is deliberately thin.
-        # Same three as run.yml, which is the list that matters: if the tests
-        # need a package the real run does not install, the tests are passing
-        # against something that cannot exist in production.
-        run: pip install requests dnspython reportlab
+        # The SAME LIST as run.yml, which is the list that matters: if the
+        # tests need a package the real run does not install, the tests are
+        # passing against something that cannot exist in production.
+        #
+        # That invariant is not decoration. cryptography was added to run.yml,
+        # reply.yml and summary.yml for personal.py and not to this file, and
+        # eighteen tests went red on a suite that had just passed locally.
+        # Four places, and the fourth is the one nobody is looking at.
+        run: pip install requests dnspython reportlab cryptography
       - name: Test
         # Offline by construction: every test that would reach the network
         # patches it. A failure here is a real failure, never a flake.
