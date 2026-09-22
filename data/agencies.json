@@ -35,7 +35,21 @@
     "",
     "  Orion Group is the known case: orionjobs.com carries no MX record, so if",
     "  discovery only turns up an @orionjobs.com address there is nothing that",
-    "  can legitimately be posted to. Their own upload form is the route there."
+    "  can legitimately be posted to. Their own upload form is the route there.",
+    "",
+    "AGENCIES BELONG HERE AND NOWHERE ELSE",
+    "  On 2026-08-04 two lists of Aberdeen recruiters were built within the hour:",
+    "  this one, and ten entries added to data/support_orgs.json with an ask of",
+    "  'representation'. Both fired. TMM, Airswift and Petroplan each got two",
+    "  different letters from Harry inside two minutes, and he had to apologise",
+    "  to the TMM consultant for it.",
+    "",
+    "  So the split is now explicit: support_orgs.json is charities, colleges and",
+    "  training bodies - organisations asked whether they can help. This file is",
+    "  recruiters - firms asked to put him on their books. The two routes also",
+    "  check each other's registers before writing, so whichever gets there first",
+    "  wins and the other stands down. The names from that second list that were",
+    "  not already here have been folded in above."
   ],
   "agencies": [
     {
@@ -43,6 +57,8 @@
       "site": "wearecammach.com",
       "group": "energy",
       "desk": "you recruit engineering, trades and industrial staff across the Aberdeen energy market",
+      "ask_tickets": true,
+      "tickets_source": "Harry was told they have funded offshore survival tickets for candidates before, 2026-08-05. Nothing published anywhere confirms it, so the letter says it is something he was told and asks - it never states it as a fact about them.",
       "confidence": "confirmed - rebranded from Cammach Bryant"
     },
     {
@@ -102,6 +118,20 @@
       "group": "energy",
       "desk": "you specialise in offshore and marine crewing, which is the market my subsea background sits in",
       "confidence": "check"
+    },
+    {
+      "name": "Simpson Booth",
+      "site": "simpsonbooth.com",
+      "group": "energy",
+      "desk": "you recruit energy and engineering staff out of Aberdeen",
+      "confidence": "came from a second list of Aberdeen recruiters built in parallel with this one - see the note at the top of this file"
+    },
+    {
+      "name": "First Recruitment Group",
+      "site": "firstrecruitmentgroup.com",
+      "group": "technical",
+      "desk": "you staff engineering and energy contracts across the UK",
+      "confidence": "came from a second list of Aberdeen recruiters built in parallel with this one"
     },
     {
       "name": "Spencer Ogden",
