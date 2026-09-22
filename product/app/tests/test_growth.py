@@ -205,7 +205,7 @@ class TestTheReferralReward(AppTestCase):
         from app import funnel, referrals
         referrer, referred = self.two_users()
         before = self.main.db.get_user(referrer["id"])["paid_until"] or 0
-        funnel.reached(referred["id"], "onboarded")
+        funnel.reached(referred["id"], "cv_uploaded")
         after = self.main.db.get_user(referrer["id"])["paid_until"]
         self.assertGreaterEqual(after - max(before, self.main.db.now()),
                                 referrals.MONTH - 5)
@@ -215,8 +215,8 @@ class TestTheReferralReward(AppTestCase):
     def test_sending_a_first_letter_pays_a_second_month(self):
         from app import funnel
         referrer, referred = self.two_users()
-        funnel.reached(referred["id"], "onboarded")
-        funnel.reached(referred["id"], "first_email_sent")
+        funnel.reached(referred["id"], "cv_uploaded")
+        funnel.reached(referred["id"], "first_auto_send")
         self.assertEqual(
             self.main.db.referral_stats(referrer["id"])["months"], 2)
 
@@ -226,10 +226,10 @@ class TestTheReferralReward(AppTestCase):
         a second month."""
         from app import funnel
         referrer, referred = self.two_users()
-        funnel.reached(referred["id"], "onboarded")
+        funnel.reached(referred["id"], "cv_uploaded")
         paid = self.main.db.get_user(referrer["id"])["paid_until"]
-        funnel.reached(referred["id"], "onboarded")
-        funnel.reached(referred["id"], "onboarded")
+        funnel.reached(referred["id"], "cv_uploaded")
+        funnel.reached(referred["id"], "cv_uploaded")
         self.assertEqual(self.main.db.get_user(referrer["id"])["paid_until"],
                          paid)
 
@@ -240,7 +240,7 @@ class TestTheReferralReward(AppTestCase):
         referrer, referred = self.two_users()
         far = self.main.db.now() + 365 * 24 * 3600
         self.main.db.set_billing(referrer["id"], paid_until=far)
-        funnel.reached(referred["id"], "onboarded")
+        funnel.reached(referred["id"], "cv_uploaded")
         self.assertEqual(self.main.db.get_user(referrer["id"])["paid_until"],
                          far + referrals.MONTH)
 
@@ -268,6 +268,17 @@ class TestTheReferralReward(AppTestCase):
         user = self.main.db.get_user_by_email("lou@example.com")
         self.assertIsNone(user["referred_by"])
 
+    def test_steps_a_thumb_can_fake_pay_nothing(self):
+        """The funnel counts a six-question form as onboarded and a "mark as
+        sent" tap as a send, which is right for measuring. Paying for either
+        would make a free month a form and a button away."""
+        from app import funnel
+        referrer, referred = self.two_users()
+        funnel.reached(referred["id"], "onboarded")
+        funnel.reached(referred["id"], "first_email_sent")
+        self.assertEqual(
+            self.main.db.referral_stats(referrer["id"])["months"], 0)
+
     def test_a_code_is_stable_once_issued(self):
         self.sign_in("mo@example.com")
         user = self.main.db.get_user_by_email("mo@example.com")
@@ -289,7 +300,7 @@ class TestTheReferralReward(AppTestCase):
             self.main.db.record_event(referrer["id"], self.main.db.REFERRED_USER,
                                       ref=f"filler{i}:onboarded")
         before = self.main.db.get_user(referrer["id"])["paid_until"] or 0
-        self.assertEqual(referrals.reward_for(referred["id"], "onboarded"), 0)
+        self.assertEqual(referrals.reward_for(referred["id"], "cv_uploaded"), 0)
         self.assertEqual(self.main.db.get_user(referrer["id"])["paid_until"] or 0,
                          before)
 

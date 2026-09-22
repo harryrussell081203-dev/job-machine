@@ -740,3 +740,19 @@ input[type=file]::file-selector-button {
   cursor: pointer;
 }
 input[type=file]::file-selector-button:hover { background: var(--panel-2); }
+
+/* The quick start on /setup. Six questions, stacked, thumb-sized - the
+   whole point of it is that it fits on one phone screen without feeling
+   like a form. The two halves of "your last job" sit together under one
+   heading because they are one answer. */
+form.quick fieldset { border: 0; padding: 0; margin: 18px 0 0; }
+form.quick legend {
+  font-size: 14px; font-weight: 500; color: var(--ink-2);
+  margin-bottom: 7px; padding: 0;
+}
+form.quick fieldset input + input { margin-top: 8px; }
+form.quick .btn { margin-top: 22px; width: 100%; }
+/* The #quickerror anchor scrolls the error to the top of the viewport, which
+   on a phone is exactly where the sticky header sits - so without this the
+   one message the person needs is the one thing hidden. */
+#quickerror { scroll-margin-top: 150px; }

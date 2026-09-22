@@ -13,6 +13,7 @@ configuration.
 from __future__ import annotations
 
 import logging
+import math
 import sys
 import threading
 import time
@@ -570,11 +571,23 @@ def run_now(request: Request):
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
 
-    user_id = user["id"]
+    _start_run(user["id"])
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+def _start_run(user_id: int) -> bool:
+    """Start a search in the background. False if one is already going.
+
+    Shared by the "look for work now" button and the quick start, because
+    the quick start's whole point is that nobody should finish setting up and
+    then land on an empty dashboard waiting for a sweep that runs hours
+    later. The first thing after answering six questions should be letters
+    being written.
+    """
     if not db.start_run(user_id):
         # Already going. Not an error and not a second run - two taps half a
         # second apart on a phone is the normal case, not the odd one.
-        return RedirectResponse("/dashboard", status_code=303)
+        return False
 
     def work():
         try:
@@ -595,7 +608,7 @@ def run_now(request: Request):
 
     threading.Thread(target=work, daemon=True,
                      name=f"run-{user_id}").start()
-    return RedirectResponse("/dashboard", status_code=303)
+    return True
 
 
 @app.get("/run/progress")
@@ -647,6 +660,9 @@ async def profile_save(request: Request):
                       error=str(exc))
 
     db.save_profile(user["id"], data)
+    # A saved profile is what starts the machine, so it is what "onboarded"
+    # means. Idempotent - editing the profile later records nothing new.
+    funnel.reached(user["id"], "onboarded", detail="full form")
     return RedirectResponse("/dashboard", status_code=303)
 
 
@@ -798,6 +814,11 @@ def draft_action(request: Request, draft_id: int, action: str):
             # One email per employer, ever - recorded the moment the user
             # says they sent it, not when it was drafted.
             db.record_contacted(user["id"], row["company"])
+            # Sending it yourself IS sending. Until this, only automatic
+            # sends reached the funnel, so the path that needs no mailbox -
+            # the one most people will take - counted as nobody activating.
+            funnel.reached(user["id"], "first_email_sent",
+                           detail=f"by hand: {row['company'] or ''}")
     return RedirectResponse("/drafts", status_code=303)
 
 
@@ -1316,6 +1337,155 @@ def setup(request: Request):
                   vault_ready=vault.available())
 
 
+# What "the least you will work for" means when somebody types one number.
+# Below this it is an hourly rate; at or above it, a salary. Nobody earns
+# £200 an hour in this market and nobody's salary is £199 a year, so one box
+# can take either and the machine can tell which.
+HOURLY_BELOW = 200
+
+
+def _pay(raw: str) -> tuple[int, int]:
+    """One free-text pay box -> (min_salary_annual, min_rate_hourly).
+
+    Accepts what people actually type on a phone: "25000", "£25,000", "25k",
+    "12.50". Returns (0, 0) for anything unreadable, which the Profile then
+    refuses with its own message - so a bad value is caught by the same rule
+    as every other route, rather than by a second copy of it here.
+    """
+    text = (raw or "").lower().replace("£", "").replace(",", "").strip()
+    thousands = text.endswith("k")
+    text = text.rstrip("k").strip()
+    for suffix in ("per hour", "an hour", "/hr", "/h", "ph", "p/h", "per year",
+                   "a year", "pa", "p.a."):
+        text = text.replace(suffix, "").strip()
+    try:
+        value = float(text)
+    except ValueError:
+        return 0, 0
+    if thousands:
+        value *= 1000
+    if value <= 0:
+        return 0, 0
+    # Rounded UP. This is a floor, and rounding a floor down quietly accepts
+    # work below what the person said - "12.50" stored as 12 lets through a
+    # £12.00 job they told us they would not take.
+    if value < HOURLY_BELOW:
+        return 0, math.ceil(value)
+    return math.ceil(value), 0
+
+
+def _quick_profile(form) -> dict:
+    """The six answers the machine cannot start without, as a full profile.
+
+    WHY THIS EXISTS. Nine people signed up and not one of them saved a
+    profile. The setup screen told them it was "two minutes" and "the only
+    thing it needs", then sent them to an eighteen-field form - salary floor,
+    hourly floor, current salary, a three-part career highlight, a list of
+    things never to claim. On a phone, having just tapped a link in a
+    Snapchat story, that is where every one of them stopped. Not the mailbox;
+    nobody ever got as far as the mailbox.
+
+    The Profile itself hard-requires exactly six things: what job, where,
+    name, phone, one previous job, and a pay floor. Everything else has a
+    working default. So this asks for those six and nothing else. The full
+    form is still there, described as what it is - a way to make the letters
+    stronger - rather than as the price of entry.
+    """
+    def s(name):
+        return (form.get(name) or "").strip()
+
+    annual, hourly = _pay(s("min_pay"))
+    location = s("location")
+    title, org = s("last_title"), s("last_org")
+    return {
+        "name": s("name"), "location": location, "phone": s("phone"),
+        "email": "",
+        # The audience is people out of work, and "employed" would demand a
+        # current salary this form deliberately does not ask for. Anybody in
+        # work can say so on the full form.
+        "situation": "unemployed",
+        "current_salary": 0, "may_name_employer": False,
+        "min_salary_annual": annual, "min_rate_hourly": hourly,
+        "priorities": [], "wants_travel": False, "wants_contract": False,
+        "history": ([{"title": title, "org": org, "detail": ""}]
+                    if title and org else []),
+        "qualifications": [], "never_claim": [],
+        "locations": [location] if location else [],
+        "radius_miles": 25,
+        "target_roles": _items(s("target_roles")),
+    }
+
+
+@app.post("/setup/quick", response_class=HTMLResponse)
+async def quick_start(request: Request):
+    """Six answers in, a working search out, and the first run started."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+
+    # Never over a fuller profile. The form is only shown to somebody with no
+    # profile, but a back button or a second tab can still post it, and six
+    # answers written over eighteen would silently throw away the other twelve.
+    if db.load_profile(user["id"]):
+        return RedirectResponse("/profile", status_code=303)
+
+    form = await request.form()
+    data = _quick_profile(form)
+    try:
+        # The same validation every other route uses, so a quick profile is
+        # never a weaker one - just a shorter way to fill in the same thing.
+        Profile.from_dict(data)
+    except ProfileError as exc:
+        return render(request, "setup.html", user=user,
+                      cv=db.cv_summary(user["id"]), profile=None,
+                      mail=db.get_mail_account(user["id"]),
+                      settings=db.get_send_settings(user["id"]),
+                      vault_ready=vault.available(),
+                      quick=dict(form), quick_error=_friendly(str(exc)))
+
+    db.save_profile(user["id"], data)
+    funnel.reached(user["id"], "onboarded", detail="quick start")
+    _start_run(user["id"])
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+# The Profile's messages are written for a JSON file ("target_roles is empty -
+# nothing to search for"). This form never shows those field names, so each
+# is translated into the question that was actually on the screen.
+_FRIENDLY = {
+    "name is empty": "Put your name in - it signs every letter.",
+    "location is empty": "Say where you live.",
+    "does not look like a number": "That phone number does not look right.",
+    "set min_salary_annual or min_rate_hourly":
+        "Put the least you would work for - a yearly salary like 25000, or an "
+        "hourly rate like 12.",
+    "target_roles is empty": "Say what job you are after.",
+    "history is empty":
+        "Put your last job and who it was with - the letters need one real "
+        "thing you have done.",
+    "locations is empty": "Say where you live.",
+}
+
+
+def _friendly(message: str) -> str:
+    lines = [ln.strip(" -") for ln in message.splitlines()[1:] if ln.strip()]
+    if not lines:
+        lines = [message]
+    out = []
+    for line in lines:
+        for needle, plain in _FRIENDLY.items():
+            if needle in line:
+                if plain not in out:
+                    out.append(plain)
+                break
+        else:
+            # The place and job-title checks already speak plain English and
+            # carry the example the person needs, so they pass through.
+            out.append(line.replace("target role", "The job").replace(
+                "location", "The place"))
+    return " ".join(out)
+
+
 @app.post("/setup/cv")
 async def upload_cv(request: Request):
     """Take the CV, and use it to answer as many questions as it can.
@@ -1374,10 +1544,11 @@ async def upload_cv(request: Request):
     db.save_cv(user["id"], filename=upload.filename,
                content_type=upload.content_type or "application/octet-stream",
                blob=blob, extracted=text)
-    # A CV is what "onboarded" means here, and it is the honest place to draw
-    # the line: it is the first step that takes real effort, and nothing in
-    # the product can do anything at all without one.
-    funnel.reached(user["id"], "onboarded")
+    # Its own event, separate from "onboarded". A CV is optional - the machine
+    # runs without one - so it is not the line between set up and not. It is
+    # recorded because it is the referral programme's first tier: a real
+    # document is work, where a six-field form is not.
+    funnel.reached(user["id"], "cv_uploaded")
 
     # Only offer to prefill an empty profile. Overwriting answers somebody
     # already gave with a model's reading of their CV would be rude and wrong.
@@ -1476,6 +1647,10 @@ async def profile_from_cv_save(request: Request):
                       error=str(exc))
 
     db.save_profile(user["id"], data)
+    funnel.reached(user["id"], "onboarded", detail="from CV")
+    # Same reason as the quick start: finishing setup should be followed by
+    # letters being written, not by an empty dashboard until the next sweep.
+    _start_run(user["id"])
     return RedirectResponse("/dashboard", status_code=303)
 
 
