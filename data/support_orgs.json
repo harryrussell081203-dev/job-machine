@@ -199,6 +199,22 @@
       "ask": "employer introductions",
       "note": "Routes service leavers into construction and infrastructure employers, several of which run guaranteed interview schemes.",
       "confidence": "unverified - check the domain resolves before writing"
+    },
+    {
+      "name": "X-Forces Enterprise",
+      "domain": "x-forces.com",
+      "group": "veteran",
+      "ask": "business support",
+      "note": "The Armed Forces community's business-support charity, and the only entry on this list aimed at Leads2Profit rather than at Harry personally. Free mentoring, government-backed Start Up Loans (GBP 500-25,000, 6% fixed, up to 5 years, with 12 months of mentoring), and the Forces Community Entrepreneur Fund - a GBP 10,000 grant per cycle for a UK business under two years old run by someone in the Forces community. Leads2Profit was founded around 2024, so whether it still meets that age criterion depends on the current cycle and is a question for them, not an assumption for us.",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "Business Gateway Aberdeen",
+      "domain": "bgateway.com",
+      "group": "local",
+      "ask": "business support",
+      "note": "Scottish Government-funded, free and impartial: one-to-one start-up and growth advisers, workshops and market research, with a dedicated Aberdeen City and Shire office. They publish a local contact (01224 289725, aberdeen@bgateway.com) but no address is recorded here, because a published address only gets used in this file when it carries an email_source citation - so discovery finds a real one or nothing is sent, same as everywhere else.",
+      "confidence": "confirmed"
     }
   ]
 }
