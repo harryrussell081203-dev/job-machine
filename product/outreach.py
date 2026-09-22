@@ -59,13 +59,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from jobseeker.pipeline import compose, contacts, discover  # noqa: E402
+from app import study  # noqa: E402  - the figures, from their one home
 
 ORGS = os.path.join(HERE, "data", "orgs.json")
 STATE = os.path.join(HERE, "data", "outreach_state.json")
 
+# The personal job machine's own registers. Organisations in these have
+# already been written to by Harry's job hunt - about HIS job hunt - and a
+# second letter from the product would break "one approach each, ever" and
+# make two machines that must not interfere write to the same inbox. See
+# excluded_hosts().
+PERSONAL_REGISTERS = tuple(
+    os.path.join(os.path.dirname(HERE), "data", f"{name}.json")
+    for name in ("support_orgs", "networking_targets", "agencies"))
+
 # No default. See the docstring: picking one for him is picking which mailbox
 # carries the risk, and that is his call, not this file's.
 FROM_ADDRESS = os.environ.get("OUTREACH_FROM", "")
+
+# Every link in the letter is tagged, so a signup that came from one of these
+# letters is counted as one. Without it, the only channel that can actually be
+# run from here would be invisible in the one report meant to judge channels.
+UTM = "utm_source=orgs&utm_campaign=letter1"
 
 SITE = os.environ.get("BASE_URL", "https://recruited.org.uk")
 
@@ -109,6 +124,51 @@ def already_asked(state, org) -> bool:
     return key_for(org) in state
 
 
+def _host(value: str) -> str:
+    host = (value or "").lower().strip().split("//", 1)[-1].split("/", 1)[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def excluded_hosts(paths=PERSONAL_REGISTERS) -> set[str]:
+    """Every site the personal job machine has its own business with.
+
+    Read from the machine's registers rather than copied into a list here,
+    because a copy is a second list to forget to update - and the failure it
+    guards against is a charity getting a letter about Harry's job hunt one
+    week and a sales pitch for his product the next.
+
+    A register that cannot be read EXCLUDES NOTHING and says so loudly
+    rather than failing open silently: the caller treats an empty set from a
+    missing file as a reason to stop. See run().
+    """
+    hosts = set()
+    for path in paths:
+        data = load(path, None)
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"cannot read {path} - refusing to write to anybody while "
+                "the list of organisations the job hunt already knows is "
+                "unreadable")
+        for key, rows in data.items():
+            if key.startswith("_") or not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                for field in ("domain", "site", "website"):
+                    host = _host(row.get(field, ""))
+                    if host:
+                        hosts.add(host)
+    return hosts
+
+
+def is_excluded(org, hosts) -> bool:
+    """Same site, or a subdomain of one, counts as the same organisation."""
+    host = key_for(org)
+    return any(host == h or host.endswith("." + h) or h.endswith("." + host)
+               for h in hosts)
+
+
 def record(state, org, outcome, address=""):
     state[key_for(org)] = {"name": org.get("name", ""), "at": now(),
                            "outcome": outcome, "address": address}
@@ -131,8 +191,27 @@ def find_address(org, *, session=None, scrape_delay=None):
         return None
     if scrape_delay is None:
         scrape_delay = discover.POLITE_DELAY
-    found = discover.scrape_site(host, session=session, delay=scrape_delay)
+    # Council services rarely keep their address at /contact. The target list
+    # can name the page it is really on, which is still reading their own
+    # site - it only tells the scraper where to look, never what to find.
+    paths = tuple(discover.SCRAPE_PATHS) + tuple(org.get("pages") or ())
+    found = discover.scrape_site(host, session=session, paths=paths,
+                                 delay=scrape_delay)
     return contacts.best(found)
+
+
+def _rate_line() -> tuple[tuple[int, int], tuple[int, int]]:
+    """(sent, came back) for a named person and for a generic inbox.
+
+    From study.py, never typed here. This letter used to carry its own copy
+    of the figures, and this project has already been caught quoting three
+    different numbers for the same thing. A stranger checking the letter
+    against /numbers must find the same counts.
+    """
+    named = next(r for r in study.BY_RECIPIENT if r[0].startswith("A named"))
+    generic = next(r for r in study.BY_RECIPIENT
+                   if r[0].startswith("A generic"))
+    return (named[1], named[2]), (generic[1], generic[2])
 
 
 def compose_letter(org, contact) -> tuple[str, str]:
@@ -140,38 +219,64 @@ def compose_letter(org, contact) -> tuple[str, str]:
 
     Written to be forwarded rather than answered: the thing they might
     actually do with it is paste the link into their own newsletter, so the
-    link and what it does are in the first three lines and the rest is the
-    evidence that it is not junk.
+    link and what it does come early and the rest is the evidence that it is
+    not junk.
+
+    What it deliberately does NOT say: Harry's age. The whole job machine is
+    built never to volunteer it, and an earlier draft of this letter opened
+    with it.
+
+    "Came back" rather than "replied", because it is the study's own
+    definition: every message that arrived, autoresponders included. The
+    live counter on /numbers excludes those, and a reader who checks should
+    find the difference stated rather than smoothed over.
     """
     name = (org.get("name") or "your organisation").strip()
     greeting = f"Hello {contact['name']}," if contact.get("name") else "Hello,"
+    (n_sent, n_back), (g_sent, g_back) = _rate_line()
 
     subject = "A free tool for the jobseekers you work with"
     body = f"""{greeting}
 
-I am 22 and job hunting in Aberdeen. Applications kept disappearing into
-portals, so I started emailing a real person at each company instead and
-logged what happened. Out of 86 cold emails, 22 came back. The thing that
-moved the number was who received it: a named person replied 13 times out of
-34, a generic info@ address 4 times out of 42.
+I am job hunting in Aberdeen. My applications kept vanishing into portals,
+so I started emailing a real person at each company instead and logging what
+came back. Over the first {study.SENT} emails, the thing that made the
+difference was who received it: a named person came back {n_back} times out
+of {n_sent}, a generic info@ inbox {g_back} times out of {g_sent}.
 
-I built the address-finding part into a free tool and I thought it might be
-useful to the people {name} works with. Paste a job advert into
-{SITE}/find and it reads the advert, then the company's own site, and tells
-you whether there is a real person worth writing to. No account, nothing to
-install, and it says so plainly when there is nothing to find rather than
-guessing an address.
+Finding that named person is the slow part, so I turned it into a free tool.
+Paste a job advert into {SITE}/find?{UTM} and it reads the advert and the
+company's own website, then tells you whether there is a real person worth
+writing to. No account and nothing to install, and when there is nobody to
+find it says so rather than guessing an address.
 
-The method is written up at {SITE}/playbook, also free, and every figure
-including the bad months is at {SITE}/numbers.
+I thought it might be useful to the people you support at {name}. The method is
+written up free at {SITE}/playbook?{UTM}, and every figure, including the
+weeks that went badly, is at {SITE}/numbers?{UTM}.
 
-Pass it on if it is any use. If it is not, no reply needed and I will not
-write again.
+Pass it on if it helps. If it does not, no reply needed and I will not write
+again.
 
 Harry Russell
-{FROM_ADDRESS or SITE}
+Recruited
+{FROM_ADDRESS}
 """
-    return subject, body.strip()
+    # The site is already linked three times above, each one tagged. A bare
+    # link in the signature would be the one untagged way in.
+    return subject, _reflow(body.strip())
+
+
+def _reflow(body: str) -> str:
+    """One line per paragraph; the signature keeps its line breaks.
+
+    Written wrapped at 78 columns so it reads in source, but sent that way it
+    arrives with hard breaks mid-sentence, and the long tagged links make
+    every one of them ragged on a phone. Mail clients wrap plain text
+    themselves - the only thing a hard break adds is the mess.
+    """
+    paragraphs = body.split("\n\n")
+    flowed = [" ".join(p.split()) for p in paragraphs[:-1]]
+    return "\n\n".join(flowed + [paragraphs[-1]])
 
 
 def check(subject, body) -> list[str]:
@@ -192,7 +297,7 @@ def check(subject, body) -> list[str]:
 
 
 def run(orgs, state, *, send=False, limit=None, session=None, sender=None,
-        delay=POLITE_DELAY, scrape_delay=None, out=print):
+        delay=POLITE_DELAY, scrape_delay=None, out=print, excluded=None):
     """Walk the list. Returns what happened, for the caller to print or test.
 
     `sender` is injected so nothing about this is exercised by pretending to
@@ -206,12 +311,19 @@ def run(orgs, state, *, send=False, limit=None, session=None, sender=None,
             "would be the mailbox the job hunt runs on.")
 
     done = {"sent": 0, "would_send": 0, "no_address": 0, "skipped": 0,
-            "refused": 0, "letters": []}
+            "refused": 0, "excluded": 0, "letters": []}
+    hosts = excluded_hosts() if excluded is None else excluded
     for org in orgs:
         if limit and (done["sent"] + done["would_send"]) >= limit:
             break
         if already_asked(state, org):
             done["skipped"] += 1
+            continue
+        if is_excluded(org, hosts):
+            # Not recorded as asked: the product never wrote to them. The job
+            # hunt did, which is precisely why the product must not.
+            done["excluded"] += 1
+            out(f"  excluded, the job hunt already knows them: {org.get('name')}")
             continue
 
         contact = find_address(org, session=session,
@@ -249,6 +361,25 @@ def run(orgs, state, *, send=False, limit=None, session=None, sender=None,
     return done
 
 
+def preview(done, path):
+    """The letters as markdown, for the Actions run summary.
+
+    This is the human review. Every scheduled run writes it, sending or not,
+    so the first live batch is never the first time anybody has read the
+    letters - and every one after it can be checked in the same place.
+    """
+    lines = [f"## Outreach: {done['sent']} sent, {done['would_send']} would "
+             f"send, {done['no_address']} with no address, "
+             f"{done['excluded']} excluded, {done['skipped']} already done", ""]
+    for letter in done["letters"]:
+        lines += [f"### {letter['org']}",
+                  f"**To:** `{letter['to']}` ({letter['tier']})  ",
+                  f"**Subject:** {letter['subject']}", "", "```",
+                  letter["body"], "```", ""]
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--send", action="store_true",
@@ -258,6 +389,8 @@ def main(argv=None):
     ap.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     ap.add_argument("--orgs", default=ORGS)
     ap.add_argument("--state", default=STATE)
+    ap.add_argument("--summary", default=os.environ.get("GITHUB_STEP_SUMMARY"),
+                    help="append the letters as markdown here")
     args = ap.parse_args(argv)
 
     orgs = load(args.orgs, [])
@@ -265,60 +398,88 @@ def main(argv=None):
         print(f"no organisations in {args.orgs}. Run tools/find_orgs.py first.")
         return 1
 
-    if args.send and not FROM_ADDRESS:
-        print("OUTREACH_FROM is not set, so there is no sending identity.\n"
-              "This is not a missing default - it is the decision about which\n"
-              "mailbox's reputation carries this campaign, and sending it\n"
-              "from the one the job hunt uses can put job applications in\n"
-              "employers' spam folders. Set it deliberately.")
-        return 2
+    sender = None
+    if args.send:
+        try:
+            sender = _smtp_sender()
+        except RuntimeError as exc:
+            print(f"not sending: {exc}")
+            return 2
 
     state = load(args.state, {})
     print(f"{len(orgs)} organisations, {len(state)} already approached")
-    done = run(orgs, state, send=args.send, limit=args.limit,
-               sender=_smtp_sender() if args.send else None)
-    save(args.state, state)
+    done = run(orgs, state, send=args.send, limit=args.limit, sender=sender)
+
+    # Only a real send writes the state. A preview that saved it would record
+    # every "no address" as final on a rehearsal, and the scheduled preview
+    # runs every weekday - it would quietly retire the list before a single
+    # letter had been approved.
+    if args.send:
+        save(args.state, state)
+    if args.summary:
+        preview(done, args.summary)
 
     print(f"\nsent {done['sent']}, would send {done['would_send']}, "
-          f"no address {done['no_address']}, already done {done['skipped']}, "
-          f"refused {done['refused']}")
+          f"no address {done['no_address']}, excluded {done['excluded']}, "
+          f"already done {done['skipped']}, refused {done['refused']}")
     if not args.send:
         print("nothing was sent. Add --send when the letters read right.")
     return 0
 
 
 def _smtp_sender():
-    """Built only when --send is given, so importing this file cannot send.
+    """A mailbox of its own, and never the one the job hunt runs on.
 
-    Goes out over the managed mail path, which already exists and is already
-    a subdomain for exactly this reason: sending reputation is per-domain, so
-    mail.recruited.org.uk can be burned by a bad run and replaced, while the
-    apex - the marketing site, the sign-in links that let anybody in at all -
-    cannot. A marketing campaign is precisely the kind of traffic that should
-    be behind that firebreak rather than in front of it.
+    WHY NOT THE MANAGED MAIL PATH, which is what this used to use. That goes
+    through Resend, and Resend's rules - like those of every mail provider of
+    its kind - forbid unsolicited email. A letter to a council employability
+    team is unsolicited however courteous it is. Breaking that would risk the
+    account every user of the product sends through, for a marketing
+    campaign. It also shared their 100-a-day allowance.
 
-    Two things to keep in mind and neither is solved here. The free tier
-    allows 100 a day ACROSS THE ACCOUNT, shared with every letter the
-    product's own users send from a Recruited address, so outreach eats a
-    pool the users need. And the daily cap the app enforces for users does
-    not know about this script. Keep --limit well under the ceiling.
+    So this is an ordinary mailbox - a separate free Gmail is the intended
+    one - configured entirely by environment, with no defaults:
+
+        OUTREACH_FROM           the address letters come from
+        OUTREACH_SMTP_USER      the login, usually the same address
+        OUTREACH_SMTP_PASSWORD  an app password for it
+        OUTREACH_SMTP_HOST      default smtp.gmail.com
+        OUTREACH_SMTP_PORT      default 465
+
+    And it REFUSES the job hunt's mailbox by comparison, not by trust. If the
+    login or the From address is GMAIL_ADDRESS - the account the job machine
+    applies from - it stops. Two machines that must not interfere cannot be
+    allowed to by a copy-and-pasted secret.
     """
-    from app import config, delivery
+    user = os.environ.get("OUTREACH_SMTP_USER", "").strip()
+    password = os.environ.get("OUTREACH_SMTP_PASSWORD", "").strip()
+    host = os.environ.get("OUTREACH_SMTP_HOST", "").strip() or "smtp.gmail.com"
+    port = int(os.environ.get("OUTREACH_SMTP_PORT", "") or 465)
+    sender_address = FROM_ADDRESS.strip()
 
-    if not config.managed_mail_available():
+    missing = [name for name, value in (("OUTREACH_FROM", sender_address),
+                                        ("OUTREACH_SMTP_USER", user),
+                                        ("OUTREACH_SMTP_PASSWORD", password))
+               if not value]
+    if missing:
+        raise RuntimeError(f"{', '.join(missing)} not set, so there is no "
+                           "sending identity. There is deliberately no "
+                           "default.")
+
+    job_hunt = os.environ.get("GMAIL_ADDRESS", "").strip().lower()
+    if job_hunt and job_hunt in (user.lower(), sender_address.lower()):
         raise RuntimeError(
-            "managed mail is not configured: MANAGED_MAIL_DOMAIN and "
-            "MANAGED_MAIL_KEY are both required. Refusing to fall back to "
-            "any other mailbox, because the only other one here is the one "
-            "the job hunt runs on.")
+            "that is the mailbox the job hunt applies from. A campaign that "
+            "tips its reputation puts job applications in employers' spam "
+            "folders. Use a separate address.")
+
+    from app import delivery
 
     def send(to, subject, body):
         delivery.send_via_smtp(
-            host=config.MANAGED_MAIL_HOST, port=config.MANAGED_MAIL_PORT,
-            username=config.MANAGED_MAIL_USERNAME,
-            password=config.MANAGED_MAIL_KEY,
+            host=host, port=port, username=user, password=password,
             to_email=to, subject=subject, body=body,
-            from_address=FROM_ADDRESS, display_name="Harry Russell")
+            from_address=sender_address, display_name="Harry Russell")
     return send
 
 
