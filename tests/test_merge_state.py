@@ -5,13 +5,17 @@ Several workflows write data/state.json and they can finish at the same
 time. A plain git rebase hits a conflict in what is really a set of
 independent records, so they are merged field by field instead.
 """
+import copy
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools import merge_state as ms  # noqa: E402
+import personal  # noqa: E402
 
 
 class TestMergingJobs(unittest.TestCase):
@@ -376,6 +380,135 @@ class TestTheHeartbeatSurvivesTheMerge(unittest.TestCase):
         """A key showing up in carry_unknown() is asking for a real rule.
         This one now has one."""
         self.assertIn("heartbeat", ms.KNOWN)
+
+
+class TestTheMergeDoesNotUnsealTheFile(unittest.TestCase):
+    """The bug this class exists for, stated plainly.
+
+    The machine seals state.json on the way out of every save. This script
+    then merges that sealed file against the copy already on the branch - and
+    every rule in it prefers the branch's copy when the two sides tie. A
+    sealed record and its plaintext twin tie on all of them: same status, so
+    pick() falls through to `len(a) >= len(b)` with theirs as `a`; same
+    timestamp, so union_earliest() keeps theirs; and carry_unknown() does
+    `merged.update(mine)` outright.
+
+    Measured against the real 18MB file before the fix: of 579 addresses, 570
+    came back in the clear and NOT ONE enc.v1: marker survived. The machine
+    would have sealed the file every run and this would have unsealed it every
+    commit, for ever, while every part looked like it was working.
+
+    So the merge now unseals both sides, compares plaintext, and seals once at
+    the end.
+    """
+
+    def setUp(self):
+        self.key = personal.make_key()
+
+    def sides(self):
+        """The ordinary case: the same record on both sides, one sealed."""
+        state = {
+            "jobs": {"a": {"company": "Kestrel", "status": "sent",
+                           "contact_email": "fiona@kestrel.example",
+                           "sent_to": "fiona@kestrel.example"}},
+            "companies_contacted": {"kestrel": {
+                "email": "fiona@kestrel.example", "at": "2026-09-01T09:00:00"}},
+            "contact_numbers": {"ex mil": {"name": "Jean Hedouin",
+                                           "numbers": ["+443332026500"]}},
+        }
+        return state, personal.seal(copy.deepcopy(state), self.key)
+
+    def test_a_sealed_side_does_not_lose_to_its_plaintext_twin(self):
+        theirs, ours = self.sides()
+        out = personal.seal(ms.merge(personal.unseal(copy.deepcopy(theirs)),
+                                     personal.unseal(ours, self.key)),
+                            self.key)
+        blob = json.dumps(out)
+        self.assertNotIn("fiona@kestrel.example", blob)
+        self.assertNotIn("Jean Hedouin", blob)
+        self.assertIn(personal.MARKER, blob)
+
+    def test_the_whole_script_run_end_to_end_seals_what_it_writes(self):
+        """Through main(), because the wiring is where this broke: load()
+        unseals, main() seals, and either one missing brings the bug back."""
+        theirs, ours = self.sides()
+        work = tempfile.mkdtemp()
+        paths = [os.path.join(work, n) for n in ("t.json", "o.json", "out.json")]
+        for path, data in zip(paths[:2], (theirs, ours)):
+            with open(path, "w") as f:
+                json.dump(data, f)
+
+        argv, env = sys.argv, os.environ.get(personal.KEY_ENV)
+        os.environ[personal.KEY_ENV] = self.key
+        try:
+            sys.argv = ["merge_state.py"] + paths
+            ms.main()
+        finally:
+            sys.argv = argv
+            if env is None:
+                os.environ.pop(personal.KEY_ENV, None)
+            else:
+                os.environ[personal.KEY_ENV] = env
+
+        with open(paths[2]) as f:
+            written = f.read()
+        self.assertNotIn("fiona@kestrel.example", written)
+        self.assertIn(personal.MARKER, written)
+        # and it is still the same state underneath
+        back = personal.unseal(json.loads(written), self.key)
+        self.assertEqual(back["jobs"]["a"]["contact_email"],
+                         "fiona@kestrel.example")
+        self.assertEqual(back["companies_contacted"]["kestrel"]["at"],
+                         "2026-09-01T09:00:00")
+
+    def test_the_rules_still_see_real_values_rather_than_ciphertext(self):
+        """The reason it unseals rather than teaching each rule about
+        ciphertext. union_earliest keeps the EARLIEST contact, which is a
+        string comparison on the timestamp - on sealed bytes it would compare
+        base64 and pick at random."""
+        theirs = {"companies_contacted": {"k": {"at": "2026-09-05T09:00:00",
+                                                "email": "late@x.example"}}}
+        ours = personal.seal(
+            {"companies_contacted": {"k": {"at": "2026-01-02T09:00:00",
+                                           "email": "early@x.example"}}},
+            self.key)
+        out = ms.merge(personal.unseal(theirs), personal.unseal(ours, self.key))
+        self.assertEqual(out["companies_contacted"]["k"]["at"],
+                         "2026-01-02T09:00:00")
+
+    def test_without_a_key_it_behaves_exactly_as_it_always_did(self):
+        """Local work and any checkout with no secret configured. Sealing is
+        a no-op both ways, so this must not have changed the old behaviour."""
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            out = ms.merge({"jobs": {"a": {"status": "scored"}}},
+                           {"jobs": {"a": {"status": "sent"}}})
+            self.assertEqual(out["jobs"]["a"]["status"], "sent")
+            self.assertEqual(personal.seal(out), out)
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+    def test_a_sealed_file_with_no_key_raises_rather_than_merging_blind(self):
+        """load() must not treat 'I cannot read this' as 'this is empty'. An
+        unreadable side losing every comparison would drop the record of who
+        has been written to, and the next run writes to them again."""
+        work = tempfile.mkdtemp()
+        path = os.path.join(work, "sealed.json")
+        with open(path, "w") as f:
+            json.dump(self.sides()[1], f)
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            with self.assertRaises(personal.KeyMissing):
+                ms.load(path)
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+    def test_a_missing_file_is_still_an_empty_state(self):
+        """The distinction the above turns on: absent is a first run, and
+        unreadable is damage."""
+        self.assertEqual(ms.load("/nonexistent/state.json"), {})
 
 
 if __name__ == "__main__":

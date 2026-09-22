@@ -35,6 +35,9 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 # use that answer rather than a second copy of it that can drift from it.
 from jobseeker.profile import _not_a_place  # noqa: E402
 
+from . import funnel  # noqa: E402
+from . import referrals  # noqa: E402
+from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
@@ -179,7 +182,7 @@ def render(request: Request, template: str, **ctx):
                          host=request.headers.get("host", ""))
         except Exception:
             pass
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
          "is_admin": bool(user and config.is_admin(user["email"])),
@@ -191,6 +194,20 @@ def render(request: Request, template: str, **ctx):
          # Appended to the stylesheet's URL so a changed file is a changed
          # URL. See _asset_version for the deploy this was invisible on.
          "asset_version": ASSET_VERSION, **ctx})
+    # First touch, here, because this is the same single door: a campaign tag
+    # has to be read on the page somebody LANDS on, not where they sign up.
+    # By the time they tap the link in their inbox the request carries no
+    # referrer and no campaign, so reading it there reports every user as
+    # direct - including the ones a channel worked for. See attribution.py.
+    #
+    # Wrapped, and after the response exists, for the same reason the counter
+    # above is: knowing where a visitor came from is never worth a blank page.
+    if request.method == "GET":
+        try:
+            attribution.stamp(request, response)
+        except Exception:
+            pass
+    return response
 
 
 def needs_login(request: Request | None = None):
@@ -476,6 +493,23 @@ def verify(request: Request, token: str = ""):
     # already decided not to pay, which is the opposite of what it is for.
     if not existed:
         db.claim_free_spot(user["id"])
+        # Where they came from, read off the cookie set on the page they first
+        # landed on. This request cannot answer it: it arrived from a mail
+        # client, so it carries no referrer and no campaign.
+        #
+        # New accounts only, and set_user_source will not overwrite either.
+        # A returning user signing in from a different link is the same user,
+        # and re-attributing them would move a sign-up between channels weeks
+        # later and make a report that has already been read change.
+        try:
+            source = attribution.read(request)
+            db.set_user_source(user["id"], source)
+            db.record_event(user["id"], "signed_up",
+                            detail=attribution.describe(source))
+            referrals.credit_signup(user["id"], source.get("ref", ""))
+        except Exception:
+            # Never between a person and their account.
+            log.exception("could not record the sign-up")
     response = RedirectResponse(_landing_for(user), status_code=303)
     response.set_cookie(
         SESSION_COOKIE, auth.make_session(user["id"]),
@@ -920,6 +954,43 @@ def manifest():
                         media_type="application/manifest+json")
 
 
+@app.get("/app", response_class=HTMLResponse)
+def install_page(request: Request):
+    """How to get this onto a phone.
+
+    A page rather than only a banner, because the banner was shown from
+    inside the beforeinstallprompt handler and Safari has never fired that
+    event - so every iPhone user was told nothing at all, on a product whose
+    audience checks for replies on a phone. It is also dismissible with a
+    "Not now" that never clears, so anybody who tapped it once could not find
+    the thing again.
+
+    Public on purpose. It costs nothing to let somebody read what installing
+    involves before they have an account, and putting it behind the login
+    would mean the first time anybody sees it is a moment they are already
+    busy.
+    """
+    return render(request, "install.html")
+
+
+@app.post("/app/installed")
+def record_install(request: Request):
+    """The browser saying the app is now on somebody's home screen.
+
+    Worth recording because "do the people who install it stick around" is a
+    question the retention figure cannot answer on its own, and it is the
+    cheapest possible way to ask it.
+
+    Anonymous callers are accepted and counted as nothing. The page is public,
+    so this can be reached without a session, and refusing it would be an
+    error in a browser console over a statistic.
+    """
+    user = current_user(request)
+    if user:
+        funnel.reached(user["id"], "installed")
+    return Response(status_code=204)
+
+
 @app.get("/status")
 def status(request: Request):
     """Is this deployment actually configured correctly?
@@ -1050,7 +1121,7 @@ def healthz():
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
-                "/privacy", "/login") + tuple(answerlib.paths())
+                "/privacy", "/login", "/app") + tuple(answerlib.paths())
 
 
 def public_urls() -> list[str]:
@@ -1303,6 +1374,10 @@ async def upload_cv(request: Request):
     db.save_cv(user["id"], filename=upload.filename,
                content_type=upload.content_type or "application/octet-stream",
                blob=blob, extracted=text)
+    # A CV is what "onboarded" means here, and it is the honest place to draw
+    # the line: it is the first step that takes real effort, and nothing in
+    # the product can do anything at all without one.
+    funnel.reached(user["id"], "onboarded")
 
     # Only offer to prefill an empty profile. Overwriting answers somebody
     # already gave with a model's reading of their CV would be rude and wrong.
