@@ -954,6 +954,43 @@ def manifest():
                         media_type="application/manifest+json")
 
 
+@app.get("/app", response_class=HTMLResponse)
+def install_page(request: Request):
+    """How to get this onto a phone.
+
+    A page rather than only a banner, because the banner was shown from
+    inside the beforeinstallprompt handler and Safari has never fired that
+    event - so every iPhone user was told nothing at all, on a product whose
+    audience checks for replies on a phone. It is also dismissible with a
+    "Not now" that never clears, so anybody who tapped it once could not find
+    the thing again.
+
+    Public on purpose. It costs nothing to let somebody read what installing
+    involves before they have an account, and putting it behind the login
+    would mean the first time anybody sees it is a moment they are already
+    busy.
+    """
+    return render(request, "install.html")
+
+
+@app.post("/app/installed")
+def record_install(request: Request):
+    """The browser saying the app is now on somebody's home screen.
+
+    Worth recording because "do the people who install it stick around" is a
+    question the retention figure cannot answer on its own, and it is the
+    cheapest possible way to ask it.
+
+    Anonymous callers are accepted and counted as nothing. The page is public,
+    so this can be reached without a session, and refusing it would be an
+    error in a browser console over a statistic.
+    """
+    user = current_user(request)
+    if user:
+        funnel.reached(user["id"], "installed")
+    return Response(status_code=204)
+
+
 @app.get("/status")
 def status(request: Request):
     """Is this deployment actually configured correctly?
@@ -1084,7 +1121,7 @@ def healthz():
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
-                "/privacy", "/login") + tuple(answerlib.paths())
+                "/privacy", "/login", "/app") + tuple(answerlib.paths())
 
 
 def public_urls() -> list[str]:

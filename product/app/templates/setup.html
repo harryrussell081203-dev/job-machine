@@ -46,6 +46,23 @@
   <div class="note bad">Choose a file first.</div>
 {% endif %}
 
+{# Put it on the phone, offered where somebody has just made an account and
+   is about to leave.
+
+   This is the screen where nine of the first ten accounts stopped, and the
+   reason a home-screen icon matters here rather than being a nicety: most of
+   them arrived on a phone from a link, and a tab is something you close and
+   never find again. An icon is something you tap on Tuesday when you wonder
+   whether anybody replied.
+
+   Hidden by the script in base.html when this is already the installed app,
+   where it would be telling somebody to do a thing they have done. #}
+<div class="note" id="setupinstall">
+  <b>Keep it on your phone.</b> It goes on your home screen like any other
+  app — no store, no download, about ten seconds.
+  <a href="/app">Show me how</a>.
+</div>
+
 <!-- 1 ---------------------------------------------------------------- -->
 <div class="panel step {% if profile %}done{% endif %}">
   <h2><span class="num">1</span> What work you want</h2>

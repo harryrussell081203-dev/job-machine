@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Put Recruited on your phone{% endblock %}
+
+{#
+  WHY THIS PAGE EXISTS RATHER THAN JUST THE BANNER.
+
+  The banner only ever appeared on Chrome and Edge, because it is shown from
+  inside the beforeinstallprompt handler and Safari has never fired that
+  event. So every iPhone user was told nothing at all - on a site whose
+  audience is people checking for replies on a phone.
+
+  It is also dismissible with a "Not now" that writes a flag and never clears
+  it, so anybody who tapped that once could not find the thing again.
+
+  A page fixes both: it is linkable, it is in the nav, and it says what to do
+  on whichever phone the reader is actually holding.
+#}
+
+{% block content %}
+<h1>Put Recruited on your phone</h1>
+
+<p class="lede">
+  It is not in the App Store or Google Play, and it does not need to be. It
+  installs straight from this page — no download, no review, no account with
+  anybody else. It takes about ten seconds.
+</p>
+
+{# Shown only when the browser has actually offered an install. Hidden by
+   default so nobody is given a button that does nothing. #}
+<div class="card" id="installcard" hidden>
+  <h2>Your browser can do this now</h2>
+  <p>One tap and it is on your home screen.</p>
+  <p><button class="btn" id="installnow">Install Recruited</button></p>
+</div>
+
+<div class="card" id="installed" hidden>
+  <h2>You already have it</h2>
+  <p>You are reading this inside the installed app.</p>
+</div>
+
+<div id="howto">
+  <div class="card" id="howto-ios" hidden>
+    <h2>On an iPhone or iPad</h2>
+    <p>
+      Safari does not ask, so you tell it. It has to be <strong>Safari</strong>
+      — Chrome on an iPhone cannot add things to the home screen.
+    </p>
+    <ol>
+      <li>Tap the <strong>Share</strong> button — the square with an arrow
+        coming out of it, at the bottom of the screen.</li>
+      <li>Scroll down the list and tap <strong>Add to Home Screen</strong>.</li>
+      <li>Tap <strong>Add</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="card" id="howto-android" hidden>
+    <h2>On an Android phone</h2>
+    <ol>
+      <li>Tap the <strong>⋮</strong> menu, top right.</li>
+      <li>Tap <strong>Install app</strong>, or <strong>Add to Home
+        screen</strong>.</li>
+      <li>Tap <strong>Install</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="card" id="howto-desktop" hidden>
+    <h2>On a computer</h2>
+    <p>
+      In Chrome or Edge, there is a small install icon at the right-hand end
+      of the address bar. In Safari on a Mac, it is
+      <strong>File → Add to Dock</strong>.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>What you get</h2>
+  <ul>
+    <li>An icon on your home screen, and no browser bars around it.</li>
+    <li>It opens on your dashboard rather than the front page.</li>
+    <li>It works the same as it does here. It is the same app.</li>
+  </ul>
+</div>
+
+<div class="card quiet">
+  <h2>What it does not do</h2>
+  <p>
+    It does not read anything on your phone, it is not in any app store, and
+    it stores nothing about your search on the device — the job list, the
+    drafts and the replies all live on our server and are fetched when you
+    open it. That last one is deliberate: a cached dashboard on a shared phone
+    would be somebody's private job search left on a screen.
+  </p>
+  <p>
+    It means the app needs a connection to show you anything, which is the
+    trade we chose.
+  </p>
+</div>
+
+<script>
+// Which set of instructions to show. Read off the browser rather than asked,
+// because "which phone have you got" is a question a page should never need
+// to put to somebody who is holding it.
+(function () {
+  var ua = navigator.userAgent || "";
+  // iPadOS reports itself as a Mac, and has since iPadOS 13. The touch-point
+  // check is what tells the two apart - a real Mac reports 0.
+  var isIOS = /iPhone|iPad|iPod/.test(ua) ||
+              (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var standalone = window.matchMedia("(display-mode: standalone)").matches ||
+                   window.navigator.standalone === true;
+
+  function show(id) {
+    var el = document.getElementById(id);
+    if (el) el.hidden = false;
+  }
+
+  if (standalone) {
+    show("installed");
+    var howto = document.getElementById("howto");
+    if (howto) howto.hidden = true;
+    return;
+  }
+  if (isIOS) show("howto-ios");
+  else if (isAndroid) show("howto-android");
+  else show("howto-desktop");
+
+  // The real install prompt, if this browser offers one. base.html catches
+  // the event and hands it over, because the event fires once and whichever
+  // listener runs first has to be the one that keeps it.
+  window.addEventListener("jm-installable", function () {
+    show("installcard");
+    // Chrome can install and ALSO has the menu route. Showing both is
+    // confusing, and the button is the one that works in one tap.
+    var menu = document.getElementById("howto-android");
+    if (menu) menu.hidden = true;
+  });
+  if (window.jmInstallReady) {
+    window.dispatchEvent(new Event("jm-installable"));
+  }
+
+  var btn = document.getElementById("installnow");
+  if (btn) btn.addEventListener("click", function () {
+    if (window.jmInstall) window.jmInstall();
+  });
+})();
+</script>
+{% endblock %}
