@@ -41,8 +41,6 @@
       "domain": "forcesemployment.org.uk",
       "group": "veteran",
       "ask": "registration",
-      "email": "info@forcesemployment.org.uk",
-      "email_source": "Published on their own contact page and on their Charity Commission register entry (RFEA Limited, charity 3036329). Needed because their site sits behind a bot check: a fire-signup run on 2026-08-04 was served a challenge page and reported 'no real address found' for a charity that publishes one plainly.",
       "note": "They deliver Op ASCEND, the government-funded employment service for veterans who left service MORE than two years ago - which is Harry, who left in 2023. It is lifelong, and it comes with an adviser and their network of veteran-friendly employers. This entry was previously marked 'already registered - RightJob' and skipped; RightJob is the CTP job board and CTP support runs out two years after discharge, so 'registered' and 'still has access' are not the same thing. The letter asks them to sign him up and asks what is still open to him.",
       "confidence": "confirmed"
     },
@@ -51,7 +49,7 @@
       "domain": "ctp.org.uk",
       "group": "veteran",
       "ask": "registration",
-      "note": "No general enquiries address is published for them that I could verify - only a switchboard, 0203 162 4410, and staff addresses in a firstinitiallastname pattern, which is exactly the kind of thing this project never generates. So this entry writes only if their site becomes readable. The same question at the other door. CTP resettlement, myPlan and CTP RightJob run from two years before discharge to two years after; Harry is three years out, so this asks whether RightJob is still open to him and where he goes if it is not. Future Horizons, the CTP programme for Early Service Leavers, is worth naming in any reply he gets - he served two years, which is under the four-year mark.",
+      "note": "The same question at the other door. CTP resettlement, myPlan and CTP RightJob run from two years before discharge to two years after; Harry is three years out, so this asks whether RightJob is still open to him and where he goes if it is not. Future Horizons, the CTP programme for Early Service Leavers, is worth naming in any reply he gets - he served two years, which is under the four-year mark.",
       "confidence": "check"
     },
     {
