@@ -1224,7 +1224,20 @@ REFERRED_USER = "referred_user"
 # cheapest way to ask it.
 INSTALLED = "installed"
 
-EVENT_KINDS = FUNNEL + (REFERRED_USER, INSTALLED)
+# Two more that are not stages, and exist for the referral programme.
+#
+# The funnel counts what a person SAYS as readily as what the machine SEES -
+# a quick-start form, a "mark as sent" tap - because for measuring the
+# funnel that is the honest thing to count. A reward is different: anything
+# that pays out has to hang off something a click cannot fake. So the two
+# steps that do pay get events of their own, fired only where the evidence
+# is real: a CV that arrived as a file, and a letter the machine itself
+# delivered through a mailbox it verified.
+CV_UPLOADED = "cv_uploaded"
+FIRST_AUTO_SEND = "first_auto_send"
+
+EVENT_KINDS = FUNNEL + (REFERRED_USER, INSTALLED, CV_UPLOADED,
+                        FIRST_AUTO_SEND)
 
 
 def record_event(user_id: int, kind: str, *, ref: str = "",

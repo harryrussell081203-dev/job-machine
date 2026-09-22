@@ -676,6 +676,16 @@ class TestFillFromCV(Base):
                      "detail": "Picked and packed 300 orders a shift."}],
     }
 
+    def setUp(self):
+        super().setUp()
+        # Saving from a CV now starts the first search straight away. A real
+        # run would reach the job boards and a model from inside a test that
+        # is offline by construction, so the start is recorded instead.
+        self.started = []
+        real = self.main._start_run
+        self.main._start_run = lambda uid: self.started.append(uid) or True
+        self.addCleanup(setattr, self.main, "_start_run", real)
+
     def sign_in(self, email="riley@example.com"):
         link = self.main.auth.make_login_link(email)
         token = link.split("token=", 1)[1]
@@ -744,6 +754,9 @@ class TestFillFromCV(Base):
                              follow_redirects=False)
         self.assertEqual(r.status_code, 303)
         self.assertEqual(r.headers["location"], "/dashboard")
+        # And literally, now: the first search is under way rather than
+        # waiting hours for the next sweep.
+        self.assertEqual(self.started, [self.uid])
 
         saved = self.db.load_profile(self.uid)
         self.assertEqual(saved["name"], "Riley Martin")

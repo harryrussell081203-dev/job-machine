@@ -30,8 +30,15 @@ a mailbox - and that one is Harry. A single reward gated on the referred
 person becoming active would be a promise that almost never comes true, which
 is worse than offering nothing: it teaches people the offer is decoration.
 
-    they sign up and upload a CV    ->  a month
-    they connect a mailbox          ->  another month
+    they upload a CV                         ->  a month
+    the machine sends a letter for them      ->  another month
+
+Both are keyed on their own events (cv_uploaded, first_auto_send) rather than
+on the funnel's onboarded and first_email_sent, and that is deliberate. The
+funnel now counts a six-question form as onboarded and a "mark as sent" tap
+as a send, which is right for measuring and wrong for paying: either can be
+faked with a thumb. A file that arrives, and a letter delivered through a
+mailbox the machine itself verified, cannot.
 
 The first is reachable today. The second is deliberately pinned to activation,
 the step that is actually broken, so the programme pays out most for bringing
@@ -62,8 +69,8 @@ MONTH = 30 * 24 * 3600
 # triggers it, so adding a tier is adding a line here rather than a branch
 # somewhere.
 REWARDS = {
-    "onboarded": MONTH,            # signed up and uploaded a CV
-    "first_email_sent": MONTH,     # connected a mailbox and actually sent
+    "cv_uploaded": MONTH,          # a real CV arrived as a file
+    "first_auto_send": MONTH,      # the machine delivered a letter for them
 }
 
 # The most anybody can earn, ever. A year is far beyond what a real user will

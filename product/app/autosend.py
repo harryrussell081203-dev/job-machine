@@ -230,6 +230,9 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
         # and a guard here would be a query that can race with a concurrent
         # sweep. Cannot raise; see funnel.py.
         funnel.reached(user_id, "first_email_sent", detail=company)
+        # Separately, because this one pays referrals and a hand-marked send
+        # must not: here the machine delivered the letter itself.
+        funnel.reached(user_id, "first_auto_send", detail=company)
         if managed:
             # After the send, not before. Counting an attempt that then failed
             # would spend the shared allowance on letters nobody received.

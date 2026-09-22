@@ -57,11 +57,16 @@
 
    Hidden by the script in base.html when this is already the installed app,
    where it would be telling somebody to do a thing they have done. #}
+{# ...but only once the search exists. It used to sit above the six
+   questions, which put a nice-to-have between a brand-new user and the one
+   thing they have to do, and pushed the form below the fold on a phone. #}
+{% if profile %}
 <div class="note" id="setupinstall">
   <b>Keep it on your phone.</b> It goes on your home screen like any other
   app — no store, no download, about ten seconds.
   <a href="/app">Show me how</a>.
 </div>
+{% endif %}
 
 <!-- 1 ---------------------------------------------------------------- -->
 <div class="panel step {% if profile %}done{% endif %}">
@@ -75,13 +80,57 @@
     {# "Your trade" reads as skilled manual work, and this product does not
        care what the job is - the same correction already made on the landing
        page and /find, which this screen was missed out of. #}
-    <p>What work you are after, how far you will travel, and the least you
-       will work for.</p>
-    <div class="actions">
-      {% if cv %}<a class="btn" href="/setup/from-cv">Fill it in from my CV</a>{% endif %}
-      <a class="{% if cv %}link{% else %}btn{% endif %}" href="/profile">
-        {% if cv %}or do it by hand{% else %}Fill in your search{% endif %}</a>
-    </div>
+    {# SIX QUESTIONS, ON THIS SCREEN, NOT A LINK TO EIGHTEEN.
+
+       This used to be a button to /profile: eighteen fields including three
+       pay figures, a three-part career highlight and a "never claim" list.
+       Nine people signed up and not one of them got through it - on a phone,
+       straight off a link in a story. The Profile hard-requires exactly what
+       is below and nothing more, so this is the whole of what anybody has to
+       answer before the machine starts looking. #}
+    {% set q = quick or {} %}
+    {% if cv %}
+      <p><a class="btn" href="/setup/from-cv">Fill it in from my CV</a></p>
+      <p class="hint">Or answer six quick questions instead:</p>
+    {% else %}
+      <p>Six questions and it starts looking straight away.</p>
+    {% endif %}
+    {# Here, not at the top of the page. On a phone the top of the page is a
+       full screen away from the field that needs fixing, so a red box up
+       there is read and then nothing on screen says what to change. #}
+    {% if quick_error %}
+      <div class="note bad" id="quickerror">{{ quick_error }}</div>
+    {% endif %}
+    <form method="post" action="/setup/quick#quickerror" class="quick">
+      <label>What job are you after?
+        <input type="text" name="target_roles" required autocomplete="organization-title"
+               placeholder="e.g. warehouse operative, electrician"
+               value="{{ q.target_roles or '' }}"></label>
+      <label>Where do you live?
+        <input type="text" name="location" required autocomplete="address-level2"
+               placeholder="e.g. Aberdeen" value="{{ q.location or '' }}"></label>
+      <label>Your name
+        <input type="text" name="name" required autocomplete="name"
+               value="{{ q.name or '' }}"></label>
+      <label>Your phone number
+        <input name="phone" required type="tel" autocomplete="tel"
+               value="{{ q.phone or '' }}"></label>
+      <fieldset>
+        <legend>Your last job</legend>
+        <input type="text" name="last_title" required placeholder="What you did, e.g. forklift driver"
+               aria-label="Your last job title" value="{{ q.last_title or '' }}">
+        <input type="text" name="last_org" required placeholder="Who it was with"
+               aria-label="Who your last job was with" value="{{ q.last_org or '' }}">
+      </fieldset>
+      <label>The least you would work for
+        <input type="text" name="min_pay" required inputmode="decimal"
+               placeholder="a salary like 24000, or hourly like 12.50"
+               value="{{ q.min_pay or '' }}"></label>
+      <button class="btn">Start looking</button>
+    </form>
+    <p class="hint">You can add more detail later to make the letters
+      stronger — <a href="/profile">the full version is here</a> if you would
+      rather do it now.</p>
   {% endif %}
 </div>
 
