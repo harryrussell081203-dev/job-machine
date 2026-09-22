@@ -12,14 +12,15 @@ screenshots/
 # is the thing worth keeping in git, not its output.
 product/share/
 
-# Outreach targets and who has already been written to. Ignored for now
-# because this repository is public: orgs.json is a filtered slice of a public
-# register and harmless, but outreach_state.json is a list of named charities
-# and the addresses found for them, which is nobody's business but Harry's.
+# Outreach targets and who has already been written to are COMMITTED now, and
+# on purpose. These lines used to ignore both, and said this would need
+# revisiting once the machine ran on a schedule: "one approach per
+# organisation, ever" only holds if the record survives between runs, and a
+# scheduled run on a fresh checkout remembers nothing that is not committed.
 #
-# This will need revisiting when the machine runs on a schedule, because
-# "one approach per organisation, ever" only holds if the state survives
-# between runs - the personal machine solves that by committing its state
-# back, and this one cannot do that while the repository is public.
-product/data/orgs.json
-product/data/outreach_state.json
+# What made that safe rather than a leak is outreach.team_inbox(). The state
+# file used to hold whatever address was found, which could be a named
+# employee's own inbox - personal data, in a public repository. Organisations
+# are now written to only at a team inbox (employability@, abzworks@,
+# contact@) and never at a person, so the file holds public bodies' names,
+# the addresses they publish for exactly this, and dates.

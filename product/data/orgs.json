@@ -1,0 +1,66 @@
+[
+  {
+    "name": "ABZ Works",
+    "website": "https://abzworks.co.uk",
+    "area": "Aberdeen City",
+    "kind": "council employability service",
+    "source": "https://www.aberdeencity.gov.uk/news/abzworks-seeks-business-support-for-funded-work-placements",
+    "pages": ["/contact-us", "/employability-support/"]
+  },
+  {
+    "name": "EmploymentCONNECT (Aberdeenshire Employability Partnership)",
+    "website": "https://employmentconnect.org.uk",
+    "area": "Aberdeenshire",
+    "kind": "council employability partnership",
+    "source": "https://employmentconnect.org.uk/job-seekers/",
+    "pages": ["/job-seekers/", "/contact-us/"]
+  },
+  {
+    "name": "Aberdeen Foyer",
+    "website": "https://www.aberdeenfoyer.com",
+    "area": "Aberdeen",
+    "kind": "charity, employability for young people",
+    "source": "https://www.aberdeenfoyer.com/employability",
+    "pages": ["/employability"]
+  },
+  {
+    "name": "Discover Work Dundee",
+    "website": "https://discoverworkdundee.co.uk",
+    "area": "Dundee",
+    "kind": "council all-age employability service",
+    "source": "https://www.dundeecity.gov.uk/service-area/city-development/planning-and-economic-development/employability-partnership-and-strategy-unit",
+    "pages": ["/contact-us/"]
+  },
+  {
+    "name": "Capital City Partnership",
+    "website": "https://capitalcitypartnership.co.uk",
+    "area": "Edinburgh",
+    "kind": "council employability partnership (Joined Up for Jobs)",
+    "source": "https://capitalcitypartnership.co.uk/strategy-1",
+    "pages": ["/contact"]
+  },
+  {
+    "name": "Jobs and Business Glasgow",
+    "website": "https://www.jbg.org.uk",
+    "area": "Glasgow",
+    "kind": "council employability service",
+    "source": "https://www.glasgow.gov.uk/article/15749/Jobs-and-Business-Glasgow",
+    "pages": ["/contact-us/"]
+  },
+  {
+    "name": "North East Scotland College",
+    "website": "https://www.nescol.ac.uk",
+    "area": "Aberdeen and Aberdeenshire",
+    "kind": "college employability courses",
+    "source": "https://www.nescol.ac.uk/get-into-work/",
+    "pages": ["/get-into-work/", "/courses/preparation-for-work-employability-skills/"]
+  },
+  {
+    "name": "Employability in Scotland",
+    "website": "https://www.employabilityinscotland.com",
+    "area": "Scotland",
+    "kind": "national employability hub, lists every council service",
+    "source": "https://www.employabilityinscotland.com/local-employability-services/",
+    "pages": ["/contact-us/"]
+  }
+]

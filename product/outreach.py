@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -174,6 +175,82 @@ def record(state, org, outcome, address=""):
                            "outcome": outcome, "address": address}
 
 
+# What a team inbox at an employability service is called. Ranked: the first
+# group names the service itself, the second is the front door. An address
+# with none of these words is not written to at all - see team_inbox().
+SERVICE_WORDS = ("employ", "work", "job", "career", "skill", "connect",
+                 "partnership", "training", "learn", "advice", "support",
+                 "team", "service")
+FRONT_DOOR_WORDS = ("contact", "info", "enquir", "hello", "general", "admin",
+                    "office", "reception", "help", "desk")
+
+_SEGMENTS = re.compile(r"[._-]+")
+
+
+def _role_word(segment: str) -> int:
+    if any(w in segment for w in SERVICE_WORDS):
+        return 2
+    if any(w in segment for w in FRONT_DOOR_WORDS):
+        return 1
+    return 0
+
+
+def team_inbox(address: str) -> int:
+    """How good a team inbox this is: 2 service, 1 front door, 0 refuse.
+
+    WHY NOT contacts.best(), which this used to call. That classifier was
+    built for writing to employers, where a named person is the prize, and it
+    reads an employability service exactly wrong. Measured on real addresses:
+
+        abzworks@aberdeencity.gov.uk      -> "named person" (Hello Abzworks,)
+        employability@nescol.ac.uk        -> unusable
+
+    The perfect recipient thrown away, and a team greeted as a human.
+
+    WHY NEVER A PERSON. A note asking a service to pass something on belongs
+    in the service's own inbox - that is what it is for. And a named
+    employee's address is personal data, while this repository and its
+    Actions logs are public: the preview would have published it. Refusing
+    people outright means the state file and every run summary hold only
+    addresses an organisation publishes for exactly this purpose.
+
+    THE RULE IS THE SHAPE, NOT A NAME LIST. name_from_email() will happily
+    call "contact" a first name, so it cannot tell a desk from a person.
+
+      - one word: used only if it contains a service or front-door word.
+        "abzworks" yes, "contact" yes, "jsmith" no.
+      - several words (first.last, support.team): used only if EVERY part is
+        a role word. "support.team" yes; "jane.smith" and "jane.workman" no,
+        because "jane" is not a role.
+      - an initial and a surname (j.smith, a.workman): never.
+    """
+    local = address.split("@", 1)[0].lower()
+    if contacts.never_write_to(local):
+        return 0
+    parts = [p for p in _SEGMENTS.split(local) if p]
+    if not parts:
+        return 0
+    if len(parts) == 1:
+        return _role_word(parts[0])
+    if len(parts[0]) <= 2:
+        return 0                    # an initial: j.smith, a.workman
+    scores = [_role_word(p) for p in parts]
+    return max(scores) if all(scores) else 0
+
+
+def best_team_inbox(addresses) -> dict | None:
+    """The service's own inbox if there is one, else its front door, else
+    nothing. Shorter wins a tie: "jobs@" over "jobs-and-careers-team@"."""
+    scored = [(team_inbox(a), a) for a in addresses]
+    usable = sorted(((-score, len(a), a) for score, a in scored if score),
+                    key=lambda t: t[:2])
+    if not usable:
+        return None
+    score, _, address = usable[0]
+    return {"email": address, "name": None, "tier": -score,
+            "tier_name": "service inbox" if -score == 2 else "front door"}
+
+
 def find_address(org, *, session=None, scrape_delay=None):
     """A real published address on their own site, or None.
 
@@ -197,7 +274,7 @@ def find_address(org, *, session=None, scrape_delay=None):
     paths = tuple(discover.SCRAPE_PATHS) + tuple(org.get("pages") or ())
     found = discover.scrape_site(host, session=session, paths=paths,
                                  delay=scrape_delay)
-    return contacts.best(found)
+    return best_team_inbox(found)
 
 
 def _rate_line() -> tuple[tuple[int, int], tuple[int, int]]:
@@ -232,7 +309,9 @@ def compose_letter(org, contact) -> tuple[str, str]:
     find the difference stated rather than smoothed over.
     """
     name = (org.get("name") or "your organisation").strip()
-    greeting = f"Hello {contact['name']}," if contact.get("name") else "Hello,"
+    # Never a name. Every recipient is a team inbox by construction, and the
+    # one thing worse than no greeting is "Hello Abzworks,".
+    greeting = "Hello,"
     (n_sent, n_back), (g_sent, g_back) = _rate_line()
 
     subject = "A free tool for the jobseekers you work with"
