@@ -723,6 +723,20 @@ def parse_ts(value):
 
 
 def load():
+    # Checked HERE, before a line of work, and that placement is the fix.
+    #
+    # A broken STATE_KEY used to surface at the first save() instead - so the
+    # run started, announced itself LIVE, re-opened listings, and only then
+    # died with a base64 traceback, having thrown away everything it had just
+    # done. Every scheduled run did that for a day. The heartbeat alarm fired
+    # and said "nothing ran for 12 working hours", which was true and did not
+    # say why.
+    #
+    # The refusal itself is right and stays: a key that cannot encrypt must
+    # never mean "write it in the clear then", because the file holds 579
+    # people's addresses and the repository is public. What was wrong was
+    # refusing late, expensively, and in a language nobody could act on.
+    personal.check_key()
     if os.path.exists(STATE_PATH):
         with open(STATE_PATH) as f:
             state = json.load(f)

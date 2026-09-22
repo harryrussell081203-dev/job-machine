@@ -139,12 +139,52 @@ def make_key() -> str:
     return base64.urlsafe_b64encode(AESSIV.generate_key(256)).decode()
 
 
+# What AESSIV will take: 256, 384 or 512 bits. make_key() produces the first.
+KEY_BYTES = (32, 48, 64)
+
+
+class KeyUnusable(RuntimeError):
+    """There is a key configured and it is not a key.
+
+    Separate from KeyMissing because the fix is different and so is the
+    blame. Missing means nobody set the secret. Unusable means somebody set
+    it to the wrong thing, and until this existed the only symptom was:
+
+        binascii.Error: Invalid base64-encoded string: number of data
+        characters (17) cannot be 1 more than a multiple of 4
+
+    which names no secret, no file and no remedy. That traceback took the
+    whole machine down for a day - every scheduled run reached its first
+    save, raised it, and exited 1, having harvested nothing and sent nothing.
+    The heartbeat alarm fired correctly and said "nothing ran for 12 hours",
+    which was true and did not say why.
+    """
+
+
 def _cipher(key: str | None):
     from cryptography.hazmat.primitives.ciphers.aead import AESSIV
-    raw = key or os.environ.get(KEY_ENV, "")
+    raw = (key or os.environ.get(KEY_ENV, "")).strip()
     if not raw:
         return None
-    return AESSIV(base64.urlsafe_b64decode(raw))
+    try:
+        secret = base64.urlsafe_b64decode(raw)
+    except Exception:
+        raise KeyUnusable(
+            f"{KEY_ENV} is set but is not a key. It holds {len(raw)} "
+            f"characters and is not valid base64 - a real one is 44 "
+            f"characters ending in '='. Nothing is encrypted with it, so "
+            f"replacing it loses nothing:\n\n"
+            f"    python3 -c \"import os,base64; "
+            f"print(base64.urlsafe_b64encode(os.urandom(32)).decode())\"\n\n"
+            f"Paste the output into Settings > Secrets and variables > "
+            f"Actions > {KEY_ENV}.") from None
+    if len(secret) not in KEY_BYTES:
+        raise KeyUnusable(
+            f"{KEY_ENV} decodes to {len(secret)} bytes and has to be one of "
+            f"{KEY_BYTES}. Generate a real one:\n\n"
+            f"    python3 -c \"import os,base64; "
+            f"print(base64.urlsafe_b64encode(os.urandom(32)).decode())\"")
+    return AESSIV(secret)
 
 
 def _seal_value(cipher, value):
@@ -268,6 +308,23 @@ def unseal_file(name: str, data: dict, key: str | None = None) -> dict:
             f"is not set. Run `python3 personal.py show data/"
             f"{os.path.basename(name)}` with the key in the environment.")
     return _walk_file(name, data, cipher, _unseal_value)
+
+
+def check_key(key: str | None = None) -> bool:
+    """Prove the key works now, before anything depends on it.
+
+    Returns True if a usable key is configured, False if none is - both of
+    which are fine to carry on with. Raises KeyUnusable if one is configured
+    and is not a key, which is not.
+
+    It exists because of WHERE the old failure happened. _cipher is first
+    reached at save(), at the end of a run, so a mistyped secret let the whole
+    pipeline start, do its work and then die throwing that work away. Calling
+    this at load() costs one base64 decode and turns a day of silent failure
+    into a run that stops in its first second saying exactly what to paste and
+    where.
+    """
+    return _cipher(key) is not None
 
 
 def seal(state: dict, key: str | None = None) -> dict:
