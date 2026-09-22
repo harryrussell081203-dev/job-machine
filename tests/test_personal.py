@@ -29,6 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import personal  # noqa: E402
+import job_machine as jm  # noqa: E402
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 PHONE = re.compile(r"\b(?:0\d{9,10}|\+44\d{9,10})\b")
@@ -414,6 +415,93 @@ class TestReadingTheSmallFilesWithoutAKey(unittest.TestCase):
         finally:
             if old is not None:
                 os.environ[personal.KEY_ENV] = old
+
+
+class TestAKeyThatIsNotAKey(unittest.TestCase):
+    """The failure that took the machine down for a day.
+
+    STATE_KEY was set to something 17 characters long. base64 refused it,
+    and the only symptom anybody got was:
+
+        binascii.Error: Invalid base64-encoded string: number of data
+        characters (17) cannot be 1 more than a multiple of 4
+
+    raised from _cipher, reached for the first time at save() - so every
+    scheduled run announced itself LIVE, re-opened listings, and then died
+    having thrown that work away. Nothing was harvested and nothing was sent.
+    The heartbeat alarm fired and reported "nothing ran for 12 working
+    hours", which was true and did not say why.
+
+    Two things were wrong and both are tested here: the message named no
+    secret and no remedy, and the check happened at the END of a run rather
+    than the start.
+    """
+
+    BAD = "thisisnotakey1234"          # 17 characters, the real value
+
+    def test_a_malformed_key_raises_something_named(self):
+        with self.assertRaises(personal.KeyUnusable):
+            personal.check_key(self.BAD)
+
+    def test_the_message_names_the_secret(self):
+        with self.assertRaises(personal.KeyUnusable) as caught:
+            personal.check_key(self.BAD)
+        self.assertIn(personal.KEY_ENV, str(caught.exception))
+
+    def test_the_message_carries_the_command_that_fixes_it(self):
+        """An error that says what is wrong and not what to do about it is
+        how a one-line mistake becomes a day of downtime."""
+        with self.assertRaises(personal.KeyUnusable) as caught:
+            personal.check_key(self.BAD)
+        text = str(caught.exception)
+        self.assertIn("urandom(32)", text)
+        self.assertIn("Actions", text)
+
+    def test_the_command_in_the_message_actually_produces_a_valid_key(self):
+        """The message would be worse than useless if the command in it did
+        not work. Standard library only, deliberately: whoever is fixing this
+        may not have cryptography installed anywhere to hand."""
+        import base64 as b64
+        import os as _os
+        generated = b64.urlsafe_b64encode(_os.urandom(32)).decode()
+        self.assertTrue(personal.check_key(generated))
+
+    def test_a_key_of_the_wrong_length_is_refused_too(self):
+        """Valid base64 that decodes to the wrong number of bytes. AESSIV
+        would raise its own ValueError, which names no secret either."""
+        import base64 as b64
+        import os as _os
+        short = b64.urlsafe_b64encode(_os.urandom(16)).decode()
+        with self.assertRaises(personal.KeyUnusable) as caught:
+            personal.check_key(short)
+        self.assertIn("16 bytes", str(caught.exception))
+
+    def test_no_key_at_all_is_not_an_error(self):
+        """Local work, and every checkout with no secret set. Different from
+        a broken key, and the distinction is the whole point of the class."""
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            self.assertFalse(personal.check_key())
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+    def test_whitespace_around_a_good_key_is_tolerated(self):
+        """Pasting into a web form is how this value gets set, and a trailing
+        newline is not a reason to take somebody's job hunt offline."""
+        self.assertTrue(personal.check_key("  " + personal.make_key() + "\n"))
+
+    def test_the_machine_checks_before_it_does_any_work(self):
+        """The placement, which is the half of this that actually cost a day.
+
+        load() is called before anything is harvested, scored or sent. If the
+        check migrates back to save(), a broken key again means a run that
+        works and then throws the work away."""
+        import inspect
+        source = inspect.getsource(jm.load)
+        self.assertIn("personal.check_key()", source)
+        # and before the file is even read
+        self.assertLess(source.index("check_key"), source.index("os.path.exists"))
 
 
 if __name__ == "__main__":
