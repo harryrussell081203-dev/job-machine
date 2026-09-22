@@ -1217,7 +1217,14 @@ FUNNEL = ("signed_up", "onboarded", "first_email_sent", "first_reply",
 # happen any number of times to one account, and to an account at any stage.
 REFERRED_USER = "referred_user"
 
-EVENT_KINDS = FUNNEL + (REFERRED_USER,)
+# Also not a funnel stage: putting the app on a home screen is something that
+# can happen at any point, or never, and somebody who never installs is not
+# stuck. It is recorded because "do the people who install it stick around" is
+# a question the retention figure cannot answer on its own, and this is the
+# cheapest way to ask it.
+INSTALLED = "installed"
+
+EVENT_KINDS = FUNNEL + (REFERRED_USER, INSTALLED)
 
 
 def record_event(user_id: int, kind: str, *, ref: str = "",
