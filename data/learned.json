@@ -3,7 +3,7 @@
     "Written by learn.py from the machine's own records. Do not edit by hand - it is overwritten on every run that learns anything.",
     "A verdict appears here only when two buckets each have 8+ sends and their confidence intervals do not overlap. Until then 'not_yet' says what is missing."
   ],
-  "updated_at": "2026-09-22T18:40:38.885615+00:00",
+  "updated_at": "2026-09-22T18:41:15.773362+00:00",
   "emails": {
     "sent": 176,
     "human_replies": 36
