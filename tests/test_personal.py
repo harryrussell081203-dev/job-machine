@@ -204,5 +204,217 @@ class TestAMissingKeyStopsTheRun(unittest.TestCase):
                 os.environ[personal.KEY_ENV] = old
 
 
+# --------------------------------------------------------------------------
+# The small hand-maintained files, which fail differently.
+#
+# state.json is machine output and the risk there is losing a contact. These
+# are config a person edits, and the risk is the opposite: a file sealed so
+# thoroughly that it stops being maintainable, or a diff so large that the
+# seal is never reviewed. So these tests guard readability as hard as they
+# guard secrecy.
+
+POSTCODE = re.compile(r"\b[A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}\b")
+
+
+def data_path(name):
+    return os.path.join(ROOT, "data", name)
+
+
+def a_file(name):
+    with open(data_path(name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+class TestTheSmallFilesStayReadable(unittest.TestCase):
+    """The thing that makes sealing these acceptable at all."""
+
+    def test_the_readme_is_never_sealed(self):
+        """Every one of these files opens with a _README explaining what it
+        is for. Sealing that would hide the documentation along with the data
+        and leave Harry editing a file he cannot read - which is how a config
+        file quietly stops being maintained."""
+        for name, spec in personal.FILES.items():
+            for container, fields in spec.items():
+                with self.subTest(file=name, container=container):
+                    self.assertNotIn("_README", fields)
+
+        key = personal.make_key()
+        for name in personal.FILES:
+            original = a_file(name)
+            sealed = personal.seal_file(name, copy.deepcopy(original), key)
+            with self.subTest(file=name):
+                self.assertEqual(sealed["_README"], original["_README"])
+
+    def test_the_file_keeps_the_shape_it_is_written_in(self):
+        """Two-space indent, keys in the order a person put them, trailing
+        newline. Not the sorted dump state.json gets.
+
+        This is not tidiness. answers.json opens with name, then contact,
+        then address, deliberately. A sorted rewrite turns a five-line seal
+        into a whole-file diff nobody reads, and puts years_experience above
+        address_line_1."""
+        for name in personal.FILES:
+            with self.subTest(file=name):
+                with open(data_path(name), encoding="utf-8") as f:
+                    on_disk = f.read()
+                self.assertEqual(personal._dump(json.loads(on_disk)), on_disk)
+
+    def test_only_the_named_fields_move(self):
+        """A seal that changed anything else would be a seal nobody could
+        review, because the diff would not be the change."""
+        key = personal.make_key()
+        for name, spec in personal.FILES.items():
+            sealed = personal.seal_file(name, a_file(name), key)
+            plain = a_file(name)
+            expected = {f for fields in spec.values() for f in fields}
+            for line_s, line_p in zip(personal._dump(sealed).splitlines(),
+                                      personal._dump(plain).splitlines()):
+                if line_s != line_p:
+                    with self.subTest(file=name, line=line_p.strip()[:40]):
+                        field = line_p.strip().split('"')[1]
+                        self.assertIn(field, expected)
+
+
+class TestTheSmallFilesLoseNothing(unittest.TestCase):
+    def setUp(self):
+        self.key = personal.make_key()
+
+    def test_round_trip_is_exact(self):
+        for name in personal.FILES:
+            original = a_file(name)
+            sealed = personal.seal_file(name, copy.deepcopy(original),
+                                        self.key)
+            with self.subTest(file=name):
+                self.assertNotEqual(sealed, original)
+                self.assertEqual(
+                    personal.unseal_file(name, sealed, self.key), original)
+
+    def test_sealing_twice_changes_nothing(self):
+        """Actions re-seals after every run. If that were not a no-op the
+        machine would commit a fresh diff every half hour."""
+        for name in personal.FILES:
+            once = personal.seal_file(name, a_file(name), self.key)
+            twice = personal.seal_file(name, copy.deepcopy(once), self.key)
+            with self.subTest(file=name):
+                self.assertEqual(personal._dump(twice), personal._dump(once))
+
+    def test_the_same_file_always_seals_to_the_same_bytes(self):
+        """Deterministic, for the same reason state.json is: a file that
+        re-encrypts differently every run is a file git cannot delta."""
+        for name in personal.FILES:
+            a = personal.seal_file(name, a_file(name), self.key)
+            b = personal.seal_file(name, a_file(name), self.key)
+            with self.subTest(file=name):
+                self.assertEqual(personal._dump(a), personal._dump(b))
+
+    def test_a_file_with_nothing_to_seal_is_returned_untouched(self):
+        """Most of data/ is business contact details the organisations
+        publish themselves. Nothing happens to those and nothing should."""
+        for name in ("agencies.json", "support_orgs.json", "targets.json"):
+            before = a_file(name)
+            with self.subTest(file=name):
+                self.assertEqual(
+                    personal.seal_file(name, copy.deepcopy(before), self.key),
+                    before)
+
+
+class TestTheSmallFilesDoNotLeak(unittest.TestCase):
+    def test_the_real_answers_file_seals_clean(self):
+        """Against the real file, not a fixture - the same rule that caught
+        companies_contacted holding 277 addresses in state.json.
+
+        answers.json is the one genuine exposure in a public repository:
+        Harry's street address, his postcode, his phone, and an email address
+        whose local part is his date of birth."""
+        blob = personal._dump(
+            personal.seal_file("answers.json", a_file("answers.json"),
+                               personal.make_key()))
+        self.assertEqual(sorted(set(EMAIL.findall(blob))), [])
+        self.assertEqual(sorted(set(PHONE.findall(blob))), [])
+        self.assertEqual(sorted(set(POSTCODE.findall(blob))), [])
+
+    def test_the_real_goals_file_seals_clean(self):
+        """goals.json records where every line came from, and one of those
+        notes names a consultant and prints their direct line, taken off a
+        reply signature. The provenance rule stays; the phone number goes."""
+        blob = personal._dump(
+            personal.seal_file("goals.json", a_file("goals.json"),
+                               personal.make_key()))
+        self.assertEqual(sorted(set(PHONE.findall(blob))), [])
+        self.assertEqual(sorted(set(EMAIL.findall(blob))), [])
+
+    def test_every_file_named_here_still_exists(self):
+        """A rename with the field list left behind seals nothing and says
+        nothing, which is the failure mode this whole module is about."""
+        for name in personal.FILES:
+            with self.subTest(file=name):
+                self.assertTrue(os.path.exists(data_path(name)), name)
+
+    def test_the_containers_named_here_are_really_there(self):
+        """The other half of the same silence: a container that does not
+        exist is walked, finds nothing, and reports success."""
+        for name, spec in personal.FILES.items():
+            data = a_file(name)
+            for container, fields in spec.items():
+                with self.subTest(file=name, container=container):
+                    records = personal._records(data, container)
+                    self.assertTrue(records,
+                                    f"{name} has no {container!r} to seal")
+                    self.assertTrue(
+                        any(f in r for r in records for f in fields),
+                        f"none of {fields} is in {name}:{container}")
+
+
+class TestReadingTheSmallFilesWithoutAKey(unittest.TestCase):
+    def sealed(self, name):
+        return personal.seal_file(name, a_file(name), personal.make_key())
+
+    def test_it_raises_rather_than_handing_back_ciphertext(self):
+        """Less dangerous than state.json - nothing in the machine loads
+        these - but a caller handed 'enc.v1:AAAA...' as a postcode has not
+        failed, and that is worse than failing."""
+        sealed = self.sealed("answers.json")
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            with self.assertRaises(personal.KeyMissing):
+                personal.unseal_file("answers.json", sealed)
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+    def test_the_error_says_how_to_read_the_file(self):
+        """An error that names the command is the difference between a seal
+        somebody works with and one they work around."""
+        sealed = self.sealed("answers.json")
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            with self.assertRaises(personal.KeyMissing) as caught:
+                personal.unseal_file("answers.json", sealed)
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+        self.assertIn("personal.py show", str(caught.exception))
+
+    def test_an_unsealed_file_needs_no_key(self):
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            self.assertEqual(
+                personal.unseal_file("answers.json", a_file("answers.json")),
+                a_file("answers.json"))
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+    def test_sealing_without_a_key_leaves_the_file_alone(self):
+        old = os.environ.pop(personal.KEY_ENV, None)
+        try:
+            self.assertEqual(
+                personal.seal_file("answers.json", a_file("answers.json")),
+                a_file("answers.json"))
+        finally:
+            if old is not None:
+                os.environ[personal.KEY_ENV] = old
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -282,6 +282,38 @@ CREATE TABLE IF NOT EXISTS page_views (
     PRIMARY KEY (path, source, kind, hour_at)
 );
 
+-- The funnel, one row per thing that happened to somebody for the first time.
+--
+-- WHY A TABLE RATHER THAN COUNTING THE OTHER TABLES. Most of these can be
+-- derived today: "has a CV" is a row in cvs, "has sent" is a row in sent_log.
+-- What cannot be derived is WHEN, once the row is deleted or replaced, and
+-- every retention question is a question about when. A user who uploaded a CV
+-- on day one and a user who uploaded one this morning look identical in cvs
+-- and are completely different facts about the product.
+--
+-- WHY IT IS ONLY FIRSTS. A log of every send would be a second copy of
+-- sent_log that can disagree with it. This records the transitions - the
+-- first time each thing ever happened to an account - which is what a funnel
+-- is, and nothing else.
+CREATE TABLE IF NOT EXISTS events (
+    id       {key},
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- signed_up, onboarded, first_email_sent, first_reply, first_interview,
+    -- referred_user.
+    kind     TEXT    NOT NULL,
+    -- Empty for the once-ever events, which is what makes the uniqueness
+    -- below do the idempotency for free: recording first_email_sent twice is
+    -- a no-op rather than a second row nobody notices.
+    --
+    -- referred_user is the exception and the reason this column exists: it
+    -- happens once per person referred, so it carries that person's id and
+    -- the same pair can never be counted twice.
+    ref      TEXT    NOT NULL DEFAULT '',
+    at       BIGINT  NOT NULL,
+    detail   TEXT    NOT NULL DEFAULT '',
+    UNIQUE (user_id, kind, ref)
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
@@ -449,6 +481,25 @@ _ADDED_COLUMNS = [
     # actually was, and the published reply rate keeps coming from the person
     # who read the thing.
     ("drafts", "reply_seen_at", "BIGINT"),
+    # Where this account came from, captured on the FIRST page they landed on
+    # rather than at sign-up. Sign-in here is a link in an email, so by the
+    # time the account exists the request carries no referrer and no campaign
+    # - every user would be recorded as "direct", including the ones a channel
+    # actually worked for. See attribution.py.
+    ("users", "utm_source", "TEXT NOT NULL DEFAULT ''"),
+    ("users", "utm_campaign", "TEXT NOT NULL DEFAULT ''"),
+    ("users", "landing_path", "TEXT NOT NULL DEFAULT ''"),
+    # The referral code they arrived on, kept as the raw string, and the user
+    # it resolved to. Both, because they answer different questions: the code
+    # survives even if that account is later deleted, and the id is what the
+    # reward is paid to.
+    ("users", "ref_code", "TEXT NOT NULL DEFAULT ''"),
+    ("users", "referred_by", "INTEGER"),
+    # This account's OWN code, the one they hand out. Generated on demand
+    # rather than at sign-up, so the column is empty for anybody who has never
+    # opened the referral screen and the codes in circulation are only the
+    # ones somebody asked for.
+    ("users", "referral_code", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

@@ -17,9 +17,56 @@ copied over only the keys it recognised, so every new top-level key was thrown
 away the first time a run tried to save one. That cost the record of which
 charities had already been written to - which is worse than losing data,
 because a lost record of a letter means sending it twice.
+
+THIS MERGES PLAINTEXT, ALWAYS, AND SEALS ONCE AT THE END.
+
+Everything below compares records to decide which side wins. Ciphertext cannot
+be compared: two records holding the same address hold different bytes
+depending on which side sealed them, and every rule here - pick(), the
+earliest-timestamp rule, the counter maxima - would be comparing the wrong
+thing.
+
+It is not a theoretical problem. The machine started sealing state.json
+before this file knew about it, and the result was measured against the real
+file: of 579 addresses, 570 stayed in the clear and NOT ONE enc.v1: marker
+survived the merge. The reason is that every rule here prefers the copy
+already on the branch when the two sides tie - pick() falls through to
+`len(a) >= len(b)` with theirs as `a`, and union_earliest() keeps theirs
+unless ours is strictly older. A sealed record and its plaintext twin tie on
+every one of those tests, so the plaintext side won every time.
+
+So the machine would have sealed the file on every run, and this would have
+unsealed it again on every commit, for ever, while looking like it worked.
+
+Hence: unseal both sides on the way in, merge plaintext, seal on the way out.
+personal.py is the only thing that knows how, and a missing key raises rather
+than letting a half-merged state through - see the fallback in
+commit-state.sh, which keeps our own already-sealed copy when that happens.
 """
 import json
+import os
 import sys
+
+# personal.py lives at the repository root, so the root goes on the path
+# explicitly - but the ORDER here is load-bearing.
+#
+# commit-state.sh copies this script to /tmp and runs it from there, because
+# `git reset --hard origin/<target>` restores the TARGET branch's tools/ and a
+# branch that changes the merge rules must be merged by its own. personal.py
+# is reset the same way, so it is copied beside this script for the same
+# reason - and beside has to win. Looking in the working directory first
+# would import the copy the reset just restored, which is exactly the
+# substitution the copying exists to prevent.
+#
+# Run normally from tools/, the first candidate holds no personal.py and the
+# repository root is found on the second.
+for _candidate in (os.path.dirname(os.path.abspath(__file__)),
+                   os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                   os.getcwd()):
+    if os.path.exists(os.path.join(_candidate, "personal.py")):
+        sys.path.insert(0, _candidate)
+        break
+import personal  # noqa: E402
 
 # Later in this list beats earlier when the two sides disagree about a job.
 #
@@ -258,17 +305,30 @@ def merge(theirs, ours):
 
 
 def load(path):
+    """Read a state file as plaintext, whether or not it arrived sealed.
+
+    A missing or unreadable file is an empty state - that is the pre-existing
+    behaviour and it is right, because one side of a merge legitimately does
+    not exist on a first run. A file that IS readable and IS sealed with no
+    key to open it is not that case, and personal.unseal raises: merging a
+    state whose contacts we cannot see would drop them on the losing side of
+    every comparison below.
+    """
     try:
         with open(path) as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+    return personal.unseal(data) if isinstance(data, dict) else {}
 
 
 def main():
     theirs_path, ours_path, out_path = sys.argv[1:4]
     merged = merge(load(theirs_path), load(ours_path))
+    # Sealed once, here, after every comparison has been made in plaintext.
+    # No key configured means written as it always was - the loud failure
+    # belongs on the read side. See personal.py.
+    merged = personal.seal(merged)
     with open(out_path, "w") as f:
         json.dump(merged, f, indent=1, sort_keys=True)
     print(f"merged state: {len(merged.get('jobs', {}))} jobs, "

@@ -77,6 +77,11 @@
       <a href="/drafts">Drafts</a>
       <a href="/applications">Sent</a>
       <a href="/setup">Set up</a>
+      {# Permanently findable, which the banner is not: it can be dismissed
+         once and never comes back, and on iOS it could not appear at all.
+         Hidden by script when the reader is already inside the installed
+         app, where an "install" link is nonsense. #}
+      <a href="/app" id="navinstall">Get the app</a>
       <a href="/account">Account</a>
       {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
       <form method="post" action="/logout"><button class="link">Sign out</button></form>
@@ -95,7 +100,11 @@
 <div class="installbar" id="installbar" hidden>
   <span>Add Recruited to your home screen.</span>
   <span class="installbtns">
-    <button class="btn small" id="installbtn">Install</button>
+    {# One of these two is revealed, never both. The button needs a prompt
+       the browser has offered; the link is for iOS, where there is no such
+       prompt and the three taps have to be written down. #}
+    <button class="btn small" id="installbtn" hidden>Install</button>
+    <a class="btn small" id="installhow" href="/app" hidden>How</a>
     <button class="link" id="installno">Not now</button>
   </span>
 </div>
@@ -134,28 +143,83 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// Chrome and Edge fire this instead of showing their own prompt. iOS Safari
-// never fires it - there the install is Share -> Add to Home Screen, which is
-// what the banner below says.
+// Getting the app onto a phone.
+//
+// THE BUG THIS REPLACES. Chrome and Edge fire beforeinstallprompt instead of
+// showing their own prompt, and the banner was revealed from inside that
+// handler. Safari has never fired it, so every iPhone user was shown nothing
+// at all - no banner, no instructions, no hint that an app existed. The
+// comment here used to claim the banner covered that case. It did not: the
+// bar stayed hidden for ever.
+//
+// So the two are separated now. The DEFERRED PROMPT is a Chrome nicety. The
+// BANNER is shown to anybody on a phone who has not already installed, and on
+// iOS it points at /app, which spells out Share -> Add to Home Screen.
 (function () {
-  var deferred = null;
   var bar = document.getElementById("installbar");
   var btn = document.getElementById("installbtn");
-  if (!bar || !btn) return;
+  var link = document.getElementById("installhow");
+
+  // Already installed: never advertise installing to somebody reading this
+  // inside the installed app. navigator.standalone is the iOS spelling and
+  // it is the only one Safari understands.
+  var standalone = window.matchMedia("(display-mode: standalone)").matches ||
+                   window.navigator.standalone === true;
+
+  if (standalone) {
+    ["navinstall", "setupinstall"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+  }
+
+  // Held on `window` so /app can use the same one. The event fires once, and
+  // whichever listener runs first is the only one that can keep it, so this
+  // one keeps it and hands it over.
+  window.jmInstall = null;
+  window.jmInstallReady = false;
 
   window.addEventListener("beforeinstallprompt", function (e) {
     e.preventDefault();
-    deferred = e;
-    if (localStorage.getItem("jm-install-dismissed") !== "1") {
+    window.jmInstallReady = true;
+    window.jmInstall = function () {
+      e.prompt();
+      return e.userChoice;
+    };
+    if (bar && btn && !standalone && !dismissed()) {
+      btn.hidden = false;
+      if (link) link.hidden = true;
       bar.hidden = false;
     }
+    window.dispatchEvent(new Event("jm-installable"));
   });
 
-  btn.addEventListener("click", function () {
-    if (!deferred) return;
-    deferred.prompt();
-    deferred.userChoice.finally(function () {
-      deferred = null;
+  function dismissed() {
+    try { return localStorage.getItem("jm-install-dismissed") === "1"; }
+    catch (e) { return false; }   // private mode: show it rather than not
+  }
+
+  if (!bar) return;
+
+  // iPadOS has reported itself as a Mac since iPadOS 13, so the user-agent
+  // alone cannot tell them apart. A real Mac reports no touch points.
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPhone|iPad|iPod/.test(ua) ||
+              (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+
+  // The case that was silently broken. No button, because Safari will not
+  // give us one - a link to the page that explains the three taps instead.
+  if (isIOS && !standalone && !dismissed()) {
+    if (btn) btn.hidden = true;
+    if (link) link.hidden = false;
+    bar.hidden = false;
+  }
+
+  if (btn) btn.addEventListener("click", function () {
+    if (!window.jmInstall) return;
+    window.jmInstall().finally(function () {
+      window.jmInstall = null;
+      window.jmInstallReady = false;
       bar.hidden = true;
     });
   });
@@ -164,6 +228,16 @@ if ("serviceWorker" in navigator) {
   if (no) no.addEventListener("click", function () {
     bar.hidden = true;
     try { localStorage.setItem("jm-install-dismissed", "1"); } catch (e) {}
+  });
+
+  // Tell the server, once, so the funnel can answer whether people who
+  // install stick around. Fire-and-forget: it cannot fail in a way anybody
+  // should hear about.
+  window.addEventListener("appinstalled", function () {
+    bar.hidden = true;
+    try {
+      fetch("/app/installed", {method: "POST", keepalive: true});
+    } catch (e) {}
   });
 })();
 

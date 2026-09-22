@@ -16,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import job_machine as jm  # noqa: E402
+import personal  # noqa: E402
 
 
 import contextlib  # noqa: E402
@@ -3519,6 +3520,26 @@ class TestTheAnswersFileNeverClaimsAClearance(unittest.TestCase):
     def test_the_clearance_answer_makes_no_claim(self):
         answer = self.answers().get("security_clearance") or ""
         self.assertIsNone(jm.claims_clearance(answer), answer)
+
+    def test_the_fields_this_guard_reads_are_never_sealed(self):
+        """Since this file went public, some of its fields are encrypted -
+        Harry's address, postcode and phone. These three tests read it
+        WITHOUT a key, because CI has none and must not.
+
+        So the guard only works while the clearance answer stays in the
+        clear. Widening personal.FILES to cover it would not fail anything:
+        claims_clearance("enc.v1:AAAA...") is None, the suite stays green,
+        and the check that exists because a false DV claim sat in a public
+        repo for three days would be silently switched off. This is the test
+        that notices."""
+        sealed = {f for fields in personal.FILES.get(
+            "answers.json", {}).values() for f in fields}
+        for field in ("security_clearance", "current_employer"):
+            with self.subTest(field=field):
+                self.assertNotIn(field, sealed)
+                self.assertFalse(
+                    str(self.answers().get(field, "")).startswith(
+                        personal.MARKER))
 
     def test_no_field_anywhere_in_the_file_claims_one(self):
         for key, value in self.answers().items():

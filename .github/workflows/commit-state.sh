@@ -54,6 +54,12 @@ done < "$CHANGED"
 # adds a new state field would have that field merged by the OLD script and
 # silently dropped. That is exactly what happened to the ATS board cache.
 cp tools/merge_state.py /tmp/merge_state.py
+# And personal.py, for the same reason and one more. The merge has to compare
+# records in plaintext - a sealed record and its plaintext twin tie on every
+# rule in merge_state.py and the plaintext side wins, which silently unsealed
+# the whole file on every commit - so merge_state.py now unseals both sides
+# and seals the result. It imports this to do it.
+cp personal.py /tmp/personal.py
 
 for attempt in 1 2 3 4 5; do
   git fetch origin "$TARGET" || { sleep $((2 ** attempt)); continue; }
@@ -78,7 +84,15 @@ for attempt in 1 2 3 4 5; do
       echo "keeping data/$name from this run"
     fi
   done
-  python /tmp/merge_state.py /tmp/theirs.json /tmp/ours.json data/state.json || {
+  # merge_state.py finds the personal.py copied beside it in /tmp by looking
+  # next to itself first, rather than the one the reset above restored.
+  #
+  # The fallback is safe under sealing and that is not an accident: ours.json
+  # was written by the run, so it is already sealed. A merge that fails -
+  # including a failure to unseal - leaves the sealed copy in place rather
+  # than a half-merged or plaintext one.
+  PYTHONPATH=/tmp python /tmp/merge_state.py \
+      /tmp/theirs.json /tmp/ours.json data/state.json || {
     echo "merge failed, falling back to our own state"
     cp /tmp/ours.json data/state.json
   }

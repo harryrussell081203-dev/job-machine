@@ -167,8 +167,31 @@ jobs:
             python job_machine.py $ARGS
           fi
 
+      - name: Seal the hand-maintained files
+        # state.json is sealed on the way out of every save, because the
+        # machine writes it. These two nothing writes - they are config Harry
+        # edits - so without this step they would sit in the clear in a public
+        # repository forever. Idempotent and deterministic: an already-sealed
+        # file comes back byte-identical, so this shows up as a diff exactly
+        # once and then never again until he edits one.
+        #
+        # It also closes a file left open. `personal.py unseal` is how he
+        # edits them; forgetting to seal it again is a mistake that would
+        # otherwise publish his address, and this is the step that catches it.
+        if: always()
+        env:
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+        run: python3 personal.py seal data/answers.json data/goals.json
+
       - name: Commit state
         if: always()
         env:
           TARGET: ${{ startsWith(github.ref_name, 'fire-') && github.event.repository.default_branch || github.ref_name }}
+          # The merge compares records, and it has to compare them in
+          # plaintext: a sealed record and its plaintext twin tie on every
+          # rule in merge_state.py and the copy already on the branch wins,
+          # which unsealed the whole file on every commit. So the merge
+          # unseals both sides and seals the result, and needs the key here
+          # as well as in the step above. See merge_state.py.
+          STATE_KEY: ${{ secrets.STATE_KEY }}
         run: bash .github/workflows/commit-state.sh "$TARGET" "state"
