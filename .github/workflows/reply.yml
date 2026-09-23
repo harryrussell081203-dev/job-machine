@@ -54,7 +54,9 @@ jobs:
           # case the machine cannot report on itself.
           HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
           TEST_MODE: ${{ vars.TEST_MODE }}
-          REPLY_AUTORESPOND: ${{ vars.REPLY_AUTORESPOND }}
+          # Off: nothing replies to anybody on Harry's behalf. Reply alerts to
+          # Harry himself still work.
+          REPLY_AUTORESPOND: "0"
         run: python job_machine.py --replies
 
       - name: Commit state

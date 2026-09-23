@@ -32,7 +32,7 @@ name: product sweep
 # and the concurrency groups are separate. The two never see each other.
 
 on:
-  schedule:
+  # schedule: (paused, see below)
     # TWO SCHEDULES, AND THE MINUTE IS WHAT TELLS THEM APART.
     #
     # Minute :10 - a FULL sweep. Harvest listings, score them, write drafts,
@@ -79,13 +79,10 @@ on:
     # it can be cut safely: the cap, the holding window and
     # one-employer-one-letter are all counted per letter, never per run, so
     # six sweeps send exactly what eleven sent, a little later in the day.
-    - cron: "10 7,11,15 * * 1-5"
-    - cron: "40 9,13,16 * * 1-5"
-  push:
-    # Same idiom the personal machine uses: push a branch to force a run when
-    # the Actions UI is not to hand. Deliberately not `branches: [main]` - an
-    # ordinary merge must never send anybody's letters.
-    branches: ["fire-sweep/**"]
+    # PAUSED 23 Sep 2026 at Harry's request: the sweep was sending from his
+    # own account alongside the personal machine, which keeps its own memory
+    # of who has been written to, so the two wrote to the same agencies.
+    # No schedule and no push trigger; manual runs only.
   workflow_dispatch:
     inputs:
       dry_run:
