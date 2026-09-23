@@ -52,6 +52,13 @@ class TestTheKey(Base):
     def test_a_council_is_itself_not_all_of_gov_uk(self):
         self.assertEqual(self.key("jobs@bexley.gov.uk"), "bexley.gov.uk")
 
+    def test_a_suffix_sold_as_a_tld_is_not_one_employer(self):
+        """candidatesource.uk.com must not block every other *.uk.com."""
+        self.assertEqual(self.key("hello@candidatesource.uk.com"),
+                         "candidatesource.uk.com")
+        self.assertEqual(self.key("jobs@scotland.police.uk"),
+                         "scotland.police.uk")
+
     def test_a_shared_provider_is_remembered_by_the_whole_address(self):
         """Blocking gmail.com after one sole trader would block them all."""
         self.assertEqual(self.key("Bob.Plumber@Gmail.com"),

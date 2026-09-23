@@ -683,7 +683,11 @@ SHARED_MAIL_DOMAINS = frozenset({
 # careers.acme.co.uk and acme.co.uk are one employer, acme.co.uk and
 # other.co.uk are not.
 _SECOND_LEVEL = frozenset({"co", "org", "ac", "gov", "ltd", "plc", "me",
-                           "net", "nhs", "sch", "com"})
+                           "net", "nhs", "sch", "com", "police", "mod"})
+# Suffixes sold as though they were top-level domains. candidatesource.uk.com
+# is one agency; "uk.com" is thousands of them.
+_SHARED_SUFFIXES = frozenset({"uk.com", "gb.com", "us.com", "eu.com",
+                              "uk.net", "gb.net", "co.com"})
 
 
 def mail_key(address_or_domain: str) -> str:
@@ -705,8 +709,9 @@ def mail_key(address_or_domain: str) -> str:
     if domain in SHARED_MAIL_DOMAINS:
         return f"{local}@{domain}" if local else ""
     labels = domain.split(".")
-    keep = 3 if (len(labels) >= 3 and len(labels[-1]) == 2
-                 and labels[-2] in _SECOND_LEVEL) else 2
+    keep = 3 if (len(labels) >= 3 and (
+        (len(labels[-1]) == 2 and labels[-2] in _SECOND_LEVEL)
+        or ".".join(labels[-2:]) in _SHARED_SUFFIXES)) else 2
     return ".".join(labels[-keep:])
 
 
