@@ -315,6 +315,13 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
         except Exception as exc:
             totals["errors"].append(f"user {user_id} follow-up: {exc}")
 
+        # Last, so it reports what this sweep just did.
+        try:
+            from . import digest
+            digest.send_for_user(user_id, sender=sender)
+        except Exception as exc:
+            totals["errors"].append(f"user {user_id} digest: {exc}")
+
     if run:
         for user in users:
             user_id = user["id"]

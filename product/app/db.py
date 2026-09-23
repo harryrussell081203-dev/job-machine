@@ -932,7 +932,7 @@ def delete_cv(user_id: int) -> None:
 # ----------------------------------------------------------------------
 DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 12,
                          "search_days": 2, "paused_until": None,
-                         "follow_up": 0}
+                         "follow_up": 0, "digest": 0, "last_digest_at": None}
 
 
 def get_send_settings(user_id: int) -> dict:
@@ -949,7 +949,9 @@ def get_send_settings(user_id: int) -> dict:
             # default", not "look back zero days and find nothing".
             "search_days": int(row["search_days"] or 0) or 2,
             "paused_until": row["paused_until"],
-            "follow_up": int(_col(row, "follow_up") or 0)}
+            "follow_up": int(_col(row, "follow_up") or 0),
+            "digest": int(_col(row, "digest") or 0),
+            "last_digest_at": _col(row, "last_digest_at")}
 
 
 def _col(row, name):
@@ -966,19 +968,23 @@ def save_send_settings(user_id: int, **fields) -> None:
     with connect() as c:
         c.execute(
             "INSERT INTO send_settings (user_id, auto_send, hold_minutes, "
-            "daily_cap, search_days, paused_until, follow_up, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "daily_cap, search_days, paused_until, follow_up, digest, "
+            "last_digest_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET auto_send = excluded.auto_send, "
             "hold_minutes = excluded.hold_minutes, "
             "daily_cap = excluded.daily_cap, "
             "search_days = excluded.search_days, "
             "paused_until = excluded.paused_until, "
             "follow_up = excluded.follow_up, "
+            "digest = excluded.digest, "
+            "last_digest_at = excluded.last_digest_at, "
             "updated_at = excluded.updated_at",
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
              int(current["search_days"]), current["paused_until"],
-             int(bool(current["follow_up"])), now()))
+             int(bool(current["follow_up"])), int(bool(current["digest"])),
+             current["last_digest_at"], now()))
 
 
 # ----------------------------------------------------------------------
@@ -1250,6 +1256,27 @@ def record_followup(user_id: int, *, draft_id, to_email: str,
             ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
              "error", "kind"],
             [user_id, draft_id, to_email, company, now(), 1, "", "followup"])
+
+
+def day_so_far(user_id: int, since: int) -> dict:
+    """What the end-of-day email reports: letters, nudges and replies since
+    the last one, and what is still waiting to go."""
+    with connect() as c:
+        sent = c.execute(
+            "SELECT company, to_email, kind FROM sent_log WHERE user_id = ? "
+            "AND ok = 1 AND sent_at > ? ORDER BY sent_at", (user_id, since)
+        ).fetchall()
+        replies = c.execute(
+            "SELECT company, job_title FROM drafts WHERE user_id = ? "
+            "AND reply_seen_at > ? ORDER BY reply_seen_at",
+            (user_id, since)).fetchall()
+        waiting = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts WHERE user_id = ? "
+            "AND status = 'draft'", (user_id,)).fetchone()
+    return {"letters": [r for r in sent if r["kind"] == "letter"],
+            "followups": [r for r in sent if r["kind"] == "followup"],
+            "replies": list(replies),
+            "waiting": int(waiting["n"] or 0)}
 
 
 def sent_today(user_id: int) -> int:

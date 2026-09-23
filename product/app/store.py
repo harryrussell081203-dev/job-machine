@@ -525,6 +525,9 @@ _ADDED_COLUMNS = [
     # because the user's mailbox does; /numbers counts only applications,
     # because a nudge is not a second letter and must not look like one.
     ("sent_log", "kind", "TEXT NOT NULL DEFAULT 'letter'"),
+    # The end-of-day email to the user themselves, and when it last went.
+    ("send_settings", "digest", "INTEGER NOT NULL DEFAULT 0"),
+    ("send_settings", "last_digest_at", "BIGINT"),
 ]
 
 
