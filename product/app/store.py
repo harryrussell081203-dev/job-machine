@@ -130,6 +130,22 @@ CREATE TABLE IF NOT EXISTS do_not_contact (
     PRIMARY KEY (user_id, company_key)
 );
 
+-- Everywhere a letter has gone, by where it went rather than who it was for.
+-- `contacted` remembers COMPANY NAMES, and a name is a weak handle: TMM
+-- Recruitment and Thorpe Molloy McCulloch are one agency with two names, and
+-- an advert naming "Protea" and a reply signed "Protea Recruitment" key
+-- differently. The address does not change with the spelling. mail_key is a
+-- business domain, or the whole address at a shared provider (gmail.com is
+-- a million strangers, not one employer). reason is empty for "written to"
+-- and says why for a block. Either way the answer is the same: not again.
+CREATE TABLE IF NOT EXISTS contacted_mail (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mail_key    TEXT    NOT NULL,
+    first_at    BIGINT  NOT NULL,
+    reason      TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (user_id, mail_key)
+);
+
 CREATE TABLE IF NOT EXISTS seen_listings (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     external_id TEXT    NOT NULL,

@@ -176,6 +176,14 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         db.mark_seen(user_id, listing.external_id,
                      "no real email address could be found - nothing is guessed")
         return
+    # The address is only known now, and a second name for an employer
+    # already written to (an agency's trading name, a parent company) is
+    # caught here, before a model is paid to write to them again.
+    if db.mail_contacted(user_id, contact.get("email") or ""):
+        report.already_contacted += 1
+        db.mark_seen(user_id, listing.external_id,
+                     "you have already written to this address or domain")
+        return
 
     letter = compose.compose(listing, contact, profile, ai,
                              cv_attached=cv_attached)

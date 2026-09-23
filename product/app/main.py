@@ -814,6 +814,7 @@ def draft_action(request: Request, draft_id: int, action: str):
             # One email per employer, ever - recorded the moment the user
             # says they sent it, not when it was drafted.
             db.record_contacted(user["id"], row["company"])
+            db.record_mail_contacted(user["id"], row["to_email"] or "")
             # Sending it yourself IS sending. Until this, only automatic
             # sends reached the funnel, so the path that needs no mailbox -
             # the one most people will take - counted as nobody activating.

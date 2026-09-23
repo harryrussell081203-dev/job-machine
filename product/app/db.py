@@ -668,8 +668,77 @@ def block_company(user_id: int, company: str, reason: str = "") -> None:
                   (user_id, company_key(company), reason, now()))
 
 
-def may_contact(user_id: int, company: str) -> bool:
-    return not is_blocked(user_id, company) and not already_contacted(user_id, company)
+# Providers where the domain says nothing about who is behind an address.
+# Remembering "gmail.com" would block every sole trader in the country after
+# the first one, so at these the whole address is remembered instead.
+SHARED_MAIL_DOMAINS = frozenset({
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com",
+    "hotmail.co.uk", "live.com", "live.co.uk", "msn.com", "yahoo.com",
+    "yahoo.co.uk", "icloud.com", "me.com", "aol.com", "btinternet.com",
+    "sky.com", "virginmedia.com", "ntlworld.com", "talktalk.net",
+    "protonmail.com", "proton.me", "gmx.com", "gmx.co.uk", "mail.com",
+})
+
+# Second-level labels under which a registrable domain has three parts:
+# careers.acme.co.uk and acme.co.uk are one employer, acme.co.uk and
+# other.co.uk are not.
+_SECOND_LEVEL = frozenset({"co", "org", "ac", "gov", "ltd", "plc", "me",
+                           "net", "nhs", "sch", "com"})
+
+
+def mail_key(address_or_domain: str) -> str:
+    """The handle a letter is remembered by. '' if there is nothing usable.
+
+    jobs@careers.acme.co.uk and hr@acme.co.uk give the same key, because
+    writing to one after the other is writing to Acme twice.
+    """
+    text = (address_or_domain or "").strip().lower().rstrip(".")
+    if "@" in text:
+        local, _, domain = text.rpartition("@")
+    else:
+        local, domain = "", text
+    domain = domain.strip()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    if not domain or "." not in domain:
+        return ""
+    if domain in SHARED_MAIL_DOMAINS:
+        return f"{local}@{domain}" if local else ""
+    labels = domain.split(".")
+    keep = 3 if (len(labels) >= 3 and len(labels[-1]) == 2
+                 and labels[-2] in _SECOND_LEVEL) else 2
+    return ".".join(labels[-keep:])
+
+
+def mail_contacted(user_id: int, address: str) -> bool:
+    """True if a letter has gone to this domain (or shared-provider address)
+    before, or it is blocked. Unknowable addresses are not contacted - the
+    company-name check still stands in front of them."""
+    key = mail_key(address)
+    if not key:
+        return False
+    with connect() as c:
+        return c.execute(
+            "SELECT 1 FROM contacted_mail WHERE user_id = ? AND mail_key = ?",
+            (user_id, key)).fetchone() is not None
+
+
+def record_mail_contacted(user_id: int, address: str, reason: str = "",
+                          at: int | None = None) -> None:
+    key = mail_key(address)
+    if not key:
+        return
+    with connect() as c:
+        c.execute("INSERT INTO contacted_mail (user_id, mail_key, first_at, "
+                  "reason) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT (user_id, mail_key) DO NOTHING",
+                  (user_id, key, now() if at is None else at, reason))
+
+
+def may_contact(user_id: int, company: str, address: str = "") -> bool:
+    return (not is_blocked(user_id, company)
+            and not already_contacted(user_id, company)
+            and not mail_contacted(user_id, address))
 
 
 # ----------------------------------------------------------------------
