@@ -126,8 +126,18 @@ def send_for_user(user_id: int, *, now=None, sender=None,
     profile = db.load_profile(user_id) or {}
     send = sender or delivery.send_via_smtp
     display_name = (profile.get("name") or "").strip()
+    done_keys = set()
     for draft in due:
         to = (draft["to_email"] or "").strip()
+        key = db.mail_key(to)
+        if key and key in done_keys:
+            # A second letter to the same place - it happens, JR Recruitment
+            # got two on 13 September - is covered by the one nudge already
+            # sent, and is marked so it is never nudged on its own later.
+            db.record_followup(user_id, draft_id=draft["id"], to_email=to,
+                               company=draft["company"] or "", sent=False)
+            report.skipped += 1
+            continue
         if to.lower() in answered:
             # Somebody there has been in touch. Put it in front of the user
             # and leave the employer alone.
@@ -153,5 +163,7 @@ def send_for_user(user_id: int, *, now=None, sender=None,
             break
         db.record_followup(user_id, draft_id=draft["id"], to_email=to,
                            company=draft["company"] or "")
+        if key:
+            done_keys.add(key)
         report.sent += 1
     return report

@@ -1244,13 +1244,16 @@ def drafts_due_followup(user_id: int, *, sent_before: int, sent_after: int,
 
 
 def record_followup(user_id: int, *, draft_id, to_email: str,
-                    company: str) -> None:
+                    company: str, sent: bool = True) -> None:
     """The nudge went. Marked on the draft first, for the same reason as
     record_delivered: half-finished must mean under-counted, never a second
-    nudge."""
+    nudge. sent=False marks a draft as covered by a nudge sent for another
+    letter to the same place, and logs nothing."""
     with connect() as c:
         c.execute("UPDATE drafts SET followup_sent_at = ? "
                   "WHERE id = ? AND user_id = ?", (now(), draft_id, user_id))
+        if not sent:
+            return
         insert_returning_id(
             c, "sent_log",
             ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",

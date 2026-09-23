@@ -1,9 +1,6 @@
 *.pyc
 .venv/
 __pycache__/
-cv/tailored/
-data/state.json.rejected
-data/state.json.tmp
 handoff/
 screenshots/
 

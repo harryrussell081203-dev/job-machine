@@ -1,7 +1,7 @@
 # Recruited — point it at your own job search
 
-The machine in the root of this repository was built for one person, and it is
-still running for him. This directory is the part anyone can use.
+This started as a machine built for one person's job hunt. That person now
+runs his own search through it, as an ordinary account.
 
 It sends short, specific emails **directly to the people who do the hiring**,
 instead of dropping your CV into an applicant tracking system with four hundred

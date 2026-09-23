@@ -82,6 +82,19 @@ class TestTheNudge(FollowupCase):
         self.run_it()
         self.assertEqual(len(self.sent), 1)
 
+    def test_two_letters_to_one_place_get_one_nudge_between_them(self):
+        """JR Recruitment was sent the same letter twice on 13 September."""
+        first = self.letter(company="JR Recruitment",
+                            email="joanne@jr-recruitment.com")
+        second = self.letter(company="JR Recruitment",
+                             email="joanne@jr-recruitment.com")
+        self.run_it()
+        self.run_it()
+        self.assertEqual(len(self.sent), 1)
+        for did in (first, second):
+            self.assertIsNotNone(
+                self.db.get_draft(self.uid, did)["followup_sent_at"])
+
     def test_it_counts_against_the_daily_cap_but_not_as_a_letter(self):
         """The mailbox sees every email; /numbers counts applications."""
         self.letter()
