@@ -526,7 +526,7 @@ def public_stats() -> dict:
     with connect() as c:
         row = c.execute(
             "SELECT COUNT(*) AS letters, COUNT(DISTINCT user_id) AS people "
-            "FROM sent_log WHERE ok = 1").fetchone()
+            "FROM sent_log WHERE ok = 1 AND kind = 'letter'").fetchone()
         letters = int(row["letters"] or 0)
         people = int(row["people"] or 0)
 
@@ -572,7 +572,8 @@ def public_stats() -> dict:
             "AND outcome IN ('interview', 'offer')").fetchone()
         interviews = int(interviews["n"] or 0)
         first = c.execute(
-            "SELECT MIN(sent_at) AS t FROM sent_log WHERE ok = 1").fetchone()
+            "SELECT MIN(sent_at) AS t FROM sent_log WHERE ok = 1 "
+            "AND kind = 'letter'").fetchone()
 
     return {
         "letters": letters,
@@ -930,7 +931,8 @@ def delete_cv(user_id: int) -> None:
 # how letters go out
 # ----------------------------------------------------------------------
 DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 12,
-                         "search_days": 2, "paused_until": None}
+                         "search_days": 2, "paused_until": None,
+                         "follow_up": 0}
 
 
 def get_send_settings(user_id: int) -> dict:
@@ -946,7 +948,16 @@ def get_send_settings(user_id: int) -> dict:
             # row written after a failed migration has NULL. Both mean "the
             # default", not "look back zero days and find nothing".
             "search_days": int(row["search_days"] or 0) or 2,
-            "paused_until": row["paused_until"]}
+            "paused_until": row["paused_until"],
+            "follow_up": int(_col(row, "follow_up") or 0)}
+
+
+def _col(row, name):
+    """A column that a database migrated before it existed may not have."""
+    try:
+        return row[name]
+    except (KeyError, IndexError):
+        return None
 
 
 def save_send_settings(user_id: int, **fields) -> None:
@@ -955,17 +966,19 @@ def save_send_settings(user_id: int, **fields) -> None:
     with connect() as c:
         c.execute(
             "INSERT INTO send_settings (user_id, auto_send, hold_minutes, "
-            "daily_cap, search_days, paused_until, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "daily_cap, search_days, paused_until, follow_up, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET auto_send = excluded.auto_send, "
             "hold_minutes = excluded.hold_minutes, "
             "daily_cap = excluded.daily_cap, "
             "search_days = excluded.search_days, "
             "paused_until = excluded.paused_until, "
+            "follow_up = excluded.follow_up, "
             "updated_at = excluded.updated_at",
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
-             int(current["search_days"]), current["paused_until"], now()))
+             int(current["search_days"]), current["paused_until"],
+             int(bool(current["follow_up"])), now()))
 
 
 # ----------------------------------------------------------------------
@@ -1185,6 +1198,58 @@ def record_delivered(user_id: int, *, draft_id, to_email: str,
             ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
              "error"],
             [user_id, draft_id, to_email, company, now(), 1, ""])
+
+
+def mail_blocked(user_id: int, address: str) -> bool:
+    """Blocked, as opposed to merely written to before. A follow-up goes to
+    somebody already written to by definition, so it needs the narrower
+    question."""
+    key = mail_key(address)
+    if not key:
+        return False
+    with connect() as c:
+        return c.execute(
+            "SELECT 1 FROM contacted_mail WHERE user_id = ? AND mail_key = ? "
+            "AND reason <> ''", (user_id, key)).fetchone() is not None
+
+
+def drafts_due_followup(user_id: int, *, sent_before: int, sent_after: int,
+                        limit: int = 50):
+    """Letters this machine delivered that nobody has answered, old enough
+    for one nudge and not so old that a nudge is strange.
+
+    Only letters with a delivered sent_log row: one the user sent by hand
+    from their own mail client is theirs to chase, and a letter imported from
+    somewhere else was chased by whatever sent it.
+    """
+    with connect() as c:
+        return c.execute(
+            "SELECT d.* FROM drafts d WHERE d.user_id = ? "
+            "AND d.status = 'sent' AND d.to_email <> '' "
+            "AND d.followup_sent_at IS NULL AND d.reply_seen_at IS NULL "
+            "AND COALESCE(d.outcome, '') = '' "
+            "AND COALESCE(d.imported_ref, '') = '' "
+            "AND d.sent_at <= ? AND d.sent_at >= ? "
+            "AND EXISTS (SELECT 1 FROM sent_log s WHERE s.draft_id = d.id "
+            "            AND s.user_id = d.user_id AND s.ok = 1 "
+            "            AND s.kind = 'letter') "
+            "ORDER BY d.sent_at ASC LIMIT ?",
+            (user_id, sent_before, sent_after, limit)).fetchall()
+
+
+def record_followup(user_id: int, *, draft_id, to_email: str,
+                    company: str) -> None:
+    """The nudge went. Marked on the draft first, for the same reason as
+    record_delivered: half-finished must mean under-counted, never a second
+    nudge."""
+    with connect() as c:
+        c.execute("UPDATE drafts SET followup_sent_at = ? "
+                  "WHERE id = ? AND user_id = ?", (now(), draft_id, user_id))
+        insert_returning_id(
+            c, "sent_log",
+            ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
+             "error", "kind"],
+            [user_id, draft_id, to_email, company, now(), 1, "", "followup"])
 
 
 def sent_today(user_id: int) -> int:

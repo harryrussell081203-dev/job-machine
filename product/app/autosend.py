@@ -304,6 +304,17 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
         except Exception as exc:
             totals["errors"].append(f"user {user_id} send: {exc}")
 
+        # After the letters, so a nudge never takes a place in the daily
+        # ceiling that a first letter wanted. Off unless the user turned it on.
+        try:
+            from . import followups
+            nudged = followups.send_for_user(user_id, sender=sender)
+            totals["followups"] = totals.get("followups", 0) + nudged.sent
+            totals["errors"].extend(f"user {user_id} follow-up: {e}"
+                                    for e in nudged.errors)
+        except Exception as exc:
+            totals["errors"].append(f"user {user_id} follow-up: {exc}")
+
     if run:
         for user in users:
             user_id = user["id"]

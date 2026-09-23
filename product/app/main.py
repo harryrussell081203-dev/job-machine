@@ -1689,7 +1689,8 @@ async def save_sending(request: Request):
         # rule - anything can POST here.
         hold_minutes=clamp("hold_minutes", 60, 0, 1440),
         daily_cap=clamp("daily_cap", 12, 1, ceiling),
-        search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS))
+        search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS),
+        follow_up=1 if form.get("follow_up") else 0)
     return RedirectResponse("/setup", status_code=303)
 
 

@@ -516,6 +516,15 @@ _ADDED_COLUMNS = [
     # opened the referral screen and the codes in circulation are only the
     # ones somebody asked for.
     ("users", "referral_code", "TEXT NOT NULL DEFAULT ''"),
+    # One polite nudge on a letter nobody has answered. Off unless the user
+    # turns it on: it is a second email in their name, and nobody should find
+    # out from a recruiter that their account sends those.
+    ("send_settings", "follow_up", "INTEGER NOT NULL DEFAULT 0"),
+    ("drafts", "followup_sent_at", "BIGINT"),
+    # What a sent_log row was. The daily cap counts every email that left,
+    # because the user's mailbox does; /numbers counts only applications,
+    # because a nudge is not a second letter and must not look like one.
+    ("sent_log", "kind", "TEXT NOT NULL DEFAULT 'letter'"),
 ]
 
 
