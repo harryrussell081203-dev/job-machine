@@ -94,7 +94,7 @@ def replies_per_user() -> dict:
     with connect() as c:
         rows = c.execute(
             "SELECT COUNT(DISTINCT user_id) AS senders, COUNT(*) AS sent "
-            "FROM sent_log WHERE ok = 1").fetchone()
+            "FROM sent_log WHERE ok = 1 AND kind = 'letter'").fetchone()
         replied = c.execute(
             "SELECT COUNT(*) AS n FROM drafts "
             "WHERE outcome NOT IN ('', 'no')").fetchone()

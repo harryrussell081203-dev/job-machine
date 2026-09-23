@@ -38,6 +38,7 @@ def main(argv=None) -> int:
     totals = autosend.sweep(run=not args.send_only)
     print(f"[sweep] {totals['users']} paying users, "
           f"{totals['drafted']} drafted, {totals['sent']} sent, "
+          f"{totals.get('followups', 0)} followed up, "
           f"{totals['failed']} failed")
     for err in totals["errors"][:20]:
         print(f"[sweep] {err}", file=sys.stderr)

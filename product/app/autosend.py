@@ -9,7 +9,8 @@ because the person receiving the letter is real:
 
   - **One employer, one letter, ever.** Checked again here and not only at
     drafting time, because two drafts for the same company can both be sitting
-    in the queue when the sweep runs.
+    in the queue when the sweep runs. Checked by company name AND by where the
+    letter is going, because one agency can advertise under two names.
   - **Never an employer who asked to be left alone.**
   - **A daily ceiling.** Somebody who never opens the app must not send four
     hundred letters over a weekend because their search terms were too broad.
@@ -167,7 +168,10 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
 
         company = draft["company"] or ""
         key = db.company_key(company)
-        if key in done_now or not db.may_contact(user_id, company):
+        where = db.mail_key(draft["to_email"] or "")
+        if (key in done_now or (where and where in done_now)
+                or not db.may_contact(user_id, company,
+                                      draft["to_email"] or "")):
             # Not a failure: the rule worked. Take it off the queue so it does
             # not come back every sweep.
             db.mark_draft(user_id, draft["id"], "skipped")
@@ -224,6 +228,7 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
         db.record_delivered(user_id, draft_id=draft["id"],
                             to_email=draft["to_email"], company=company)
         db.record_contacted(user_id, company)
+        db.record_mail_contacted(user_id, draft["to_email"])
         # The moment this account became a working one: a real letter, to a
         # real employer, out of their own mailbox. Called on every send rather
         # than guarded by "is this the first" - the event table answers that,
@@ -238,6 +243,8 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
             # would spend the shared allowance on letters nobody received.
             db.record_managed_send(user_id)
         done_now.add(key)
+        if where:
+            done_now.add(where)
         report.sent += 1
 
     return report
@@ -296,6 +303,24 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
             totals["failed"] += sent.failed
         except Exception as exc:
             totals["errors"].append(f"user {user_id} send: {exc}")
+
+        # After the letters, so a nudge never takes a place in the daily
+        # ceiling that a first letter wanted. Off unless the user turned it on.
+        try:
+            from . import followups
+            nudged = followups.send_for_user(user_id, sender=sender)
+            totals["followups"] = totals.get("followups", 0) + nudged.sent
+            totals["errors"].extend(f"user {user_id} follow-up: {e}"
+                                    for e in nudged.errors)
+        except Exception as exc:
+            totals["errors"].append(f"user {user_id} follow-up: {exc}")
+
+        # Last, so it reports what this sweep just did.
+        try:
+            from . import digest
+            digest.send_for_user(user_id, sender=sender)
+        except Exception as exc:
+            totals["errors"].append(f"user {user_id} digest: {exc}")
 
     if run:
         for user in users:

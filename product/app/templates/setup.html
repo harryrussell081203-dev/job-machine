@@ -224,6 +224,23 @@
         me{% if not mail %} <i>(connect your email first)</i>{% endif %}</span>
     </label>
 
+    <label class="check">
+      <input type="checkbox" name="follow_up" value="1"
+             {% if settings.follow_up %}checked{% endif %}
+             {% if not mail %}disabled{% endif %}>
+      <span><b>One follow-up.</b> If nobody at the employer has written back
+        after five days, send one short "still interested" in the same
+        thread. Never a second one, and never after anybody there has replied.</span>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" name="digest" value="1"
+             {% if settings.digest %}checked{% endif %}
+             {% if not mail %}disabled{% endif %}>
+      <span><b>End-of-day email.</b> One email to yourself each evening with
+        what went out and who wrote back. Nothing on a day nothing happened.</span>
+    </label>
+
     <div class="row">
       <label>Letters a day
         <input type="number" name="daily_cap" min="1" id="dailycap"

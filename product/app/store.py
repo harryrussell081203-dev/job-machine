@@ -130,6 +130,22 @@ CREATE TABLE IF NOT EXISTS do_not_contact (
     PRIMARY KEY (user_id, company_key)
 );
 
+-- Everywhere a letter has gone, by where it went rather than who it was for.
+-- `contacted` remembers COMPANY NAMES, and a name is a weak handle: TMM
+-- Recruitment and Thorpe Molloy McCulloch are one agency with two names, and
+-- an advert naming "Protea" and a reply signed "Protea Recruitment" key
+-- differently. The address does not change with the spelling. mail_key is a
+-- business domain, or the whole address at a shared provider (gmail.com is
+-- a million strangers, not one employer). reason is empty for "written to"
+-- and says why for a block. Either way the answer is the same: not again.
+CREATE TABLE IF NOT EXISTS contacted_mail (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mail_key    TEXT    NOT NULL,
+    first_at    BIGINT  NOT NULL,
+    reason      TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (user_id, mail_key)
+);
+
 CREATE TABLE IF NOT EXISTS seen_listings (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     external_id TEXT    NOT NULL,
@@ -500,6 +516,18 @@ _ADDED_COLUMNS = [
     # opened the referral screen and the codes in circulation are only the
     # ones somebody asked for.
     ("users", "referral_code", "TEXT NOT NULL DEFAULT ''"),
+    # One polite nudge on a letter nobody has answered. Off unless the user
+    # turns it on: it is a second email in their name, and nobody should find
+    # out from a recruiter that their account sends those.
+    ("send_settings", "follow_up", "INTEGER NOT NULL DEFAULT 0"),
+    ("drafts", "followup_sent_at", "BIGINT"),
+    # What a sent_log row was. The daily cap counts every email that left,
+    # because the user's mailbox does; /numbers counts only applications,
+    # because a nudge is not a second letter and must not look like one.
+    ("sent_log", "kind", "TEXT NOT NULL DEFAULT 'letter'"),
+    # The end-of-day email to the user themselves, and when it last went.
+    ("send_settings", "digest", "INTEGER NOT NULL DEFAULT 0"),
+    ("send_settings", "last_digest_at", "BIGINT"),
 ]
 
 

@@ -138,7 +138,12 @@ class Base(unittest.TestCase):
         self.addCleanup(restore)
         return calls
 
-    def draft(self, company, email="a@example.com", age_seconds=7200):
+    def draft(self, company, email=None, age_seconds=7200):
+        # A different domain for each employer by default, as in life: one
+        # shared domain would now be one employer, written to once.
+        if email is None:
+            slug = "".join(ch for ch in company.lower() if ch.isalnum())
+            email = f"a@{slug or 'employer'}.example"
         did = self.db.add_draft(self.uid, job_title="Scaffolder",
                                 company=company, to_email=email,
                                 subject="s", body="b")
@@ -294,14 +299,14 @@ class TestLimits(Base):
 
     def test_the_daily_cap_holds(self):
         for i in range(8):
-            self.draft(f"Company {i} Ltd", email=f"c{i}@example.com")
+            self.draft(f"Company {i} Ltd", email=f"c{i}@company{i}.example")
         self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         self.assertEqual(len(self.sent), 3)
         self.assertEqual(self.db.sent_today(self.uid), 3)
 
     def test_a_second_sweep_does_not_reset_it(self):
         for i in range(8):
-            self.draft(f"Company {i} Ltd", email=f"c{i}@example.com")
+            self.draft(f"Company {i} Ltd", email=f"c{i}@company{i}.example")
         self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         report = self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         self.assertEqual(len(self.sent), 3)
@@ -327,7 +332,7 @@ class TestLimits(Base):
         Eleven sweeps, a cap of three, plenty of work waiting. Three letters.
         """
         for i in range(20):
-            self.draft(f"Company {i} Ltd", email=f"c{i}@example.com")
+            self.draft(f"Company {i} Ltd", email=f"c{i}@company{i}.example")
         for _ in range(11):
             self.autosend.send_due_for_user(self.uid, sender=self.fake_send)
         self.assertEqual(len(self.sent), 3)
@@ -374,7 +379,7 @@ class TestFailureHandling(Base):
             calls.append(1)
             raise self.delivery.DeliveryError("could not reach smtp: timeout")
         for i in range(20):
-            self.draft(f"Company {i} Ltd", email=f"c{i}@example.com")
+            self.draft(f"Company {i} Ltd", email=f"c{i}@company{i}.example")
         self.autosend.send_due_for_user(self.uid, sender=flaky)
         self.assertLessEqual(len(calls), self.autosend.MAX_CONSECUTIVE_FAILURES)
 
@@ -410,7 +415,7 @@ class TestSweep(Base):
 
         def sender(**kw):
             seen.append(kw["to_email"])
-            if kw["to_email"] == "a@example.com":
+            if kw["to_email"] == "a@acmeltd.example":
                 raise self.delivery.DeliveryError("this one is broken")
         totals = self.autosend.sweep(run=False, sender=sender)
         self.assertEqual(totals["sent"], 1)

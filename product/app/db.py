@@ -526,7 +526,7 @@ def public_stats() -> dict:
     with connect() as c:
         row = c.execute(
             "SELECT COUNT(*) AS letters, COUNT(DISTINCT user_id) AS people "
-            "FROM sent_log WHERE ok = 1").fetchone()
+            "FROM sent_log WHERE ok = 1 AND kind = 'letter'").fetchone()
         letters = int(row["letters"] or 0)
         people = int(row["people"] or 0)
 
@@ -572,7 +572,8 @@ def public_stats() -> dict:
             "AND outcome IN ('interview', 'offer')").fetchone()
         interviews = int(interviews["n"] or 0)
         first = c.execute(
-            "SELECT MIN(sent_at) AS t FROM sent_log WHERE ok = 1").fetchone()
+            "SELECT MIN(sent_at) AS t FROM sent_log WHERE ok = 1 "
+            "AND kind = 'letter'").fetchone()
 
     return {
         "letters": letters,
@@ -668,8 +669,82 @@ def block_company(user_id: int, company: str, reason: str = "") -> None:
                   (user_id, company_key(company), reason, now()))
 
 
-def may_contact(user_id: int, company: str) -> bool:
-    return not is_blocked(user_id, company) and not already_contacted(user_id, company)
+# Providers where the domain says nothing about who is behind an address.
+# Remembering "gmail.com" would block every sole trader in the country after
+# the first one, so at these the whole address is remembered instead.
+SHARED_MAIL_DOMAINS = frozenset({
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com",
+    "hotmail.co.uk", "live.com", "live.co.uk", "msn.com", "yahoo.com",
+    "yahoo.co.uk", "icloud.com", "me.com", "aol.com", "btinternet.com",
+    "sky.com", "virginmedia.com", "ntlworld.com", "talktalk.net",
+    "protonmail.com", "proton.me", "gmx.com", "gmx.co.uk", "mail.com",
+})
+
+# Second-level labels under which a registrable domain has three parts:
+# careers.acme.co.uk and acme.co.uk are one employer, acme.co.uk and
+# other.co.uk are not.
+_SECOND_LEVEL = frozenset({"co", "org", "ac", "gov", "ltd", "plc", "me",
+                           "net", "nhs", "sch", "com", "police", "mod"})
+# Suffixes sold as though they were top-level domains. candidatesource.uk.com
+# is one agency; "uk.com" is thousands of them.
+_SHARED_SUFFIXES = frozenset({"uk.com", "gb.com", "us.com", "eu.com",
+                              "uk.net", "gb.net", "co.com"})
+
+
+def mail_key(address_or_domain: str) -> str:
+    """The handle a letter is remembered by. '' if there is nothing usable.
+
+    jobs@careers.acme.co.uk and hr@acme.co.uk give the same key, because
+    writing to one after the other is writing to Acme twice.
+    """
+    text = (address_or_domain or "").strip().lower().rstrip(".")
+    if "@" in text:
+        local, _, domain = text.rpartition("@")
+    else:
+        local, domain = "", text
+    domain = domain.strip()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    if not domain or "." not in domain:
+        return ""
+    if domain in SHARED_MAIL_DOMAINS:
+        return f"{local}@{domain}" if local else ""
+    labels = domain.split(".")
+    keep = 3 if (len(labels) >= 3 and (
+        (len(labels[-1]) == 2 and labels[-2] in _SECOND_LEVEL)
+        or ".".join(labels[-2:]) in _SHARED_SUFFIXES)) else 2
+    return ".".join(labels[-keep:])
+
+
+def mail_contacted(user_id: int, address: str) -> bool:
+    """True if a letter has gone to this domain (or shared-provider address)
+    before, or it is blocked. Unknowable addresses are not contacted - the
+    company-name check still stands in front of them."""
+    key = mail_key(address)
+    if not key:
+        return False
+    with connect() as c:
+        return c.execute(
+            "SELECT 1 FROM contacted_mail WHERE user_id = ? AND mail_key = ?",
+            (user_id, key)).fetchone() is not None
+
+
+def record_mail_contacted(user_id: int, address: str, reason: str = "",
+                          at: int | None = None) -> None:
+    key = mail_key(address)
+    if not key:
+        return
+    with connect() as c:
+        c.execute("INSERT INTO contacted_mail (user_id, mail_key, first_at, "
+                  "reason) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT (user_id, mail_key) DO NOTHING",
+                  (user_id, key, now() if at is None else at, reason))
+
+
+def may_contact(user_id: int, company: str, address: str = "") -> bool:
+    return (not is_blocked(user_id, company)
+            and not already_contacted(user_id, company)
+            and not mail_contacted(user_id, address))
 
 
 # ----------------------------------------------------------------------
@@ -856,7 +931,8 @@ def delete_cv(user_id: int) -> None:
 # how letters go out
 # ----------------------------------------------------------------------
 DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 12,
-                         "search_days": 2, "paused_until": None}
+                         "search_days": 2, "paused_until": None,
+                         "follow_up": 0, "digest": 0, "last_digest_at": None}
 
 
 def get_send_settings(user_id: int) -> dict:
@@ -872,7 +948,18 @@ def get_send_settings(user_id: int) -> dict:
             # row written after a failed migration has NULL. Both mean "the
             # default", not "look back zero days and find nothing".
             "search_days": int(row["search_days"] or 0) or 2,
-            "paused_until": row["paused_until"]}
+            "paused_until": row["paused_until"],
+            "follow_up": int(_col(row, "follow_up") or 0),
+            "digest": int(_col(row, "digest") or 0),
+            "last_digest_at": _col(row, "last_digest_at")}
+
+
+def _col(row, name):
+    """A column that a database migrated before it existed may not have."""
+    try:
+        return row[name]
+    except (KeyError, IndexError):
+        return None
 
 
 def save_send_settings(user_id: int, **fields) -> None:
@@ -881,17 +968,23 @@ def save_send_settings(user_id: int, **fields) -> None:
     with connect() as c:
         c.execute(
             "INSERT INTO send_settings (user_id, auto_send, hold_minutes, "
-            "daily_cap, search_days, paused_until, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "daily_cap, search_days, paused_until, follow_up, digest, "
+            "last_digest_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET auto_send = excluded.auto_send, "
             "hold_minutes = excluded.hold_minutes, "
             "daily_cap = excluded.daily_cap, "
             "search_days = excluded.search_days, "
             "paused_until = excluded.paused_until, "
+            "follow_up = excluded.follow_up, "
+            "digest = excluded.digest, "
+            "last_digest_at = excluded.last_digest_at, "
             "updated_at = excluded.updated_at",
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
-             int(current["search_days"]), current["paused_until"], now()))
+             int(current["search_days"]), current["paused_until"],
+             int(bool(current["follow_up"])), int(bool(current["digest"])),
+             current["last_digest_at"], now()))
 
 
 # ----------------------------------------------------------------------
@@ -1111,6 +1204,82 @@ def record_delivered(user_id: int, *, draft_id, to_email: str,
             ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
              "error"],
             [user_id, draft_id, to_email, company, now(), 1, ""])
+
+
+def mail_blocked(user_id: int, address: str) -> bool:
+    """Blocked, as opposed to merely written to before. A follow-up goes to
+    somebody already written to by definition, so it needs the narrower
+    question."""
+    key = mail_key(address)
+    if not key:
+        return False
+    with connect() as c:
+        return c.execute(
+            "SELECT 1 FROM contacted_mail WHERE user_id = ? AND mail_key = ? "
+            "AND reason <> ''", (user_id, key)).fetchone() is not None
+
+
+def drafts_due_followup(user_id: int, *, sent_before: int, sent_after: int,
+                        limit: int = 50):
+    """Letters this machine delivered that nobody has answered, old enough
+    for one nudge and not so old that a nudge is strange.
+
+    Only letters with a delivered sent_log row: one the user sent by hand
+    from their own mail client is theirs to chase, and a letter imported from
+    somewhere else was chased by whatever sent it.
+    """
+    with connect() as c:
+        return c.execute(
+            "SELECT d.* FROM drafts d WHERE d.user_id = ? "
+            "AND d.status = 'sent' AND d.to_email <> '' "
+            "AND d.followup_sent_at IS NULL AND d.reply_seen_at IS NULL "
+            "AND COALESCE(d.outcome, '') = '' "
+            "AND COALESCE(d.imported_ref, '') = '' "
+            "AND d.sent_at <= ? AND d.sent_at >= ? "
+            "AND EXISTS (SELECT 1 FROM sent_log s WHERE s.draft_id = d.id "
+            "            AND s.user_id = d.user_id AND s.ok = 1 "
+            "            AND s.kind = 'letter') "
+            "ORDER BY d.sent_at ASC LIMIT ?",
+            (user_id, sent_before, sent_after, limit)).fetchall()
+
+
+def record_followup(user_id: int, *, draft_id, to_email: str,
+                    company: str, sent: bool = True) -> None:
+    """The nudge went. Marked on the draft first, for the same reason as
+    record_delivered: half-finished must mean under-counted, never a second
+    nudge. sent=False marks a draft as covered by a nudge sent for another
+    letter to the same place, and logs nothing."""
+    with connect() as c:
+        c.execute("UPDATE drafts SET followup_sent_at = ? "
+                  "WHERE id = ? AND user_id = ?", (now(), draft_id, user_id))
+        if not sent:
+            return
+        insert_returning_id(
+            c, "sent_log",
+            ["user_id", "draft_id", "to_email", "company", "sent_at", "ok",
+             "error", "kind"],
+            [user_id, draft_id, to_email, company, now(), 1, "", "followup"])
+
+
+def day_so_far(user_id: int, since: int) -> dict:
+    """What the end-of-day email reports: letters, nudges and replies since
+    the last one, and what is still waiting to go."""
+    with connect() as c:
+        sent = c.execute(
+            "SELECT company, to_email, kind FROM sent_log WHERE user_id = ? "
+            "AND ok = 1 AND sent_at > ? ORDER BY sent_at", (user_id, since)
+        ).fetchall()
+        replies = c.execute(
+            "SELECT company, job_title FROM drafts WHERE user_id = ? "
+            "AND reply_seen_at > ? ORDER BY reply_seen_at",
+            (user_id, since)).fetchall()
+        waiting = c.execute(
+            "SELECT COUNT(*) AS n FROM drafts WHERE user_id = ? "
+            "AND status = 'draft'", (user_id,)).fetchone()
+    return {"letters": [r for r in sent if r["kind"] == "letter"],
+            "followups": [r for r in sent if r["kind"] == "followup"],
+            "replies": list(replies),
+            "waiting": int(waiting["n"] or 0)}
 
 
 def sent_today(user_id: int) -> int:

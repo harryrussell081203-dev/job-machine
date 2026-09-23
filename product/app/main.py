@@ -814,6 +814,7 @@ def draft_action(request: Request, draft_id: int, action: str):
             # One email per employer, ever - recorded the moment the user
             # says they sent it, not when it was drafted.
             db.record_contacted(user["id"], row["company"])
+            db.record_mail_contacted(user["id"], row["to_email"] or "")
             # Sending it yourself IS sending. Until this, only automatic
             # sends reached the funnel, so the path that needs no mailbox -
             # the one most people will take - counted as nobody activating.
@@ -1688,7 +1689,9 @@ async def save_sending(request: Request):
         # rule - anything can POST here.
         hold_minutes=clamp("hold_minutes", 60, 0, 1440),
         daily_cap=clamp("daily_cap", 12, 1, ceiling),
-        search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS))
+        search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS),
+        follow_up=1 if form.get("follow_up") else 0,
+        digest=1 if form.get("digest") else 0)
     return RedirectResponse("/setup", status_code=303)
 
 
