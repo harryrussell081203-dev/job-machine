@@ -72,10 +72,10 @@
 <div class="panel step {% if profile %}done{% endif %}">
   <h2><span class="num">1</span> What work you want</h2>
   {% if profile %}
-    <p class="ok">Set up for
+    <p class="ok oneline">Set up for
        {% if profile.target_roles %}{{ profile.target_roles | join(', ') }}{% else %}your roles{% endif %}
-       {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}.</p>
-    <p><a class="btn small" href="/profile">Change it</a></p>
+       {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}.
+       <a href="/profile">Change it</a></p>
   {% else %}
     {# "Your trade" reads as skilled manual work, and this product does not
        care what the job is - the same correction already made on the landing
@@ -138,17 +138,18 @@
 <div class="panel step {% if cv %}done{% endif %}">
   <h2><span class="num">2</span> Your CV <small class="muted" style="font-weight:400">(optional)</small></h2>
   {% if cv %}
-    <p class="ok">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB,
-       attached to every letter.</p>
-    <div class="actions">
-      <a class="btn small" href="/cv">Download it</a>
-      <form method="post" action="/cv/delete">
+    <div class="ok oneline">{{ cv.filename }} &middot; {{ (cv.bytes / 1024) | round | int }}KB,
+       attached to every letter.
+       <a href="/cv">Download it</a>
+      <form method="post" action="/cv/delete" class="inline">
         <button class="link danger">Remove</button>
-      </form>
-    </div>
+      </form></div>
   {% else %}
-    <p>Attached to every letter, and it makes them a lot stronger. Without one the letters still go, they just have nothing to open.</p>
-    <p class="hint">No CV on your phone? Leave it. You can add it later from anywhere, and every letter after that carries it.</p>
+    <p>Attached to every letter. Without one the letters still go.</p>
+    <details class="why"><summary>No CV on your phone?</summary>
+      <p class="hint">Leave it. You can add it later from anywhere, and every
+        letter after that carries it. PDF or Word, 5MB limit. Drive and
+        OneDrive are fine.</p></details>
     {# The accept list carries MIME types as well as extensions. Android's
        picker greys out cloud files when it cannot match an extension - a file
        in Drive often arrives with a type and no useful name - so extensions
@@ -185,8 +186,7 @@
       });
     })();
     </script>
-    <p class="hint" id="cvhint">PDF or Word, 5MB limit. Drive and OneDrive are
-       fine.</p>
+    <p class="hint" id="cvhint"></p>
   {% endif %}
 </div>
 
@@ -209,10 +209,14 @@
        is built not to tell: somebody believing their letters are going out
        while nothing happens. #}
     {% if mail.verified_at %}
-      <p class="ok">Connected as {{ mail.address }}.</p>
+      <div class="ok oneline">Connected as {{ mail.address }}.
+        <form method="post" action="/setup/mail/forget" class="inline">
+          <button class="link danger">Disconnect</button>
+        </form></div>
     {% else %}
-      <p class="ok">Saved as {{ mail.address }}, not checked yet.</p>
-      <div class="note">
+      <p class="ok">Saved as {{ mail.address }}, not checked yet. The next
+        run checks it.</p>
+      <details class="why"><summary>Why not now?</summary><div class="note">
         <p><b>We could not test the password from here.</b> This site cannot
            open a connection to a mail server, so there is no way to try it on
            this screen. That is about our hosting, not about your password.</p>
@@ -220,17 +224,19 @@
            works, letters start going out and this line changes. If it does
            not, sending is switched off and the reason appears right here.
            Nothing goes out on a password we have not proved.</p>
-      </div>
+      </div></details>
     {% endif %}
     {% if mail.last_error %}
       <div class="note bad">Last send failed: {{ mail.last_error }}</div>
     {% endif %}
+    {% if not mail.verified_at %}
     <form method="post" action="/setup/mail/forget" class="inline">
       <button class="link danger">Disconnect</button>
     </form>
+    {% endif %}
   {% else %}
-    <p>Connected: letters send themselves from your address. Not connected:
-       we write them, you press send.</p>
+    <p>Connect it and letters send themselves from your address. Skip it
+       and you press send.</p>
     <p><a class="btn" href="/setup/mail">Connect my email</a></p>
   {% endif %}
 </div>
@@ -239,9 +245,7 @@
 <div class="panel step" id="never">
   <h2>Never write to
     <small class="muted" style="font-weight:400">(optional)</small></h2>
-  <p>Your current employer, somewhere you have left, an agency that already
-    has you. Add their web address as well as their name and nothing reaches
-    anybody there, whatever name an advert uses.</p>
+  <p>Your employer, or anywhere you would rather not hear from.</p>
   <form method="post" action="/setup/never">
     <textarea name="names" rows="3" style="min-height:80px"
       placeholder="One per line: a company name, or its web address (acme.co.uk)"></textarea>
@@ -259,17 +263,23 @@
           </form></li>
       {% endfor %}
     </ul>
-    <p class="hint">A web address blocks everyone at it. Removing one that
-      was already written to still never sends it a second letter.</p>
+    <details class="why"><summary>Name or web address?</summary>
+      <p class="hint">Add both. A web address blocks everyone at it, whatever
+        name an advert uses. Removing one that was already written to still
+        never sends it a second letter.</p></details>
   {% endif %}
 </div>
 
 <!-- 4 ---------------------------------------------------------------- -->
-<div class="panel step">
-  <h2><span class="num">4</span> Sending rules
+<details class="panel step" id="rules">
+  <summary><h2><span class="num">4</span> Sending rules
     <small class="muted" style="font-weight:400">(optional)</small></h2>
-  <p class="hint" style="margin-top:0">These are already set sensibly. Change
-    them only if you want to.</p>
+    <p class="hint rulesline">
+      {%- if settings.auto_send %}Sends automatically{% else %}You press send{% endif %}
+      &middot; {{ settings.daily_cap }} a day
+      {%- if settings.follow_up %} &middot; one follow-up{% endif %}
+      {%- if settings.digest %} &middot; evening email{% endif %}.
+      <u>Change</u></p></summary>
   <form method="post" action="/setup/sending">
     <label class="check">
       <input type="checkbox" name="auto_send" value="1"
@@ -356,7 +366,15 @@
 
     <button class="btn">Save</button>
   </form>
-</div>
+</details>
+
+<script>
+// Arriving from "Change" on the dashboard: open the folded panel it points at.
+(function () {
+  var target = location.hash && document.getElementById(location.hash.slice(1));
+  if (target && target.tagName === "DETAILS") target.open = true;
+})();
+</script>
 
 <script>
 // Show the warning with the tick, and raise the input's own ceiling to match.
@@ -377,8 +395,9 @@
 })();
 </script>
 
+<details class="fold">
+  <summary><small>What happens next</small></summary>
 <div class="panel">
-  <h2>What happens then</h2>
   {# Reads back their own settings. A summary that says "48 hours" to
      somebody who chose a week is the app telling them it ignored them. #}
   <p>Adzuna and Reed are searched every weekday for your roles in
@@ -395,8 +414,9 @@
      out on their own.{% else %}Up to <b>{{ settings.daily_cap }} a day</b>
      land on your drafts screen for you to send.{% endif %}
      One employer, one letter, ever.</p>
-  <p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
 </div>
+</details>
+<p><a class="btn" href="/dashboard">Go to the dashboard</a></p>
 
 <script>
 // Why this exists, because it looks like a pointless rewrite of a form that
