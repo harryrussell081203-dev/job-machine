@@ -85,7 +85,8 @@ who actually does the hiring, from your own address.</p>
   {%- if spots_left %}
     {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,
     then {{ config.PRICE_LABEL }}. No card.
-  {%- else %}{{ config.PRICE_LABEL }}. Cancel any time.{% endif %}
+  {%- else %}{{ config.PRICE_LABEL }}. No credits, no charge per
+    application. Cancel any time.{% endif %}
 </small></p>
 
 {% if record %}
@@ -99,17 +100,18 @@ who actually does the hiring, from your own address.</p>
    tests caught it, which is what they are for:
 
      whose numbers they are      or they are not checkable
-     that they update themselves or they could be a good fortnight
+     that it is every letter     or they could be a good fortnight
      what is excluded            or the rate is the usual inflated kind
      that a reply is not a job   or 19% reads as 19% getting hired
      that no trade is assumed    or every non-engineer reads themselves out
 #}
 <p><small>These are the founder's own, across {{ record.employers }} employers
-since August, and they update themselves after every run. Cold email normally
+from August to 23 September &mdash; every letter, not a good fortnight chosen
+out of it. His search runs on this site now. Cold email normally
 gets 1&ndash;5%. Autoresponders and rejections are not counted in that
 {{ record.reply_rate }}%, and a reply is not the same thing as an interview.
 Nothing in it is built around a trade: a carer, a driver and a welder get the
-same machine. <a href="/numbers">Every figure, live.</a></small></p>
+same machine. <a href="/numbers">Every figure.</a></small></p>
 {% endif %}
 
 <h2>Who you write to decides everything</h2>

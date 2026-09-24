@@ -756,3 +756,85 @@ form.quick .btn { margin-top: 22px; width: 100%; }
    on a phone is exactly where the sticky header sits - so without this the
    one message the person needs is the one thing hidden. */
 #quickerror { scroll-margin-top: 150px; }
+
+/* --- borrowed, and adapted: the tracker's tabs, the dashboard's outcomes,
+   the CV drop zone and the interview prep. What AI Apply's users praise is
+   seeing the pipeline at a glance and getting ready for the call; these are
+   those two ideas in this site's voice. ---------------------------------- */
+.stats.four { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 640px) { .stats.four { grid-template-columns: repeat(4, 1fr); } }
+a.stat { color: inherit; text-decoration: none; }
+a.stat:hover { border-color: var(--line-strong); }
+
+/* The tracker's five tabs on the existing segmented control: one line that
+   scrolls sideways on a phone rather than wrapping into a lump. */
+.tabs.slide { flex-wrap: nowrap; max-width: 100%; overflow-x: auto;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tabs.slide::-webkit-scrollbar { display: none; }
+.tabs.slide a { flex: none; }
+.tabs a span { color: var(--muted); font-variant-numeric: tabular-nums;
+  margin-left: 4px; }
+
+.drop {
+  display: block; border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-sm); padding: 22px 16px; text-align: center;
+  background: var(--panel-2); cursor: pointer; margin: 0 0 10px;
+  transition: border-color .15s, background .15s;
+}
+.drop b { display: block; margin-bottom: 4px; }
+.drop.over { border-color: var(--good); background: var(--good-bg); }
+.drop input[type=file] { margin-top: 10px; max-width: 100%; }
+
+.prep-q { border-top: 1px solid var(--line); padding: 16px 0 4px; }
+.prep-q:first-of-type { border-top: 0; padding-top: 4px; }
+.prep-q h3 { margin: 0 0 6px; }
+.prep-q .why { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+.prep-q .outline { white-space: pre-line; margin: 0 0 6px; }
+
+.blocks { list-style: none; padding: 0; margin: 10px 0 0; }
+.blocks li { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.blocks li:first-child { border-top: 0; }
+.blocks small { color: var(--muted); }
+
+/* A whole card that is one link: a queued letter on the dashboard. */
+a.row-link { display: flex; flex-direction: column; gap: 2px;
+  color: inherit; text-decoration: none; padding-top: 14px; padding-bottom: 14px; }
+a.row-link:hover { border-color: var(--line-strong); }
+a.row-link .meta { margin: 0; }
+details > summary { cursor: pointer; color: var(--muted); }
+
+/* The tracker's one-line cards. */
+details.appcard { padding-top: 14px; padding-bottom: 14px; }
+details.appcard > summary { list-style: none; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; cursor: pointer; color: inherit; }
+details.appcard > summary::-webkit-details-marker { display: none; }
+details.appcard[open] > summary { margin-bottom: 12px; }
+.appline { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.appline b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.appline .meta { margin: 0; }
+.pill { flex: none; font-size: 12.5px; font-weight: 500; padding: 4px 10px;
+  border-radius: var(--pill); border: 1px solid var(--line);
+  color: var(--ink-2); background: var(--panel-2); }
+.pill-heard, .pill-replied { color: var(--good); background: var(--good-bg);
+  border-color: transparent; }
+.pill-interview, .pill-offer { color: var(--accent-ink); background: var(--good);
+  border-color: transparent; }
+.pill-rejected { color: var(--muted); }
+details.fold { margin: 0 0 16px; }
+details.fold > summary { margin-bottom: 8px; }
+
+/* Setup: finished steps are one line, explanations sit behind "why". */
+.oneline { margin: 0; }
+.oneline a, .oneline form.inline { margin-left: 8px; }
+form.inline { display: inline; }
+details.why { margin: 6px 0 10px; }
+details.why > summary { font-size: 14px; }
+details.step > summary { list-style: none; cursor: pointer; }
+details.step > summary::-webkit-details-marker { display: none; }
+details.step > summary h2 { margin-bottom: 4px; }
+details.step .rulesline { margin: 0; }
+details.step[open] .rulesline { display: none; }
+details.step[open] > summary { margin-bottom: 12px; }
+details.appcard > summary::before, details.step > summary::before { content: none; }
+details.step > summary, details.appcard > summary { color: inherit; }

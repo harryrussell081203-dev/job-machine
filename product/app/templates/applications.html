@@ -26,6 +26,17 @@
   {% endif %}
 </div>
 
+{# Tabs, because by the thirtieth letter "who answered" is a scroll away
+   from "what went". Plain links, so they work with JavaScript off and a
+   filtered view can be bookmarked. #}
+<nav class="tabs slide" aria-label="Show">
+  {% for key, label in tabs %}
+    <a href="/applications{% if key != 'all' %}?show={{ key }}{% endif %}"
+       {% if key == show %}class="on" aria-current="page"{% endif %}>{{ label }}
+       <span>{{ tab_counts[key] }}</span></a>
+  {% endfor %}
+</nav>
+
 {% if stats.longest_wait_days >= 10 and stats.awaiting %}
   <div class="note">
     <b>{{ stats.awaiting }} still waiting</b>, the oldest for
@@ -34,7 +45,9 @@
   </div>
 {% endif %}
 
-<div class="panel">
+<details class="fold">
+  <summary><small>{% if stats.detected %}{{ stats.detected }} spotted automatically &mdash; how replies are noticed{% else %}How replies are noticed{% endif %}</small></summary>
+  <div class="panel">
   {% if stats.detected %}
     <p><small><b>{{ stats.detected }} of these
        {% if stats.detected == 1 %}was{% else %}were{% endif %}
@@ -50,13 +63,15 @@
        never what it says &mdash; two taps tell it which ones were
        real.</small></p>
   {% endif %}
-</div>
+  </div>
+</details>
 
 {# What their own sending says. Not shown at all until there is enough of it
    to mean something: a page that puts "100%" next to one letter teaches
    somebody to distrust everything else on it. #}
 {% if working.enough %}
-  <h2>What is working for you</h2>
+  <details class="fold">
+  <summary><small>What is working for you</small></summary>
   <div class="panel">
     {% if working.lesson %}
       <p><b>Writing to {{ working.lesson.best.name }} is getting you
@@ -89,12 +104,32 @@
        reply reads as a third, and you would change your search on nothing.
        A rejection counts as hearing back but not as a reply.</p>
   </div>
+  </details>
+{% endif %}
+
+{% if not items %}
+  <div class="panel"><p class="muted">Nothing here yet.
+     <a href="/applications">Show every letter</a>.</p></div>
 {% endif %}
 
 {% for item in items %}
   {% set d = item.row %}
-  <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
-    <h3>{{ d['job_title'] }}</h3>
+  {# One line and a status; everything else is a tap away. By the
+     thirtieth letter a page of full cards is a scroll through things
+     nobody needs to reread to find the one that answered. #}
+  {% set o = d['outcome'] %}
+  <details class="panel draft appcard tier{{ d['contact_tier'] or 0 }}"
+           {% if item.group == 'heard' and not o %}open{% endif %}>
+    <summary>
+      <span class="appline"><b>{{ d['job_title'] }}</b>
+        <span class="meta">{{ d['company'] }} &middot;
+          {% if item.days == 0 %}today{% elif item.days == 1 %}yesterday{% else %}{{ item.days }}d{% endif %}</span></span>
+      <span class="pill pill-{{ o or item.group }}">
+        {%- if o == 'offer' %}Offer{% elif o == 'interview' %}Interview
+        {%- elif o == 'replied' %}Replied{% elif o == 'rejected' %}Rejected
+        {%- elif d['reply_seen_at'] %}Wrote back{% else %}Waiting{% endif -%}
+      </span>
+    </summary>
     <p class="meta">
       {{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
       {% if d['salary_text'] %} &middot; {{ d['salary_text'] }}{% endif %}
@@ -150,6 +185,12 @@
       </div>
     {% endif %}
 
+    {% if item.group in ('heard', 'interviews') %}
+      <p><a class="btn small {% if not item.prepared %}ghost{% endif %}"
+            href="/applications/{{ d['id'] }}/prep">
+        {% if item.prepared %}Your interview prep{% else %}Prepare for the interview{% endif %}</a></p>
+    {% endif %}
+
     <details>
       <summary><small>The letter that went</small></summary>
       <p><b>{{ d['subject'] }}</b></p>
@@ -159,7 +200,7 @@
            rel="noopener">Read the original advert</a></small></p>
       {% endif %}
     </details>
-  </div>
+  </details>
 {% endfor %}
 {% endif %}
 {% endblock %}

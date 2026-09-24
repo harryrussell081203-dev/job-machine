@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Interview prep &middot; Recruited{% endblock %}
+{% block content %}
+<p><small><a href="/applications">&larr; Applications</a></small></p>
+<h1>{{ d['job_title'] }}</h1>
+<p class="lede">{{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}</p>
+
+{% if error == 'ai' or error == 'busy' %}
+  <div class="note">The question writer is busy right now. Give it a few
+    minutes and try again &mdash; nothing is lost.</div>
+{% elif error == 'empty' %}
+  <div class="note">It could not build anything it could stand behind from
+    your profile for this role. Adding more detail to your past jobs on
+    <a href="/profile">your profile</a> gives it something real to work with.</div>
+{% endif %}
+
+{% if prep %}
+  <div class="panel">
+    <p><small><b>Every answer here comes from your own profile.</b> Each one
+      names the job it draws on, so you can check it is true before you say
+      it. If one does not sound like you, change the words &mdash; the example
+      is the part that matters.</small></p>
+    {% for item in prep.questions %}
+      <div class="prep-q">
+        <h3>{{ item.q }}</h3>
+        {% if item.why %}<p class="why">Why they ask: {{ item.why }}</p>{% endif %}
+        <p class="outline">{{ item.outline }}</p>
+        <p><small>
+          {% if item.draws_on %}From: {{ item.draws_on }}
+          {% else %}Nothing on your profile fits this one directly &mdash;
+            be straight about that and say how you would go about it.{% endif %}
+        </small></p>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if prep.ask_them %}
+    <h2>Questions to ask them</h2>
+    <div class="panel">
+      <ul>
+        {% for q in prep.ask_them %}<li>{{ q }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <details>
+    <summary><small>The letter you sent them</small></summary>
+    <div class="letter">{{ d['body'] }}</div>
+  </details>
+{% else %}
+  <div class="panel">
+    <p>The questions {{ d['company'] }} is most likely to ask for this role,
+      each with a short answer outline built from your own past jobs &mdash;
+      situation, what you had to do, what you did, how it turned out.</p>
+    <p class="hint">Nothing is invented. If your profile has no example for a
+      question, it says so rather than making one up for you to defend across
+      the table.</p>
+    <form method="post" action="/applications/{{ d['id'] }}/prep">
+      <button class="btn" type="submit">Build my interview prep</button>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

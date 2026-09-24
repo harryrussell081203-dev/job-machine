@@ -103,7 +103,7 @@ class TestPublicPages(AppTestCase):
         # Asserted on the claim, not the sentence: the wording around it
         # gets edited, and a test that breaks on a comma teaches people to
         # change the test rather than think about it.
-        self.assertIn("update themselves", page)
+        self.assertIn("every letter, not a good fortnight", page)
 
         import app.track_record as tr
         record = tr.read()
@@ -1265,9 +1265,10 @@ class TestSetupDoesNotReadAsAWall(AppTestCase):
         self.assertIn("Two minutes", page)
 
     def test_the_optional_steps_say_they_are_optional(self):
-        """Three of the four now: the mailbox, the sending rules, and the CV,
-        which turned out never to have been required by anything."""
-        self.assertEqual(self.page().count("optional"), 3)
+        """Four of the five now: the mailbox, the sending rules, the "never
+        write to" list, and the CV, which turned out never to have been
+        required by anything."""
+        self.assertEqual(self.page().count("optional"), 4)
 
     def test_it_says_which_single_thing_to_do_first(self):
         """And it is not the CV. run_for_user needs a profile and nothing
