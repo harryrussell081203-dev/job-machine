@@ -155,10 +155,36 @@
        alone are what makes Drive look broken. #}
     <form method="post" action="/setup/cv" enctype="multipart/form-data"
           id="cvform">
-      <input type="file" name="cv" id="cvfile" required
-             accept=".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,text/markdown">
+      {# A drop zone on a computer, the ordinary picker on a phone - the
+         input is still inside it, so nothing depends on dragging. #}
+      <label class="drop" id="cvdrop">
+        <b>Drop your CV here</b>
+        <span class="hint">or choose it</span>
+        <input type="file" name="cv" id="cvfile" required
+               accept=".pdf,.docx,.doc,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,text/plain,text/markdown">
+      </label>
       <button class="btn" id="cvbtn">Upload</button>
     </form>
+    <script>
+    (function () {
+      var zone = document.getElementById('cvdrop'),
+          input = document.getElementById('cvfile');
+      if (!zone || !input || !window.DataTransfer) return;
+      ['dragenter', 'dragover'].forEach(function (e) {
+        zone.addEventListener(e, function (ev) {
+          ev.preventDefault(); zone.classList.add('over'); });
+      });
+      ['dragleave', 'drop'].forEach(function (e) {
+        zone.addEventListener(e, function () { zone.classList.remove('over'); });
+      });
+      zone.addEventListener('drop', function (ev) {
+        ev.preventDefault();
+        if (!ev.dataTransfer.files.length) return;
+        input.files = ev.dataTransfer.files;
+        zone.querySelector('b').textContent = ev.dataTransfer.files[0].name;
+      });
+    })();
+    </script>
     <p class="hint" id="cvhint">PDF or Word, 5MB limit. Drive and OneDrive are
        fine.</p>
   {% endif %}
@@ -206,6 +232,35 @@
     <p>Connected: letters send themselves from your address. Not connected:
        we write them, you press send.</p>
     <p><a class="btn" href="/setup/mail">Connect my email</a></p>
+  {% endif %}
+</div>
+
+<!-- never ------------------------------------------------------------ -->
+<div class="panel step" id="never">
+  <h2>Never write to
+    <small class="muted" style="font-weight:400">(optional)</small></h2>
+  <p>Your current employer, somewhere you have left, an agency that already
+    has you. Add their web address as well as their name and nothing reaches
+    anybody there, whatever name an advert uses.</p>
+  <form method="post" action="/setup/never">
+    <textarea name="names" rows="3" style="min-height:80px"
+      placeholder="One per line: a company name, or its web address (acme.co.uk)"></textarea>
+    <button class="btn small" type="submit">Add</button>
+  </form>
+  {% if blocks %}
+    <ul class="blocks">
+      {% for b in blocks %}
+        <li><span>{{ b.key }}
+          {% if b.reason and 'you asked' not in b.reason %}<br><small>{{ b.reason[:90] }}</small>{% endif %}</span>
+          <form method="post" action="/setup/never/remove">
+            <input type="hidden" name="kind" value="{{ b.kind }}">
+            <input type="hidden" name="key" value="{{ b.key }}">
+            <button class="ghost small" type="submit">Remove</button>
+          </form></li>
+      {% endfor %}
+    </ul>
+    <p class="hint">A web address blocks everyone at it. Removing one that
+      was already written to still never sends it a second letter.</p>
   {% endif %}
 </div>
 

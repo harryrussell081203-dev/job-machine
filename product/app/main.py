@@ -539,6 +539,7 @@ def dashboard(request: Request):
     return render(request, "dashboard.html", user=user,
                   profile=db.load_profile(user["id"]),
                   counts=db.counts(user["id"]),
+                  stats=db.application_stats(user["id"]),
                   drafts=db.list_drafts(user["id"], limit=5),
                   # Whether the machine is actually on, and the last thing it
                   # did. Every figure something that happened, never a
@@ -760,19 +761,93 @@ def applications(request: Request):
     user, blocked = _gate(request)
     if blocked:
         return blocked
-    rows = db.applications(user["id"])
+    show = request.query_params.get("show", "all")
+    if show not in dict(db.APPLICATION_FILTERS):
+        show = "all"
+    rows, tab_counts = db.filter_applications(db.applications(user["id"]),
+                                              show)
     stamp = db.now()
     items = [{
         "row": r,
         # Days waiting, which is the actionable number on this screen: it is
         # what tells somebody it is time to chase rather than keep waiting.
         "days": int((stamp - (r["sent_at"] or stamp)) // 86400),
+        "group": db.application_group(r),
+        "prepared": bool(db.interview_prep(r)),
     } for r in rows]
     return render(request, "applications.html", user=user, items=items,
+                  show=show, tabs=db.APPLICATION_FILTERS, tab_counts=tab_counts,
                   stats=db.application_stats(user["id"]),
                   # What their own sending says, rather than what we believe.
                   working=db.what_is_working(user["id"]),
                   outcomes=db.OUTCOMES)
+
+
+@app.get("/applications/{draft_id}/prep", response_class=HTMLResponse)
+def interview_prep(request: Request, draft_id: int):
+    """Likely questions for a role that answered, with outlines built only
+    from the user's own history. See prep.py for why that matters."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    row = db.get_draft(user["id"], draft_id)
+    if not row or row["status"] != "sent":
+        return RedirectResponse("/applications", status_code=303)
+    return render(request, "prep.html", user=user, d=row,
+                  prep=db.interview_prep(row),
+                  error=request.query_params.get("e", ""))
+
+
+@app.post("/applications/{draft_id}/prep")
+def build_interview_prep(request: Request, draft_id: int):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    row = db.get_draft(user["id"], draft_id)
+    if not row or row["status"] != "sent":
+        return RedirectResponse("/applications", status_code=303)
+    back = f"/applications/{draft_id}/prep"
+    if db.interview_prep(row):
+        return RedirectResponse(back, status_code=303)
+    # A model call per click is the one thing on this page that costs money,
+    # so a handful an hour is plenty for anybody actually preparing.
+    if not ratelimit.hit(f"prep:{user['id']}", limit=5, window=3600):
+        return RedirectResponse(back + "?e=busy", status_code=303)
+    from . import prep as preplib
+    from .ai import AIError, gemini_now
+    try:
+        made = preplib.prepare(row, db.load_profile(user["id"]) or {},
+                               lambda p: gemini_now(p, max_tokens=2200))
+    except AIError:
+        return RedirectResponse(back + "?e=ai", status_code=303)
+    if not made:
+        return RedirectResponse(back + "?e=empty", status_code=303)
+    db.save_interview_prep(user["id"], draft_id, made)
+    return RedirectResponse(back, status_code=303)
+
+
+@app.post("/setup/never")
+async def never_write_to(request: Request):
+    """The user's own "never apply to" list: their employer, a firm they
+    have left on bad terms, an agency that already has them."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    form = await request.form()
+    for line in str(form.get("names") or "").replace(",", "\n").splitlines()[:50]:
+        db.add_user_block(user["id"], line)
+    return RedirectResponse("/setup#never", status_code=303)
+
+
+@app.post("/setup/never/remove")
+async def never_write_to_remove(request: Request):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    form = await request.form()
+    db.remove_user_block(user["id"], str(form.get("kind") or ""),
+                         str(form.get("key") or ""))
+    return RedirectResponse("/setup#never", status_code=303)
 
 
 @app.post("/applications/{draft_id}/outcome")
@@ -1335,6 +1410,7 @@ def setup(request: Request):
                   profile=db.load_profile(user["id"]),
                   mail=db.get_mail_account(user["id"]),
                   settings=db.get_send_settings(user["id"]),
+                  blocks=db.user_blocks(user["id"]),
                   vault_ready=vault.available())
 
 

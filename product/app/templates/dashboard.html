@@ -7,10 +7,13 @@
   ten minutes.</div>
   <p><a class="btn" href="/setup">Get started</a></p>
 {% else %}
-  <div class="stats">
+  <div class="stats four">
+    {# What came of it, not just how much went: "sent" with nothing next to
+       it tells somebody the machine is busy, not that it is working. #}
     <div class="stat"><b>{{ counts.get('draft', 0) }}</b><span>waiting to send</span></div>
-    <div class="stat"><b>{{ counts.get('sent', 0) }}</b><span>sent</span></div>
-    <div class="stat"><b>{{ counts.get('discarded', 0) }}</b><span>discarded</span></div>
+    <a class="stat" href="/applications"><b>{{ stats.sent }}</b><span>sent</span></a>
+    <a class="stat" href="/applications?show=heard"><b>{{ stats.heard_back }}</b><span>heard back</span></a>
+    <a class="stat" href="/applications?show=interviews"><b>{{ stats.interviews }}</b><span>interview{{ '' if stats.interviews == 1 else 's' }}</span></a>
   </div>
 
   {# Whether the machine is on, and the last thing it actually did.

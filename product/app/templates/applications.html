@@ -26,6 +26,17 @@
   {% endif %}
 </div>
 
+{# Tabs, because by the thirtieth letter "who answered" is a scroll away
+   from "what went". Plain links, so they work with JavaScript off and a
+   filtered view can be bookmarked. #}
+<nav class="tabs slide" aria-label="Show">
+  {% for key, label in tabs %}
+    <a href="/applications{% if key != 'all' %}?show={{ key }}{% endif %}"
+       {% if key == show %}class="on" aria-current="page"{% endif %}>{{ label }}
+       <span>{{ tab_counts[key] }}</span></a>
+  {% endfor %}
+</nav>
+
 {% if stats.longest_wait_days >= 10 and stats.awaiting %}
   <div class="note">
     <b>{{ stats.awaiting }} still waiting</b>, the oldest for
@@ -91,6 +102,11 @@
   </div>
 {% endif %}
 
+{% if not items %}
+  <div class="panel"><p class="muted">Nothing here yet.
+     <a href="/applications">Show every letter</a>.</p></div>
+{% endif %}
+
 {% for item in items %}
   {% set d = item.row %}
   <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
@@ -148,6 +164,12 @@
           </form>
         {% endfor %}
       </div>
+    {% endif %}
+
+    {% if item.group in ('heard', 'interviews') %}
+      <p><a class="btn small {% if not item.prepared %}ghost{% endif %}"
+            href="/applications/{{ d['id'] }}/prep">
+        {% if item.prepared %}Your interview prep{% else %}Prepare for the interview{% endif %}</a></p>
     {% endif %}
 
     <details>
