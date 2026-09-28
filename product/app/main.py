@@ -37,7 +37,8 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import funnel  # noqa: E402
-from . import push, referrals  # noqa: E402
+from . import letter_check, push, referrals  # noqa: E402
+from jobseeker import settings  # noqa: E402
 from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
@@ -186,6 +187,7 @@ def render(request: Request, template: str, **ctx):
     response = templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
+         "tools_on": tools_on(),
          "is_admin": bool(user and config.is_admin(user["email"])),
          # Every page, because the meta description in base.html quotes it and
          # base.html is every page. Cached on the file's mtime, so this is a
@@ -288,6 +290,55 @@ async def find_submit(request: Request):
     found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
     return render(request, "find.html", advert=advert, found=found,
                   searched=True)
+
+
+TOOL_PER_IP = (60, 3600)
+
+
+@app.get("/tools", response_class=HTMLResponse)
+def tools_index(request: Request):
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "tools.html", tools=TOOL_PAGES,
+                  og_title="Free tools for jobseekers",
+                  og_description="Check whether your cover letter sounds "
+                                 "like AI, and find the real email address "
+                                 "in a job advert. Free, no account.")
+
+
+_AI_CHECK_OG = dict(
+    og_title="Does my cover letter sound like AI? Free checker",
+    og_description="Paste your cover letter and see the stock phrases, "
+                   "American spellings and flat rhythm that make it read as "
+                   "AI-written. Free, no account, nothing stored.")
+
+
+@app.get("/tools/cover-letter-ai-check", response_class=HTMLResponse)
+def ai_check_form(request: Request):
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "ai_check.html", **_AI_CHECK_OG)
+
+
+@app.post("/tools/cover-letter-ai-check", response_class=HTMLResponse)
+async def ai_check_submit(request: Request):
+    """Rules only, no model: nothing pasted here leaves this request, and
+    nothing is stored. See letter_check.py."""
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    form = await request.form()
+    text = (form.get("letter") or "")[:letter_check.MAX_CHARS]
+    if not text.strip():
+        return render(request, "ai_check.html", error="Paste your letter first.",
+                      **_AI_CHECK_OG)
+    limit, window = TOOL_PER_IP
+    if not ratelimit.hit(f"tool:ip:{ratelimit.client_ip(request)}",
+                         limit=limit, window=window):
+        return render(request, "ai_check.html", letter=text,
+                      error="That is a lot of checks in an hour. Try again "
+                            "later.", **_AI_CHECK_OG)
+    return render(request, "ai_check.html", letter=text,
+                  result=letter_check.check(text), **_AI_CHECK_OG)
 
 
 @app.get("/answers", response_class=HTMLResponse)
@@ -1256,12 +1307,24 @@ def healthz():
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
                 "/privacy", "/login", "/app") + tuple(answerlib.paths())
 
+# The free tools, listed only while they are switched on, so the sitemap
+# never points a crawler at a page that answers 404.
+TOOL_PAGES = ("/tools", "/tools/cover-letter-ai-check")
+
+
+def tools_on() -> bool:
+    return settings.flag("TOOLS_ENABLED")
+
+
+def public_pages() -> tuple[str, ...]:
+    return PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+
 
 def public_urls() -> list[str]:
     """Every public page as an absolute address, for the sitemap's readers
     and for IndexNow. One list, so a page cannot be in one and not the
     other."""
-    return [config.BASE_URL + path for path in PUBLIC_PAGES]
+    return [config.BASE_URL + path for path in public_pages()]
 
 
 # Serving the key is what proves the domain is ours, so the route only exists
@@ -1316,7 +1379,7 @@ def sitemap():
     when = f"<lastmod>{stamp}</lastmod>" if stamp else ""
     urls = "".join(
         f"<url><loc>{escape(config.BASE_URL + p)}</loc>{when}</url>"
-        for p in PUBLIC_PAGES)
+        for p in public_pages())
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
            f'{urls}</urlset>')
@@ -1348,6 +1411,13 @@ def llms_txt():
                 f"{record['replies']} replies, {record['reply_rate']}%. "
                 f"Updated {record.get('updated_at', '')[:10]}.\n")
 
+    tools = ""
+    if tools_on():
+        tools = (f"- {config.BASE_URL}/tools/cover-letter-ai-check: checks a "
+                 "cover letter for stock phrases, American spellings and flat "
+                 "rhythm. Rules only, nothing stored.\n"
+                 f"- {config.BASE_URL}/tools: every free tool.\n")
+
     return f"""# Recruited
 
 > A free tool that finds the real email address of a person who can act on a
@@ -1377,7 +1447,7 @@ count under every rate and the caveat on every thin row:
 ## Pages
 
 - {config.BASE_URL}/find: the free tool. No account, nothing to install.
-- {config.BASE_URL}/playbook: the whole method, free.
+{tools}- {config.BASE_URL}/playbook: the whole method, free.
 - {config.BASE_URL}/numbers: every figure, live, including the bad months.
 - {config.BASE_URL}/answers: one page per question jobseekers actually ask.
 

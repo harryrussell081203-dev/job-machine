@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Does my cover letter sound like AI? Free checker &middot; Recruited{% endblock %}
+{% block content %}
+
+{# Facts only, like the landing page: what the tool is, that it is free, who
+   made it. No rating, no user count. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Cover letter AI checker",
+  "url": {{ (config.BASE_URL ~ "/tools/cover-letter-ai-check") | tojson }},
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Any",
+  "isAccessibleForFree": true,
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "GBP"},
+  "description": "Checks a cover letter for the stock phrases, American spellings, repeated words and flat sentence rhythm that make it read as AI-written. Rule-based; nothing is stored.",
+  "publisher": {"@type": "Organization", "name": "Recruited",
+                "url": {{ config.BASE_URL | tojson }}}
+}
+</script>
+
+<h1>Does my cover letter sound like AI?</h1>
+<p class="lede">Paste it in. You will see the phrases, spellings and habits
+that make a letter read as machine-written, and how to fix each one. Free,
+no account, and nothing you paste is stored.</p>
+
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+
+<form method="post" action="/tools/cover-letter-ai-check" class="panel">
+  <label for="letter">Your cover letter or email</label>
+  <textarea id="letter" name="letter" rows="12" required
+            maxlength="6000">{{ letter or '' }}</textarea>
+  <p><button type="submit">Check my letter</button></p>
+</form>
+
+{% if result %}
+  <h2>{{ result.verdict }}</h2>
+  <div class="panel">
+    <p class="aiscore"><b>{{ result.score }}</b><span>/100</span>
+      <small>{{ result.words }} words</small></p>
+    <p class="hint">Not a detector: nothing can reliably tell who wrote a
+      letter, and a tool claiming a percentage would be making it up. This
+      counts the things a hiring manager notices. 100 means none of them.</p>
+  </div>
+
+  {% if result.findings %}
+    <div class="panel">
+      {% for f in result.findings %}
+        <p><b>{{ f.title }}.</b> {{ f.detail }}</p>
+      {% endfor %}
+    </div>
+    <h2>Where they are</h2>
+    <div class="panel letter marked">{% for piece, why in result.marked -%}
+      {%- if why %}<mark title="{{ why }}">{{ piece }}</mark>
+      {%- else %}{{ piece }}{% endif -%}
+    {%- endfor %}</div>
+  {% else %}
+    <div class="note good">Nothing here that reads as machine-written.</div>
+  {% endif %}
+
+  <div class="note">
+    <p><b>The letter is only half of it.</b> The other half is who reads it.
+    A letter sent to the hiring manager's own address gets read; one sent
+    through an Apply button often is not.</p>
+    <p><a class="btn" href="/find">Find the real address in a job advert</a></p>
+  </div>
+{% else %}
+  <p><a href="/find">Or find the real email address in a job advert &rarr;</a></p>
+{% endif %}
+
+<p><small><a href="/tools">More free tools</a></small></p>
+{% endblock %}
