@@ -125,3 +125,86 @@ class InteractiveCallersAreImpatient(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheDailyLimitIsRecognised(unittest.TestCase):
+    """25 September: every call for 47 minutes was a 429 on an allowance
+    that was simply used up, because the check looked for "per day" and
+    Google writes PerDay."""
+
+    class _DayGone:
+        status_code = 429
+        text = ('{"error":{"code":429,"message":"You exceeded your current '
+                'quota","details":[{"violations":[{"quotaId":'
+                '"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},'
+                '{"retryDelay":"59s"}]}}')
+
+    def setUp(self):
+        gemini._spent_for_today = False
+        gemini._last_call = time.monotonic() - 1000
+        self.addCleanup(setattr, gemini, "_spent_for_today", False)
+
+    def test_googles_wording_counts_as_the_daily_limit(self):
+        slept = []
+        with patch.object(gemini.httpx, "post", return_value=self._DayGone()):
+            with self.assertRaises(gemini.QuotaExhausted):
+                gemini.call("prompt", sleep=slept.append)
+        self.assertEqual(slept, [], "it waited on a limit that resets tomorrow")
+
+    def test_after_that_nothing_more_is_asked_today(self):
+        with patch.object(gemini.httpx, "post", return_value=self._DayGone()):
+            with self.assertRaises(gemini.QuotaExhausted):
+                gemini.call("prompt", sleep=lambda s: None)
+        with patch.object(gemini.httpx, "post") as post:
+            with self.assertRaises(gemini.QuotaExhausted):
+                gemini.call("prompt", sleep=lambda s: None)
+            post.assert_not_called()
+
+    def test_an_ordinary_slow_down_is_not_mistaken_for_it(self):
+        self.assertFalse(gemini._is_daily_limit(_TooManyRequests.text))
+
+
+class ScoringStaysInsideTheAllowance(unittest.TestCase):
+    def listings(self, n):
+        from jobseeker.pipeline.harvest import Listing
+        return [Listing(external_id=str(i), source="adzuna", title="Technician",
+                        company=f"Firm {i}", location="Aberdeen",
+                        url="https://x", description="work")
+                for i in range(n)]
+
+    def profile(self):
+        from jobseeker.profile import Profile
+        return Profile.from_dict({
+            "name": "Sam", "location": "Aberdeen", "phone": "07700 900123",
+            "target_roles": ["technician"], "locations": ["Aberdeen"],
+            "min_salary_annual": 20000,
+            "history": [{"title": "Technician", "org": "Acme",
+                         "detail": "maintenance"}]})
+
+    def test_one_run_asks_about_no_more_than_the_cap(self):
+        from jobseeker.pipeline import scoring
+        calls = []
+        scoring.score(self.listings(200), self.profile(),
+                      lambda p: (calls.append(p), "[]")[1])
+        self.assertLessEqual(len(calls) * scoring.BATCH_SIZE,
+                             scoring.MAX_SCORED_PER_RUN + scoring.BATCH_SIZE)
+
+    def test_it_stops_once_the_model_keeps_refusing(self):
+        from jobseeker.pipeline import scoring
+        calls = []
+
+        def refuse(prompt):
+            calls.append(prompt)
+            raise gemini.AIError("rate limited")
+        scoring.score(self.listings(60), self.profile(), refuse)
+        self.assertEqual(len(calls), scoring.STOP_AFTER_FAILURES)
+
+    def test_a_used_up_day_stops_it_at_once(self):
+        from jobseeker.pipeline import scoring
+        calls = []
+
+        def gone(prompt):
+            calls.append(prompt)
+            raise gemini.QuotaExhausted("daily model quota exhausted")
+        scoring.score(self.listings(60), self.profile(), gone)
+        self.assertEqual(len(calls), 1)

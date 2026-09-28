@@ -34,6 +34,20 @@ ENDPOINT = ("https://generativelanguage.googleapis.com/v1beta/models/"
 MIN_INTERVAL = 7.0
 _last_call = 0.0
 
+# Set when Google says today's allowance is gone. Every later call in this
+# process fails at once instead of spending the rest of the run - and more of
+# tomorrow's goodwill - asking again. On 25 September one sweep spent 47
+# minutes waiting out 429s on a quota that was simply used up.
+_spent_for_today = False
+
+
+def _is_daily_limit(text: str) -> bool:
+    """Google names the limit that was hit, e.g.
+    GenerateRequestsPerDayPerProjectPerModel-FreeTier. The old check looked
+    for "per day" with a space and never matched it."""
+    flat = (text or "").lower().replace(" ", "").replace("_", "").replace("-", "")
+    return "perday" in flat
+
 
 class AIError(RuntimeError):
     pass
@@ -66,10 +80,12 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
     right for anything inside a web request, because the server runs one
     worker and a sleeping request holds up every other user's page.
     """
-    global _last_call
+    global _last_call, _spent_for_today
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise AIError("GEMINI_API_KEY is not set")
+    if _spent_for_today:
+        raise QuotaExhausted("daily model quota exhausted")
 
     wait = MIN_INTERVAL - (time.monotonic() - _last_call)
     if wait > 0:
@@ -100,7 +116,8 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
         if r.status_code == 429:
             # Distinguish "slow down" from "you are done for today". Only the
             # second is worth giving up on.
-            if "quota" in r.text.lower() and "per day" in r.text.lower():
+            if _is_daily_limit(r.text):
+                _spent_for_today = True
                 raise QuotaExhausted("daily model quota exhausted")
             delay = _retry_after(r, 15 * (attempt + 1))
             if budget is not None and waited + delay > budget:
