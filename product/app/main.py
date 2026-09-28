@@ -37,7 +37,7 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import funnel  # noqa: E402
-from . import referrals  # noqa: E402
+from . import push, referrals  # noqa: E402
 from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
@@ -548,7 +548,42 @@ def dashboard(request: Request):
                   # Rendered server-side as well as polled, so the panel is
                   # right on first paint and a browser with no JavaScript
                   # still sees where a run has got to on a refresh.
-                  progress=db.run_progress(user["id"]))
+                  progress=db.run_progress(user["id"]),
+                  push_key=push.public_key() if push.available() else "")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request):
+    """Store this browser's push address for "an employer wrote back"."""
+    user = current_user(request)
+    if not user or not push.available():
+        return JSONResponse({"ok": False}, status_code=403)
+    try:
+        data = await request.json()
+        endpoint = str(data["endpoint"])
+        keys = data.get("keys") or {}
+        p256dh, auth_key = str(keys["p256dh"]), str(keys["auth"])
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    # Only a real push service's address, never somewhere of the caller's
+    # choosing: this server will POST to it.
+    if not push.is_push_service(endpoint):
+        return JSONResponse({"ok": False}, status_code=400)
+    db.save_push_subscription(user["id"], endpoint, p256dh, auth_key)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    user = current_user(request)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=403)
+    try:
+        endpoint = str((await request.json())["endpoint"])
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    db.delete_push_subscription(endpoint, user["id"])
+    return JSONResponse({"ok": True})
 
 
 @app.post("/run")

@@ -1754,6 +1754,39 @@ def extend_paid_until(user_id: int, seconds: int) -> int:
     return until
 
 
+# ----------------------------------------------------------------------
+# push notifications
+# ----------------------------------------------------------------------
+def save_push_subscription(user_id: int, endpoint: str, p256dh: str,
+                           auth: str) -> None:
+    """One row per browser. The same browser subscribing again (or after
+    another person used it) moves the row to whoever is signed in now."""
+    with connect() as c:
+        c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?",
+                  (endpoint,))
+        c.execute(
+            "INSERT INTO push_subscriptions "
+            "(user_id, endpoint, p256dh, auth, created_at) "
+            "VALUES (?, ?, ?, ?, ?)", (user_id, endpoint, p256dh, auth, now()))
+
+
+def push_subscriptions(user_id: int):
+    with connect() as c:
+        return c.execute(
+            "SELECT * FROM push_subscriptions WHERE user_id = ?",
+            (user_id,)).fetchall()
+
+
+def delete_push_subscription(endpoint: str, user_id: int | None = None) -> None:
+    with connect() as c:
+        if user_id is None:
+            c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?",
+                      (endpoint,))
+        else:
+            c.execute("DELETE FROM push_subscriptions WHERE endpoint = ? "
+                      "AND user_id = ?", (endpoint, user_id))
+
+
 class _PlaceCache:
     """jobseeker/geo.py's lookups kept in site_meta, so a town is asked about
     once across every process: the runner's distances and the bank-holiday
