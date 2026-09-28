@@ -24,7 +24,16 @@ from __future__ import annotations
 
 import json
 
-BATCH_SIZE = 12
+BATCH_SIZE = 15
+# The most listings one run sends to the model. The free tier allows a few
+# hundred calls a day and three full sweeps share them with letter-writing,
+# so a run that tried to score 343 listings in batches of 12 was spending a
+# day's allowance on one search. Whatever is left over is not marked seen,
+# so the next run picks it up if it is still fresh.
+MAX_SCORED_PER_RUN = 60
+# Two batches in a row failing means the model is refusing, not blinking.
+# Carrying on only spends more of the allowance on refusals.
+STOP_AFTER_FAILURES = 2
 DEFAULT_THRESHOLD = 70
 
 
@@ -234,6 +243,13 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
                 # Never let the commentary break the scoring it describes.
                 pass
 
+    deferred = len(to_score) - MAX_SCORED_PER_RUN
+    if deferred > 0:
+        print(f"[scoring] {deferred} left for the next run to keep inside "
+              f"the free model allowance")
+        to_score = to_score[:MAX_SCORED_PER_RUN]
+
+    failures = 0
     report(0)
     for start in range(0, len(to_score), batch_size):
         batch = to_score[start:start + batch_size]
@@ -247,7 +263,14 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
             # next run picks them up; silently binning them would lose good
             # jobs to a network blip.
             print(f"[scoring] batch failed, leaving unscored: {exc}")
+            failures += 1
+            if (type(exc).__name__ == "QuotaExhausted"
+                    or failures >= STOP_AFTER_FAILURES):
+                print("[scoring] stopping: the model is refusing; the rest "
+                      "waits for the next run")
+                break
             continue
+        failures = 0
 
         for i, listing in enumerate(batch):
             if i not in scores:

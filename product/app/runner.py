@@ -146,6 +146,9 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     # where nine accounts out of nine stopped.
     cv_attached = bool(db.get_cv(user_id))
 
+    # No more letters written than can go out today: each one is a model
+    # call, and a letter written tomorrow is written about a fresher advert.
+    cap = min(cap, max(1, settings["daily_cap"]))
     shortlist = judged["passed"][:cap]
     for i, listing in enumerate(shortlist):
         if report.drafted >= cap:
