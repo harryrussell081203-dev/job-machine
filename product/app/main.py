@@ -743,7 +743,7 @@ def drafts(request: Request, status: str = "draft"):
         return needs_login()
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
-    if status not in ("draft", "sent", "discarded"):
+    if status not in ("draft", "sent", "discarded", "undeliverable"):
         status = "draft"
 
     rows = db.list_drafts(user["id"], status=status)

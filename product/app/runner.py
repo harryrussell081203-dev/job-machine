@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from jobseeker import mx
 from jobseeker.pipeline import compose, discover, harvest, scoring
 from jobseeker.profile import Profile, ProfileError
 
@@ -38,6 +39,7 @@ class RunReport:
     blocked: int = 0
     compose_failed: int = 0
     fallback_used: int = 0
+    undeliverable: int = 0
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -192,6 +194,19 @@ def _draft_one(user_id, listing, profile, ai, session, report,
                      "you have already written to this address or domain")
         return
 
+    # A domain that takes no mail would bounce, and a bounce is counted
+    # against the user's own mailbox. Checked before the model is paid to
+    # write, and the job is kept - marked, with no model call spent on it -
+    # so the user can see why it will not go and find another address.
+    if mx.undeliverable(contact.get("email") or ""):
+        letter = compose.plain_letter(listing, contact, profile, cv_attached)
+        draft_id = _save_draft(user_id, listing, letter)
+        db.mark_draft(user_id, draft_id, "undeliverable")
+        db.mark_seen(user_id, listing.external_id,
+                     "the employer's email domain does not accept mail")
+        report.undeliverable += 1
+        return
+
     letter = compose.compose(listing, contact, profile, ai,
                              cv_attached=cv_attached)
     if letter is None:
@@ -200,7 +215,13 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         letter = compose.plain_letter(listing, contact, profile, cv_attached)
         report.fallback_used += 1
 
-    db.add_draft(
+    _save_draft(user_id, listing, letter)
+    db.mark_seen(user_id, listing.external_id, "drafted")
+    report.drafted += 1
+
+
+def _save_draft(user_id, listing, letter) -> int:
+    return db.add_draft(
         user_id,
         job_title=listing.title, company=listing.company,
         location=listing.location, listing_url=listing.url,
@@ -209,8 +230,6 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         to_email=letter["to_email"], to_name=letter.get("to_name"),
         contact_tier=letter.get("contact_tier"),
         subject=letter["subject"], body=letter["body"])
-    db.mark_seen(user_id, listing.external_id, "drafted")
-    report.drafted += 1
 
 
 def _salary_text(listing) -> str:

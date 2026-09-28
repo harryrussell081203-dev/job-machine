@@ -10,6 +10,10 @@ python-multipart>=0.0.9
 itsdangerous>=2.1
 httpx>=0.26
 
+# Checking an employer's domain takes mail before a letter goes to it. The
+# standard library cannot ask for MX records. See jobseeker/mx.py.
+dnspython>=2.4
+
 # Only needed when DATABASE_URL points at Postgres (Supabase). The app runs on
 # SQLite without it.
 psycopg[binary]>=3.1

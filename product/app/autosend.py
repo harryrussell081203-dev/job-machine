@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from jobseeker import mx
+
 from . import config, db, delivery, funnel
 from .vault import VaultError
 
@@ -180,6 +182,14 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
 
         if not (draft["to_email"] or "").strip():
             db.mark_draft(user_id, draft["id"], "skipped")
+            report.skipped += 1
+            continue
+
+        # Checked again at the last moment: a domain can lapse in the hours a
+        # draft waits, and a bounce is counted against the user's mailbox.
+        # Only a definite "takes no mail" stops it; a DNS hiccup does not.
+        if mx.undeliverable(draft["to_email"]):
+            db.mark_draft(user_id, draft["id"], "undeliverable")
             report.skipped += 1
             continue
 
