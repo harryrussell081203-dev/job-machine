@@ -122,6 +122,23 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt
 
+      # The open-source ranker that puts the likeliest listings in front of
+      # the model first (jobseeker/pipeline/rank.py). Optional by design: if
+      # it will not install, the sweep ranks by words and runs anyway. Kept
+      # out of requirements.txt because the web server has 512MB and never
+      # needs it.
+      - name: Install the ranker
+        continue-on-error: true
+        run: pip install "fastembed>=0.4,<1"
+
+      # The ranker's model, fetched from Hugging Face once and then reused,
+      # rather than downloaded six times a day.
+      - name: Keep the ranker's model
+        uses: actions/cache@v4
+        with:
+          path: .embeddings
+          key: embeddings-bge-small-en-v1.5
+
       - name: Sweep
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -134,6 +151,7 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMBEDDING_CACHE: ${{ github.workspace }}/.embeddings
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}

@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 
+from . import rank as ranking
+
 BATCH_SIZE = 15
 # The most listings one run sends to the model. The free tier allows a few
 # hundred calls a day and three full sweeps share them with letter-writing,
@@ -204,7 +206,7 @@ def parse_scores(raw, batch_size: int) -> dict:
 
 
 def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
-          batch_size: int = BATCH_SIZE, on_batch=None) -> dict:
+          batch_size: int = BATCH_SIZE, on_batch=None, embed=None) -> dict:
     """Score every listing. Returns {"passed": [...], "rejected": [...]}.
 
     `ai` is any callable taking a prompt and returning the model's text. Kept
@@ -245,6 +247,9 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
 
     deferred = len(to_score) - MAX_SCORED_PER_RUN
     if deferred > 0:
+        # More than the model can read today, so read the likeliest first.
+        # The rest are not rejected, only left for the next run.
+        to_score = ranking.rank(to_score, profile, embed=embed)
         print(f"[scoring] {deferred} left for the next run to keep inside "
               f"the free model allowance")
         to_score = to_score[:MAX_SCORED_PER_RUN]

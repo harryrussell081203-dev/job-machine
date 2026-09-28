@@ -91,8 +91,12 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         return report
 
     if ai is None:
-        from .ai import gemini, gemini_now
+        from .ai import gemini, gemini_now, scorer, scorer_now
         ai = gemini_now if interactive else gemini
+        score_ai = scorer_now if interactive else scorer
+    else:
+        # A caller that brings its own model means it for everything.
+        score_ai = ai
     kwargs = {} if delay is None else {"delay": delay}
 
     seen = db.seen_ids(user_id)
@@ -131,7 +135,7 @@ def run_for_user(user_id: int, *, ai=None, session=None,
             candidates.append(listing)
 
     judged = scoring.score(
-        candidates, profile, ai,
+        candidates, profile, score_ai,
         on_batch=lambda done, total: step(
             f"Scoring {total} job{'' if total == 1 else 's'} against your "
             f"profile", done=done, total=total))

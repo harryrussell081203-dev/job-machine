@@ -10,6 +10,7 @@ uses the patient one.
 """
 
 from jobseeker.gemini import AIError, QuotaExhausted, call as gemini  # noqa: F401
+from jobseeker.gemini import score_call as scorer  # noqa: F401
 
 
 def gemini_now(prompt: str, **kwargs) -> str:
@@ -23,4 +24,11 @@ def gemini_now(prompt: str, **kwargs) -> str:
     return gemini(prompt, **kwargs)
 
 
-__all__ = ["gemini", "gemini_now", "AIError", "QuotaExhausted"]
+def scorer_now(prompt: str, **kwargs) -> str:
+    """The scoring models, for callers with a person waiting. Same rule."""
+    kwargs.setdefault("budget", 0.0)
+    return scorer(prompt, **kwargs)
+
+
+__all__ = ["gemini", "gemini_now", "scorer", "scorer_now", "AIError",
+           "QuotaExhausted"]

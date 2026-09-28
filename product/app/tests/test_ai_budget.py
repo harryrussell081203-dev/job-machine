@@ -46,9 +46,10 @@ class RateLimitBudget(unittest.TestCase):
 
     def setUp(self):
         self.slept = []
-        # Pretend the last call was long ago, so the MIN_INTERVAL spacing wait
-        # does not fire and every sleep recorded below is a rate-limit backoff.
-        gemini._last_call = time.monotonic() - 1000
+        # Forget earlier calls, so the MIN_INTERVAL spacing wait does not
+        # fire and every sleep recorded below is a rate-limit backoff.
+        gemini._last_call.clear()
+        gemini._spent_for_today.clear()
 
     def _call(self, **kwargs):
         with patch.object(gemini.httpx, "post", return_value=_TooManyRequests()):
@@ -140,9 +141,9 @@ class TheDailyLimitIsRecognised(unittest.TestCase):
                 '{"retryDelay":"59s"}]}}')
 
     def setUp(self):
-        gemini._spent_for_today = False
-        gemini._last_call = time.monotonic() - 1000
-        self.addCleanup(setattr, gemini, "_spent_for_today", False)
+        gemini._spent_for_today.clear()
+        gemini._last_call.clear()
+        self.addCleanup(gemini._spent_for_today.clear)
 
     def test_googles_wording_counts_as_the_daily_limit(self):
         slept = []
