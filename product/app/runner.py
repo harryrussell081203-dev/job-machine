@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from jobseeker import mx
-from jobseeker.pipeline import compose, discover, harvest, scoring
+from jobseeker.pipeline import compose, discover, harvest, proofread, scoring
 from jobseeker.profile import Profile, ProfileError
 
 from . import config, db
@@ -214,6 +214,10 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         # plainer letter to a verified address beats no letter at all.
         letter = compose.plain_letter(listing, contact, profile, cv_attached)
         report.fallback_used += 1
+
+    # British spelling, fixed only where the fix is not a judgement call.
+    # Grammar and style are logged, never applied. See proofread.py.
+    letter = proofread.letter(letter)
 
     _save_draft(user_id, listing, letter)
     db.mark_seen(user_id, listing.external_id, "drafted")

@@ -139,6 +139,26 @@ jobs:
           path: .embeddings
           key: embeddings-${{ vars.EMBEDDING_MODEL || 'all-MiniLM-L6-v2' }}
 
+      # LanguageTool, the open-source proofreader, in a container beside the
+      # job so letters never leave the runner and the public service's rate
+      # limit never applies (jobseeker/pipeline/proofread.py). Only for runs
+      # that write letters: the send-only runs (minute 40) never draft.
+      # Optional by design - if it will not start, letters go unproofread
+      # rather than not at all. Off with the repository variable
+      # LANGUAGETOOL_ENABLED=0.
+      - name: Start the proofreader
+        if: ${{ vars.LANGUAGETOOL_ENABLED != '0' && !startsWith(github.event.schedule, '40 ') }}
+        continue-on-error: true
+        run: |
+          docker run -d --name languagetool -p 8010:8010 erikvl87/languagetool
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:8010/v2/languages" >/dev/null; then
+              echo "LanguageTool is up"; echo "LANGUAGETOOL_URL=http://localhost:8010" >> "$GITHUB_ENV"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::warning::LanguageTool did not start; letters go unproofread this run"
+
       - name: Sweep
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
