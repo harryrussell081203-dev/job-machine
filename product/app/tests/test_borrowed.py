@@ -170,5 +170,29 @@ class TestThePrice(Signed):
         self.assertIn("No credits", self.client.get("/").text)
 
 
+class TestTheLandingPage(Signed):
+    def page(self):
+        self.client.cookies.clear()
+        return self.client.get("/").text
+
+    def test_the_example_says_it_is_one(self):
+        """A made-up letter shown as a real one would be the first false
+        thing on a page whose whole argument is that it can be checked."""
+        page = self.page()
+        self.assertIn("example, names changed", page)
+        self.assertIn("What came back", page)
+
+    def test_the_comparison_and_the_questions_are_there(self):
+        page = self.page()
+        self.assertIn("Why not an auto-apply bot?", page)
+        self.assertIn("Do you guess email addresses?", page)
+        self.assertIn("<details><summary>Can I cancel?", page)
+
+    def test_the_explanations_are_folded(self):
+        """The long paragraph under the numbers is a tap away, not gone."""
+        page = self.page()
+        self.assertIn("How these are counted", page)
+
+
 if __name__ == "__main__":
     unittest.main()

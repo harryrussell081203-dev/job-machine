@@ -838,3 +838,26 @@ details.step[open] .rulesline { display: none; }
 details.step[open] > summary { margin-bottom: 12px; }
 details.appcard > summary::before, details.step > summary::before { content: none; }
 details.step > summary, details.appcard > summary { color: inherit; }
+
+/* Landing: the letter and what came back, side by side. */
+.showcase { display: grid; gap: 14px; margin: 0 0 24px; }
+@media (min-width: 760px) { .showcase { grid-template-columns: 1.2fr 1fr; } }
+.shot { margin: 0; }
+.shot-label { font-weight: 600; margin: 0 0 10px; }
+.shot .letter { white-space: pre-line; font-size: 15px; }
+.mini-tracker { list-style: none; padding: 0; margin: 0 0 8px; }
+.mini-tracker li { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.mini-tracker li:first-child { border-top: 0; }
+.mini-tracker li > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.mini-tracker small { color: var(--muted); }
+table.versus td:first-child { color: var(--muted); white-space: nowrap; }
+.price .price-line { font-family: var(--display); font-size: 30px; margin: 0 0 8px; }
+.price ul { margin: 0 0 12px; padding-left: 20px; }
+.faq details { background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 14px 16px; margin: 0 0 8px; }
+.faq summary { color: var(--ink); font-weight: 500; }
+.faq details p { margin: 10px 0 0; }
+@media (max-width: 560px) {
+  table.versus td.rowhead { font-weight: 600; color: var(--ink); white-space: normal; }
+}

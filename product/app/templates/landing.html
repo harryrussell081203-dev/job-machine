@@ -105,6 +105,7 @@ who actually does the hiring, from your own address.</p>
      that a reply is not a job   or 19% reads as 19% getting hired
      that no trade is assumed    or every non-engineer reads themselves out
 #}
+<details class="fold"><summary><small>How these are counted</small></summary>
 <p><small>These are the founder's own, across {{ record.employers }} employers
 from August to 23 September &mdash; every letter, not a good fortnight chosen
 out of it. His search runs on this site now. Cold email normally
@@ -112,6 +113,7 @@ gets 1&ndash;5%. Autoresponders and rejections are not counted in that
 {{ record.reply_rate }}%, and a reply is not the same thing as an interview.
 Nothing in it is built around a trade: a carer, a driver and a welder get the
 same machine. <a href="/numbers">Every figure.</a></small></p>
+</details>
 {% endif %}
 
 <h2>Who you write to decides everything</h2>
@@ -145,13 +147,90 @@ one question. Your CV attached.</p>
 same employer twice. Name your current employer to anybody.</p>
 </div>
 
+{# What it actually looks like: the letter, and what came back. Labelled as
+   an example because it is one. The companies are the same made-up ones as
+   the finder's example - a real firm's name here would point strangers'
+   curiosity at a real inbox. The shape is exactly what the machine writes
+   and what the tracker shows. #}
+<h2>What it looks like</h2>
+<div class="showcase">
+  <div class="panel shot">
+    <p class="shot-label">The letter <small class="muted">&middot; example, names changed</small></p>
+    <p class="meta">To: Fiona Menzies &lt;fiona.menzies@kestrelfoods.example&gt;<br>
+      Subject: Maintenance technician, packaging lines</p>
+    <div class="letter">Hi Fiona,
+
+Saw your maintenance technician role covering the packaging lines at Rotherham. That is the work I do now.
+
+Four years of planned and reactive maintenance on high-speed lines, fault-finding on PLC conveyors and fillers.
+
+Would it help if I sent my availability for a call this week?
+
+Sam Doherty
+07700 900123 &middot; CV attached</div>
+  </div>
+  <div class="panel shot">
+    <p class="shot-label">What came back <small class="muted">&middot; example</small></p>
+    <ul class="mini-tracker">
+      <li><span><b>Maintenance Technician</b><small>Kestrel Foods &middot; 2d</small></span><span class="pill pill-interview">Interview</span></li>
+      <li><span><b>Engineering Technician</b><small>Harlow Controls &middot; 3d</small></span><span class="pill pill-heard">Wrote back</span></li>
+      <li><span><b>Field Service Engineer</b><small>Northgate Plant Hire &middot; 4d</small></span><span class="pill">Waiting</span></li>
+      <li><span><b>Electrical Technician</b><small>Firthside Systems &middot; 6d</small></span><span class="pill pill-rejected">Rejected</span></li>
+    </ul>
+    <p class="hint">Replies are spotted in your inbox and land here.</p>
+  </div>
+</div>
+
+<h2>Why not an auto-apply bot?</h2>
+<div class="panel scroll stacked">
+<table class="versus">
+  <thead><tr><th></th><th>Auto-apply bots</th><th>Recruited</th></tr></thead>
+  <tr><td class="rowhead">Where it goes</td><td data-label="Auto-apply bots">A job board or an applicant tracking system</td><td data-label="Recruited"><b>The person hiring</b></td></tr>
+  <tr><td class="rowhead">Sent from</td><td data-label="Auto-apply bots">Their system</td><td data-label="Recruited"><b>Your own email</b></td></tr>
+  <tr><td class="rowhead">Pricing</td><td data-label="Auto-apply bots">Often credits, per application</td><td data-label="Recruited"><b>One price</b></td></tr>
+  <tr><td class="rowhead">Same employer twice</td><td data-label="Auto-apply bots">Can happen</td><td data-label="Recruited"><b>Never</b></td></tr>
+  <tr><td class="rowhead">Contact details</td><td data-label="Auto-apply bots">Form fields</td><td data-label="Recruited"><b>Real addresses, never guessed</b></td></tr>
+</table>
+</div>
+
+<h2>One price</h2>
+<div class="panel price">
+  <p class="price-line"><b>{{ config.PRICE_LABEL }}</b></p>
+  <ul>
+    <li>Jobs found and letters written every weekday</li>
+    <li>Sent from your email, or you press send</li>
+    <li>One polite follow-up, never more</li>
+    <li>Reply alerts and interview prep</li>
+  </ul>
+  <p class="hint">No credits, no charge per application. Cancel from your
+    account page.</p>
+  <p><a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
+  {% if spots_left %}<small class="muted">&nbsp;{{ spots_left }} free
+    place{{ '' if spots_left == 1 else 's' }} left. No card.</small>{% endif %}</p>
+</div>
+
+<h2>Questions</h2>
+<div class="faq">
+  <details><summary>Is this spam?</summary>
+    <p>One short letter to one person, about a job they advertised. Never the
+      same employer twice, and a daily limit you set.</p></details>
+  <details><summary>Does it send from my email?</summary>
+    <p>Yes, once you connect it, so replies come straight to you. Or leave it
+      unconnected: it writes the letters and you press send.</p></details>
+  <details><summary>I am in work. Will my employer find out?</summary>
+    <p>Add them to "Never write to" and nothing ever reaches anyone there,
+      whatever name an advert uses. Letters never name your current
+      employer.</p></details>
+  <details><summary>Do you guess email addresses?</summary>
+    <p>Never. Only an address printed in the advert or on the company's own
+      site. No real address, no letter.</p></details>
+  <details><summary>Can I cancel?</summary>
+    <p>Any time, from your account page. You keep access to the end of the
+      month you paid for.</p></details>
+</div>
+
 <p style="margin-top:32px" class="hero-cta">
   <a class="btn" href="/find">Try it on a job advert</a>
   <a class="btn ghost" href="/playbook">Read the method free</a>
 </p>
-{% if spots_left %}
-  <p><small class="muted">{{ spots_left }} free
-  place{{ '' if spots_left == 1 else 's' }} left. No card, nothing to
-  cancel.</small></p>
-{% endif %}
 {% endblock %}
