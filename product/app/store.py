@@ -531,6 +531,9 @@ _ADDED_COLUMNS = [
     # Interview questions and answer outlines for this application, as JSON,
     # built once when the user asks. See prep.py.
     ("drafts", "interview_prep", "TEXT NOT NULL DEFAULT ''"),
+    # Straight-line miles from the person's home, when both ends could be
+    # found. Empty means unknown, never zero. See jobseeker/geo.py.
+    ("drafts", "distance_miles", "INTEGER"),
 ]
 
 

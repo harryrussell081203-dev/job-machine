@@ -177,7 +177,9 @@
           placeholder="field service engineer&#10;maintenance technician&#10;instrumentation technician">{{ (data.get('target_roles') or []) | join('\n') }}</textarea>
       </div>
     </div>
-    <label for="radius_miles">Miles around each</label>
+    <label for="radius_miles">Furthest you will travel, in miles</label>
+    <p class="hint">Measured from each place above. Jobs further away than
+       this are hidden, and every job shows how far it is from you.</p>
     <input id="radius_miles" name="radius_miles" type="number" min="1" max="200"
            value="{{ data.get('radius_miles') or 25 }}">
   </div>

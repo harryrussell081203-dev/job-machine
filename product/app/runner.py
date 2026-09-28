@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from jobseeker import mx
+from jobseeker import geo, mx
 from jobseeker.pipeline import compose, discover, harvest, proofread, scoring
 from jobseeker.profile import Profile, ProfileError
 
@@ -40,6 +40,7 @@ class RunReport:
     compose_failed: int = 0
     fallback_used: int = 0
     undeliverable: int = 0
+    too_far: int = 0
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -136,6 +137,8 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         else:
             candidates.append(listing)
 
+    candidates = _measure(user_id, candidates, profile, session, report)
+
     judged = scoring.score(
         candidates, profile, score_ai,
         on_batch=lambda done, total: step(
@@ -175,6 +178,58 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     step("Finishing up", done=len(shortlist), total=len(shortlist),
          drafted=report.drafted)
     return report
+
+
+class _MetaStore:
+    """geo.py's lookups kept in site_meta, so a town is asked about once."""
+
+    def get(self, key):
+        return db.get_meta(key) or None
+
+    def put(self, key, value):
+        db.set_meta(key, value)
+
+
+geo.store = _MetaStore()
+
+
+def _measure(user_id, listings, profile, session, report) -> list:
+    """Put a distance on every listing, and set aside the ones the boards
+    leaked from well beyond the person's travel radius.
+
+    The radius is measured from each place they search, not only home: a
+    person in Aberdeen who also searches Edinburgh wants Edinburgh jobs, and
+    those are 120 miles from home. The number on the card is from home,
+    because that is the journey that matters to them.
+
+    Nothing is set aside unless every place they search could be found - a
+    search area of "United Kingdom" has no centre to measure from - or unless
+    the job itself could be found. Unknown is shown, never hidden.
+    """
+    if not geo.enabled() or not listings:
+        return listings
+    get = session.get if session is not None else None
+    home = geo.locate(profile.location, get=get)
+    areas = [geo.locate(place, get=get) for place in profile.locations]
+    can_filter = bool(areas) and all(areas)
+    limit = profile.radius_miles + geo.slack(profile.radius_miles)
+
+    kept = []
+    for listing in listings:
+        where = geo.where_listing_is(listing, get=get)
+        if where and home:
+            listing.distance_miles = round(geo.miles(home, where))
+        if where and can_filter:
+            nearest = min(geo.miles(a, where) for a in areas)
+            if nearest > limit:
+                report.too_far += 1
+                db.mark_seen(user_id, listing.external_id,
+                             f"about {round(nearest)} miles from where you "
+                             f"search, beyond your {profile.radius_miles}-mile "
+                             "limit")
+                continue
+        kept.append(listing)
+    return kept
 
 
 def _draft_one(user_id, listing, profile, ai, session, report,
@@ -233,6 +288,7 @@ def _save_draft(user_id, listing, letter) -> int:
         score_reason=getattr(listing, "score_reason", "") or "",
         to_email=letter["to_email"], to_name=letter.get("to_name"),
         contact_tier=letter.get("contact_tier"),
+        distance_miles=listing.distance_miles,
         subject=letter["subject"], body=letter["body"])
 
 

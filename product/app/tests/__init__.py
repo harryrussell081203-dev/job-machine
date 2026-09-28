@@ -5,3 +5,4 @@ import os
 # MX lookup would mark each one undeliverable. The tests for each check turn
 # it back on with a fake in place of the network.
 os.environ.setdefault("MX_CHECK", "0")
+os.environ.setdefault("DISTANCE", "0")
