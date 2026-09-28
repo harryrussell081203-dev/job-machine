@@ -20,7 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from jobseeker import geo, mx
-from jobseeker.pipeline import compose, discover, harvest, proofread, scoring
+from jobseeker.pipeline import (compose, discover, harvest, pay, proofread,
+                                scoring)
 from jobseeker.profile import Profile, ProfileError
 
 from . import config, db
@@ -282,7 +283,10 @@ def _save_draft(user_id, listing, letter) -> int:
 def _salary_text(listing) -> str:
     amount, unit = scoring.stated_pay(listing)
     if amount is None:
-        return ""
+        # The boards' fields are empty on most adverts; the figure is often
+        # in the text instead. Display only - see pay.py.
+        found = pay.from_text(f"{listing.title}\n{listing.description or ''}")
+        return pay.describe(*found) if found else ""
     if unit == "year":
         return f"£{amount:,.0f}"
     return f"£{amount:g} per {unit}"

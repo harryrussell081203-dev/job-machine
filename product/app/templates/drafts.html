@@ -27,7 +27,7 @@
     <p class="meta">
       {{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
       {% if d['distance_miles'] is not none %} &middot; {{ d['distance_miles'] }} mile{{ '' if d['distance_miles'] == 1 else 's' }} from you{% endif %}
-      {% if d['salary_text'] %} &middot; {{ d['salary_text'] }}{% endif %}
+      &middot; {{ d['salary_text'] or 'Salary not listed' }}
       {% if d['score'] %} &middot; scored {{ d['score'] }}/100{% endif %}
     </p>
     {# A number on its own is something to be suspicious of. The same number
