@@ -183,6 +183,8 @@ jobs:
           GEMINI_DAILY_CAPS: ${{ vars.GEMINI_DAILY_CAPS }}
           MX_CHECK: ${{ vars.MX_CHECK }}
           DISTANCE: ${{ vars.DISTANCE }}
+          BANK_HOLIDAYS: ${{ vars.BANK_HOLIDAYS }}
+          BANK_HOLIDAY_DIVISION: ${{ vars.BANK_HOLIDAY_DIVISION }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}

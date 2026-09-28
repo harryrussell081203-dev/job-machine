@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 
 from jobseeker import mx
 
-from . import config, db, delivery, funnel
+from . import config, db, delivery, funnel, holidays
 from .vault import VaultError
 
 MAX_CONSECUTIVE_FAILURES = 3
@@ -69,6 +69,14 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
     stamp = db.now() if now is None else now
     if settings["paused_until"] and settings["paused_until"] > stamp:
         report.reason = "sending is paused"
+        return report
+
+    # Held, not dropped: the drafts stay due and the next working day's
+    # sweep sends them. See holidays.py.
+    holiday = holidays.holiday_today(user_id, now=_as_datetime(stamp))
+    if holiday:
+        report.reason = (f"today is a bank holiday in {holiday} - letters go "
+                         "out on the next working day")
         return report
 
     account = db.get_mail_account(user_id)
@@ -258,6 +266,11 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
         report.sent += 1
 
     return report
+
+
+def _as_datetime(stamp: int):
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(int(stamp), tz=timezone.utc)
 
 
 def _is_auth_failure(message: str) -> bool:

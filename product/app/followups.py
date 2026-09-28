@@ -78,6 +78,12 @@ def send_for_user(user_id: int, *, now=None, sender=None,
     if settings["paused_until"] and settings["paused_until"] > stamp:
         report.reason = "sending is paused"
         return report
+    from . import holidays
+    holiday = holidays.holiday_today(
+        user_id, now=datetime.fromtimestamp(int(stamp), tz=timezone.utc))
+    if holiday:
+        report.reason = f"bank holiday in {holiday}"
+        return report
 
     account = db.get_mail_account(user_id)
     if not account or not account["verified_at"]:

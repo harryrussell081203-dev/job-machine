@@ -180,19 +180,6 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     return report
 
 
-class _MetaStore:
-    """geo.py's lookups kept in site_meta, so a town is asked about once."""
-
-    def get(self, key):
-        return db.get_meta(key) or None
-
-    def put(self, key, value):
-        db.set_meta(key, value)
-
-
-geo.store = _MetaStore()
-
-
 def _measure(user_id, listings, profile, session, report) -> list:
     """Put a distance on every listing, and set aside the ones the boards
     leaked from well beyond the person's travel radius.

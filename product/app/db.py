@@ -1752,3 +1752,23 @@ def extend_paid_until(user_id: int, seconds: int) -> int:
         c.execute("UPDATE users SET paid_until = ? WHERE id = ?",
                   (until, user_id))
     return until
+
+
+class _PlaceCache:
+    """jobseeker/geo.py's lookups kept in site_meta, so a town is asked about
+    once across every process: the runner's distances and the bank-holiday
+    check both use it."""
+
+    def get(self, key):
+        return get_meta(key) or None
+
+    def put(self, key, value):
+        set_meta(key, value)
+
+
+def _plug_place_cache() -> None:
+    from jobseeker import geo
+    geo.store = _PlaceCache()
+
+
+_plug_place_cache()

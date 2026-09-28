@@ -6,3 +6,4 @@ import os
 # it back on with a fake in place of the network.
 os.environ.setdefault("MX_CHECK", "0")
 os.environ.setdefault("DISTANCE", "0")
+os.environ.setdefault("BANK_HOLIDAYS", "0")
