@@ -1,0 +1,62 @@
+name: keep awake
+
+# Render's free plan puts the site to sleep after fifteen minutes without a
+# visitor, and the next person waits about fifty seconds on a blank screen -
+# long enough that somebody tapping a link in a story has gone before it
+# loads. A request every ten minutes through the UK day keeps it up.
+#
+# THE HOURS ARE 07:00-23:00 UK TIME. GitHub's cron is UTC only, so this runs
+# 06:00-22:59 UTC (which covers the UK day in both GMT and BST) and the step
+# below skips any run outside 07:00-23:00 in Europe/London.
+#
+# THE FREE HOURS. Render gives 750 instance-hours a month across every free
+# service in the workspace. This workspace has one (job-machine), and
+# sixteen hours a day is about 490 a month, plus whatever real visitors keep
+# it up overnight. If a second free service is ever added, the two share the
+# 750 and this should be looked at again.
+#
+# GitHub runs scheduled jobs on a best-effort basis and can be late, so the
+# site may still sleep now and then. This makes cold starts rare, not
+# impossible.
+#
+# /healthz answers without touching the database, and is not counted as a
+# page view (only rendered pages are).
+#
+# Off: set the repository variable KEEP_AWAKE to 0. No code change.
+
+on:
+  schedule:
+    - cron: "*/10 6-22 * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: keepawake
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    if: ${{ vars.KEEP_AWAKE != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the site during UK waking hours
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          hour=$(TZ=Europe/London date +%H)
+          if [ "${hour#0}" -lt 7 ] || [ "${hour#0}" -ge 23 ]; then
+            echo "Outside 07:00-23:00 UK time (${hour}:xx); not pinging."
+            exit 0
+          fi
+          if [ -z "${BASE_URL}" ]; then
+            echo "::warning::BASE_URL is not set; nothing to ping."
+            exit 0
+          fi
+          # A warning rather than a failure: a red cross every ten minutes
+          # while Render is having a bad hour is noise, not news.
+          if curl -fsS --max-time 90 -o /dev/null -w "%{http_code} in %{time_total}s\n" "${BASE_URL%/}/healthz"; then
+            exit 0
+          fi
+          echo "::warning::${BASE_URL%/}/healthz did not answer."
