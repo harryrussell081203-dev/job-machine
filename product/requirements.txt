@@ -19,6 +19,10 @@ dnspython>=2.4
 # app/push.py.
 pywebpush>=2.0
 
+# Error reports. Dormant until SENTRY_DSN is set; see app/errors.py for what
+# it is and is not allowed to send.
+sentry-sdk[fastapi]>=2.0
+
 # Only needed when DATABASE_URL points at Postgres (Supabase). The app runs on
 # SQLite without it.
 psycopg[binary]>=3.1

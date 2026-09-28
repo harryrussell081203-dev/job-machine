@@ -57,6 +57,10 @@ log = logging.getLogger("recruited")
 # startup hook: a process that cannot serve checkout should never bind a port.
 config.check_billing_config()
 
+# Error reports, if SENTRY_DSN is set; nothing at all if not. See errors.py.
+from . import errors as _errors  # noqa: E402
+_errors.start("web")
+
 app = FastAPI(title="Recruited", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
@@ -189,6 +193,7 @@ def render(request: Request, template: str, **ctx):
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
          "tools_on": tools_on(),
+         "sentry_on": bool(settings.text("SENTRY_DSN")),
          "is_admin": bool(user and config.is_admin(user["email"])),
          # Every page, because the meta description in base.html quotes it and
          # base.html is every page. Cached on the file's mtime, so this is a

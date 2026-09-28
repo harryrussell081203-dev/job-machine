@@ -192,6 +192,8 @@ jobs:
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           PUSH_ENABLED: ${{ vars.PUSH_ENABLED }}
           SALARY_FROM_TEXT: ${{ vars.SALARY_FROM_TEXT }}
+          # Dormant until set. See app/errors.py.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}
