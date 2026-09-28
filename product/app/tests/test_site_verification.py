@@ -1,0 +1,35 @@
+"""Search Console and Bing verification tags: absent until set, then on the
+home page only."""
+
+import os
+import sys
+import unittest
+from unittest.mock import patch
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, ROOT)
+
+from app.tests.test_app import AppTestCase  # noqa: E402
+
+
+class Verification(AppTestCase):
+    def test_nothing_until_set(self):
+        with patch.dict(os.environ, {"GOOGLE_SITE_VERIFICATION": "",
+                                     "BING_SITE_VERIFICATION": ""}):
+            page = self.client.get("/").text
+        self.assertNotIn("google-site-verification", page)
+        self.assertNotIn("msvalidate.01", page)
+
+    def test_both_on_the_home_page(self):
+        with patch.dict(os.environ, {"GOOGLE_SITE_VERIFICATION": "g123",
+                                     "BING_SITE_VERIFICATION": "b456"}):
+            home = self.client.get("/").text
+            other = self.client.get("/find").text
+        self.assertIn('<meta name="google-site-verification" content="g123">',
+                      home)
+        self.assertIn('<meta name="msvalidate.01" content="b456">', home)
+        self.assertNotIn("g123", other)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -195,6 +195,9 @@ def render(request: Request, template: str, **ctx):
          "tools_on": tools_on(),
          "sentry_on": bool(settings.text("SENTRY_DSN")),
          "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
+         "site_verification": {
+             "google": settings.text("GOOGLE_SITE_VERIFICATION"),
+             "bing": settings.text("BING_SITE_VERIFICATION")},
          "is_admin": bool(user and config.is_admin(user["email"])),
          # Every page, because the meta description in base.html quotes it and
          # base.html is every page. Cached on the file's mtime, so this is a
