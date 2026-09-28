@@ -19,30 +19,70 @@ Two things it handles that a naive caller does not:
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import time
+from zoneinfo import ZoneInfo
 
 import httpx
 
-# The model that writes letters. The best of the free ones, kept for the job
-# a person reads.
-MODEL = "gemini-2.5-flash"
+from . import settings
 
-# The models that score listings, tried in order. Scoring is a yes/no with a
-# reason, not prose, and it is what used to run the day's allowance out
+# Which model does which job. Read when used, not at import, so a renamed
+# model is fixed by changing a repository variable rather than the code.
+#
+# GEMINI_LETTER_MODEL writes letters: the best of the free ones, kept for the
+# job a person reads.
+#
+# GEMINI_SCORING_MODELS score listings, tried in order. Scoring is a number
+# and a reason, not prose, and it is what used to run the day's allowance out
 # before a single letter was written. Each model has its OWN free daily
 # allowance, so moving scoring off the letter model gives letters theirs
 # back. Gemma is Google's open-weights model, served free on the same key;
-# the letter model comes last so a renamed model never stops scoring
-# altogether. Overridable because Google renames these every few months.
-SCORING_MODELS = tuple(
-    m.strip() for m in os.environ.get(
-        "GEMINI_SCORING_MODELS",
-        f"gemini-2.5-flash-lite,gemma-3-27b-it,{MODEL}").split(",")
-    if m.strip())
+# the letter model comes last so a renamed model never stops scoring.
+DEFAULT_LETTER_MODEL = "gemini-2.5-flash"
+DEFAULT_SCORING_MODELS = "gemini-2.5-flash-lite,gemma-3-27b-it"
+
+
+def letter_model() -> str:
+    return settings.text("GEMINI_LETTER_MODEL", DEFAULT_LETTER_MODEL)
+
+
+def scoring_models() -> tuple[str, ...]:
+    listed = [m.strip() for m in settings.text(
+        "GEMINI_SCORING_MODELS", DEFAULT_SCORING_MODELS).split(",")
+        if m.strip()]
+    if letter_model() not in listed:
+        listed.append(letter_model())
+    return tuple(listed)
+
+
+def daily_caps() -> dict[str, int]:
+    """GEMINI_DAILY_CAPS, e.g. "gemini-2.5-flash-lite=900,gemma-3-27b-it=5000".
+
+    Optional, and empty by default. No free limit is written into this code,
+    because Google publishes different numbers every few months and the
+    authoritative answer is the 429 it sends when one is reached, which is
+    handled below either way. A cap here is for stopping short of that on
+    purpose - leaving room for the day's interactive users, say."""
+    caps = {}
+    for part in settings.text("GEMINI_DAILY_CAPS").split(","):
+        name, _, value = part.partition("=")
+        try:
+            caps[name.strip()] = int(value)
+        except ValueError:
+            continue
+    return caps
+
+
+# Where the calls made today are counted, so a cap holds across the several
+# processes a day runs. None counts nothing. The app plugs in its database
+# (app/ai.py); a bare command-line run has no caps to keep.
+#   usage.used(model) -> int     usage.add(model) -> None
+usage = None
+
 
 BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
-ENDPOINT = f"{BASE}{MODEL}:generateContent"
 
 # The free tier allows ten calls a minute. Six seconds apart sits exactly on
 # that ceiling, so any jitter tips over it; seven leaves a little room. Being
@@ -51,11 +91,30 @@ ENDPOINT = f"{BASE}{MODEL}:generateContent"
 MIN_INTERVAL = 7.0
 _last_call: dict[str, float] = {}
 
-# Models Google has said are done for today. Every later call to one in this
-# process fails at once instead of spending the rest of the run - and more of
-# tomorrow's goodwill - asking again. On 25 September one sweep spent 47
-# minutes waiting out 429s on a quota that was simply used up.
-_spent_for_today: set[str] = set()
+# Models Google has said are done for today, with the day they were spent on.
+# Every later call to one fails at once instead of spending the rest of the
+# run - and more of tomorrow's goodwill - asking again. On 25 September one
+# sweep spent 47 minutes waiting out 429s on a quota that was simply used up.
+#
+# Keyed by day because the web server is a process that outlives a day: a
+# plain "spent" flag set on Monday would still be refusing on Wednesday.
+_spent_for_today: dict[str, str] = {}
+
+# Google resets the free allowance at midnight Pacific time.
+_QUOTA_ZONE = ZoneInfo("America/Los_Angeles")
+
+
+def quota_day(now: dt.datetime | None = None) -> str:
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return now.astimezone(_QUOTA_ZONE).date().isoformat()
+
+
+def _spent(model: str) -> bool:
+    return _spent_for_today.get(model) == quota_day()
+
+
+def _mark_spent(model: str) -> None:
+    _spent_for_today[model] = quota_day()
 
 
 def _is_daily_limit(text: str) -> bool:
@@ -108,7 +167,7 @@ def _retry_after(response, fallback: float) -> float:
 
 def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
            as_json: bool = True, attempts: int = 3, sleep=time.sleep,
-           budget: float | None = None, model: str = MODEL) -> str:
+           budget: float | None = None, model: str | None = None) -> str:
     """One call. Returns the model's text, or raises.
 
     `budget` caps the total seconds this may spend waiting out rate limits.
@@ -117,11 +176,21 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
     right for anything inside a web request, because the server runs one
     worker and a sleeping request holds up every other user's page.
     """
+    model = model or letter_model()
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise AIError("GEMINI_API_KEY is not set")
-    if model in _spent_for_today:
+    if _spent(model):
         raise QuotaExhausted(f"daily quota for {model} exhausted")
+    cap = daily_caps().get(model)
+    if cap is not None and usage is not None:
+        try:
+            over = usage.used(model) >= cap
+        except Exception:
+            over = False          # a counter that cannot be read caps nothing
+        if over:
+            _mark_spent(model)
+            raise QuotaExhausted(f"{model} reached its cap of {cap} today")
 
     wait = MIN_INTERVAL - (time.monotonic() - _last_call.get(model, 0.0))
     if wait > 0:
@@ -153,7 +222,7 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
             # Distinguish "slow down" from "you are done for today". Only the
             # second is worth giving up on.
             if _is_daily_limit(r.text):
-                _spent_for_today.add(model)
+                _mark_spent(model)
                 raise QuotaExhausted(f"daily quota for {model} exhausted")
             delay = _retry_after(r, 15 * (attempt + 1))
             if budget is not None and waited + delay > budget:
@@ -180,19 +249,27 @@ def call(prompt: str, *, max_tokens: int = 900, temperature: float = 0.4,
         try:
             parts = r.json()["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in parts)
-            return _unfence(text) if as_json else text
         except (KeyError, IndexError, ValueError) as exc:
             last = AIError(f"unreadable reply: {exc}")
             continue
+        # Which provider answered, every time, so a log shows where the
+        # day's allowance went.
+        print(f"[ai] answered by {model}")
+        if usage is not None:
+            try:
+                usage.add(model)
+            except Exception:
+                pass
+        return _unfence(text) if as_json else text
 
     raise last or AIError("the model could not be reached")
 
 
-def call_first(prompt: str, *, models=SCORING_MODELS, **kwargs) -> str:
+def call_first(prompt: str, *, models=None, **kwargs) -> str:
     """The first of `models` that answers. A model that is spent for the day
     or no longer served is skipped; anything else is a real failure and is
     raised as it is, so the caller's own give-up rules still apply."""
-    for model in models:
+    for model in models or scoring_models():
         try:
             return call(prompt, model=model, **kwargs)
         except (QuotaExhausted, ModelUnavailable) as exc:

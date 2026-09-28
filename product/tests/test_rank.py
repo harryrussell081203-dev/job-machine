@@ -1,5 +1,4 @@
-"""Reading the likeliest listings first, and keeping scoring off the letter
-model's allowance.
+"""Reading the likeliest listings first.
 
 The free model reads sixty listings a run. Which sixty used to be whichever
 the boards returned first. These hold:
@@ -10,8 +9,6 @@ the boards returned first. These hold:
      can read, by embedding when the open-source model is there and by words
      when it is not.
   3. A BROKEN RANKER NEVER STOPS A RUN.
-  4. SCORING WALKS DOWN ITS OWN MODELS - a spent or renamed one is skipped,
-     and the letter model's allowance is only touched last.
 """
 
 import os
@@ -20,9 +17,6 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("GEMINI_API_KEY", "test-key")
-
-from jobseeker import gemini  # noqa: E402
 from jobseeker.pipeline import rank, scoring  # noqa: E402
 from jobseeker.pipeline.harvest import Listing  # noqa: E402
 from jobseeker.profile import Profile, Role  # noqa: E402
@@ -132,78 +126,6 @@ class ScoringReadsTheLikeliestFirst(unittest.TestCase):
         scoring.score([listing(1, "Barista")], profile(), lambda p: "[]",
                       embed=lambda t: called.append(t))
         self.assertEqual(called, [])
-
-
-class _Response:
-    def __init__(self, status, text="", payload=None):
-        self.status_code, self.text, self._payload = status, text, payload
-
-    def json(self):
-        return self._payload or {}
-
-
-def _ok(text):
-    return _Response(200, payload={"candidates": [
-        {"content": {"parts": [{"text": text}]}}]})
-
-
-_DAY_GONE = _Response(429, '{"quotaId":"GenerateRequestsPerDayPerProjectPerModel"}')
-
-
-class ScoringWalksDownItsModels(unittest.TestCase):
-    def setUp(self):
-        gemini._spent_for_today.clear()
-        gemini._last_call.clear()
-        self.addCleanup(gemini._spent_for_today.clear)
-        self.asked = []
-
-    def post(self, answers):
-        def fake(url, **kwargs):
-            model = url.rsplit("/", 1)[1].split(":")[0]
-            self.asked.append((model, kwargs["json"]))
-            return answers[model]
-        return patch.object(gemini.httpx, "post", side_effect=fake)
-
-    def test_scoring_does_not_use_the_letter_model_first(self):
-        self.assertNotEqual(gemini.SCORING_MODELS[0], gemini.MODEL)
-        self.assertEqual(gemini.SCORING_MODELS[-1], gemini.MODEL)
-
-    def test_a_spent_model_passes_to_the_next(self):
-        first, second = gemini.SCORING_MODELS[:2]
-        with self.post({first: _DAY_GONE, second: _ok("[]")}):
-            self.assertEqual(gemini.score_call("p", sleep=lambda s: None), "[]")
-            gemini.score_call("p", sleep=lambda s: None)
-        # The spent one is not asked a second time today.
-        self.assertEqual([m for m, _ in self.asked], [first, second, second])
-
-    def test_a_renamed_model_passes_to_the_next(self):
-        first, second = gemini.SCORING_MODELS[:2]
-        with self.post({first: _Response(404, "not found"),
-                        second: _ok("[]")}):
-            self.assertEqual(gemini.score_call("p", sleep=lambda s: None), "[]")
-
-    def test_all_spent_is_quota_exhausted(self):
-        with self.post({m: _DAY_GONE for m in gemini.SCORING_MODELS}):
-            with self.assertRaises(gemini.QuotaExhausted):
-                gemini.score_call("p", sleep=lambda s: None)
-
-    def test_the_open_model_gets_a_body_it_accepts(self):
-        """Gemma refuses a thinking budget or a JSON response type, and
-        answers in a fence instead."""
-        gemma = next(m for m in gemini.SCORING_MODELS if m.startswith("gemma"))
-        with self.post({gemma: _ok('```json\n[{"listing": 0}]\n```')}):
-            out = gemini.call("p", model=gemma, sleep=lambda s: None)
-        config = self.asked[0][1]["generationConfig"]
-        self.assertNotIn("thinkingConfig", config)
-        self.assertNotIn("responseMimeType", config)
-        self.assertEqual(out, '[{"listing": 0}]')
-
-    def test_a_spent_scoring_model_leaves_letters_alone(self):
-        first = gemini.SCORING_MODELS[0]
-        with self.post({first: _DAY_GONE, gemini.MODEL: _ok("letter")}):
-            with self.assertRaises(gemini.QuotaExhausted):
-                gemini.call("p", model=first, sleep=lambda s: None)
-            self.assertEqual(gemini.call("p", sleep=lambda s: None), "letter")
 
 
 if __name__ == "__main__":

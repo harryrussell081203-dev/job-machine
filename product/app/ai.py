@@ -11,6 +11,32 @@ uses the patient one.
 
 from jobseeker.gemini import AIError, QuotaExhausted, call as gemini  # noqa: F401
 from jobseeker.gemini import score_call as scorer  # noqa: F401
+from jobseeker import gemini as _gemini
+
+
+class _Ledger:
+    """Calls per model per quota day, kept in site_meta so an optional
+    GEMINI_DAILY_CAPS holds across the web server and every sweep. Both
+    reads and writes swallow failure: a counter that cannot be reached must
+    never be the reason a letter was not written."""
+
+    @staticmethod
+    def _key(model: str) -> str:
+        return f"ai_calls:{_gemini.quota_day()}:{model}"
+
+    def used(self, model: str) -> int:
+        from . import db
+        try:
+            return int(db.get_meta(self._key(model)) or 0)
+        except ValueError:
+            return 0
+
+    def add(self, model: str) -> None:
+        from . import db
+        db.set_meta(self._key(model), str(self.used(model) + 1))
+
+
+_gemini.usage = _Ledger()
 
 
 def gemini_now(prompt: str, **kwargs) -> str:

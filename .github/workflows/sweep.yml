@@ -158,6 +158,9 @@ jobs:
           RANKER_ENABLED: ${{ vars.RANKER_ENABLED }}
           SCORING_TOP_N: ${{ vars.SCORING_TOP_N }}
           EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+          GEMINI_LETTER_MODEL: ${{ vars.GEMINI_LETTER_MODEL }}
+          GEMINI_SCORING_MODELS: ${{ vars.GEMINI_SCORING_MODELS }}
+          GEMINI_DAILY_CAPS: ${{ vars.GEMINI_DAILY_CAPS }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}
