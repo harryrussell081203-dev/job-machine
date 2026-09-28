@@ -178,3 +178,44 @@ def reward_for(user_id: int, kind: str) -> int:
         return 0
     db.extend_paid_until(referrer_id, seconds)
     return seconds
+
+
+# What the referred person gets, and when. The same step that first pays the
+# referrer - a real CV arriving - so "you both get a month" is true for both
+# of them at the same moment, and a bare sign-up still earns nobody anything.
+WELCOME_ON = "cv_uploaded"
+
+
+def welcome(user_id: int, kind: str) -> int:
+    """A month for somebody who arrived on a friend's link, once they have
+    uploaded a CV. Returns the seconds granted, 0 for nothing. Recorded
+    before it is paid, on their own account, so a retry pays nothing."""
+    if kind != WELCOME_ON:
+        return 0
+    user = db.get_user(user_id)
+    if user is None:
+        return 0
+    try:
+        if not int(user["referred_by"] or 0):
+            return 0
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0
+    if not db.record_event(user_id, db.REFERRAL_WELCOME):
+        return 0
+    db.extend_paid_until(user_id, MONTH)
+    return MONTH
+
+
+def card(user_id: int) -> dict | None:
+    """What the dashboard's invite card shows, or None when it should not
+    appear: with billing off everything is free, and a free month of a free
+    thing is not an offer. Switch: REFERRALS_ENABLED (default on)."""
+    from jobseeker import settings
+    if not config.BILLING_ENABLED or not settings.flag("REFERRALS_ENABLED"):
+        return None
+    link = link_for(user_id)
+    if not link:
+        return None
+    stats = db.referral_stats(user_id)
+    return {"link": link, "people": stats["people"],
+            "months": min(stats["months"], MAX_MONTHS), "cap": MAX_MONTHS}

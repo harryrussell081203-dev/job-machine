@@ -1529,8 +1529,12 @@ INSTALLED = "installed"
 CV_UPLOADED = "cv_uploaded"
 FIRST_AUTO_SEND = "first_auto_send"
 
+# The month the referred person gets themselves, recorded on their own
+# account so it can only ever be paid once. See referrals.welcome.
+REFERRAL_WELCOME = "referral_welcome"
+
 EVENT_KINDS = FUNNEL + (REFERRED_USER, INSTALLED, CV_UPLOADED,
-                        FIRST_AUTO_SEND)
+                        FIRST_AUTO_SEND, REFERRAL_WELCOME)
 
 
 def record_event(user_id: int, kind: str, *, ref: str = "",

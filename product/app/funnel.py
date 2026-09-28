@@ -54,6 +54,8 @@ def reached(user_id: int, kind: str, *, detail: str = "",
         if earned:
             log.info("referral: %s seconds granted for %s reaching %s",
                      earned, user_id, kind)
+        if referrals.welcome(user_id, kind):
+            log.info("referral: welcome month for %s", user_id)
     except Exception:
         # The stage is recorded either way. A reward that failed to pay is
         # recoverable from the events table; a stage that was never recorded

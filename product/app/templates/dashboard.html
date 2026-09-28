@@ -61,6 +61,39 @@
       <a href="/applications?show=heard">See who</a></p>
   {% endif %}
 
+  {% if referral %}
+    <div class="panel invite">
+      <p><b>Invite a friend &mdash; you both get a month free.</b></p>
+      <p class="copyrow">
+        <input id="invitelink" type="text" readonly value="{{ referral.link }}"
+               aria-label="Your invite link">
+        <button type="button" class="ghost" id="invitecopy">Copy</button>
+      </p>
+      <details class="fold"><summary><small>How it works{% if referral.people %}
+        &middot; {{ referral.people }} joined, {{ referral.months }}
+        month{{ '' if referral.months == 1 else 's' }} earned{% endif %}</small></summary>
+        <p><small>When your friend signs up from this link and uploads their
+          CV, you each get a month free. You get another month when their
+          first letter goes out. Up to {{ referral.cap }} months.</small></p>
+      </details>
+    </div>
+    <script>
+    (function () {
+      var btn = document.getElementById("invitecopy");
+      var box = document.getElementById("invitelink");
+      if (!btn || !box) { return; }
+      btn.addEventListener("click", function () {
+        function done() { btn.textContent = "Copied"; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(box.value).then(done, function () {
+            box.select(); document.execCommand("copy"); done();
+          });
+        } else { box.select(); document.execCommand("copy"); done(); }
+      });
+    })();
+    </script>
+  {% endif %}
+
   {% if push_key %}
     {# Shown only where the browser can actually do it; see the script below.
        One job only - a notification when an employer replies. #}

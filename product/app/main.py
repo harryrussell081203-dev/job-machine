@@ -549,7 +549,8 @@ def dashboard(request: Request):
                   # right on first paint and a browser with no JavaScript
                   # still sees where a run has got to on a refresh.
                   progress=db.run_progress(user["id"]),
-                  push_key=push.public_key() if push.available() else "")
+                  push_key=push.public_key() if push.available() else "",
+                  referral=referrals.card(user["id"]))
 
 
 @app.post("/push/subscribe")

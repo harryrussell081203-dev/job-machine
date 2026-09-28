@@ -861,3 +861,7 @@ table.versus td:first-child { color: var(--muted); white-space: nowrap; }
 @media (max-width: 560px) {
   table.versus td.rowhead { font-weight: 600; color: var(--ink); white-space: normal; }
 }
+
+/* The invite card's link and copy button, side by side. */
+.invite .copyrow { display: flex; gap: 8px; align-items: center; }
+.invite .copyrow input { flex: 1; min-width: 0; margin: 0; }
