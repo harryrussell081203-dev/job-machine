@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}When should I follow up on a job application? &middot; Recruited{% endblock %}
+{% block content %}
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Job application follow-up calculator",
+  "url": {{ (config.BASE_URL ~ "/tools/follow-up") | tojson }},
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Any",
+  "isAccessibleForFree": true,
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "GBP"},
+  "description": "Gives the date to follow up on a job application, the date to stop, and the message to send, from when and how you applied.",
+  "publisher": {"@type": "Organization", "name": "Recruited",
+                "url": {{ config.BASE_URL | tojson }}}
+}
+</script>
+
+<h1>When should I follow up on a job application?</h1>
+<p class="lede">Tell it when and how you applied. You get the day to follow
+up, the day to give up, and the message to send. Free, no account.</p>
+
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+
+<form method="get" action="/tools/follow-up" class="panel">
+  <label for="applied">When did you apply?</label>
+  <input id="applied" name="applied" type="date" required max="{{ today }}"
+         value="{{ applied }}">
+
+  <label for="how">How did you apply?</label>
+  <select id="how" name="how">
+    {% for key, label in ways.items() %}
+      <option value="{{ key }}" {% if how == key %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="closing">Closing date, if the advert had one</label>
+  <input id="closing" name="closing" type="date" value="{{ closing }}">
+
+  <label for="role">The job title (optional, for the message)</label>
+  <input id="role" name="role" type="text" maxlength="120" value="{{ role }}"
+         placeholder="Maintenance technician">
+
+  <p><button type="submit">Work it out</button></p>
+</form>
+
+{% if result %}
+  {% if result.follow_up_on %}
+    <h2>Follow up on {{ result.follow_up_on.strftime('%A %-d %B') }}</h2>
+    <div class="panel">
+      <p>Write to {{ result.who }}, once. If nothing has come back by
+        <b>{{ result.stop_after.strftime('%A %-d %B') }}</b>, stop and put
+        the time into the next application.</p>
+      {% if overdue %}
+        <p class="note">That date has passed. A follow-up now is a cold
+          email with &ldquo;Re:&rdquo; on it &mdash; better to move on.</p>
+      {% endif %}
+      <p><small>{{ result.note }}</small></p>
+      <p><small>This is the rule Recruited follows when it chases its own
+        letters: one nudge, five working days on, never after three weeks.
+        Weekends are skipped; bank holidays are not, because they differ
+        across the UK.</small></p>
+    </div>
+
+    <h2>What to send</h2>
+    <div class="panel letter">{{ message }}</div>
+    <p><small>Send it as a reply to your first email, so they can see what
+      it is about.</small></p>
+  {% else %}
+    <h2>There is nobody to follow up with</h2>
+    <div class="note">
+      <p>{{ result.note }}</p>
+      <p><a class="btn" href="/find">Find the real address in the advert</a></p>
+    </div>
+  {% endif %}
+{% endif %}
+
+<div class="note">
+  <p><b>A follow-up only helps if the first email reached a person.</b>
+  Paste the advert into <a href="/find">the address finder</a> to get the
+  real one.</p>
+</div>
+
+<p><small><a href="/tools">More free tools</a></small></p>
+{% endblock %}

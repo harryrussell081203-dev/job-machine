@@ -12,6 +12,7 @@ configuration.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import math
 import sys
@@ -339,6 +340,39 @@ async def ai_check_submit(request: Request):
                             "later.", **_AI_CHECK_OG)
     return render(request, "ai_check.html", letter=text,
                   result=letter_check.check(text), **_AI_CHECK_OG)
+
+
+_FOLLOW_UP_OG = dict(
+    og_title="When should I follow up on a job application? Free calculator",
+    og_description="Put in when and how you applied and get the date to "
+                   "follow up, the date to stop, and the message to send. "
+                   "Free, no account.")
+
+
+@app.get("/tools/follow-up", response_class=HTMLResponse)
+def follow_up_calc(request: Request, applied: str = "", how: str = "",
+                   closing: str = "", role: str = ""):
+    """A GET form on purpose: the answer has its own address, so it can be
+    bookmarked or sent to somebody, and nothing about it needs storing."""
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    from . import followup_calc as calc
+    today = datetime.date.today()
+    context = dict(ways=calc.HOW, today=today.isoformat(), applied=applied,
+                   how=how, closing=closing, role=role[:120], **_FOLLOW_UP_OG)
+    if applied:
+        try:
+            day = datetime.date.fromisoformat(applied)
+            close = datetime.date.fromisoformat(closing) if closing else None
+        except ValueError:
+            return render(request, "follow_up.html",
+                          error="That date did not look right.", **context)
+        result = calc.plan(day, how, close)
+        context.update(result=result,
+                       message=calc.message(role[:120], day),
+                       overdue=bool(result.stop_after
+                                    and result.stop_after < today))
+    return render(request, "follow_up.html", **context)
 
 
 @app.get("/answers", response_class=HTMLResponse)
@@ -1309,7 +1343,7 @@ PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
 
 # The free tools, listed only while they are switched on, so the sitemap
 # never points a crawler at a page that answers 404.
-TOOL_PAGES = ("/tools", "/tools/cover-letter-ai-check")
+TOOL_PAGES = ("/tools", "/tools/cover-letter-ai-check", "/tools/follow-up")
 
 
 def tools_on() -> bool:
@@ -1416,6 +1450,8 @@ def llms_txt():
         tools = (f"- {config.BASE_URL}/tools/cover-letter-ai-check: checks a "
                  "cover letter for stock phrases, American spellings and flat "
                  "rhythm. Rules only, nothing stored.\n"
+                 f"- {config.BASE_URL}/tools/follow-up: the date to follow up "
+                 "on a job application, the date to stop, and what to send.\n"
                  f"- {config.BASE_URL}/tools: every free tool.\n")
 
     return f"""# Recruited
