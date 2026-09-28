@@ -137,7 +137,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .embeddings
-          key: embeddings-bge-small-en-v1.5
+          key: embeddings-${{ vars.EMBEDDING_MODEL || 'all-MiniLM-L6-v2' }}
 
       - name: Sweep
         env:
@@ -152,6 +152,12 @@ jobs:
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EMBEDDING_CACHE: ${{ github.workspace }}/.embeddings
+          # Switches. Set under Settings > Secrets and variables > Actions >
+          # Variables; read on the next run, no code change. Empty means the
+          # default in the code.
+          RANKER_ENABLED: ${{ vars.RANKER_ENABLED }}
+          SCORING_TOP_N: ${{ vars.SCORING_TOP_N }}
+          EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}

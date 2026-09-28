@@ -92,6 +92,26 @@ class RankingOnlyReorders(unittest.TestCase):
                              "Maintenance Technician")
 
 
+class TheSwitches(unittest.TestCase):
+    def test_ranker_off_keeps_the_boards_order(self):
+        jobs = [listing(1, "Barista"), listing(2, "Maintenance Technician")]
+        with patch.dict(os.environ, {"RANKER_ENABLED": "0"}):
+            self.assertEqual([l.title for l in rank.rank(jobs, profile())],
+                             ["Barista", "Maintenance Technician"])
+
+    def test_top_n_is_configurable(self):
+        read = []
+        jobs = [listing(i, "Technician") for i in range(100)]
+        with patch.dict(os.environ, {"SCORING_TOP_N": "15"}):
+            scoring.score(jobs, profile(),
+                          lambda p: (read.append(p), "[]")[1])
+        self.assertEqual(len(read), 1)
+
+    def test_nonsense_top_n_is_the_default(self):
+        with patch.dict(os.environ, {"SCORING_TOP_N": "lots"}):
+            self.assertEqual(scoring.top_n(), scoring.MAX_SCORED_PER_RUN)
+
+
 class ScoringReadsTheLikeliestFirst(unittest.TestCase):
     def test_the_one_good_job_at_the_back_is_still_read(self):
         """The failure this exists for: the right job at number 200."""

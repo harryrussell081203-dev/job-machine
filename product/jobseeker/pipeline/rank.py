@@ -13,12 +13,14 @@ about relevance, and only the model's score (and the pay floor) may say no.
 
 Two rankers, and the better one is optional:
 
-  - **An open-source embedding model** (BAAI's bge-small, via the fastembed
-    library, downloaded free from Hugging Face). It knows that a
+  - **An open-source embedding model** (all-MiniLM-L6-v2 by default, run
+    through the fastembed library, downloaded free from Hugging Face). It knows that a
     "multi-skilled engineer" and a "maintenance technician" are the same
     job, which word matching never will. It runs on the sweep's own CPU in
     a few seconds, costs nothing and sends nothing anywhere. It is installed
     only where the sweep runs: the web server's 512MB would not hold it.
+    fastembed rather than sentence-transformers because the latter pulls in
+    PyTorch, a gigabyte or two on every cold runner, for the same model.
   - **Word overlap** with their target roles and past job titles. Always
     available, and what is used if the model cannot be loaded for any
     reason. A worse ranking is never a reason to stop a run.
@@ -27,13 +29,13 @@ Two rankers, and the better one is optional:
 from __future__ import annotations
 
 import math
-import os
 import re
 
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-# Where the sweep keeps the downloaded model between runs, so Hugging Face is
-# asked once rather than six times a day.
-CACHE_DIR = os.environ.get("EMBEDDING_CACHE", "")
+from .. import settings
+
+# Switch: RANKER_ENABLED (default on). Off means the boards' own order.
+# EMBEDDING_MODEL names any model fastembed supports.
+DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 _WORD = re.compile(r"[a-z]+")
 # Words that appear in every advert and say nothing about the job.
@@ -96,8 +98,13 @@ def _load_embedder():
         return _embedder
     try:
         from fastembed import TextEmbedding
-        kwargs = {"cache_dir": CACHE_DIR} if CACHE_DIR else {}
-        model = TextEmbedding(model_name=EMBEDDING_MODEL, **kwargs)
+        # Where the sweep keeps the downloaded model between runs, so
+        # Hugging Face is asked once rather than six times a day.
+        cache = settings.text("EMBEDDING_CACHE")
+        kwargs = {"cache_dir": cache} if cache else {}
+        name = settings.text("EMBEDDING_MODEL", DEFAULT_MODEL)
+        model = TextEmbedding(model_name=name, **kwargs)
+        print(f"[rank] ranking with {name}")
 
         def embed(texts):
             return [list(v) for v in model.embed(list(texts))]
@@ -131,7 +138,8 @@ def rank(listings, profile, *, embed=None) -> list:
     """The same listings, likeliest first. Stable, so equal scores keep the
     boards' own order (newest first)."""
     listings = list(listings)
-    if len(listings) < 2 or not profile_text(profile):
+    if (len(listings) < 2 or not profile_text(profile)
+            or not settings.flag("RANKER_ENABLED")):
         return listings
     scores = similarity(profile, listings, embed=embed)
     order = sorted(range(len(listings)), key=lambda i: -scores[i])

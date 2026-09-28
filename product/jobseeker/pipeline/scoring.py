@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 
+from .. import settings
 from . import rank as ranking
 
 BATCH_SIZE = 15
@@ -31,8 +32,12 @@ BATCH_SIZE = 15
 # hundred calls a day and three full sweeps share them with letter-writing,
 # so a run that tried to score 343 listings in batches of 12 was spending a
 # day's allowance on one search. Whatever is left over is not marked seen,
-# so the next run picks it up if it is still fresh.
+# so the next run picks it up if it is still fresh. SCORING_TOP_N overrides.
 MAX_SCORED_PER_RUN = 60
+
+
+def top_n() -> int:
+    return max(1, settings.number("SCORING_TOP_N", MAX_SCORED_PER_RUN))
 # Two batches in a row failing means the model is refusing, not blinking.
 # Carrying on only spends more of the allowance on refusals.
 STOP_AFTER_FAILURES = 2
@@ -245,14 +250,15 @@ def score(listings, profile, ai, *, threshold: int = DEFAULT_THRESHOLD,
                 # Never let the commentary break the scoring it describes.
                 pass
 
-    deferred = len(to_score) - MAX_SCORED_PER_RUN
+    cap = top_n()
+    deferred = len(to_score) - cap
     if deferred > 0:
         # More than the model can read today, so read the likeliest first.
         # The rest are not rejected, only left for the next run.
         to_score = ranking.rank(to_score, profile, embed=embed)
         print(f"[scoring] {deferred} left for the next run to keep inside "
               f"the free model allowance")
-        to_score = to_score[:MAX_SCORED_PER_RUN]
+        to_score = to_score[:cap]
 
     failures = 0
     report(0)
