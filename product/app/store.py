@@ -548,6 +548,10 @@ _ADDED_COLUMNS = [
     # Straight-line miles from the person's home, when both ends could be
     # found. Empty means unknown, never zero. See jobseeker/geo.py.
     ("drafts", "distance_miles", "INTEGER"),
+    # Current directors of a small employer, from Companies House: names
+    # only, comma-separated, as a pointer to who is likely hiring. Empty
+    # when the firm is not small, not matched, or the key is not set.
+    ("drafts", "directors", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

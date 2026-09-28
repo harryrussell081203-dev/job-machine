@@ -194,6 +194,7 @@ def render(request: Request, template: str, **ctx):
         {"user": user, "paid": db.is_paid(user), "config": config,
          "tools_on": tools_on(),
          "sentry_on": bool(settings.text("SENTRY_DSN")),
+         "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
          "is_admin": bool(user and config.is_admin(user["email"])),
          # Every page, because the meta description in base.html quotes it and
          # base.html is every page. Cached on the file's mtime, so this is a
@@ -294,8 +295,12 @@ async def find_submit(request: Request):
                             "later, or sign up and let it run on its own.")
 
     found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
+    company = (form.get("company") or "").strip()[:160]
+    from jobseeker import companies_house
+    directors = (companies_house.directors(company)
+                 if company and companies_house.enabled() else [])
     return render(request, "find.html", advert=advert, found=found,
-                  searched=True)
+                  searched=True, company=company, directors=directors)
 
 
 TOOL_PER_IP = (60, 3600)

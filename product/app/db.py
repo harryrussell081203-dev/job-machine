@@ -1804,8 +1804,10 @@ class _PlaceCache:
 
 
 def _plug_place_cache() -> None:
-    from jobseeker import geo
+    from jobseeker import companies_house, geo
     geo.store = _PlaceCache()
+    # The same site_meta notes, for Companies House answers.
+    companies_house.store = _PlaceCache()
 
 
 _plug_place_cache()

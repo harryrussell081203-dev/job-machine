@@ -45,6 +45,11 @@
       {% else %}<span class="tag">generic inbox</span>{% endif %}
     </p>
 
+    {% if d['directors'] %}
+      <p class="hint">Small firm. Directors on Companies House:
+        {{ d['directors'] }} &mdash; often the person hiring. Names only;
+        find their own address before writing to one.</p>
+    {% endif %}
     <p><b>{{ d['subject'] }}</b></p>
     <div class="letter">{{ d['body'] }}</div>
 

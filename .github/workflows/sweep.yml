@@ -194,6 +194,7 @@ jobs:
           SALARY_FROM_TEXT: ${{ vars.SALARY_FROM_TEXT }}
           # Dormant until set. See app/errors.py.
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}

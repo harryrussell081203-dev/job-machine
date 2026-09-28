@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from jobseeker import geo, mx
+from jobseeker import companies_house, geo, mx
 from jobseeker.pipeline import (compose, discover, harvest, pay, proofread,
                                 scoring)
 from jobseeker.profile import Profile, ProfileError
@@ -42,6 +42,7 @@ class RunReport:
     fallback_used: int = 0
     undeliverable: int = 0
     too_far: int = 0
+    dissolved: int = 0
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -139,6 +140,7 @@ def run_for_user(user_id: int, *, ai=None, session=None,
             candidates.append(listing)
 
     candidates = _measure(user_id, candidates, profile, session, report)
+    candidates = _still_trading(user_id, candidates, report, session)
 
     judged = scoring.score(
         candidates, profile, score_ai,
@@ -220,6 +222,26 @@ def _measure(user_id, listings, profile, session, report) -> list:
     return kept
 
 
+def _still_trading(user_id, listings, report, session) -> list:
+    """Set aside adverts from employers Companies House says are gone -
+    dissolved, in liquidation - before a model is paid to read them. Only a
+    single exact name match counts; anything less keeps the job. Dormant
+    without a Companies House key."""
+    if not companies_house.enabled() or not listings:
+        return listings
+    get = session.get if session is not None else None
+    kept = []
+    for listing in listings:
+        status = companies_house.gone(listing.company or "", get=get)
+        if status:
+            report.dissolved += 1
+            db.mark_seen(user_id, listing.external_id,
+                         f"Companies House lists the employer as {status}")
+            continue
+        kept.append(listing)
+    return kept
+
+
 def _draft_one(user_id, listing, profile, ai, session, report,
                cv_attached=True, **kwargs):
     contact = discover.discover(listing, profile, session=session, **kwargs)
@@ -262,12 +284,17 @@ def _draft_one(user_id, listing, profile, ai, session, report,
     # Grammar and style are logged, never applied. See proofread.py.
     letter = proofread.letter(letter)
 
-    _save_draft(user_id, listing, letter)
+    # At a small firm a director is often the person hiring. Names only, as
+    # a pointer on the card; never used to make an address.
+    get = session.get if session is not None else None
+    directors = ", ".join(companies_house.directors(listing.company or "",
+                                                    get=get))
+    _save_draft(user_id, listing, letter, directors)
     db.mark_seen(user_id, listing.external_id, "drafted")
     report.drafted += 1
 
 
-def _save_draft(user_id, listing, letter) -> int:
+def _save_draft(user_id, listing, letter, directors: str = "") -> int:
     return db.add_draft(
         user_id,
         job_title=listing.title, company=listing.company,
@@ -277,6 +304,7 @@ def _save_draft(user_id, listing, letter) -> int:
         to_email=letter["to_email"], to_name=letter.get("to_name"),
         contact_tier=letter.get("contact_tier"),
         distance_miles=listing.distance_miles,
+        directors=directors,
         subject=letter["subject"], body=letter["body"])
 
 
