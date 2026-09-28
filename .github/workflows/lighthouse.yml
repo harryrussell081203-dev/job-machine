@@ -71,7 +71,16 @@ jobs:
         continue-on-error: true
         uses: treosh/lighthouse-ci-action@v12
         with:
-          urls: ${{ env.PAGES }}
+          # One per line: the action splits on newlines, and the
+          # space-separated PAGES above (which axe wants) reads to it as one
+          # long, broken address.
+          urls: |
+            http://127.0.0.1:8000/
+            http://127.0.0.1:8000/find
+            http://127.0.0.1:8000/tools
+            http://127.0.0.1:8000/tools/cover-letter-ai-check
+            http://127.0.0.1:8000/tools/follow-up
+            http://127.0.0.1:8000/answers/why-no-reply
           configPath: product/lighthouserc.json
           uploadArtifacts: true
 
