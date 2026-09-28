@@ -7,54 +7,59 @@
   ten minutes.</div>
   <p><a class="btn" href="/setup">Get started</a></p>
 {% else %}
-  <div class="stats">
+  <div class="stats four">
+    {# What came of it, not just how much went: "sent" with nothing next to
+       it tells somebody the machine is busy, not that it is working. #}
     <div class="stat"><b>{{ counts.get('draft', 0) }}</b><span>waiting to send</span></div>
-    <div class="stat"><b>{{ counts.get('sent', 0) }}</b><span>sent</span></div>
-    <div class="stat"><b>{{ counts.get('discarded', 0) }}</b><span>discarded</span></div>
+    <a class="stat" href="/applications"><b>{{ stats.sent }}</b><span>sent</span></a>
+    <a class="stat" href="/applications?show=heard"><b>{{ stats.heard_back }}</b><span>heard back</span></a>
+    <a class="stat" href="/applications?show=interviews"><b>{{ stats.interviews }}</b><span>interview{{ '' if stats.interviews == 1 else 's' }}</span></a>
   </div>
 
-  {# Whether the machine is on, and the last thing it actually did.
-     Deliberately no "next run at 11:10": that schedule is GitHub's, and
-     GitHub delays scheduled workflows under load and drops the ones it
-     cannot place. Printing a time that may not arrive is how a product
-     teaches somebody to stop believing it. #}
+  {# One line: is it working. The rules behind it fold away - somebody
+     checking on it wants the answer, not the terms. Deliberately no "next
+     run at 11:10": that schedule is GitHub's, and GitHub delays scheduled
+     workflows under load and drops the ones it cannot place. #}
+  {% set auto = machine.mailbox and machine.auto_send and not machine.paused %}
   <div class="panel machine">
     {% if not machine.mailbox %}
       <p><b>Not sending yet.</b> Connect a mailbox and letters go out on their
-         own, from your own address.</p>
-      <p><a class="btn small" href="/setup/mail">Connect a mailbox</a></p>
+         own, from your own address.
+         <a href="/setup/mail">Connect a mailbox</a></p>
     {% elif not machine.auto_send %}
-      <p><b>Writing, not sending.</b> Letters are being written for you and
-         are waiting for you to send them.</p>
-      <p><a class="btn small ghost" href="/account">Turn on automatic
-         sending</a></p>
+      <p><b>Writing, not sending.</b> Letters wait here for you to send.
+         <a href="/setup#rules">Turn on automatic sending</a></p>
     {% elif machine.paused %}
-      <p><b>Paused.</b> Nothing will go out until you start it again.</p>
-      <p><a class="btn small ghost" href="/account">Settings</a></p>
+      <p><b>Paused.</b> Nothing will go out until you start it again.
+         <a href="/setup#rules">Settings</a></p>
     {% else %}
-      <p><b>On.</b> Letters go out on their own, up to
+      <p><b>On.</b>
+        {%- if machine.sent_today %} {{ machine.sent_today }} sent today, {{ machine.left_today }} left.
+        {%- else %} Nothing sent today yet &mdash; {{ machine.left_today }} to spend.
+        {%- endif %}
+        {%- if machine.last_sent_at %} Last letter went {{ machine.last_sent_at | ago }}.{% endif %}</p>
+      <details>
+        <summary><small>How it sends</small></summary>
+        <p class="hint">Letters go out on their own, up to
          {{ machine.daily_cap }} a day, each one held
          {{ machine.hold_minutes }} minutes after it is written so you can
-         stop it.</p>
-      <p class="muted">
-        {%- if machine.sent_today -%}
-          {{ machine.sent_today }} sent today, {{ machine.left_today }} left.
-        {%- else -%}
-          Nothing sent today yet &mdash; {{ machine.left_today }} to spend.
-        {%- endif -%}
-        {% if machine.waiting %} {{ machine.waiting }} waiting in the
-          queue.{% endif %}
-      </p>
+         stop it.{% if machine.waiting %} {{ machine.waiting }} waiting in the
+         queue.{% endif %}
+         {%- if machine.last_looked_at %} Last looked for work
+         {{ machine.last_looked_at | ago }}.{% endif %}
+         <a href="/setup#rules">Change</a></p>
+      </details>
     {% endif %}
-    {% if machine.last_looked_at or machine.last_sent_at %}
-      <p class="hint">
-        {%- if machine.last_looked_at %}Last looked for work
-          {{ machine.last_looked_at | ago }}.{% endif %}
-        {%- if machine.last_sent_at %} Last letter went
-          {{ machine.last_sent_at | ago }}.{% endif %}
-      </p>
+    {% if not auto and machine.last_sent_at %}
+      <p class="hint">Last letter went {{ machine.last_sent_at | ago }}.</p>
     {% endif %}
   </div>
+
+  {% if stats.detected %}
+    <p class="note"><b>{{ stats.detected }}
+      employer{{ '' if stats.detected == 1 else 's' }} wrote back.</b>
+      <a href="/applications?show=heard">See who</a></p>
+  {% endif %}
 
   {# Rendered from the server on load AND updated by polling, so it is correct
      on first paint, survives a refresh, and still tells you something with
@@ -90,37 +95,41 @@
     </p>
   </div>
 
-  {% if drafts %}
+  {% if not auto %}
+    {# Not sending on its own, so this page is where the work happens:
+       the letters to send, and the tool that finds who to send one to. #}
     <h2>Ready to send</h2>
-    {% for d in drafts %}
-      <div class="panel draft tier{{ d['contact_tier'] or 0 }}">
-        <h3>{{ d['job_title'] }}</h3>
-        <p class="meta">{{ d['company'] }}{% if d['location'] %} &middot; {{ d['location'] }}{% endif %}
-          {% if d['to_name'] %} &middot; to {{ d['to_name'] }}{% endif %}</p>
+    {% if drafts %}
+      {% for d in drafts %}
+        <a class="panel draft row-link tier{{ d['contact_tier'] or 0 }}" href="/drafts">
+          <b>{{ d['job_title'] }}</b>
+          <span class="meta">{{ d['company'] }}{% if d['to_name'] %} &middot; to {{ d['to_name'] }}{% endif %}</span>
+        </a>
+      {% endfor %}
+      <p><a class="btn" href="/drafts">Work through them</a></p>
+    {% else %}
+      <div class="panel">
+        <p>Nothing waiting. Anything that clears your floor and has a real
+        address behind it appears here, written and ready.</p>
+        <form method="post" action="/run" style="margin-top:6px">
+          <button type="submit">Look for work now</button>
+        </form>
       </div>
-    {% endfor %}
-    <p><a class="btn" href="/drafts">Work through them</a></p>
-  {% else %}
+    {% endif %}
+
+    <h2>Find the hiring manager</h2>
     <div class="panel">
-      <p>Nothing waiting. Listings are checked every weekday;
-      anything that clears your floor and has a real address behind it appears
-      here written and ready.</p>
-      <form method="post" action="/run" style="margin-top:6px">
-        <button type="submit">Look for work now</button>
-      </form>
+      <p class="hint" style="margin-top:0">Seen a job somewhere else? Paste
+        the advert and it finds the person to write to.</p>
+      {% include "_finder.html" %}
     </div>
   {% endif %}
 
-  <h2>Your search</h2>
-  <div class="panel">
-    <p><b>{{ profile.get('name') }}</b> &middot; {{ profile.get('location') }}</p>
-    <p class="muted">
-      {% if profile.get('min_salary_annual') %}Floor £{{ '{:,}'.format(profile.get('min_salary_annual')) }}{% endif %}
-      {% if profile.get('min_rate_hourly') %} or £{{ profile.get('min_rate_hourly') }}/hr{% endif %}
-      &middot; {{ (profile.get('locations') or []) | join(', ') }}
-    </p>
-    <p><a class="btn ghost" href="/profile">Edit</a></p>
-  </div>
+  <p class="hint">Looking for
+    {{ (profile.get('target_roles') or ['work']) | join(', ') }} in
+    {{ (profile.get('locations') or [profile.get('location')]) | join(', ') }}
+    {%- if profile.get('min_salary_annual') %}, from £{{ '{:,}'.format(profile.get('min_salary_annual')) }}{% endif %}.
+    <a href="/profile">Edit</a></p>
 
 <script>
 // Follow a run while it happens.

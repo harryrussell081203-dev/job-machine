@@ -528,6 +528,9 @@ _ADDED_COLUMNS = [
     # The end-of-day email to the user themselves, and when it last went.
     ("send_settings", "digest", "INTEGER NOT NULL DEFAULT 0"),
     ("send_settings", "last_digest_at", "BIGINT"),
+    # Interview questions and answer outlines for this application, as JSON,
+    # built once when the user asks. See prep.py.
+    ("drafts", "interview_prep", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

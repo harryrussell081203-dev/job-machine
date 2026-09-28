@@ -38,7 +38,7 @@
       "@type": "Dataset",
       "@id": {{ (config.BASE_URL ~ "/numbers.json#founder") | tojson }},
       "name": "A UK job hunt, counted as it happens",
-      "description": "The running total of one jobseeker's applications and replies, republished by the machine that sends them after every run. {{ record.applications }} applications to {{ record.employers }} employers, {{ record.replies }} replies. It goes down as well as up.",
+      "description": "The complete total of one jobseeker's applications and replies from the machine this product was built out of, from August to its retirement on 23 September 2026. {{ record.applications }} applications to {{ record.employers }} employers, {{ record.replies }} replies.",
       "license": "https://creativecommons.org/licenses/by/4.0/",
       "creator": {"@id": {{ (config.BASE_URL ~ "/#org") | tojson }}},
       "isAccessibleForFree": true,
@@ -148,12 +148,13 @@
    was built out of, from his own mailbox, before there was a product. They
    are counted from his sent folder and his replies &mdash; not from this
    database, which is why they are not in the panel at the top.</p>
-<p>They are no longer typed in by hand. That machine writes them out at the
-   end of every run and this page reads what it wrote, so they are the
-   running total on
-   {%- if record and record.updated_at %} {{ record.updated_at[:10] }}
-   {%- endif %} rather than a good fortnight chosen out of it. They will go
-   down as well as up.</p>
+<p>They were never typed in by hand. That machine wrote them out at the
+   end of every run until
+   {%- if record and record.updated_at %} {{ record.updated_at[:10] }},
+   {%- else %} it was retired,{% endif %} when his own search moved onto this
+   site, so they are every letter it sent rather than a good fortnight chosen
+   out of it. From then on his letters are counted in the panel at the top
+   with everybody else's.</p>
 <p>They also measure a different thing from the table above. Those are
    <b>interview</b> rates. His is a <b>reply</b> rate: an answer from a human
    being at the company. Putting the two side by side as though they were the

@@ -14,6 +14,7 @@ What is deliberately NOT stored:
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from . import config
@@ -374,6 +375,129 @@ def applications(user_id: int, limit: int = 200):
             "SELECT * FROM drafts WHERE user_id = ? AND status = 'sent' "
             "ORDER BY sent_at DESC, id DESC LIMIT ?",
             (user_id, limit)).fetchall()
+
+
+# The tracker's tabs. Each is a question somebody opening it actually has:
+# what is still out there, who answered, where am I talking to somebody,
+# and what is over.
+APPLICATION_FILTERS = (("all", "All"), ("waiting", "Waiting"),
+                       ("heard", "Heard back"), ("interviews", "Interviews"),
+                       ("closed", "Closed"))
+
+
+def application_group(row) -> str:
+    outcome = (row["outcome"] or "").strip()
+    if outcome in ("interview", "offer"):
+        return "interviews"
+    if outcome == "rejected":
+        return "closed"
+    if outcome == "replied" or row["reply_seen_at"]:
+        return "heard"
+    return "waiting"
+
+
+def filter_applications(rows, show: str) -> tuple[list, dict]:
+    """(the rows for this tab, a count for every tab). "Heard back" includes
+    interviews, the way the stats above it count them."""
+    counts = {key: 0 for key, _ in APPLICATION_FILTERS}
+    counts["all"] = len(rows)
+    picked = []
+    for row in rows:
+        group = application_group(row)
+        counts[group] += 1
+        if group == "interviews":
+            counts["heard"] += 1
+        if (show == "all" or show == group
+                or (show == "heard" and group == "interviews")):
+            picked.append(row)
+    return picked, counts
+
+
+def save_interview_prep(user_id: int, draft_id: int, prep: dict) -> None:
+    with connect() as c:
+        c.execute("UPDATE drafts SET interview_prep = ? WHERE id = ? "
+                  "AND user_id = ?", (json.dumps(prep), draft_id, user_id))
+
+
+def interview_prep(row) -> dict | None:
+    raw = _col(row, "interview_prep") or ""
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None
+
+
+YOU_ASKED = "blocked: you asked"
+WRITTEN_BEFORE = " (written to before)"
+
+
+def user_blocks(user_id: int) -> list[dict]:
+    """Everything this user has said never to write to, by name and by
+    address. What the machine records as merely 'written to before' is not
+    here: that is memory, not a choice they made."""
+    with connect() as c:
+        names = c.execute(
+            "SELECT company_key AS key, reason FROM do_not_contact "
+            "WHERE user_id = ? ORDER BY company_key", (user_id,)).fetchall()
+        mail = c.execute(
+            "SELECT mail_key AS key, reason FROM contacted_mail "
+            "WHERE user_id = ? AND reason <> '' ORDER BY mail_key",
+            (user_id,)).fetchall()
+    return ([{"kind": "name", "key": r["key"], "reason": r["reason"] or ""}
+             for r in names]
+            + [{"kind": "mail", "key": r["key"], "reason": r["reason"]}
+               for r in mail])
+
+
+def add_user_block(user_id: int, text: str) -> str | None:
+    """One line from the "never write to" box. A web address or email is
+    blocked by domain, anything else by company name. Returns what was
+    stored, or None if the line was empty."""
+    line = (text or "").strip().strip(",")
+    if not line:
+        return None
+    looks_like_mail = " " not in line and "." in line
+    if looks_like_mail:
+        cleaned = re.sub(r"^https?://", "", line.lower()).split("/")[0]
+        key = mail_key(cleaned)
+        if key:
+            with connect() as c:
+                known = c.execute(
+                    "SELECT reason FROM contacted_mail WHERE user_id = ? "
+                    "AND mail_key = ?", (user_id, key)).fetchone()
+                if known is None:
+                    c.execute(
+                        "INSERT INTO contacted_mail (user_id, mail_key, "
+                        "first_at, reason) VALUES (?, ?, ?, ?)",
+                        (user_id, key, now(), YOU_ASKED))
+                elif not known["reason"]:
+                    # Written to before. Say so in the reason, so that
+                    # unblocking later puts the memory back rather than
+                    # forgetting a letter that really went.
+                    c.execute(
+                        "UPDATE contacted_mail SET reason = ? WHERE user_id = ? "
+                        "AND mail_key = ?", (YOU_ASKED + WRITTEN_BEFORE,
+                                             user_id, key))
+            return key
+    block_company(user_id, line, reason="you asked")
+    return company_key(line) or None
+
+
+def remove_user_block(user_id: int, kind: str, key: str) -> None:
+    """Unblocking a domain turns it back into ordinary memory rather than
+    deleting it: if a letter ever went there, it still did."""
+    with connect() as c:
+        if kind == "name":
+            c.execute("DELETE FROM do_not_contact WHERE user_id = ? "
+                      "AND company_key = ?", (user_id, key))
+        elif kind == "mail":
+            # A block they added to a domain nobody had written to goes
+            # completely. Any other block becomes ordinary memory again.
+            c.execute("DELETE FROM contacted_mail WHERE user_id = ? "
+                      "AND mail_key = ? AND reason = ?",
+                      (user_id, key, YOU_ASKED))
+            c.execute("UPDATE contacted_mail SET reason = '' WHERE user_id = ? "
+                      "AND mail_key = ?", (user_id, key))
 
 
 def application_stats(user_id: int) -> dict:
