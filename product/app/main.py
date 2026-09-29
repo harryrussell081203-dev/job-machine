@@ -38,7 +38,7 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import funnel  # noqa: E402
-from . import letter_check, push, referrals  # noqa: E402
+from . import letter_check, push, referrals, telegram  # noqa: E402
 from jobseeker import settings  # noqa: E402
 from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
@@ -136,6 +136,9 @@ async def lifespan(_app: FastAPI):
     # delay a request: the only caller that pays for it is the first boot
     # after something actually changed.
     print(f"[indexnow] {indexnow.submit_if_changed(public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)}")
+    # The Telegram bot's webhook, registered once per token and address.
+    # Dormant without a token; cannot raise. See telegram.py.
+    print(f"[telegram] {telegram.register(get_meta=db.get_meta, set_meta=db.set_meta)}")
     yield
 
 
@@ -195,6 +198,8 @@ def render(request: Request, template: str, **ctx):
          "tools_on": tools_on(),
          "sentry_on": bool(settings.text("SENTRY_DSN")),
          "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
+         "telegram_bot": (telegram.username()
+                          if telegram.enabled() else ""),
          "site_verification": {
              "google": settings.text("GOOGLE_SITE_VERIFICATION"),
              "bing": settings.text("BING_SITE_VERIFICATION")},
@@ -341,6 +346,33 @@ def find_submit(request: Request, advert: str = Form(""),
     return render(request, "find.html", advert=advert, found=found,
                   searched=True, company=company, directors=directors,
                   looked_up=looked_up)
+
+
+@app.post("/telegram/{secret}")
+async def telegram_webhook(request: Request, secret: str):
+    """Telegram's webhook. The path and the header are both derived from the
+    bot token, so a request without the token gets a 404 and learns nothing.
+    The reply rides back in this response; nothing is sent from here."""
+    import hmac
+    if (not telegram.enabled()
+            or not hmac.compare_digest(secret, telegram.path_secret())
+            or not hmac.compare_digest(
+                request.headers.get("x-telegram-bot-api-secret-token", ""),
+                telegram.header_secret())):
+        return PlainTextResponse("Not found", status_code=404)
+    try:
+        update = await request.json()
+    except Exception:
+        return JSONResponse({})
+    limit, window = telegram.PER_CHAT
+
+    def allow(chat_id):
+        return ratelimit.hit(f"tg:{chat_id}", limit=limit, window=window)
+    # The company lookup waits on other sites; run it off the event loop.
+    import anyio
+    reply = await anyio.to_thread.run_sync(
+        lambda: telegram.reply_to(update, allow=allow))
+    return JSONResponse(reply or {})
 
 
 TOOL_PER_IP = (60, 3600)

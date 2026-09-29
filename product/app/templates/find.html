@@ -10,6 +10,12 @@ find a real address to write to. Free, no account.</p>
 
 {% include "_finder.html" %}
 
+{% if telegram_bot %}
+  <p><small>Also on Telegram: send
+    <a href="https://t.me/{{ telegram_bot }}" target="_blank" rel="noopener">@{{ telegram_bot }}</a>
+    a company name and it replies with the address.</small></p>
+{% endif %}
+
 {% if searched and directors %}
   <div class="note">
     <p><b>{{ company }} is a small firm.</b> Its directors on Companies House
