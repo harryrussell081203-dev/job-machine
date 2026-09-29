@@ -17,39 +17,32 @@
    script travel with it for the same reason: a button without its handler is
    a control that does nothing when pressed. #}
 <form method="post" action="/find">
-  {# The example button was BELOW the box and below the fold - on an iPhone SE
-     you had to scroll 277px to learn there was anything to press, and on a
-     13 you had to scroll 85. Everybody landed on a headline and a big empty
-     rectangle with no visible control, and left.
-
-     Nineteen people opened this page the night that was true and not one of
-     them pressed anything. The errand was never the whole problem; the button
-     that removed the errand could not be seen.
-
-     So it comes FIRST, above the box, because for somebody arriving with
-     nothing in their clipboard it is the only action they can take. The paste
-     box is for the person who came with an advert, and they will scroll. #}
-  <p class="actions" style="margin:0 0 20px">
-    <button type="button" class="btn" id="tryexample" hidden>Show me, on an
-      example job</button>
-  </p>
-
-  <label for="advert">Or paste your own advert</label>
-  {# rows=10 was 280px of empty rectangle pushing every control off the
-     screen. Six still shows it is a big box for a big paste. #}
-  <textarea id="advert" name="advert" rows="6" required
-            placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom, which is usually where it hides">{{ advert or '' }}</textarea>
-  <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. We
-    only read what you paste.</p>
-  {% if companies_house_on %}
-    <label for="company">Company name (optional)</label>
-    <input id="company" name="company" type="text" maxlength="160"
-           value="{{ company or '' }}"
-           placeholder="For a small firm, we will list its directors">
-  {% endif %}
+  {# The company name comes first. Finding the advert, copying all of it and
+     pasting it was the step people abandoned; typing an employer's name is
+     one step, and the lookup reads that company's own website for an address
+     they publish (app/company_lookup.py). The advert stays, one tap down,
+     because an address printed in the advert has the best odds of all. #}
+  <label for="company">Company name</label>
+  <input id="company" name="company" type="text" maxlength="160"
+         autocomplete="organization" value="{{ company or '' }}"
+         placeholder="The employer on the job advert">
+  <p class="hint">We check that company's own website for an address it
+    publishes. Nothing is guessed.</p>
   <p style="margin-top:14px" class="actions">
     <button type="submit">Find the contact</button>
+    <button type="button" class="btn ghost" id="tryexample" hidden>Show me an
+      example</button>
   </p>
+
+  <details class="fold"{% if advert %} open{% endif %}>
+    <summary>Or paste the job advert &mdash; best odds</summary>
+    <label for="advert">The job advert</label>
+    <textarea id="advert" name="advert" rows="6"
+              placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom, which is usually where it hides">{{ advert or '' }}</textarea>
+    <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. An
+      address printed in the advert itself has the best odds of a reply.</p>
+    <p style="margin-top:14px"><button type="submit">Find the contact</button></p>
+  </details>
 </form>
 
 <script>

@@ -38,7 +38,7 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import funnel  # noqa: E402
-from . import letter_check, push, referrals  # noqa: E402
+from . import letter_check, push, referrals, telegram  # noqa: E402
 from jobseeker import settings  # noqa: E402
 from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
@@ -136,6 +136,9 @@ async def lifespan(_app: FastAPI):
     # delay a request: the only caller that pays for it is the first boot
     # after something actually changed.
     print(f"[indexnow] {indexnow.submit_if_changed(public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)}")
+    # The Telegram bot's webhook, registered once per token and address.
+    # Dormant without a token; cannot raise. See telegram.py.
+    print(f"[telegram] {telegram.register(get_meta=db.get_meta, set_meta=db.set_meta)}")
     yield
 
 
@@ -195,6 +198,8 @@ def render(request: Request, template: str, **ctx):
          "tools_on": tools_on(),
          "sentry_on": bool(settings.text("SENTRY_DSN")),
          "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
+         "telegram_bot": (telegram.username()
+                          if telegram.enabled() else ""),
          "site_verification": {
              "google": settings.text("GOOGLE_SITE_VERIFICATION"),
              "bing": settings.text("BING_SITE_VERIFICATION")},
@@ -282,28 +287,92 @@ def find_form(request: Request):
     return render(request, "find.html")
 
 
-@app.post("/find", response_class=HTMLResponse)
-async def find_submit(request: Request):
-    form = await request.form()
-    advert = (form.get("advert") or "")[:MAX_ADVERT]
-    if not advert.strip():
-        return render(request, "find.html",
-                      error="Paste the advert text first.")
+# Looking a company up reads its website, so it is rationed harder than an
+# advert, which is only text the visitor already has: per visitor, and for
+# the whole site, so the free page can never become a way to hammer small
+# firms' websites.
+COMPANY_PER_IP = (15, 3600)
+COMPANY_ALL = (300, 3600)
 
+
+@app.post("/find", response_class=HTMLResponse)
+def find_submit(request: Request, advert: str = Form(""),
+                company: str = Form("")):
+    """By company name, by advert, or both.
+
+    Sync on purpose: a company lookup waits on other sites for up to twenty
+    seconds, and FastAPI runs a plain function in its thread pool, so that
+    wait never holds up anybody else's page.
+    """
+    advert = (advert or "")[:MAX_ADVERT]
+    company = (company or "").strip()[:160]
+    if not advert.strip() and not company:
+        return render(request, "find.html",
+                      error="Type the company's name, or paste the advert.")
+
+    ip = ratelimit.client_ip(request)
     limit, window = FIND_PER_IP
-    if not ratelimit.hit(f"find:ip:{ratelimit.client_ip(request)}",
-                         limit=limit, window=window):
-        return render(request, "find.html", advert=advert,
-                      error="That is a lot of adverts in an hour. Try again "
+    if not ratelimit.hit(f"find:ip:{ip}", limit=limit, window=window):
+        return render(request, "find.html", advert=advert, company=company,
+                      error="That is a lot of searches in an hour. Try again "
                             "later, or sign up and let it run on its own.")
 
-    found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
-    company = (form.get("company") or "").strip()[:160]
+    from_advert = contacts.clean_emails(discover.emails_in(advert))
+    looked_up = None
+    if company:
+        per_ip, per_ip_window = COMPANY_PER_IP
+        everyone, everyone_window = COMPANY_ALL
+        if not (ratelimit.hit(f"find:company:{ip}", limit=per_ip,
+                              window=per_ip_window)
+                and ratelimit.hit("find:company:all", limit=everyone,
+                                  window=everyone_window)):
+            return render(request, "find.html", advert=advert,
+                          company=company,
+                          error="Company lookups are busy right now. Paste "
+                                "the advert instead, or try again later.")
+        from . import company_lookup
+        looked_up = company_lookup.lookup(company, store=db._PlaceCache())
+
+    from_site = [e for e in (looked_up or {}).get("emails", [])
+                 if e not in from_advert]
+    found = contacts.rank(from_advert + from_site)
+    for c in found:
+        c["source"] = "the advert" if c["email"] in from_advert else \
+            "their website"
+
     from jobseeker import companies_house
     directors = (companies_house.directors(company)
                  if company and companies_house.enabled() else [])
     return render(request, "find.html", advert=advert, found=found,
-                  searched=True, company=company, directors=directors)
+                  searched=True, company=company, directors=directors,
+                  looked_up=looked_up)
+
+
+@app.post("/telegram/{secret}")
+async def telegram_webhook(request: Request, secret: str):
+    """Telegram's webhook. The path and the header are both derived from the
+    bot token, so a request without the token gets a 404 and learns nothing.
+    The reply rides back in this response; nothing is sent from here."""
+    import hmac
+    if (not telegram.enabled()
+            or not hmac.compare_digest(secret, telegram.path_secret())
+            or not hmac.compare_digest(
+                request.headers.get("x-telegram-bot-api-secret-token", ""),
+                telegram.header_secret())):
+        return PlainTextResponse("Not found", status_code=404)
+    try:
+        update = await request.json()
+    except Exception:
+        return JSONResponse({})
+    limit, window = telegram.PER_CHAT
+
+    def allow(chat_id):
+        return ratelimit.hit(f"tg:{chat_id}", limit=limit, window=window)
+    # The company lookup waits on other sites; run it off the event loop.
+    import anyio
+    reply = await anyio.to_thread.run_sync(
+        lambda: telegram.reply_to(update, allow=allow))
+    return JSONResponse(reply or {})
 
 
 TOOL_PER_IP = (60, 3600)

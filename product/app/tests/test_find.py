@@ -66,7 +66,7 @@ class TheFreeTool(AppTestCase):
 
     def test_an_empty_paste_asks_again_rather_than_pretending(self):
         page = self.find("   ")
-        self.assertIn("Paste the advert text first", page)
+        self.assertIn("Type the company's name, or paste the advert", page)
 
     def test_it_never_invents_an_address(self):
         """The rule the whole product rests on. A company name and a domain
@@ -91,7 +91,7 @@ class TheFreeTool(AppTestCase):
         limit, _window = self.main.FIND_PER_IP
         for _ in range(limit):
             self.find(ADVERT_WITH_A_PERSON)
-        self.assertIn("a lot of adverts", self.find(ADVERT_WITH_A_PERSON))
+        self.assertIn("a lot of searches", self.find(ADVERT_WITH_A_PERSON))
 
     def test_the_page_sends_people_on_to_the_method_and_the_product(self):
         page = self.find(ADVERT_WITH_A_PERSON)
@@ -163,15 +163,13 @@ class TheExampleMustBeReachable(AppTestCase):
                              "a taller box pushes the submit button off a "
                              "small screen again")
 
-    def test_the_example_is_the_primary_action(self):
-        """For somebody arriving with nothing in their clipboard it is the
-        only thing they can do, so it must not be the quiet ghost button."""
-        import re
+    def test_the_example_is_reachable_without_opening_anything(self):
+        """For somebody arriving with nothing in their clipboard it is one of
+        two things they can do (the other is typing a company), so it sits
+        beside the first button rather than inside the advert fold."""
         page = self.client.get("/find").text
-        tag = re.search(r'<button[^>]*id="tryexample"[^>]*>', page)
-        self.assertIsNotNone(tag)
-        self.assertNotIn("ghost", tag.group(0))
-
+        self.assertIn('id="tryexample"', page)
+        self.assertLess(page.index('id="tryexample"'), page.index('id="advert"'))
 
 if __name__ == "__main__":
     unittest.main()
