@@ -3,8 +3,8 @@
 {% block content %}
 
 <h1>Who do you actually email about this job?</h1>
-<p class="lede">Paste a job advert and we will find the real address in it.
-Free, no account.</p>
+<p class="lede">Type the company's name, or paste the advert, and we will
+find a real address to write to. Free, no account.</p>
 
 {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
 
@@ -30,7 +30,8 @@ Free, no account.</p>
         <tbody>
         {% for c in found %}
           <tr>
-            <td class="lead" data-label="Address"><b>{{ c.email }}</b></td>
+            <td class="lead" data-label="Address"><b>{{ c.email }}</b>
+              {% if c.source %}<br><small class="muted">from {{ c.source }}</small>{% endif %}</td>
             <td data-label="What it is">
               {% if c.tier == 3 %}<span class="tag">named person</span>
                 {% if c.name %}, {{ c.name | title }}{% endif %}
@@ -57,6 +58,20 @@ Free, no account.</p>
       here, free.</a></p>
     </div>
   {% else %}
+    {% if looked_up and not looked_up.domain %}
+    <div class="note">
+      <p><b>We could not be sure which website is {{ company }}'s.</b> Rather
+      than risk the wrong firm, nothing was checked. Try the full name as the
+      company writes it, or paste the advert.</p>
+    </div>
+    {% elif looked_up %}
+    <div class="note">
+      <p><b>{{ looked_up.domain }} does not publish an address on its main
+      pages.</b> Nothing was guessed. Paste the advert if you have it: the
+      contact is often in the small print.</p>
+    </div>
+    {% endif %}
+    {% if advert %}
     <div class="note">
       <p><b>Nothing in the advert itself.</b> That is the normal answer. Most
       adverts route you through a portal on purpose.</p>
@@ -65,6 +80,7 @@ Free, no account.</p>
       fresh listing in your line of work, every weekday. We never guess an
       address. If there is no real one, no letter goes.</p>
     </div>
+    {% endif %}
   {% endif %}
 
   {# Somebody who has just watched this work on their own advert is the most

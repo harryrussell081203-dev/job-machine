@@ -282,28 +282,65 @@ def find_form(request: Request):
     return render(request, "find.html")
 
 
-@app.post("/find", response_class=HTMLResponse)
-async def find_submit(request: Request):
-    form = await request.form()
-    advert = (form.get("advert") or "")[:MAX_ADVERT]
-    if not advert.strip():
-        return render(request, "find.html",
-                      error="Paste the advert text first.")
+# Looking a company up reads its website, so it is rationed harder than an
+# advert, which is only text the visitor already has: per visitor, and for
+# the whole site, so the free page can never become a way to hammer small
+# firms' websites.
+COMPANY_PER_IP = (15, 3600)
+COMPANY_ALL = (300, 3600)
 
+
+@app.post("/find", response_class=HTMLResponse)
+def find_submit(request: Request, advert: str = Form(""),
+                company: str = Form("")):
+    """By company name, by advert, or both.
+
+    Sync on purpose: a company lookup waits on other sites for up to twenty
+    seconds, and FastAPI runs a plain function in its thread pool, so that
+    wait never holds up anybody else's page.
+    """
+    advert = (advert or "")[:MAX_ADVERT]
+    company = (company or "").strip()[:160]
+    if not advert.strip() and not company:
+        return render(request, "find.html",
+                      error="Type the company's name, or paste the advert.")
+
+    ip = ratelimit.client_ip(request)
     limit, window = FIND_PER_IP
-    if not ratelimit.hit(f"find:ip:{ratelimit.client_ip(request)}",
-                         limit=limit, window=window):
-        return render(request, "find.html", advert=advert,
-                      error="That is a lot of adverts in an hour. Try again "
+    if not ratelimit.hit(f"find:ip:{ip}", limit=limit, window=window):
+        return render(request, "find.html", advert=advert, company=company,
+                      error="That is a lot of searches in an hour. Try again "
                             "later, or sign up and let it run on its own.")
 
-    found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
-    company = (form.get("company") or "").strip()[:160]
+    from_advert = contacts.clean_emails(discover.emails_in(advert))
+    looked_up = None
+    if company:
+        per_ip, per_ip_window = COMPANY_PER_IP
+        everyone, everyone_window = COMPANY_ALL
+        if not (ratelimit.hit(f"find:company:{ip}", limit=per_ip,
+                              window=per_ip_window)
+                and ratelimit.hit("find:company:all", limit=everyone,
+                                  window=everyone_window)):
+            return render(request, "find.html", advert=advert,
+                          company=company,
+                          error="Company lookups are busy right now. Paste "
+                                "the advert instead, or try again later.")
+        from . import company_lookup
+        looked_up = company_lookup.lookup(company, store=db._PlaceCache())
+
+    from_site = [e for e in (looked_up or {}).get("emails", [])
+                 if e not in from_advert]
+    found = contacts.rank(from_advert + from_site)
+    for c in found:
+        c["source"] = "the advert" if c["email"] in from_advert else \
+            "their website"
+
     from jobseeker import companies_house
     directors = (companies_house.directors(company)
                  if company and companies_house.enabled() else [])
     return render(request, "find.html", advert=advert, found=found,
-                  searched=True, company=company, directors=directors)
+                  searched=True, company=company, directors=directors,
+                  looked_up=looked_up)
 
 
 TOOL_PER_IP = (60, 3600)
