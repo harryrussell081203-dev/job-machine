@@ -1,0 +1,115 @@
+name: lighthouse
+
+# Speed, SEO and accessibility scores for the public pages, on every pull
+# request that touches the product. WARN ONLY for now: every step here is
+# continue-on-error and the thresholds in product/lighthouserc.json are
+# "warn", so a low score shows up in the run summary and never blocks a
+# merge. Tighten it once there is a baseline worth holding.
+#
+# Runs the app itself on the runner (SQLite, DEV_MODE, no secrets), so it
+# measures the code in the pull request rather than whatever Render is
+# serving, and it touches no real data.
+
+on:
+  pull_request:
+    paths:
+      - "product/**"
+      - ".github/workflows/lighthouse.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEV_MODE: "1"
+      SECRET_KEY: lighthouse-not-a-secret
+      BILLING_ENABLED: "0"
+      BASE_URL: http://127.0.0.1:8000
+      DB_PATH: /tmp/lighthouse.db
+      PAGES: >-
+        http://127.0.0.1:8000/
+        http://127.0.0.1:8000/find
+        http://127.0.0.1:8000/tools
+        http://127.0.0.1:8000/tools/cover-letter-ai-check
+        http://127.0.0.1:8000/tools/follow-up
+        http://127.0.0.1:8000/answers/why-no-reply
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Start the site
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/site.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/healthz >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/site.log
+          exit 1
+
+      - name: Lighthouse
+        id: lighthouse
+        continue-on-error: true
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          # One per line: the action splits on newlines, and the
+          # space-separated PAGES above (which axe wants) reads to it as one
+          # long, broken address.
+          urls: |
+            http://127.0.0.1:8000/
+            http://127.0.0.1:8000/find
+            http://127.0.0.1:8000/tools
+            http://127.0.0.1:8000/tools/cover-letter-ai-check
+            http://127.0.0.1:8000/tools/follow-up
+            http://127.0.0.1:8000/answers/why-no-reply
+          configPath: product/lighthouserc.json
+          uploadArtifacts: true
+
+      - name: Scores
+        if: always()
+        continue-on-error: true
+        env:
+          MANIFEST: ${{ steps.lighthouse.outputs.manifest }}
+        run: |
+          {
+            echo "## Lighthouse (warn only)"
+            echo
+            echo "| Page | Performance | Accessibility | SEO | Best practices |"
+            echo "| --- | --- | --- | --- | --- |"
+            echo "${MANIFEST:-[]}" | jq -r '.[] | "| \(.url | sub("http://127.0.0.1:8000"; "")) | \(.summary.performance * 100 | round) | \(.summary.accessibility * 100 | round) | \(.summary.seo * 100 | round) | \(.summary["best-practices"] * 100 | round) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # axe-core, the open-source accessibility engine, for the problems a
+      # score hides: every violation is listed by rule and element.
+      - name: Accessibility (axe)
+        continue-on-error: true
+        run: |
+          npx --yes @axe-core/cli@4 ${PAGES} \
+            --chromedriver-path "${CHROMEWEBDRIVER}/chromedriver" \
+            --chrome-options="headless=new,no-sandbox" | tee /tmp/axe.txt
+          {
+            echo "## Accessibility (axe, warn only)"
+            echo
+            echo '```'
+            grep -E "Testing|violation|found" /tmp/axe.txt | head -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

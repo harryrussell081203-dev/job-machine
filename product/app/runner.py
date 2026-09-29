@@ -19,7 +19,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from jobseeker.pipeline import compose, discover, harvest, scoring
+from jobseeker import companies_house, geo, mx
+from jobseeker.pipeline import (compose, discover, harvest, pay, proofread,
+                                scoring)
 from jobseeker.profile import Profile, ProfileError
 
 from . import config, db
@@ -38,6 +40,9 @@ class RunReport:
     blocked: int = 0
     compose_failed: int = 0
     fallback_used: int = 0
+    undeliverable: int = 0
+    too_far: int = 0
+    dissolved: int = 0
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -91,8 +96,12 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         return report
 
     if ai is None:
-        from .ai import gemini, gemini_now
+        from .ai import gemini, gemini_now, scorer, scorer_now
         ai = gemini_now if interactive else gemini
+        score_ai = scorer_now if interactive else scorer
+    else:
+        # A caller that brings its own model means it for everything.
+        score_ai = ai
     kwargs = {} if delay is None else {"delay": delay}
 
     seen = db.seen_ids(user_id)
@@ -130,8 +139,11 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         else:
             candidates.append(listing)
 
+    candidates = _measure(user_id, candidates, profile, session, report)
+    candidates = _still_trading(user_id, candidates, report, session)
+
     judged = scoring.score(
-        candidates, profile, ai,
+        candidates, profile, score_ai,
         on_batch=lambda done, total: step(
             f"Scoring {total} job{'' if total == 1 else 's'} against your "
             f"profile", done=done, total=total))
@@ -171,6 +183,65 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     return report
 
 
+def _measure(user_id, listings, profile, session, report) -> list:
+    """Put a distance on every listing, and set aside the ones the boards
+    leaked from well beyond the person's travel radius.
+
+    The radius is measured from each place they search, not only home: a
+    person in Aberdeen who also searches Edinburgh wants Edinburgh jobs, and
+    those are 120 miles from home. The number on the card is from home,
+    because that is the journey that matters to them.
+
+    Nothing is set aside unless every place they search could be found - a
+    search area of "United Kingdom" has no centre to measure from - or unless
+    the job itself could be found. Unknown is shown, never hidden.
+    """
+    if not geo.enabled() or not listings:
+        return listings
+    get = session.get if session is not None else None
+    home = geo.locate(profile.location, get=get)
+    areas = [geo.locate(place, get=get) for place in profile.locations]
+    can_filter = bool(areas) and all(areas)
+    limit = profile.radius_miles + geo.slack(profile.radius_miles)
+
+    kept = []
+    for listing in listings:
+        where = geo.where_listing_is(listing, get=get)
+        if where and home:
+            listing.distance_miles = round(geo.miles(home, where))
+        if where and can_filter:
+            nearest = min(geo.miles(a, where) for a in areas)
+            if nearest > limit:
+                report.too_far += 1
+                db.mark_seen(user_id, listing.external_id,
+                             f"about {round(nearest)} miles from where you "
+                             f"search, beyond your {profile.radius_miles}-mile "
+                             "limit")
+                continue
+        kept.append(listing)
+    return kept
+
+
+def _still_trading(user_id, listings, report, session) -> list:
+    """Set aside adverts from employers Companies House says are gone -
+    dissolved, in liquidation - before a model is paid to read them. Only a
+    single exact name match counts; anything less keeps the job. Dormant
+    without a Companies House key."""
+    if not companies_house.enabled() or not listings:
+        return listings
+    get = session.get if session is not None else None
+    kept = []
+    for listing in listings:
+        status = companies_house.gone(listing.company or "", get=get)
+        if status:
+            report.dissolved += 1
+            db.mark_seen(user_id, listing.external_id,
+                         f"Companies House lists the employer as {status}")
+            continue
+        kept.append(listing)
+    return kept
+
+
 def _draft_one(user_id, listing, profile, ai, session, report,
                cv_attached=True, **kwargs):
     contact = discover.discover(listing, profile, session=session, **kwargs)
@@ -188,6 +259,19 @@ def _draft_one(user_id, listing, profile, ai, session, report,
                      "you have already written to this address or domain")
         return
 
+    # A domain that takes no mail would bounce, and a bounce is counted
+    # against the user's own mailbox. Checked before the model is paid to
+    # write, and the job is kept - marked, with no model call spent on it -
+    # so the user can see why it will not go and find another address.
+    if mx.undeliverable(contact.get("email") or ""):
+        letter = compose.plain_letter(listing, contact, profile, cv_attached)
+        draft_id = _save_draft(user_id, listing, letter)
+        db.mark_draft(user_id, draft_id, "undeliverable")
+        db.mark_seen(user_id, listing.external_id,
+                     "the employer's email domain does not accept mail")
+        report.undeliverable += 1
+        return
+
     letter = compose.compose(listing, contact, profile, ai,
                              cv_attached=cv_attached)
     if letter is None:
@@ -196,7 +280,22 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         letter = compose.plain_letter(listing, contact, profile, cv_attached)
         report.fallback_used += 1
 
-    db.add_draft(
+    # British spelling, fixed only where the fix is not a judgement call.
+    # Grammar and style are logged, never applied. See proofread.py.
+    letter = proofread.letter(letter)
+
+    # At a small firm a director is often the person hiring. Names only, as
+    # a pointer on the card; never used to make an address.
+    get = session.get if session is not None else None
+    directors = ", ".join(companies_house.directors(listing.company or "",
+                                                    get=get))
+    _save_draft(user_id, listing, letter, directors)
+    db.mark_seen(user_id, listing.external_id, "drafted")
+    report.drafted += 1
+
+
+def _save_draft(user_id, listing, letter, directors: str = "") -> int:
+    return db.add_draft(
         user_id,
         job_title=listing.title, company=listing.company,
         location=listing.location, listing_url=listing.url,
@@ -204,15 +303,18 @@ def _draft_one(user_id, listing, profile, ai, session, report,
         score_reason=getattr(listing, "score_reason", "") or "",
         to_email=letter["to_email"], to_name=letter.get("to_name"),
         contact_tier=letter.get("contact_tier"),
+        distance_miles=listing.distance_miles,
+        directors=directors,
         subject=letter["subject"], body=letter["body"])
-    db.mark_seen(user_id, listing.external_id, "drafted")
-    report.drafted += 1
 
 
 def _salary_text(listing) -> str:
     amount, unit = scoring.stated_pay(listing)
     if amount is None:
-        return ""
+        # The boards' fields are empty on most adverts; the figure is often
+        # in the text instead. Display only - see pay.py.
+        found = pay.from_text(f"{listing.title}\n{listing.description or ''}")
+        return pay.describe(*found) if found else ""
     if unit == "year":
         return f"£{amount:,.0f}"
     return f"£{amount:g} per {unit}"

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Free tools for jobseekers &middot; Recruited{% endblock %}
+{% block content %}
+<h1>Free tools for jobseekers</h1>
+<p class="lede">No account, nothing to pay, and nothing you paste is kept.</p>
+
+<a class="panel row-link" href="/find">
+  <h2>Who do you actually email about this job?</h2>
+  <p>Paste a job advert and get the real email address in it, ranked by who
+  is worth writing to.</p>
+</a>
+
+{% if '/tools/cover-letter-ai-check' in tools %}
+<a class="panel row-link" href="/tools/cover-letter-ai-check">
+  <h2>Does my cover letter sound like AI?</h2>
+  <p>The stock phrases, American spellings and flat rhythm that give a letter
+  away, highlighted where they are.</p>
+</a>
+{% endif %}
+
+{% if '/tools/follow-up' in tools %}
+<a class="panel row-link" href="/tools/follow-up">
+  <h2>When should I follow up?</h2>
+  <p>The date to chase an application, and the date to stop, from when you
+  applied and how.</p>
+</a>
+{% endif %}
+
+<p><a href="/answers">Straight answers to the questions jobseekers ask</a>
+&middot; <a href="/playbook">the full method, free</a></p>
+{% endblock %}

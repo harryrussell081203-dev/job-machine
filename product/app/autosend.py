@@ -29,7 +29,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from . import config, db, delivery, funnel
+from jobseeker import mx
+
+from . import config, db, delivery, funnel, holidays
 from .vault import VaultError
 
 MAX_CONSECUTIVE_FAILURES = 3
@@ -67,6 +69,14 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
     stamp = db.now() if now is None else now
     if settings["paused_until"] and settings["paused_until"] > stamp:
         report.reason = "sending is paused"
+        return report
+
+    # Held, not dropped: the drafts stay due and the next working day's
+    # sweep sends them. See holidays.py.
+    holiday = holidays.holiday_today(user_id, now=_as_datetime(stamp))
+    if holiday:
+        report.reason = (f"today is a bank holiday in {holiday} - letters go "
+                         "out on the next working day")
         return report
 
     account = db.get_mail_account(user_id)
@@ -183,6 +193,14 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
             report.skipped += 1
             continue
 
+        # Checked again at the last moment: a domain can lapse in the hours a
+        # draft waits, and a bounce is counted against the user's mailbox.
+        # Only a definite "takes no mail" stops it; a DNS hiccup does not.
+        if mx.undeliverable(draft["to_email"]):
+            db.mark_draft(user_id, draft["id"], "undeliverable")
+            report.skipped += 1
+            continue
+
         try:
             # On a managed account the SMTP username is the provider's
             # ("resend"), the From line is the issued address, and Reply-To is
@@ -248,6 +266,11 @@ def send_due_for_user(user_id: int, *, now=None, sender=None,
         report.sent += 1
 
     return report
+
+
+def _as_datetime(stamp: int):
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(int(stamp), tz=timezone.utc)
 
 
 def _is_auth_failure(message: str) -> bool:

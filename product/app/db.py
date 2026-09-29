@@ -1529,8 +1529,12 @@ INSTALLED = "installed"
 CV_UPLOADED = "cv_uploaded"
 FIRST_AUTO_SEND = "first_auto_send"
 
+# The month the referred person gets themselves, recorded on their own
+# account so it can only ever be paid once. See referrals.welcome.
+REFERRAL_WELCOME = "referral_welcome"
+
 EVENT_KINDS = FUNNEL + (REFERRED_USER, INSTALLED, CV_UPLOADED,
-                        FIRST_AUTO_SEND)
+                        FIRST_AUTO_SEND, REFERRAL_WELCOME)
 
 
 def record_event(user_id: int, kind: str, *, ref: str = "",
@@ -1752,3 +1756,58 @@ def extend_paid_until(user_id: int, seconds: int) -> int:
         c.execute("UPDATE users SET paid_until = ? WHERE id = ?",
                   (until, user_id))
     return until
+
+
+# ----------------------------------------------------------------------
+# push notifications
+# ----------------------------------------------------------------------
+def save_push_subscription(user_id: int, endpoint: str, p256dh: str,
+                           auth: str) -> None:
+    """One row per browser. The same browser subscribing again (or after
+    another person used it) moves the row to whoever is signed in now."""
+    with connect() as c:
+        c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?",
+                  (endpoint,))
+        c.execute(
+            "INSERT INTO push_subscriptions "
+            "(user_id, endpoint, p256dh, auth, created_at) "
+            "VALUES (?, ?, ?, ?, ?)", (user_id, endpoint, p256dh, auth, now()))
+
+
+def push_subscriptions(user_id: int):
+    with connect() as c:
+        return c.execute(
+            "SELECT * FROM push_subscriptions WHERE user_id = ?",
+            (user_id,)).fetchall()
+
+
+def delete_push_subscription(endpoint: str, user_id: int | None = None) -> None:
+    with connect() as c:
+        if user_id is None:
+            c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?",
+                      (endpoint,))
+        else:
+            c.execute("DELETE FROM push_subscriptions WHERE endpoint = ? "
+                      "AND user_id = ?", (endpoint, user_id))
+
+
+class _PlaceCache:
+    """jobseeker/geo.py's lookups kept in site_meta, so a town is asked about
+    once across every process: the runner's distances and the bank-holiday
+    check both use it."""
+
+    def get(self, key):
+        return get_meta(key) or None
+
+    def put(self, key, value):
+        set_meta(key, value)
+
+
+def _plug_place_cache() -> None:
+    from jobseeker import companies_house, geo
+    geo.store = _PlaceCache()
+    # The same site_meta notes, for Companies House answers.
+    companies_house.store = _PlaceCache()
+
+
+_plug_place_cache()

@@ -45,7 +45,8 @@ class ReplyReport:
         return f"{self.found} new repl(ies) across {self.checked} application(s)"
 
 
-def check_for_user(user_id: int, *, finder=None, notify=None) -> ReplyReport:
+def check_for_user(user_id: int, *, finder=None, notify=None,
+                   pusher=None) -> ReplyReport:
     """Flag every sent application whose employer has been in touch.
 
     `finder` and `notify` are injected so the tests exercise this without a
@@ -115,6 +116,13 @@ def check_for_user(user_id: int, *, finder=None, notify=None) -> ReplyReport:
     if newly:
         _tell_them(user_id, newly, address=address, password=password,
                    host=smtp_host, port=smtp_port, notify=notify)
+        # And on their phone, if they switched that on. Same once-per-
+        # employer guarantee as the email, for the same reason. See push.py.
+        try:
+            from . import push
+            (pusher or push.tell_about_replies)(user_id, newly)
+        except Exception as exc:
+            print(f"[replies] user {user_id}: could not push: {exc}")
     return report
 
 

@@ -124,6 +124,20 @@ class TestAFullRun(RunnerTestCase):
         self.assertIn("07700 900123", d["body"])
         self.assertEqual(d["salary_text"], "£44,000")
 
+    def test_pay_written_in_the_advert_reaches_the_card(self):
+        self.run_once(session=Session(adzuna=adzuna_payload(
+            salary_min=None, salary_max=None,
+            description="Packaging lines, £19.50 per hour. Send your CV to "
+                        "claire@pennine.co.uk")))
+        d = self.db.list_drafts(self.user["id"])[0]
+        self.assertEqual(d["salary_text"], "£19.50 an hour")
+
+    def test_an_adzuna_estimate_is_salary_not_listed(self):
+        self.run_once(session=Session(adzuna=adzuna_payload(
+            salary_min=41000, salary_max=41000, salary_is_predicted="1")))
+        d = self.db.list_drafts(self.user["id"])[0]
+        self.assertEqual(d["salary_text"], "")
+
     def test_a_second_run_does_not_redo_the_same_listing(self):
         self.run_once()
         again = self.run_once()

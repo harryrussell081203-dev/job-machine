@@ -91,6 +91,11 @@ class Listing:
     score_reason: str = ""
     skipped: str = ""          # why it was dropped, if it was
     raw_emails: list = field(default_factory=list)
+    # Where the job is, when the board says (Adzuna usually does), and how
+    # far that is from the person. See jobseeker/geo.py.
+    latitude: float | None = None
+    longitude: float | None = None
+    distance_miles: int | None = None
 
     def as_dict(self) -> dict:
         return dict(self.__dict__)
@@ -246,12 +251,33 @@ def adzuna(profile, creds: Credentials, *, pages: int = 1, session=None,
                     search_location=location,
                     url=j.get("redirect_url") or "",
                     description=strip_html(j.get("description") or "")[:4000],
-                    salary_min=j.get("salary_min"), salary_max=j.get("salary_max"),
+                    # Adzuna fills these with its OWN estimate when the
+                    # advert gives no pay, and says so in salary_is_predicted.
+                    # An estimate is not what the employer said: shown as
+                    # "listed" it misleads, and fed to the pay floor it can
+                    # reject a job on a guess.
+                    salary_min=_stated(j, "salary_min"),
+                    salary_max=_stated(j, "salary_max"),
+                    latitude=_coordinate(j.get("latitude")),
+                    longitude=_coordinate(j.get("longitude")),
                     posted_at=posted.isoformat() if posted else None))
 
             if len(results) < RESULTS_PER_PAGE:
                 break
     return out
+
+
+def _stated(job: dict, key: str):
+    if str(job.get("salary_is_predicted") or "0") == "1":
+        return None
+    return job.get(key)
+
+
+def _coordinate(value) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def reed(profile, creds: Credentials, *, pages: int = 1, session=None,

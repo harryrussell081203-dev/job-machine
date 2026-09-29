@@ -92,3 +92,37 @@ self.addEventListener("fetch", (event) => {
     }))
   );
 });
+
+// "An employer wrote back" - the one thing this site ever pushes (app/push.py).
+// The message carries only a title, a line and a page on this site to open.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  const title = data.title || "An employer wrote back";
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || "It is in your inbox now.",
+    icon: "/static/icons/icon-192.png",
+    badge: "/static/icons/icon-192.png",
+    data: { url: data.url || "/applications" },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  // Only ever a page on this site, whatever the message said.
+  const path = String((event.notification.data || {}).url || "/applications");
+  const local = path.startsWith("/") && !path.startsWith("//")
+                && !path.startsWith("/\\");
+  const target = new URL(local ? path : "/applications",
+                         self.location.origin).href;
+  event.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true })
+    .then((open) => {
+      for (const client of open) {
+        if (client.url.startsWith(self.location.origin) && "focus" in client) {
+          client.navigate(target);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(target);
+    }));
+});

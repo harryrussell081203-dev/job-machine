@@ -61,6 +61,51 @@
       <a href="/applications?show=heard">See who</a></p>
   {% endif %}
 
+  {% if referral %}
+    <div class="panel invite">
+      <p><b>Invite a friend &mdash; you both get a month free.</b></p>
+      <p class="copyrow">
+        <input id="invitelink" type="text" readonly value="{{ referral.link }}"
+               aria-label="Your invite link">
+        <button type="button" class="ghost" id="invitecopy">Copy</button>
+      </p>
+      <details class="fold"><summary><small>How it works{% if referral.people %}
+        &middot; {{ referral.people }} joined, {{ referral.months }}
+        month{{ '' if referral.months == 1 else 's' }} earned{% endif %}</small></summary>
+        <p><small>When your friend signs up from this link and uploads their
+          CV, you each get a month free. You get another month when their
+          first letter goes out. Up to {{ referral.cap }} months.</small></p>
+      </details>
+    </div>
+    <script>
+    (function () {
+      var btn = document.getElementById("invitecopy");
+      var box = document.getElementById("invitelink");
+      if (!btn || !box) { return; }
+      btn.addEventListener("click", function () {
+        function done() { btn.textContent = "Copied"; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(box.value).then(done, function () {
+            box.select(); document.execCommand("copy"); done();
+          });
+        } else { box.select(); document.execCommand("copy"); done(); }
+      });
+    })();
+    </script>
+  {% endif %}
+
+  {% if push_key %}
+    {# Shown only where the browser can actually do it; see the script below.
+       One job only - a notification when an employer replies. #}
+    <div class="panel push" id="pushpanel" hidden>
+      <p><b>Get a notification when an employer replies.</b>
+        <small>Only that, nothing else. On an iPhone, add this site to your
+        home screen first.</small></p>
+      <p><button type="button" class="ghost" id="pushbtn">Turn on
+        notifications</button> <small id="pushstate"></small></p>
+    </div>
+  {% endif %}
+
   {# Rendered from the server on load AND updated by polling, so it is correct
      on first paint, survives a refresh, and still tells you something with
      JavaScript switched off. #}
@@ -220,5 +265,69 @@
   });
 })();
 </script>
+{% if push_key %}
+<script>
+(function () {
+  var panel = document.getElementById("pushpanel");
+  if (!panel || !("serviceWorker" in navigator) || !("PushManager" in window)
+      || !("Notification" in window)) { return; }
+  var btn = document.getElementById("pushbtn");
+  var state = document.getElementById("pushstate");
+  var key = "{{ push_key }}";
+
+  function bytes(b64) {
+    var pad = "=".repeat((4 - b64.length % 4) % 4);
+    var raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) { out[i] = raw.charCodeAt(i); }
+    return out;
+  }
+  function show(on) {
+    panel.hidden = false;
+    btn.textContent = on ? "Turn off notifications" : "Turn on notifications";
+    btn.dataset.on = on ? "1" : "";
+    state.textContent = on ? "On for this device." : "";
+  }
+  function post(path, body) {
+    return fetch(path, {method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body)});
+  }
+
+  navigator.serviceWorker.ready.then(function (reg) {
+    reg.pushManager.getSubscription().then(function (sub) { show(!!sub); });
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      if (btn.dataset.on) {
+        reg.pushManager.getSubscription().then(function (sub) {
+          if (!sub) { return; }
+          post("/push/unsubscribe", {endpoint: sub.endpoint});
+          return sub.unsubscribe();
+        }).then(function () { show(false); btn.disabled = false; });
+        return;
+      }
+      Notification.requestPermission().then(function (answer) {
+        if (answer !== "granted") {
+          state.textContent = "Notifications are blocked in this browser's settings.";
+          btn.disabled = false;
+          return;
+        }
+        return reg.pushManager.subscribe({userVisibleOnly: true,
+                                          applicationServerKey: bytes(key)})
+          .then(function (sub) { return post("/push/subscribe", sub.toJSON()); })
+          .then(function (r) {
+            show(r.ok);
+            if (!r.ok) { state.textContent = "Could not switch it on. Try again later."; }
+            btn.disabled = false;
+          });
+      }).catch(function () {
+        state.textContent = "Could not switch it on. Try again later.";
+        btn.disabled = false;
+      });
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

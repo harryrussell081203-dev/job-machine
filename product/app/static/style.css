@@ -861,3 +861,15 @@ table.versus td:first-child { color: var(--muted); white-space: nowrap; }
 @media (max-width: 560px) {
   table.versus td.rowhead { font-weight: 600; color: var(--ink); white-space: normal; }
 }
+
+/* The invite card's link and copy button, side by side. */
+.invite .copyrow { display: flex; gap: 8px; align-items: center; }
+.invite .copyrow input { flex: 1; min-width: 0; margin: 0; }
+
+/* The AI-sound checker: the score, and the letter with its tells marked. */
+.aiscore { display: flex; align-items: baseline; gap: 6px; margin: 0; }
+.aiscore b { font-size: 2.6rem; line-height: 1; }
+.aiscore small { margin-left: auto; color: var(--muted); }
+.marked { white-space: pre-wrap; }
+.marked mark { background: var(--bad-bg); color: var(--bad);
+               border-radius: 4px; padding: 0 2px; }

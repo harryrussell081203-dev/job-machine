@@ -10,6 +10,19 @@ python-multipart>=0.0.9
 itsdangerous>=2.1
 httpx>=0.26
 
+# Checking an employer's domain takes mail before a letter goes to it. The
+# standard library cannot ask for MX records. See jobseeker/mx.py.
+dnspython>=2.4
+
+# Phone notifications when an employer replies, with this site's own VAPID
+# keys - no third-party service. Dormant until the keys are set. See
+# app/push.py.
+pywebpush>=2.0
+
+# Error reports. Dormant until SENTRY_DSN is set; see app/errors.py for what
+# it is and is not allowed to send.
+sentry-sdk[fastapi]>=2.0
+
 # Only needed when DATABASE_URL points at Postgres (Supabase). The app runs on
 # SQLite without it.
 psycopg[binary]>=3.1

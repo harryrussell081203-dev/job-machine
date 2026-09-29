@@ -51,6 +51,13 @@
    whole point is to drop the query string, and echoing it back would make
    this tag agree with the duplicate instead of correcting it. #}
 <link rel="canonical" href="{{ config.BASE_URL }}{{ request.url.path }}">
+{# Proving the site is ours to Google Search Console and Bing Webmaster
+   Tools, so they will show which searches find it. Nothing is printed until
+   the codes are set. On the home page only: that is where both look. #}
+{% if request.url.path == '/' %}
+  {% if site_verification.google %}<meta name="google-site-verification" content="{{ site_verification.google }}">{% endif %}
+  {% if site_verification.bing %}<meta name="msvalidate.01" content="{{ site_verification.bing }}">{% endif %}
+{% endif %}
 
 <!-- Installable. No store, no review, no fee: this is what makes the app
      appear on a home screen from a plain link. -->
@@ -118,7 +125,8 @@
   <p>One email per employer. Never a guessed address. Never a claim you
      cannot back.</p>
   <p><a href="/playbook">The playbook</a> is free, and so are
-     <a href="/answers">the straight answers</a>.</p>
+     <a href="/answers">the straight answers</a>
+     {%- if tools_on %} and <a href="/tools">the tools</a>{% endif %}.</p>
   <p><a href="/numbers">The numbers</a> are public, live, and include the
      months when they are bad.</p>
   <p class="legal">

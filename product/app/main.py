@@ -12,6 +12,7 @@ configuration.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import math
 import sys
@@ -37,7 +38,8 @@ from jobseeker.profile import Profile, ProfileError, Role  # noqa: E402
 from jobseeker.profile import _not_a_place  # noqa: E402
 
 from . import funnel  # noqa: E402
-from . import referrals  # noqa: E402
+from . import letter_check, push, referrals  # noqa: E402
+from jobseeker import settings  # noqa: E402
 from . import attribution  # noqa: E402
 from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
@@ -54,6 +56,10 @@ log = logging.getLogger("recruited")
 # start if it cannot honour a payment. Deliberately at import rather than in a
 # startup hook: a process that cannot serve checkout should never bind a port.
 config.check_billing_config()
+
+# Error reports, if SENTRY_DSN is set; nothing at all if not. See errors.py.
+from . import errors as _errors  # noqa: E402
+_errors.start("web")
 
 app = FastAPI(title="Recruited", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -186,6 +192,12 @@ def render(request: Request, template: str, **ctx):
     response = templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
+         "tools_on": tools_on(),
+         "sentry_on": bool(settings.text("SENTRY_DSN")),
+         "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
+         "site_verification": {
+             "google": settings.text("GOOGLE_SITE_VERIFICATION"),
+             "bing": settings.text("BING_SITE_VERIFICATION")},
          "is_admin": bool(user and config.is_admin(user["email"])),
          # Every page, because the meta description in base.html quotes it and
          # base.html is every page. Cached on the file's mtime, so this is a
@@ -286,8 +298,94 @@ async def find_submit(request: Request):
                             "later, or sign up and let it run on its own.")
 
     found = contacts.rank(contacts.clean_emails(discover.emails_in(advert)))
+    company = (form.get("company") or "").strip()[:160]
+    from jobseeker import companies_house
+    directors = (companies_house.directors(company)
+                 if company and companies_house.enabled() else [])
     return render(request, "find.html", advert=advert, found=found,
-                  searched=True)
+                  searched=True, company=company, directors=directors)
+
+
+TOOL_PER_IP = (60, 3600)
+
+
+@app.get("/tools", response_class=HTMLResponse)
+def tools_index(request: Request):
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "tools.html", tools=TOOL_PAGES,
+                  og_title="Free tools for jobseekers",
+                  og_description="Check whether your cover letter sounds "
+                                 "like AI, and find the real email address "
+                                 "in a job advert. Free, no account.")
+
+
+_AI_CHECK_OG = dict(
+    og_title="Does my cover letter sound like AI? Free checker",
+    og_description="Paste your cover letter and see the stock phrases, "
+                   "American spellings and flat rhythm that make it read as "
+                   "AI-written. Free, no account, nothing stored.")
+
+
+@app.get("/tools/cover-letter-ai-check", response_class=HTMLResponse)
+def ai_check_form(request: Request):
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "ai_check.html", **_AI_CHECK_OG)
+
+
+@app.post("/tools/cover-letter-ai-check", response_class=HTMLResponse)
+async def ai_check_submit(request: Request):
+    """Rules only, no model: nothing pasted here leaves this request, and
+    nothing is stored. See letter_check.py."""
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    form = await request.form()
+    text = (form.get("letter") or "")[:letter_check.MAX_CHARS]
+    if not text.strip():
+        return render(request, "ai_check.html", error="Paste your letter first.",
+                      **_AI_CHECK_OG)
+    limit, window = TOOL_PER_IP
+    if not ratelimit.hit(f"tool:ip:{ratelimit.client_ip(request)}",
+                         limit=limit, window=window):
+        return render(request, "ai_check.html", letter=text,
+                      error="That is a lot of checks in an hour. Try again "
+                            "later.", **_AI_CHECK_OG)
+    return render(request, "ai_check.html", letter=text,
+                  result=letter_check.check(text), **_AI_CHECK_OG)
+
+
+_FOLLOW_UP_OG = dict(
+    og_title="When should I follow up on a job application? Free calculator",
+    og_description="Put in when and how you applied and get the date to "
+                   "follow up, the date to stop, and the message to send. "
+                   "Free, no account.")
+
+
+@app.get("/tools/follow-up", response_class=HTMLResponse)
+def follow_up_calc(request: Request, applied: str = "", how: str = "",
+                   closing: str = "", role: str = ""):
+    """A GET form on purpose: the answer has its own address, so it can be
+    bookmarked or sent to somebody, and nothing about it needs storing."""
+    if not tools_on():
+        return PlainTextResponse("Not found", status_code=404)
+    from . import followup_calc as calc
+    today = datetime.date.today()
+    context = dict(ways=calc.HOW, today=today.isoformat(), applied=applied,
+                   how=how, closing=closing, role=role[:120], **_FOLLOW_UP_OG)
+    if applied:
+        try:
+            day = datetime.date.fromisoformat(applied)
+            close = datetime.date.fromisoformat(closing) if closing else None
+        except ValueError:
+            return render(request, "follow_up.html",
+                          error="That date did not look right.", **context)
+        result = calc.plan(day, how, close)
+        context.update(result=result,
+                       message=calc.message(role[:120], day),
+                       overdue=bool(result.stop_after
+                                    and result.stop_after < today))
+    return render(request, "follow_up.html", **context)
 
 
 @app.get("/answers", response_class=HTMLResponse)
@@ -548,7 +646,43 @@ def dashboard(request: Request):
                   # Rendered server-side as well as polled, so the panel is
                   # right on first paint and a browser with no JavaScript
                   # still sees where a run has got to on a refresh.
-                  progress=db.run_progress(user["id"]))
+                  progress=db.run_progress(user["id"]),
+                  push_key=push.public_key() if push.available() else "",
+                  referral=referrals.card(user["id"]))
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request):
+    """Store this browser's push address for "an employer wrote back"."""
+    user = current_user(request)
+    if not user or not push.available():
+        return JSONResponse({"ok": False}, status_code=403)
+    try:
+        data = await request.json()
+        endpoint = str(data["endpoint"])
+        keys = data.get("keys") or {}
+        p256dh, auth_key = str(keys["p256dh"]), str(keys["auth"])
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    # Only a real push service's address, never somewhere of the caller's
+    # choosing: this server will POST to it.
+    if not push.is_push_service(endpoint):
+        return JSONResponse({"ok": False}, status_code=400)
+    db.save_push_subscription(user["id"], endpoint, p256dh, auth_key)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request):
+    user = current_user(request)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=403)
+    try:
+        endpoint = str((await request.json())["endpoint"])
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    db.delete_push_subscription(endpoint, user["id"])
+    return JSONResponse({"ok": True})
 
 
 @app.post("/run")
@@ -743,7 +877,7 @@ def drafts(request: Request, status: str = "draft"):
         return needs_login()
     if not db.is_paid(user):
         return render(request, "paywall.html", user=user)
-    if status not in ("draft", "sent", "discarded"):
+    if status not in ("draft", "sent", "discarded", "undeliverable"):
         status = "draft"
 
     rows = db.list_drafts(user["id"], status=status)
@@ -1220,12 +1354,24 @@ def healthz():
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
                 "/privacy", "/login", "/app") + tuple(answerlib.paths())
 
+# The free tools, listed only while they are switched on, so the sitemap
+# never points a crawler at a page that answers 404.
+TOOL_PAGES = ("/tools", "/tools/cover-letter-ai-check", "/tools/follow-up")
+
+
+def tools_on() -> bool:
+    return settings.flag("TOOLS_ENABLED")
+
+
+def public_pages() -> tuple[str, ...]:
+    return PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+
 
 def public_urls() -> list[str]:
     """Every public page as an absolute address, for the sitemap's readers
     and for IndexNow. One list, so a page cannot be in one and not the
     other."""
-    return [config.BASE_URL + path for path in PUBLIC_PAGES]
+    return [config.BASE_URL + path for path in public_pages()]
 
 
 # Serving the key is what proves the domain is ours, so the route only exists
@@ -1280,7 +1426,7 @@ def sitemap():
     when = f"<lastmod>{stamp}</lastmod>" if stamp else ""
     urls = "".join(
         f"<url><loc>{escape(config.BASE_URL + p)}</loc>{when}</url>"
-        for p in PUBLIC_PAGES)
+        for p in public_pages())
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
            f'{urls}</urlset>')
@@ -1312,6 +1458,15 @@ def llms_txt():
                 f"{record['replies']} replies, {record['reply_rate']}%. "
                 f"Updated {record.get('updated_at', '')[:10]}.\n")
 
+    tools = ""
+    if tools_on():
+        tools = (f"- {config.BASE_URL}/tools/cover-letter-ai-check: checks a "
+                 "cover letter for stock phrases, American spellings and flat "
+                 "rhythm. Rules only, nothing stored.\n"
+                 f"- {config.BASE_URL}/tools/follow-up: the date to follow up "
+                 "on a job application, the date to stop, and what to send.\n"
+                 f"- {config.BASE_URL}/tools: every free tool.\n")
+
     return f"""# Recruited
 
 > A free tool that finds the real email address of a person who can act on a
@@ -1341,7 +1496,7 @@ count under every rate and the caveat on every thin row:
 ## Pages
 
 - {config.BASE_URL}/find: the free tool. No account, nothing to install.
-- {config.BASE_URL}/playbook: the whole method, free.
+{tools}- {config.BASE_URL}/playbook: the whole method, free.
 - {config.BASE_URL}/numbers: every figure, live, including the bad months.
 - {config.BASE_URL}/answers: one page per question jobseekers actually ask.
 

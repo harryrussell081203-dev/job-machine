@@ -72,6 +72,11 @@ class TestTheTabs(Signed):
         self.assertIn("Talking Ltd", page)
         self.assertNotIn("Quiet Ltd", page)
 
+    def test_a_card_says_when_no_salary_was_listed(self):
+        self.letter("Quiet Ltd")
+        self.assertIn("Salary not listed",
+                      self.client.get("/applications").text)
+
     def test_nonsense_in_the_address_is_all(self):
         self.letter("Quiet Ltd")
         page = self.client.get("/applications?show=<script>").text

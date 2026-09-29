@@ -10,6 +10,15 @@ Free, no account.</p>
 
 {% include "_finder.html" %}
 
+{% if searched and directors %}
+  <div class="note">
+    <p><b>{{ company }} is a small firm.</b> Its directors on Companies House
+      are {{ directors | join(', ') }}. At a firm this size one of them is
+      often the person hiring. These are names only &mdash; find their own
+      address before writing to one of them; never guess it.</p>
+  </div>
+{% endif %}
+
 {% if searched %}
   {% if found %}
     <h2>Found {{ found | length }}</h2>

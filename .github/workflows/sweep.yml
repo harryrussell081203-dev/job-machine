@@ -122,6 +122,43 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt
 
+      # The open-source ranker that puts the likeliest listings in front of
+      # the model first (jobseeker/pipeline/rank.py). Optional by design: if
+      # it will not install, the sweep ranks by words and runs anyway. Kept
+      # out of requirements.txt because the web server has 512MB and never
+      # needs it.
+      - name: Install the ranker
+        continue-on-error: true
+        run: pip install "fastembed>=0.4,<1"
+
+      # The ranker's model, fetched from Hugging Face once and then reused,
+      # rather than downloaded six times a day.
+      - name: Keep the ranker's model
+        uses: actions/cache@v4
+        with:
+          path: .embeddings
+          key: embeddings-${{ vars.EMBEDDING_MODEL || 'all-MiniLM-L6-v2' }}
+
+      # LanguageTool, the open-source proofreader, in a container beside the
+      # job so letters never leave the runner and the public service's rate
+      # limit never applies (jobseeker/pipeline/proofread.py). Only for runs
+      # that write letters: the send-only runs (minute 40) never draft.
+      # Optional by design - if it will not start, letters go unproofread
+      # rather than not at all. Off with the repository variable
+      # LANGUAGETOOL_ENABLED=0.
+      - name: Start the proofreader
+        if: ${{ vars.LANGUAGETOOL_ENABLED != '0' && !startsWith(github.event.schedule, '40 ') }}
+        continue-on-error: true
+        run: |
+          docker run -d --name languagetool -p 8010:8010 erikvl87/languagetool
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:8010/v2/languages" >/dev/null; then
+              echo "LanguageTool is up"; echo "LANGUAGETOOL_URL=http://localhost:8010" >> "$GITHUB_ENV"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::warning::LanguageTool did not start; letters go unproofread this run"
+
       - name: Sweep
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -134,6 +171,30 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMBEDDING_CACHE: ${{ github.workspace }}/.embeddings
+          # Switches. Set under Settings > Secrets and variables > Actions >
+          # Variables; read on the next run, no code change. Empty means the
+          # default in the code.
+          RANKER_ENABLED: ${{ vars.RANKER_ENABLED }}
+          SCORING_TOP_N: ${{ vars.SCORING_TOP_N }}
+          EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+          GEMINI_LETTER_MODEL: ${{ vars.GEMINI_LETTER_MODEL }}
+          GEMINI_SCORING_MODELS: ${{ vars.GEMINI_SCORING_MODELS }}
+          GEMINI_DAILY_CAPS: ${{ vars.GEMINI_DAILY_CAPS }}
+          MX_CHECK: ${{ vars.MX_CHECK }}
+          DISTANCE: ${{ vars.DISTANCE }}
+          BANK_HOLIDAYS: ${{ vars.BANK_HOLIDAYS }}
+          BANK_HOLIDAY_DIVISION: ${{ vars.BANK_HOLIDAY_DIVISION }}
+          # Replies are found here, so the phone notification is sent from
+          # here. Dormant until the keys exist. See app/push.py.
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_ENABLED: ${{ vars.PUSH_ENABLED }}
+          SALARY_FROM_TEXT: ${{ vars.SALARY_FROM_TEXT }}
+          # Dormant until set. See app/errors.py.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
           # The cron expression that fired this run, empty for a manual run or
           # a branch push. Read below to pick the mode.
           FIRED_BY: ${{ github.event.schedule }}

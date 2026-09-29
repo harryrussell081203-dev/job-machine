@@ -41,6 +41,12 @@
             placeholder="Paste the job advert here&#10;&#10;including the small print at the bottom, which is usually where it hides">{{ advert or '' }}</textarea>
   <p class="hint">Select the whole page on Indeed, Reed, s1jobs, anywhere. We
     only read what you paste.</p>
+  {% if companies_house_on %}
+    <label for="company">Company name (optional)</label>
+    <input id="company" name="company" type="text" maxlength="160"
+           value="{{ company or '' }}"
+           placeholder="For a small firm, we will list its directors">
+  {% endif %}
   <p style="margin-top:14px" class="actions">
     <button type="submit">Find the contact</button>
   </p>

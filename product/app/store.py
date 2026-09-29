@@ -330,6 +330,20 @@ CREATE TABLE IF NOT EXISTS events (
     UNIQUE (user_id, kind, ref)
 );
 
+-- Where to send "an employer wrote back" to a phone, one row per browser a
+-- person switched it on in. The endpoint is the push service's address for
+-- that browser; p256dh and auth are the keys the message is encrypted to, so
+-- the push service can deliver it but never read it. Deleted with the user,
+-- and deleted when the push service says the browser has gone.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id          {key},
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint    TEXT    NOT NULL UNIQUE,
+    p256dh      TEXT    NOT NULL,
+    auth        TEXT    NOT NULL,
+    created_at  BIGINT  NOT NULL
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
@@ -531,6 +545,13 @@ _ADDED_COLUMNS = [
     # Interview questions and answer outlines for this application, as JSON,
     # built once when the user asks. See prep.py.
     ("drafts", "interview_prep", "TEXT NOT NULL DEFAULT ''"),
+    # Straight-line miles from the person's home, when both ends could be
+    # found. Empty means unknown, never zero. See jobseeker/geo.py.
+    ("drafts", "distance_miles", "INTEGER"),
+    # Current directors of a small employer, from Companies House: names
+    # only, comma-separated, as a pointer to who is likely hiring. Empty
+    # when the firm is not small, not matched, or the key is not set.
+    ("drafts", "directors", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

@@ -28,7 +28,8 @@ def main(argv=None) -> int:
                     help="report what would be sent, without sending")
     args = ap.parse_args(argv)
 
-    from . import autosend, db
+    from . import autosend, db, errors
+    errors.start("sweep")
     db.init()
     _say_billing_mode()
 
