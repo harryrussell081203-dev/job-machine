@@ -275,6 +275,56 @@ ANSWERS: tuple[Answer, ...] = (
         blurb="1-5% is the normal benchmark. 26% across 86, and why the count "
               "matters more than the rate.",
     ),
+    Answer(
+        slug="job-email-subject-line",
+        question="What should the subject line of a job application email say?",
+        answer=(
+            "The job title and one detail, in 8 words or fewer: "
+            "\"Maintenance technician, Rotherham packaging lines\" rather than "
+            "\"Application for the position of Maintenance Technician\". The "
+            "reader sees the subject before anything else and decides from it "
+            "whether this is about a job they are filling. Name the role "
+            "exactly as the advert does, so it matches what they are looking "
+            "for. Never write \"Application for\", which reads as a form, and "
+            "never write it in capitals. Every letter Recruited sends is "
+            "checked against these rules before it goes."),
+        blurb="The role and one detail, 8 words or fewer, and never "
+              "\"Application for\".",
+    ),
+    Answer(
+        slug="email-hiring-manager-directly",
+        question="Is it rude to email a hiring manager directly about a job?",
+        answer=(
+            "No, as long as it is short, it is to an address the employer "
+            "published, and you send it once. A hiring manager with a vacancy "
+            "wants to hear from people who can do the job, and a short email "
+            "that names the role is easier to deal with than a stack of "
+            "portal applications. Across 86 cold emails to UK employers, a "
+            "named person replied 38% of the time. What does come across "
+            "badly is a guessed address, a long letter, a second email to "
+            "somebody else at the same firm, or chasing more than once. Apply "
+            "through the portal too if there is one; the email is how a "
+            "person notices you."),
+        blurb="Not if it is short, sent once, to an address they published. "
+              "38% of named people replied.",
+    ),
+    Answer(
+        slug="fake-job-advert",
+        question="How can I tell if a job advert is a scam?",
+        answer=(
+            "A real employer never asks you for money to get a job: not for "
+            "training, a DBS check, equipment, a uniform or a visa. Be wary "
+            "of an offer made without an interview, pay far above the going "
+            "rate for easy work, a recruiter who only uses WhatsApp, Telegram "
+            "or a free email address, and anybody asking for your bank "
+            "details or passport before a written offer. Check the company "
+            "on Companies House and find its own website, then contact it "
+            "through the details there, not the ones in the advert. If "
+            "something feels wrong, report it to JobsAware, or to Action "
+            "Fraud on 0300 123 2040 (in Scotland, Police Scotland on 101)."),
+        blurb="A real employer never asks you to pay. The other signs, and "
+              "where to report one.",
+    ),
 )
 
 
