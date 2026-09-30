@@ -325,6 +325,50 @@ ANSWERS: tuple[Answer, ...] = (
         blurb="A real employer never asks you to pay. The other signs, and "
               "where to report one.",
     ),
+    Answer(
+        slug="do-i-need-a-cover-letter",
+        question="Do I still need a cover letter?",
+        answer=(
+            "You need something a person reads, and a short email does that "
+            "job better than a page-long letter. Keep it between 60 and 90 "
+            "words: the exact role and one detail from the advert, two things "
+            "you have done that matter for it, and one question. Attach the "
+            "CV and say so in the sign-off. If a portal has a cover letter "
+            "box, paste the same short version in. Across 86 cold emails to "
+            "UK employers written this way, 22 got a reply, which is 26%."),
+        blurb="A 60 to 90 word email beats a page-long letter. What to put "
+              "in it.",
+    ),
+    Answer(
+        slug="speculative-application-email",
+        question="How do I apply to a company that is not advertising a job?",
+        answer=(
+            "Write to a real person there, found on the company's own "
+            "website: its contact, careers, about or team pages. Addresses "
+            "found that way replied 21% of the time, 16 out of 77, which is "
+            "far better than the 1% to 5% cold email usually gets. Say what "
+            "work you do and the one kind of role you are after, give two "
+            "things you have done with figures, and ask one question, such "
+            "as whether they take on people for that kind of work. Keep it "
+            "to 60 to 90 words and attach your CV. Never guess an address: "
+            "if the site publishes none, move on to the next firm."),
+        blurb="Write to an address the firm publishes. 16 of 77 replied. "
+              "What to say.",
+    ),
+    Answer(
+        slug="how-long-to-hear-back",
+        question="How long should I wait to hear back about a job application?",
+        answer=(
+            "Give it 5 working days, then send one short follow-up as a "
+            "reply to your first email. If nothing has come back 3 weeks "
+            "after you applied, stop and put the time into the next "
+            "application: a nudge to something the reader has forgotten is "
+            "just another cold email. If the advert had a closing date, "
+            "start counting from the closing date, because that is usually "
+            "when applications are read. That is the rule Recruited follows "
+            "for every letter it sends."),
+        blurb="5 working days, then one follow-up. After 3 weeks, move on.",
+    ),
 )
 
 

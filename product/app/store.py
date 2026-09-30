@@ -344,6 +344,22 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     created_at  BIGINT  NOT NULL
 );
 
+-- People who asked for the weekly job-hunting tips, and nobody else. A row
+-- is made when somebody types their address, but nothing is sent to it
+-- except the one confirmation email until they click it (confirmed_at).
+-- Unsubscribing deletes the row: there is nothing to keep. Unconfirmed rows
+-- are deleted after a week. See tips.py.
+CREATE TABLE IF NOT EXISTS tip_subscribers (
+    id            {key},
+    email         TEXT    NOT NULL UNIQUE,
+    token         TEXT    NOT NULL UNIQUE,
+    source        TEXT    NOT NULL DEFAULT '',
+    created_at    BIGINT  NOT NULL,
+    confirmed_at  BIGINT,
+    sent_count    INTEGER NOT NULL DEFAULT 0,
+    last_sent_at  BIGINT
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The

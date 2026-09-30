@@ -197,6 +197,7 @@ def render(request: Request, template: str, **ctx):
         {"user": user, "paid": db.is_paid(user), "config": config,
          "tools_on": tools_on(),
          "sentry_on": bool(settings.text("SENTRY_DSN")),
+         "tips_on": settings.flag("TIPS_ENABLED"),
          "companies_house_on": bool(settings.text("COMPANIES_HOUSE_API_KEY")),
          "telegram_bot": (telegram.username()
                           if telegram.enabled() else ""),
@@ -373,6 +374,83 @@ async def telegram_webhook(request: Request, secret: str):
     reply = await anyio.to_thread.run_sync(
         lambda: telegram.reply_to(update, allow=allow))
     return JSONResponse(reply or {})
+
+
+TIPS_PER_IP = (5, 3600)
+
+
+@app.post("/tips", response_class=HTMLResponse)
+def tips_subscribe(request: Request, email: str = Form(""),
+                   source: str = Form(""), website: str = Form("")):
+    """Ask for the weekly tips. Only a confirmation email is sent from here;
+    nothing else goes until that link is clicked. See tips.py."""
+    from . import tips
+    if not tips.enabled():
+        return PlainTextResponse("Not found", status_code=404)
+    said = dict(heading="Check your email",
+                message="If that address is right, a confirmation email is "
+                        "on its way. Tap the link in it and the first tip "
+                        "arrives straight away. Nothing else is sent until "
+                        "you do.")
+    if website:
+        return render(request, "tips_message.html", **said)   # a bot
+    limit, window = TIPS_PER_IP
+    if not ratelimit.hit(f"tips:ip:{ratelimit.client_ip(request)}",
+                         limit=limit, window=window):
+        return render(request, "tips_message.html", heading="Try again later",
+                      message="That is a lot of sign-ups from one place in "
+                              "an hour.")
+    try:
+        tips.subscribe(email, source)
+    except ValueError:
+        return render(request, "tips_message.html",
+                      heading="That address did not look right",
+                      message="Go back and check it, then try again.")
+    except Exception:
+        log.exception("could not send the tips confirmation")
+        return render(request, "tips_message.html",
+                      heading="That did not work",
+                      message="The confirmation email could not be sent. "
+                              "Please try again later.")
+    return render(request, "tips_message.html", **said)
+
+
+@app.get("/tips/confirm/{token}", response_class=HTMLResponse)
+def tips_confirm(request: Request, token: str):
+    from . import tips
+    try:
+        ok = tips.confirm(token)
+    except Exception:
+        log.exception("could not confirm tips")
+        ok = False
+    if not ok:
+        return render(request, "tips_message.html",
+                      heading="That link did not work",
+                      message="It may have expired. Sign up again from any "
+                              "page with the tips box.")
+    return render(request, "tips_message.html", heading="You're in",
+                  message="The first tip is in your inbox now. One a week "
+                          "after that, 8 in all, then it stops.")
+
+
+@app.get("/tips/unsubscribe/{token}", response_class=HTMLResponse)
+def tips_unsubscribe_page(request: Request, token: str):
+    """A page with a button rather than unsubscribing on sight, because mail
+    scanners open every link in an email and would unsubscribe people who
+    never asked to go."""
+    return render(request, "tips_message.html", heading="Unsubscribe",
+                  message="Stop the weekly job-hunting tips and delete your "
+                          "address?", unsubscribe_token=token)
+
+
+@app.post("/tips/unsubscribe/{token}", response_class=HTMLResponse)
+def tips_unsubscribe(request: Request, token: str):
+    """The button above, and mail providers' one-click unsubscribe."""
+    from . import tips
+    tips.unsubscribe(token)
+    return render(request, "tips_message.html", heading="Unsubscribed",
+                  message="Your address has been deleted. You won't hear "
+                          "from us again.")
 
 
 TOOL_PER_IP = (60, 3600)

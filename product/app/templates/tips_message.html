@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} &middot; Recruited{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<div class="panel">
+  <p>{{ message }}</p>
+  {% if unsubscribe_token %}
+    <form method="post" action="/tips/unsubscribe/{{ unsubscribe_token }}">
+      <p><button type="submit">Unsubscribe</button></p>
+    </form>
+  {% endif %}
+</div>
+<p><a class="btn" href="/find">Find the real address for a job</a>
+   <a class="btn ghost" href="/tools">Free tools</a></p>
+{% endblock %}
