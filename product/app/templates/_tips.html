@@ -1,0 +1,18 @@
+{% if tips_on %}
+{# The one place jobseekers can ask to hear from Recruited by email. Nothing
+   is sent except a confirmation until they click it. See app/tips.py. #}
+<form method="post" action="/tips" class="panel tips">
+  <p><b>One job-hunting tip a week, from my own search.</b>
+    <small>8 short emails, then it stops. Unsubscribe any time.</small></p>
+  <div class="copyrow">
+    <label for="tips-email" class="sr-only">Your email address</label>
+    <input id="tips-email" name="email" type="email" required
+           autocomplete="email" placeholder="you@example.com">
+    <input type="hidden" name="source" value="{{ request.url.path }}">
+    {# A field no person sees or fills in. Bots do. #}
+    <input type="text" name="website" tabindex="-1" autocomplete="off"
+           class="sr-only" aria-hidden="true">
+    <button type="submit" class="ghost">Send me the tips</button>
+  </div>
+</form>
+{% endif %}

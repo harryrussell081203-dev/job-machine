@@ -108,7 +108,8 @@ def _body(link: str) -> str:
             "in without the link, and it expires on its own.\n")
 
 
-def _send_over_https(address: str, body: str) -> None:
+def _send_over_https(address: str, body: str, *, subject: str = SUBJECT,
+                     headers: dict | None = None) -> None:
     """Brevo's transactional endpoint, on 443.
 
     Exists because a free host may block every SMTP port outright, and a
@@ -124,8 +125,9 @@ def _send_over_https(address: str, body: str) -> None:
             json={"sender": {"email": config.SMTP_ADDRESS,
                              "name": "Recruited"},
                   "to": [{"email": address}],
-                  "subject": SUBJECT,
-                  "textContent": body},
+                  "subject": subject,
+                  "textContent": body,
+                  **({"headers": headers} if headers else {})},
             timeout=30)
     except httpx.HTTPError as exc:
         raise RuntimeError(f"could not reach Brevo: {exc}") from exc
@@ -136,9 +138,12 @@ def _send_over_https(address: str, body: str) -> None:
             f"Brevo refused the message ({r.status_code}): {r.text[:300]}")
 
 
-def _send_over_smtp(address: str, body: str) -> None:
+def _send_over_smtp(address: str, body: str, *, subject: str = SUBJECT,
+                    headers: dict | None = None) -> None:
     msg = EmailMessage()
-    msg["Subject"] = SUBJECT
+    msg["Subject"] = subject
+    for name, value in (headers or {}).items():
+        msg[name] = value
     msg["From"] = config.SMTP_ADDRESS
     msg["To"] = address
     msg.set_content(body)
@@ -171,3 +176,19 @@ def send_login_email(address: str, link: str) -> None:
         _send_over_https(address, body)
     else:
         _send_over_smtp(address, body)
+
+
+def send_app_email(address: str, subject: str, body: str, *,
+                   headers: dict | None = None) -> None:
+    """Any email the app sends its own users, by the same route as sign-in
+    links. Raises if no route is configured; prints it in development."""
+    route = config.mail_route()
+    if config.DEV and not route:
+        print(f"\n  [dev] email to {address}: {subject}\n{body}\n", flush=True)
+        return
+    if not route:
+        raise RuntimeError("No way to send mail is configured.")
+    if route == "brevo":
+        _send_over_https(address, body, subject=subject, headers=headers)
+    else:
+        _send_over_smtp(address, body, subject=subject, headers=headers)
