@@ -1963,6 +1963,48 @@ async def quick_start(request: Request):
     return RedirectResponse("/dashboard", status_code=303)
 
 
+DESCRIBE_PER_USER = (10, 3600)
+
+
+@app.post("/setup/describe", response_class=HTMLResponse)
+async def describe_yourself(request: Request):
+    """One sentence in, the quick-start boxes filled in for them to check.
+    Saves nothing: they still press Start looking themselves."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if db.load_profile(user["id"]):
+        return RedirectResponse("/profile", status_code=303)
+    form = await request.form()
+    text = (form.get("about") or "").strip()
+
+    def page(**extra):
+        return render(request, "setup.html", user=user,
+                      cv=db.cv_summary(user["id"]), profile=None,
+                      mail=db.get_mail_account(user["id"]),
+                      settings=db.get_send_settings(user["id"]),
+                      vault_ready=vault.available(), about=text, **extra)
+
+    if not text:
+        return page(quick_error="Write a sentence about the work you want "
+                                "first, or fill in the boxes below.")
+    limit, window = DESCRIBE_PER_USER
+    filled = {}
+    if ratelimit.hit(f"describe:{user['id']}", limit=limit, window=window):
+        try:
+            from . import describe
+            from .ai import gemini_now
+            filled = describe.read(text, gemini_now)
+        except Exception as exc:
+            log.info("describe: %s", exc)
+    if not filled:
+        return page(quick_error="Couldn't read that just now. Fill in the "
+                                "boxes below instead; it's six questions.")
+    return page(quick=filled, quick_note=(
+        "Filled in from what you wrote. Check each box, add your name and "
+        "phone number, then press Start looking."))
+
+
 # The Profile's messages are written for a JSON file ("target_roles is empty -
 # nothing to search for"). This form never shows those field names, so each
 # is translated into the question that was actually on the screen.
