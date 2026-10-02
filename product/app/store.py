@@ -360,6 +360,24 @@ CREATE TABLE IF NOT EXISTS tip_subscribers (
     last_sent_at  BIGINT
 );
 
+-- The public employer directory: one page per company, showing only the
+-- shared inboxes it publishes on its own website (careers@, jobs@, info@),
+-- never a person's address or name. See app/directory.py.
+CREATE TABLE IF NOT EXISTS employer_pages (
+    slug        TEXT    PRIMARY KEY,
+    company     TEXT    NOT NULL,
+    domain      TEXT    NOT NULL,
+    -- JSON list of objects with email, kind (hiring or general), found_on
+    inboxes     TEXT    NOT NULL DEFAULT '[]',
+    -- JSON list of recent adverts, if known: title, location, posted_at
+    roles       TEXT    NOT NULL DEFAULT '[]',
+    created_at  BIGINT  NOT NULL,
+    checked_at  BIGINT  NOT NULL,
+    -- Set when the company asks for the page to go. The row stays so the
+    -- page is never rebuilt.
+    removed_at  BIGINT
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The

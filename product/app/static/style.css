@@ -884,3 +884,7 @@ table.versus td:first-child { color: var(--muted); white-space: nowrap; }
    work". Same look as the rest of the form, with the legend as a label. */
 fieldset.choices { border: 0; padding: 0; margin: 16px 0 6px; }
 fieldset.choices legend { padding: 0; margin-bottom: 4px; }
+
+/* The employer directory index: a plain A to Z list in columns. */
+ul.employers { columns: 2; column-gap: 24px; padding-left: 18px; }
+@media (max-width: 520px) { ul.employers { columns: 1; } }

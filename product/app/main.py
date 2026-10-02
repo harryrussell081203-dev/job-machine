@@ -45,6 +45,7 @@ from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
+from . import directory  # noqa: E402
 from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
 from . import search_console  # noqa: E402
@@ -125,6 +126,18 @@ def _ago(stamp) -> str:
 
 
 templates.env.filters["ago"] = _ago
+
+
+def _datefmt(stamp) -> str:
+    """A unix time as "2 October 2026", in UK time."""
+    try:
+        when = datetime.datetime.fromtimestamp(int(stamp), datetime.timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+    return f"{when.day} {when:%B %Y}"
+
+
+templates.env.filters["datefmt"] = _datefmt
 
 SESSION_COOKIE = "jm_session"
 
@@ -1632,7 +1645,15 @@ def tools_on() -> bool:
 
 
 def public_pages() -> tuple[str, ...]:
-    return PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+    pages = PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+    if directory.enabled():
+        # Grows by itself: every company whose site was read and that prints
+        # a shared inbox. See directory.py.
+        try:
+            pages += ("/employers",) + tuple(directory.paths())
+        except Exception:
+            pass
+    return pages
 
 
 def public_urls() -> list[str]:
@@ -1640,6 +1661,47 @@ def public_urls() -> list[str]:
     and for IndexNow. One list, so a page cannot be in one and not the
     other."""
     return [config.BASE_URL + path for path in public_pages()]
+
+
+@app.get("/employers", response_class=HTMLResponse)
+def employers(request: Request):
+    """Every company page, A to Z."""
+    if not directory.enabled():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "employers.html", pages=directory.listed(),
+                  removed=request.query_params.get("removed") == "1",
+                  og_title="How to email UK employers about a job",
+                  og_description=(
+                      "The job application email addresses UK employers "
+                      "publish on their own websites, with where each one is "
+                      "printed. Shared inboxes only, never a person's."))
+
+
+@app.get("/employers/{slug}", response_class=HTMLResponse)
+def employer_page(request: Request, slug: str):
+    page = directory.get(slug) if directory.enabled() else None
+    if not page:
+        response = render(request, "employer_missing.html", slug=slug)
+        response.status_code = 404
+        return response
+    first = page["inboxes"][0]["email"]
+    return render(request, "employer.html", page=page,
+                  og_title=f"{page['company']} careers email address",
+                  og_description=(
+                      f"The email address {page['company']} publishes on its "
+                      f"own website for jobs ({first}), where it's printed, "
+                      "and how to write to it."))
+
+
+@app.post("/employers/{slug}/remove")
+def employer_remove(request: Request, slug: str):
+    """Taken down on request, and never rebuilt. Anybody can ask; taking a
+    page down is the safe direction to be wrong in."""
+    if not ratelimit.hit(f"employer-remove:{ratelimit.client_ip(request)}",
+                         limit=20, window=3600):
+        return RedirectResponse("/employers", status_code=303)
+    directory.remove(slug)
+    return RedirectResponse("/employers?removed=1", status_code=303)
 
 
 # Serving the key is what proves the domain is ours, so the route only exists

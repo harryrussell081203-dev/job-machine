@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ page.company }} careers email address &middot; Recruited{% endblock %}
+{% block content %}
+{% set hiring = page.inboxes | selectattr("kind", "equalto", "hiring") | list %}
+<script type="application/ld+json">
+{{ {"@context": "https://schema.org", "@type": "Organization",
+    "name": page.company, "url": "https://" ~ page.domain,
+    "email": page.inboxes[0].email} | tojson }}
+</script>
+
+<p class="muted"><small><a href="/employers">Employers</a> &rsaquo; {{ page.company }}</small></p>
+<h1>How to email {{ page.company }} about a job</h1>
+<p class="lede">
+  {%- if hiring %}{{ page.company }} prints a hiring address on its own website,
+  {{ page.domain }}. Write there, not to a portal.
+  {%- else %}{{ page.company }} doesn't print a careers address, but its own
+  website, {{ page.domain }}, does give a general one. Ask them to pass your
+  email to whoever is hiring.{% endif %}</p>
+
+<div class="panel">
+  {% for i in page.inboxes %}
+    <p><b><a href="mailto:{{ i.email }}">{{ i.email }}</a></b>
+      <span class="tag">{{ "hiring inbox" if i.kind == "hiring" else "general inbox" }}</span><br>
+      <small class="muted">
+        {%- if i.found_on %}Printed on <a href="{{ i.found_on }}" rel="nofollow noopener" target="_blank">{{ i.found_on | replace("https://", "") | replace("http://", "") }}</a>.
+        {%- else %}Printed on {{ page.domain }}.{% endif %}
+        Checked {{ page.checked_at | int | datefmt }}.</small></p>
+  {% endfor %}
+  <p class="hint">Only shared inboxes that {{ page.company }} publishes itself
+    are listed here, never a person's address. Addresses change; if one
+    bounces, check their contact page.</p>
+</div>
+
+{% if page.roles %}
+<h2>Jobs they've advertised recently</h2>
+<div class="panel">
+  <ul>
+    {% for r in page.roles %}
+      <li>{{ r.title }}{% if r.location %} <small class="muted">{{ r.location }}</small>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="hint">From the UK job boards. The roles may have closed; the
+    address above is still the way in.</p>
+</div>
+{% endif %}
+
+<h2>What to write</h2>
+<div class="panel">
+  <p>Short gets read. 60 to 90 words:</p>
+  <ol>
+    <li>The job you're after, and one thing about {{ page.company }} that shows
+      you looked: a site, a product, something from their advert.</li>
+    <li>Two things you've actually done that matter for this job, with a
+      number if you have one.</li>
+    <li>One question, so replying is easy.</li>
+  </ol>
+  <p>Then your name, your phone number and "CV attached". Subject line: the job
+    title, nothing else. <a href="/answers/job-email-subject-line">Why</a>.</p>
+  <p><a class="btn small ghost" href="/tools/cover-letter-ai-check">Check your
+    letter doesn't sound like AI</a></p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Applying to more than one company?</h2>
+  <p>Recruited does this for every job you'd go for: it finds the address each
+    employer publishes, never a guessed one, writes a short letter in your
+    voice, and sends it from your own email.</p>
+  <p><a class="btn" href="/">See how it works</a>
+     <a class="btn ghost" href="/find">Look up another company</a></p>
+</div>
+
+<details class="fold">
+  <summary><small>Is this your company?</small></summary>
+  <div class="panel">
+    <p><small>This page shows an address {{ page.company }} publishes on its own
+      website, so jobseekers can apply to a person rather than a portal. If
+      you'd rather it wasn't here, remove it. It won't come back.</small></p>
+    <form method="post" action="/employers/{{ page.slug }}/remove">
+      <button class="btn small ghost">Remove this page</button>
+    </form>
+  </div>
+</details>
+{% endblock %}
