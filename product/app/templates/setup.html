@@ -98,34 +98,59 @@
     {# Here, not at the top of the page. On a phone the top of the page is a
        full screen away from the field that needs fixing, so a red box up
        there is read and then nothing on screen says what to change. #}
+    <form method="post" action="/setup/describe#quickerror" class="quick">
+      <label>Quicker: describe it in a sentence
+        <textarea name="about" rows="3" maxlength="600" style="min-height:80px"
+          placeholder="e.g. I've driven forklifts at Tesco in Leeds for 3 years and want warehouse or driving work, at least £12 an hour">{{ about or '' }}</textarea>
+        <small class="hint">Say the job you want, where, your last job and
+          the least you'd take. It fills in the boxes below for you to check;
+          nothing is saved until you press Start looking.</small></label>
+      <button class="btn small ghost">Fill in the boxes for me</button>
+    </form>
+
     {% if quick_error %}
       <div class="note bad" id="quickerror">{{ quick_error }}</div>
+    {% elif quick_note %}
+      <div class="note good" id="quickerror">{{ quick_note }}</div>
     {% endif %}
     <form method="post" action="/setup/quick#quickerror" class="quick">
       <label>What job are you after?
         <input type="text" name="target_roles" required autocomplete="organization-title"
                placeholder="e.g. warehouse operative, electrician"
-               value="{{ q.target_roles or '' }}"></label>
+               value="{{ q.target_roles or '' }}">
+        <small class="hint">The job title an employer would put on the advert.
+          Two or three is fine, separated by commas. "Anything" finds
+          nothing.</small></label>
       <label>Where do you live?
         <input type="text" name="location" required autocomplete="address-level2"
-               placeholder="e.g. Aberdeen" value="{{ q.location or '' }}"></label>
+               placeholder="e.g. Aberdeen" value="{{ q.location or '' }}">
+        <small class="hint">A town or city. Jobs within 25 miles are searched;
+          you can change the distance and add places later.</small></label>
       <label>Your name
         <input type="text" name="name" required autocomplete="name"
-               value="{{ q.name or '' }}"></label>
+               value="{{ q.name or '' }}">
+        <small class="hint">It signs every letter.</small></label>
       <label>Your phone number
         <input name="phone" required type="tel" autocomplete="tel"
-               value="{{ q.phone or '' }}"></label>
+               value="{{ q.phone or '' }}">
+        <small class="hint">Goes at the bottom of every letter, so an employer
+          can ring you. Never shown anywhere else.</small></label>
       <fieldset>
         <legend>Your last job</legend>
         <input type="text" name="last_title" required placeholder="What you did, e.g. forklift driver"
                aria-label="Your last job title" value="{{ q.last_title or '' }}">
         <input type="text" name="last_org" required placeholder="Who it was with"
                aria-label="Who your last job was with" value="{{ q.last_org or '' }}">
+        <small class="hint">Your most recent job, even if it was short or
+          different work. The letter uses it as proof you've worked; it never
+          makes up anything else.</small>
       </fieldset>
       <label>The least you would work for
         <input type="text" name="min_pay" required inputmode="decimal"
                placeholder="a salary like 24000, or hourly like 12.50"
-               value="{{ q.min_pay or '' }}"></label>
+               value="{{ q.min_pay or '' }}">
+        <small class="hint">Jobs that say they pay less are skipped. Adverts
+          that don't say what they pay are kept.</small></label>
       <button class="btn">Start looking</button>
     </form>
     <p class="hint">You can add more detail later to make the letters
@@ -277,6 +302,8 @@
     <p class="hint rulesline">
       {%- if settings.auto_send %}Sends automatically{% else %}You press send{% endif %}
       &middot; {{ settings.daily_cap }} a day
+      {%- if settings.audience == 'employers' %} &middot; employers only
+      {%- elif settings.audience == 'recruiters' %} &middot; recruiters only{% endif %}
       {%- if settings.follow_up %} &middot; one follow-up{% endif %}
       {%- if settings.digest %} &middot; evening email{% endif %}.
       <u>Change</u></p></summary>
@@ -288,6 +315,43 @@
       <span><b>Send automatically.</b> Letters go out without asking
         me{% if not mail %} <i>(connect your email first)</i>{% endif %}</span>
     </label>
+
+    <fieldset class="choices">
+      <legend><b>Who to write to</b></legend>
+      {% for value, title, what in [
+          ("both", "Employers and recruiters",
+           "Whoever placed the advert. An employer fills one job; a recruiter can put you forward for this one and the next."),
+          ("employers", "Employers only",
+           "Skip adverts placed by recruitment agencies."),
+          ("recruiters", "Recruiters only",
+           "Only adverts placed by recruitment agencies. The letter asks them to put you forward for this role and similar ones.")] %}
+      <label class="check">
+        <input type="radio" name="audience" value="{{ value }}"
+               {% if settings.audience == value %}checked{% endif %}>
+        <span><b>{{ title }}.</b> {{ what }}</span>
+      </label>
+      {% endfor %}
+      <p class="hint">An agency is spotted from the advert itself: the line
+        saying it acts as an employment agency, "our client", or a name like
+        Hays or "&hellip; Recruitment". <a href="/recruiters">See which
+        recruiters are advertising your kind of work.</a></p>
+    </fieldset>
+
+    <fieldset class="choices">
+      <legend><b>What kind of work</b></legend>
+      {% set picked = (settings.work_types or "permanent,contract,temp").split(",") %}
+      {% for value, title in [("permanent", "Permanent"),
+                              ("contract", "Contract or fixed-term"),
+                              ("temp", "Temporary")] %}
+      <label class="check">
+        <input type="checkbox" name="work_types" value="{{ value }}"
+               {% if value in picked %}checked{% endif %}>
+        <span>{{ title }}</span>
+      </label>
+      {% endfor %}
+      <p class="hint">Adverts that don't say are always included. Tick all
+        three, or none, for any kind.</p>
+    </fieldset>
 
     <label class="check">
       <input type="checkbox" name="follow_up" value="1"

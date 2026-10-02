@@ -1,0 +1,60 @@
+name: directory
+
+# Grows the public employer directory (product/app/directory_builder.py): a
+# few job-board searches a day for company names, then each company's own
+# website is read for the shared inboxes it publishes. Never a person's
+# address. A removed page is never rebuilt.
+#
+# Needs DATABASE_URL, and ADZUNA_APP_ID / ADZUNA_APP_KEY for the board
+# searches (the same secrets the sweep uses). Without Adzuna it still reads
+# the companies the product has already drafted letters to.
+#
+# Off: repository variable DIRECTORY_ENABLED=0. Size: DIRECTORY_PER_RUN.
+
+on:
+  schedule:
+    # Every day, early, not on the hour.
+    - cron: "41 5 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: directory
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Grow the directory
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          CREDENTIAL_KEY: ${{ secrets.CREDENTIAL_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          STRIPE_PAYMENT_LINK: ${{ secrets.STRIPE_PAYMENT_LINK }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          DIRECTORY_ENABLED: ${{ vars.DIRECTORY_ENABLED }}
+          DIRECTORY_PER_RUN: ${{ vars.DIRECTORY_PER_RUN }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL must be a repository secret."
+            exit 1
+          fi
+          python -m app.directory_builder

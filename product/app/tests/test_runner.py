@@ -246,3 +246,70 @@ class TestItSurvivesFailure(RunnerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWhoItWritesTo(RunnerTestCase):
+    AGENCY_AD = dict(company={"display_name": "Apex Recruitment"},
+                     description="Our client needs a fitter. Send your CV to "
+                                 "claire@pennine.co.uk")
+
+    def test_by_default_an_agency_advert_is_written_to_and_labelled(self):
+        prompts = []
+        ai = scripted_ai()
+
+        def watching(prompt):
+            prompts.append(prompt)
+            return ai(prompt)
+        report = self.run_once(session=Session(
+            adzuna=adzuna_payload(**self.AGENCY_AD)), ai=watching)
+        self.assertEqual(report.drafted, 1, report.errors)
+        d = self.db.list_drafts(self.user["id"])[0]
+        self.assertEqual(d["advertiser"], "agency")
+        self.assertTrue(any("RECRUITMENT AGENCY" in p for p in prompts))
+
+    def test_an_employer_letter_has_no_agency_note(self):
+        prompts = []
+        ai = scripted_ai()
+        self.run_once(ai=lambda p: prompts.append(p) or ai(p))
+        self.assertFalse(any("RECRUITMENT AGENCY" in p for p in prompts))
+        self.assertEqual(self.db.list_drafts(self.user["id"])[0]["advertiser"],
+                         "employer")
+
+    def test_employers_only_skips_the_agency_and_can_change_its_mind(self):
+        self.db.save_send_settings(self.user["id"], audience="employers")
+        session = Session(adzuna=adzuna_payload(**self.AGENCY_AD))
+        report = self.run_once(session=session)
+        self.assertEqual((report.drafted, report.other_kind), (0, 1))
+        # Not marked seen, so switching back picks it up.
+        self.db.save_send_settings(self.user["id"], audience="both")
+        self.assertEqual(self.run_once(session=session).drafted, 1)
+
+    def test_recruiters_only_skips_the_employer(self):
+        self.db.save_send_settings(self.user["id"], audience="recruiters")
+        report = self.run_once()
+        self.assertEqual((report.drafted, report.other_kind), (0, 1))
+
+    def test_terms_filter_keeps_adverts_that_do_not_say(self):
+        self.db.save_send_settings(self.user["id"], work_types="permanent")
+        self.assertEqual(self.run_once().drafted, 1)
+
+    def test_terms_filter_drops_the_wrong_terms(self):
+        self.db.save_send_settings(self.user["id"], work_types="permanent")
+        report = self.run_once(session=Session(adzuna=adzuna_payload(
+            title="Maintenance Technician - 6 month contract")))
+        self.assertEqual((report.drafted, report.other_kind), (0, 1))
+
+
+class TestTheSettings(RunnerTestCase):
+    def test_defaults_and_cleaning(self):
+        s = self.db.get_send_settings(self.user["id"])
+        self.assertEqual((s["audience"], s["work_types"]), ("both", ""))
+        self.db.save_send_settings(self.user["id"], audience="nonsense",
+                                   work_types="temp,permanent,junk")
+        s = self.db.get_send_settings(self.user["id"])
+        self.assertEqual((s["audience"], s["work_types"]),
+                         ("both", "permanent,temp"))
+        self.db.save_send_settings(self.user["id"],
+                                   work_types="permanent,contract,temp")
+        self.assertEqual(self.db.get_send_settings(self.user["id"])
+                         ["work_types"], "")

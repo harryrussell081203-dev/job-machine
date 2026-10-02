@@ -129,6 +129,23 @@ class SendingSettings(AppTestCase):
     def test_a_window_of_zero_days_would_find_nothing_so_is_refused(self):
         self.assertEqual(self.post(search_days=0)["search_days"], 1)
 
+    # -- who to write to, and on what terms ------------------------------
+    def test_who_to_write_to_is_saved_and_shown(self):
+        self.assertEqual(self.post(audience="recruiters")["audience"],
+                         "recruiters")
+        page = self.client.get("/setup").text
+        self.assertIn("Recruiters only", page)
+        self.assertIn("recruiters only", page)       # the summary line
+
+    def test_an_unknown_audience_is_both(self):
+        self.assertEqual(self.post(audience="everyone")["audience"], "both")
+
+    def test_work_types_from_the_ticks(self):
+        self.client.post("/setup/sending",
+                         data={"work_types": ["contract", "temp"]})
+        self.assertEqual(self.main.db.get_send_settings(self.user["id"])
+                         ["work_types"], "contract,temp")
+
 
 class TheSearchWindowReachesTheSearch(AppTestCase):
     """A setting that does not change what the machine does is decoration."""

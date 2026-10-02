@@ -49,5 +49,20 @@ class VerificationFile(AppTestCase):
             self.assertEqual(other.status_code, 404)
 
 
+class SearchTitles(AppTestCase):
+    """What shows as the blue link on Google. The brand name alone collides
+    with an existing recruitment agency, so the titles say what the page
+    does."""
+
+    def test_home_and_find_say_what_they_do(self):
+        home = self.client.get("/").text
+        find = self.client.get("/find").text
+        self.assertIn("<title>Email the person hiring, not the job portal", home)
+        self.assertIn("<title>Find the hiring manager&#39;s email for a job",
+                      find.replace("'", "&#39;"))
+        self.assertIn('content="Type a company&#39;s name or paste a job advert',
+                      find.replace("'", "&#39;"))
+
+
 if __name__ == "__main__":
     unittest.main()

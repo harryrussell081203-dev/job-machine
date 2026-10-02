@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}How to email UK employers about a job &middot; Recruited{% endblock %}
+{% block content %}
+<h1>How to email UK employers about a job</h1>
+<p class="lede">The address each company prints on its own website for jobs,
+and the page it's printed on. Shared inboxes only, never a person's.</p>
+
+{% if removed %}<div class="note good">Removed. That page won't come back.</div>{% endif %}
+
+<div class="panel">
+  <p>Not listed? <a href="/find">Type the company's name</a> and its website
+    is read for you. Free, no account.</p>
+</div>
+
+{% if pages %}
+<div class="panel">
+  <ul class="employers">
+    {% for p in pages %}
+      <li><a href="/employers/{{ p.slug }}">{{ p.company }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Nothing here yet.</p></div>
+{% endif %}
+{% endblock %}

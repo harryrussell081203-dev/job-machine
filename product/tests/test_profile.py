@@ -227,10 +227,6 @@ class TestWizardRoundTrip(unittest.TestCase):
         self.assertEqual(Profile.load(fh.name).name, "Sam O'Doherty")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestASearchTermHasToBeSearchable(unittest.TestCase):
     """The failure this class exists for produced no error at all.
 
@@ -283,3 +279,18 @@ class TestASearchTermHasToBeSearchable(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("One place per line", message)
         self.assertIn("Aberdeen", message)
+
+
+class TooGeneralTitles(unittest.TestCase):
+    def test_answers_that_name_no_job_are_refused_with_the_reason(self):
+        import jobseeker.profile as p
+        for vague in ("anything", "Any job", "work", "idk", "not sure",
+                      "full time", "ok"):
+            self.assertIn("too general", p._not_a_job_title(vague), vague)
+        for real in ("labourer", "forklift driver", "HGV driver", "nurse",
+                     "chef", "IT support"):
+            self.assertEqual(p._not_a_job_title(real), "", real)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -50,12 +50,16 @@
     <div class="row">
       <div>
         <label for="location">Where you are</label>
+        <p class="hint">Your home town. Distances on each job are measured from
+          here.</p>
         <input id="location" name="location" type="text" required
                placeholder="Sheffield, England"
                value="{{ data.get('location','') }}">
       </div>
       <div>
         <label for="email">Your email</label>
+        <p class="hint">Optional. Letters go from the mailbox you connect, so
+          this is only kept with your profile.</p>
         <input id="email" name="email" type="email"
                value="{{ data.get('email','') }}">
       </div>
@@ -138,7 +142,8 @@
         </div>
       </div>
       <label>What you actually did</label>
-      <input name="h_detail" type="text" value="{{ h.get('detail','') }}">
+      <input name="h_detail" type="text" value="{{ h.get('detail','') }}"
+             placeholder="e.g. serviced 40 forklifts a month to LOLER standard">
     {% endfor %}
   </div>
 
@@ -152,7 +157,11 @@
       placeholder="that I hold a current 17th Edition certificate&#10;that I have finished my HNC">{{ (data.get('never_claim') or []) | join('\n') }}</textarea>
 
     <label for="qualifications">Qualifications you <em>do</em> hold</label>
-    <textarea id="qualifications" name="qualifications">{{ (data.get('qualifications') or []) | join('\n') }}</textarea>
+    <p class="hint">One per line, as written on the certificate: "CSCS card",
+      "Level 3 NVQ Electrical", "Full UK driving licence". The letters only
+      ever mention what is here.</p>
+    <textarea id="qualifications" name="qualifications"
+      placeholder="CSCS card&#10;Full UK driving licence">{{ (data.get('qualifications') or []) | join('\n') }}</textarea>
   </div>
 
   <div class="panel">

@@ -360,6 +360,24 @@ CREATE TABLE IF NOT EXISTS tip_subscribers (
     last_sent_at  BIGINT
 );
 
+-- The public employer directory: one page per company, showing only the
+-- shared inboxes it publishes on its own website (careers@, jobs@, info@),
+-- never a person's address or name. See app/directory.py.
+CREATE TABLE IF NOT EXISTS employer_pages (
+    slug        TEXT    PRIMARY KEY,
+    company     TEXT    NOT NULL,
+    domain      TEXT    NOT NULL,
+    -- JSON list of objects with email, kind (hiring or general), found_on
+    inboxes     TEXT    NOT NULL DEFAULT '[]',
+    -- JSON list of recent adverts, if known: title, location, posted_at
+    roles       TEXT    NOT NULL DEFAULT '[]',
+    created_at  BIGINT  NOT NULL,
+    checked_at  BIGINT  NOT NULL,
+    -- Set when the company asks for the page to go. The row stays so the
+    -- page is never rebuilt.
+    removed_at  BIGINT
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
@@ -557,6 +575,17 @@ _ADDED_COLUMNS = [
     # turns it on: it is a second email in their name, and nobody should find
     # out from a recruiter that their account sends those.
     ("send_settings", "follow_up", "INTEGER NOT NULL DEFAULT 0"),
+    # Who the sweep writes to: 'both' (employers and recruitment agencies,
+    # which is what it always did), 'employers' or 'recruiters'. And on what
+    # terms: '' for any, else a comma list of permanent, contract, temp. An
+    # advert that doesn't say is never filtered out. See jobseeker/agencies.py.
+    ("send_settings", "audience", "TEXT NOT NULL DEFAULT 'both'"),
+    ("send_settings", "work_types", "TEXT NOT NULL DEFAULT ''"),
+    # Who placed the advert a draft answers, and on what terms, so the card
+    # can say "recruitment agency" and "contract" rather than leave it to be
+    # worked out from the letter.
+    ("drafts", "advertiser", "TEXT NOT NULL DEFAULT ''"),
+    ("drafts", "contract", "TEXT NOT NULL DEFAULT ''"),
     ("drafts", "followup_sent_at", "BIGINT"),
     # What a sent_log row was. The daily cap counts every email that left,
     # because the user's mailbox does; /numbers counts only applications,

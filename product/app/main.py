@@ -45,8 +45,11 @@ from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
+from . import directory  # noqa: E402
+from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
 from . import search_console  # noqa: E402
+from jobseeker.names import company_key  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import views  # noqa: E402
@@ -123,6 +126,18 @@ def _ago(stamp) -> str:
 
 
 templates.env.filters["ago"] = _ago
+
+
+def _datefmt(stamp) -> str:
+    """A unix time as "2 October 2026", in UK time."""
+    try:
+        when = datetime.datetime.fromtimestamp(int(stamp), datetime.timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+    return f"{when.day} {when:%B %Y}"
+
+
+templates.env.filters["datefmt"] = _datefmt
 
 SESSION_COOKIE = "jm_session"
 
@@ -284,9 +299,16 @@ FIND_PER_IP = (30, 3600)
 MAX_ADVERT = 20_000        # a long advert is 5k; past this it is an attack
 
 
+# The search result snippet for /find. Says what the page does in the words
+# people search with, because "Who to write to" said nothing to a stranger.
+FIND_DESCRIPTION = ("Type a company's name or paste a job advert, and get the "
+                    "real email address the employer published, ranked. "
+                    "Never guessed. Free, no account.")
+
+
 @app.get("/find", response_class=HTMLResponse)
 def find_form(request: Request):
-    return render(request, "find.html")
+    return render(request, "find.html", og_description=FIND_DESCRIPTION)
 
 
 # Looking a company up reads its website, so it is rationed harder than an
@@ -1158,6 +1180,101 @@ async def set_outcome(request: Request, draft_id: int):
     return RedirectResponse("/applications", status_code=303)
 
 
+RECRUITER_RESULTS = {
+    "drafted": "Letter written. It's on your drafts screen to check.",
+    "written": "You've already written to this agency.",
+    "blocked": "This agency is on your never-contact list.",
+    "no_address": "No real email address could be found for this agency, "
+                  "in its adverts or on its website. Nothing is guessed.",
+    "undeliverable": "This agency's email domain doesn't accept mail, so "
+                     "nothing was written.",
+    "gone": "That agency is no longer in the list. Refresh it.",
+    "no_profile": "Finish your profile first, so the letter has something "
+                  "true to say.",
+    "never": "Done. This agency will never be written to.",
+}
+
+
+def _recruiter_filters(q) -> dict:
+    def number(name, allowed, default):
+        try:
+            value = int(q.get(name) or default)
+        except (TypeError, ValueError):
+            return default
+        return value if value in allowed else default
+    return {
+        "area": (q.get("area") or "").strip()[:80],
+        "terms": [t for t in q.getlist("terms") if t in db.WORK_TYPES],
+        "days": number("days", dict(recruiterlib.WINDOWS), 30),
+        "min_roles": number("min_roles", dict(recruiterlib.MIN_ROLES), 1),
+        "words": (q.get("words") or "").strip()[:60],
+    }
+
+
+@app.get("/recruiters", response_class=HTMLResponse)
+def recruiters(request: Request):
+    """Agencies advertising this person's kind of work, with filters."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if not recruiterlib.enabled():
+        return RedirectResponse("/dashboard", status_code=303)
+    raw = db.load_profile(user["id"])
+    try:
+        profile = Profile.from_dict(raw) if raw else None
+    except ProfileError:
+        profile = None
+    filters = _recruiter_filters(request.query_params)
+    ctx = {"user": user, "profile": profile, "filters": filters,
+           "result": RECRUITER_RESULTS.get(request.query_params.get("r", "")),
+           "boards": runner.credentials().has_adzuna()
+           or runner.credentials().has_reed(),
+           "windows": recruiterlib.WINDOWS, "min_roles": recruiterlib.MIN_ROLES,
+           "now": time.time()}
+    if not profile or not ctx["boards"]:
+        return render(request, "recruiters.html", agencies=[], gathered=None,
+                      **ctx)
+    try:
+        gathered = recruiterlib.gather(
+            user["id"], profile, runner.credentials(),
+            refresh=request.query_params.get("refresh") == "1")
+    except Exception as exc:
+        log.warning("recruiter search failed: %s", exc)
+        gathered = recruiterlib.saved(user["id"]) or {"at": 0, "listings": []}
+    found = recruiterlib.group(gathered["listings"], **filters)
+    for a in found:
+        a["status"] = recruiterlib.status(user["id"], a["name"])
+    return render(request, "recruiters.html", agencies=found,
+                  gathered=gathered, **ctx)
+
+
+@app.post("/recruiters/{key}/write")
+def recruiter_write(request: Request, key: str):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if not ratelimit.hit(f"recruiter-write:{user['id']}", limit=20,
+                         window=3600):
+        return RedirectResponse("/recruiters", status_code=303)
+    outcome = recruiterlib.write_to(user["id"], key)
+    if outcome == "drafted":
+        return RedirectResponse("/drafts", status_code=303)
+    return RedirectResponse(f"/recruiters?r={outcome}", status_code=303)
+
+
+@app.post("/recruiters/{key}/never")
+def recruiter_never(request: Request, key: str):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    have = recruiterlib.saved(user["id"]) or {"listings": []}
+    name = next((i["company"] for i in have["listings"]
+                 if company_key(i.get("company") or "") == key), "")
+    if name:
+        db.block_company(user["id"], name, reason="asked by user")
+    return RedirectResponse("/recruiters?r=never", status_code=303)
+
+
 @app.post("/drafts/{draft_id}/block")
 def block_employer(request: Request, draft_id: int):
     """'Never write to this company again.' Deliberately one click, and
@@ -1528,7 +1645,15 @@ def tools_on() -> bool:
 
 
 def public_pages() -> tuple[str, ...]:
-    return PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+    pages = PUBLIC_PAGES + (TOOL_PAGES if tools_on() else ())
+    if directory.enabled():
+        # Grows by itself: every company whose site was read and that prints
+        # a shared inbox. See directory.py.
+        try:
+            pages += ("/employers",) + tuple(directory.paths())
+        except Exception:
+            pass
+    return pages
 
 
 def public_urls() -> list[str]:
@@ -1536,6 +1661,47 @@ def public_urls() -> list[str]:
     and for IndexNow. One list, so a page cannot be in one and not the
     other."""
     return [config.BASE_URL + path for path in public_pages()]
+
+
+@app.get("/employers", response_class=HTMLResponse)
+def employers(request: Request):
+    """Every company page, A to Z."""
+    if not directory.enabled():
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "employers.html", pages=directory.listed(),
+                  removed=request.query_params.get("removed") == "1",
+                  og_title="How to email UK employers about a job",
+                  og_description=(
+                      "The job application email addresses UK employers "
+                      "publish on their own websites, with where each one is "
+                      "printed. Shared inboxes only, never a person's."))
+
+
+@app.get("/employers/{slug}", response_class=HTMLResponse)
+def employer_page(request: Request, slug: str):
+    page = directory.get(slug) if directory.enabled() else None
+    if not page:
+        response = render(request, "employer_missing.html", slug=slug)
+        response.status_code = 404
+        return response
+    first = page["inboxes"][0]["email"]
+    return render(request, "employer.html", page=page,
+                  og_title=f"{page['company']} careers email address",
+                  og_description=(
+                      f"The email address {page['company']} publishes on its "
+                      f"own website for jobs ({first}), where it's printed, "
+                      "and how to write to it."))
+
+
+@app.post("/employers/{slug}/remove")
+def employer_remove(request: Request, slug: str):
+    """Taken down on request, and never rebuilt. Anybody can ask; taking a
+    page down is the safe direction to be wrong in."""
+    if not ratelimit.hit(f"employer-remove:{ratelimit.client_ip(request)}",
+                         limit=20, window=3600):
+        return RedirectResponse("/employers", status_code=303)
+    directory.remove(slug)
+    return RedirectResponse("/employers?removed=1", status_code=303)
 
 
 # Serving the key is what proves the domain is ours, so the route only exists
@@ -1711,6 +1877,7 @@ def admin(request: Request):
                   traffic_hours=views.by_hour(hours=24, now=now),
                   searches_week=views.outcomes(since=now - 7 * 86400),
                   search_console=search_console.latest(),
+                  from_search=views.search_report(since=now - 28 * 86400),
                   **adminlib.summarise(rows, now=now))
 
 
@@ -1857,6 +2024,48 @@ async def quick_start(request: Request):
     funnel.reached(user["id"], "onboarded", detail="quick start")
     _start_run(user["id"])
     return RedirectResponse("/dashboard", status_code=303)
+
+
+DESCRIBE_PER_USER = (10, 3600)
+
+
+@app.post("/setup/describe", response_class=HTMLResponse)
+async def describe_yourself(request: Request):
+    """One sentence in, the quick-start boxes filled in for them to check.
+    Saves nothing: they still press Start looking themselves."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if db.load_profile(user["id"]):
+        return RedirectResponse("/profile", status_code=303)
+    form = await request.form()
+    text = (form.get("about") or "").strip()
+
+    def page(**extra):
+        return render(request, "setup.html", user=user,
+                      cv=db.cv_summary(user["id"]), profile=None,
+                      mail=db.get_mail_account(user["id"]),
+                      settings=db.get_send_settings(user["id"]),
+                      vault_ready=vault.available(), about=text, **extra)
+
+    if not text:
+        return page(quick_error="Write a sentence about the work you want "
+                                "first, or fill in the boxes below.")
+    limit, window = DESCRIBE_PER_USER
+    filled = {}
+    if ratelimit.hit(f"describe:{user['id']}", limit=limit, window=window):
+        try:
+            from . import describe
+            from .ai import gemini_now
+            filled = describe.read(text, gemini_now)
+        except Exception as exc:
+            log.info("describe: %s", exc)
+    if not filled:
+        return page(quick_error="Couldn't read that just now. Fill in the "
+                                "boxes below instead; it's six questions.")
+    return page(quick=filled, quick_note=(
+        "Filled in from what you wrote. Check each box, add your name and "
+        "phone number, then press Start looking."))
 
 
 # The Profile's messages are written for a JSON file ("target_roles is empty -
@@ -2100,7 +2309,10 @@ async def save_sending(request: Request):
         daily_cap=clamp("daily_cap", 12, 1, ceiling),
         search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS),
         follow_up=1 if form.get("follow_up") else 0,
-        digest=1 if form.get("digest") else 0)
+        digest=1 if form.get("digest") else 0,
+        audience=(form.get("audience") if form.get("audience") in db.AUDIENCES
+                  else "both"),
+        work_types=db.clean_work_types(form.getlist("work_types")))
     return RedirectResponse("/setup", status_code=303)
 
 

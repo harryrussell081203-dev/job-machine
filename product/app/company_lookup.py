@@ -57,8 +57,8 @@ def _same_site(url: str, domain: str) -> bool:
                                                           "www." + domain)
 
 
-def _read(domain: str, path: str, get) -> list[str]:
-    """Addresses on one page. Redirects are followed only while they stay on
+def _read(domain: str, path: str, get) -> tuple[str, list[str]]:
+    """(the page it ended up on, the addresses on it). Redirects are followed only while they stay on
     the company's own domain: a redirect elsewhere is somewhere the visitor
     could not have pointed us, and is not followed."""
     from urllib.parse import urljoin
@@ -72,21 +72,23 @@ def _read(domain: str, path: str, get) -> list[str]:
                 if status in (301, 302, 303, 307, 308):
                     nxt = urljoin(url, (r.headers or {}).get("location", ""))
                     if not _same_site(nxt, domain):
-                        return []
+                        return url, []
                     url = nxt
                     continue
                 if status == 200:
-                    return discover.emails_in(r.text or "")
-                return []
+                    return url, discover.emails_in(r.text or "")
+                return url, []
         except Exception:
             continue
-    return []
+    return "", []
 
 
 def lookup(company: str, *, get=None, find_domain=None, resolves=None,
            store=None) -> dict:
-    """{"domain": str, "emails": [..]}; domain "" when the company's own
-    site could not be identified with confidence."""
+    """{"domain": str, "emails": [..], "found_on": {email: page url}};
+    domain "" when the company's own site could not be identified with
+    confidence. A fresh answer is also offered to the public employer
+    directory (directory.py), which keeps only shared role inboxes."""
     key = f"find:{company_key(company)}"
     if store is not None:
         try:
@@ -100,6 +102,7 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
 
     domain = (find_domain or discover.find_domain)(company) or ""
     emails: list[str] = []
+    found_on: dict[str, str] = {}
     if domain and (resolves or _public)(domain):
         if get is None:
             import requests
@@ -111,15 +114,24 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
         raw: list[str] = []
         for f in futures:
             if f in done and not f.exception():
-                raw += f.result()
+                page, found = f.result()
+                raw += found
+                for address in contacts.clean_emails(found, domain):
+                    found_on.setdefault(address, page)
         emails = contacts.clean_emails(raw, domain)
     elif domain:
         domain = ""          # resolves somewhere private: treat as unknown
 
-    result = {"domain": domain, "emails": emails, "at": int(time.time())}
+    result = {"domain": domain, "emails": emails, "found_on": found_on,
+              "at": int(time.time())}
     if store is not None:
         try:
             store.put(key, json.dumps(result))
+        except Exception:
+            pass
+        try:
+            from . import directory
+            directory.record(company, result)
         except Exception:
             pass
     return result
