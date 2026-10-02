@@ -29,6 +29,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from .. import agencies
 from ..names import company_key
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; recruited/1.0; +job search)"}
@@ -96,6 +97,10 @@ class Listing:
     latitude: float | None = None
     longitude: float | None = None
     distance_miles: int | None = None
+    # Who placed the advert (agencies.AGENCY or EMPLOYER) and on what terms
+    # (permanent, contract, temp, or "" when it doesn't say). See agencies.py.
+    advertiser: str = ""
+    contract: str = ""
 
     def as_dict(self) -> dict:
         return dict(self.__dict__)
@@ -260,6 +265,9 @@ def adzuna(profile, creds: Credentials, *, pages: int = 1, session=None,
                     salary_max=_stated(j, "salary_max"),
                     latitude=_coordinate(j.get("latitude")),
                     longitude=_coordinate(j.get("longitude")),
+                    contract=agencies.contract(
+                        j.get("title") or "", j.get("description") or "",
+                        j.get("contract_type") or ""),
                     posted_at=posted.isoformat() if posted else None))
 
             if len(results) < RESULTS_PER_PAGE:
@@ -353,6 +361,11 @@ def harvest(profile, creds: Credentials, *, pages: int = 1, session=None,
     for listing in found:
         if listing.external_id in known:
             continue
+        listing.advertiser = agencies.advertiser(listing.company,
+                                                 listing.description)
+        if not listing.contract:
+            listing.contract = agencies.contract(listing.title,
+                                                 listing.description)
 
         key = dedupe_key(listing)
         if key in seen_keys:

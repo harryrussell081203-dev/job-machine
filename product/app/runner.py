@@ -43,6 +43,7 @@ class RunReport:
     undeliverable: int = 0
     too_far: int = 0
     dissolved: int = 0
+    other_kind: int = 0        # agency/employer or terms the user didn't pick
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -51,6 +52,23 @@ class RunReport:
                 f"({self.no_address} had no real address, "
                 f"{self.scored_out} scored too low, "
                 f"{self.already_contacted} already contacted)")
+
+
+def wanted(listing, settings: dict) -> bool:
+    """Whether this advert is the kind the person asked to write to: from an
+    employer, a recruitment agency or either, and on the terms they picked.
+    An advert that doesn't say its terms is kept; unknown is never hidden."""
+    audience = settings.get("audience") or "both"
+    kind = getattr(listing, "advertiser", "") or "employer"
+    if audience == "employers" and kind == "agency":
+        return False
+    if audience == "recruiters" and kind != "agency":
+        return False
+    terms = [t for t in (settings.get("work_types") or "").split(",") if t]
+    contract = getattr(listing, "contract", "") or ""
+    if terms and contract and contract not in terms:
+        return False
+    return True
 
 
 def credentials() -> harvest.Credentials:
@@ -128,6 +146,11 @@ def run_for_user(user_id: int, *, ai=None, session=None,
          f"have already written to")
     candidates = []
     for listing in found["keep"]:
+        # Not marked seen: the person can change who they write to, and a job
+        # set aside for that reason should come back if they do.
+        if not wanted(listing, settings):
+            report.other_kind += 1
+            continue
         if db.is_blocked(user_id, listing.company):
             report.blocked += 1
             db.mark_seen(user_id, listing.external_id,
@@ -305,6 +328,8 @@ def _save_draft(user_id, listing, letter, directors: str = "") -> int:
         contact_tier=letter.get("contact_tier"),
         distance_miles=listing.distance_miles,
         directors=directors,
+        advertiser=getattr(listing, "advertiser", "") or "",
+        contract=getattr(listing, "contract", "") or "",
         subject=letter["subject"], body=letter["body"])
 
 

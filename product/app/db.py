@@ -1056,7 +1056,20 @@ def delete_cv(user_id: int) -> None:
 # ----------------------------------------------------------------------
 DEFAULT_SEND_SETTINGS = {"auto_send": 0, "hold_minutes": 60, "daily_cap": 12,
                          "search_days": 2, "paused_until": None,
-                         "follow_up": 0, "digest": 0, "last_digest_at": None}
+                         "follow_up": 0, "digest": 0, "last_digest_at": None,
+                         "audience": "both", "work_types": ""}
+
+AUDIENCES = ("both", "employers", "recruiters")
+WORK_TYPES = ("permanent", "contract", "temp")
+
+
+def clean_work_types(value) -> str:
+    """A comma list of known terms, in a fixed order; "" means any."""
+    if isinstance(value, str):
+        value = value.split(",")
+    chosen = {str(v).strip().lower() for v in (value or [])}
+    picked = [w for w in WORK_TYPES if w in chosen]
+    return "" if len(picked) in (0, len(WORK_TYPES)) else ",".join(picked)
 
 
 def get_send_settings(user_id: int) -> dict:
@@ -1075,7 +1088,10 @@ def get_send_settings(user_id: int) -> dict:
             "paused_until": row["paused_until"],
             "follow_up": int(_col(row, "follow_up") or 0),
             "digest": int(_col(row, "digest") or 0),
-            "last_digest_at": _col(row, "last_digest_at")}
+            "last_digest_at": _col(row, "last_digest_at"),
+            "audience": (_col(row, "audience") or "both")
+            if (_col(row, "audience") or "both") in AUDIENCES else "both",
+            "work_types": clean_work_types(_col(row, "work_types") or "")}
 
 
 def _col(row, name):
@@ -1093,8 +1109,8 @@ def save_send_settings(user_id: int, **fields) -> None:
         c.execute(
             "INSERT INTO send_settings (user_id, auto_send, hold_minutes, "
             "daily_cap, search_days, paused_until, follow_up, digest, "
-            "last_digest_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "last_digest_at, audience, work_types, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (user_id) DO UPDATE SET auto_send = excluded.auto_send, "
             "hold_minutes = excluded.hold_minutes, "
             "daily_cap = excluded.daily_cap, "
@@ -1103,12 +1119,17 @@ def save_send_settings(user_id: int, **fields) -> None:
             "follow_up = excluded.follow_up, "
             "digest = excluded.digest, "
             "last_digest_at = excluded.last_digest_at, "
+            "audience = excluded.audience, "
+            "work_types = excluded.work_types, "
             "updated_at = excluded.updated_at",
             (user_id, int(bool(current["auto_send"])),
              int(current["hold_minutes"]), int(current["daily_cap"]),
              int(current["search_days"]), current["paused_until"],
              int(bool(current["follow_up"])), int(bool(current["digest"])),
-             current["last_digest_at"], now()))
+             current["last_digest_at"],
+             current["audience"] if current["audience"] in AUDIENCES
+             else "both",
+             clean_work_types(current["work_types"]), now()))
 
 
 # ----------------------------------------------------------------------

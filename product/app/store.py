@@ -557,6 +557,17 @@ _ADDED_COLUMNS = [
     # turns it on: it is a second email in their name, and nobody should find
     # out from a recruiter that their account sends those.
     ("send_settings", "follow_up", "INTEGER NOT NULL DEFAULT 0"),
+    # Who the sweep writes to: 'both' (employers and recruitment agencies,
+    # which is what it always did), 'employers' or 'recruiters'. And on what
+    # terms: '' for any, else a comma list of permanent, contract, temp. An
+    # advert that doesn't say is never filtered out. See jobseeker/agencies.py.
+    ("send_settings", "audience", "TEXT NOT NULL DEFAULT 'both'"),
+    ("send_settings", "work_types", "TEXT NOT NULL DEFAULT ''"),
+    # Who placed the advert a draft answers, and on what terms, so the card
+    # can say "recruitment agency" and "contract" rather than leave it to be
+    # worked out from the letter.
+    ("drafts", "advertiser", "TEXT NOT NULL DEFAULT ''"),
+    ("drafts", "contract", "TEXT NOT NULL DEFAULT ''"),
     ("drafts", "followup_sent_at", "BIGINT"),
     # What a sent_log row was. The daily cap counts every email that left,
     # because the user's mailbox does; /numbers counts only applications,

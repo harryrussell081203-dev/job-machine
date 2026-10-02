@@ -303,6 +303,7 @@ def build_prompt(listing, contact, profile, feedback=()) -> str:
         f"THE JOB\nTitle: {listing.title}\nCompany: {listing.company}\n"
         f"Location: {listing.location}\n"
         f"Advert: {(listing.description or '')[:1200]}\n\n"
+        f"{_agency_note(listing)}"
         "RULES, all mandatory:\n"
         f"- the greeting is exactly '{greeting}' and will be added for you; "
         "do not write it\n"
@@ -324,6 +325,18 @@ def build_prompt(listing, contact, profile, feedback=()) -> str:
         "em dashes, no exclamation marks\n"
         f"- never use: {', '.join(BANNED[:10])}, or similar filler\n"
         f"{retry}")
+
+
+def _agency_note(listing) -> str:
+    """A recruiter reads a letter differently from an employer: they place
+    people, so the useful ask is to be put forward, for this role and the
+    next one like it."""
+    if getattr(listing, "advertiser", "") != "agency":
+        return ""
+    return ("THIS ADVERT IS FROM A RECRUITMENT AGENCY, not the employer. You "
+            "are writing to the recruiter. Name the role and ask to be put "
+            "forward for it, and for similar roles they are filling. Do not "
+            "address the agency as if it were the employer.\n\n")
 
 
 def compose(listing, contact, profile, ai, *, attempts: int = 3,

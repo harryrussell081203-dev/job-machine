@@ -277,6 +277,8 @@
     <p class="hint rulesline">
       {%- if settings.auto_send %}Sends automatically{% else %}You press send{% endif %}
       &middot; {{ settings.daily_cap }} a day
+      {%- if settings.audience == 'employers' %} &middot; employers only
+      {%- elif settings.audience == 'recruiters' %} &middot; recruiters only{% endif %}
       {%- if settings.follow_up %} &middot; one follow-up{% endif %}
       {%- if settings.digest %} &middot; evening email{% endif %}.
       <u>Change</u></p></summary>
@@ -288,6 +290,43 @@
       <span><b>Send automatically.</b> Letters go out without asking
         me{% if not mail %} <i>(connect your email first)</i>{% endif %}</span>
     </label>
+
+    <fieldset class="choices">
+      <legend><b>Who to write to</b></legend>
+      {% for value, title, what in [
+          ("both", "Employers and recruiters",
+           "Whoever placed the advert. An employer fills one job; a recruiter can put you forward for this one and the next."),
+          ("employers", "Employers only",
+           "Skip adverts placed by recruitment agencies."),
+          ("recruiters", "Recruiters only",
+           "Only adverts placed by recruitment agencies. The letter asks them to put you forward for this role and similar ones.")] %}
+      <label class="check">
+        <input type="radio" name="audience" value="{{ value }}"
+               {% if settings.audience == value %}checked{% endif %}>
+        <span><b>{{ title }}.</b> {{ what }}</span>
+      </label>
+      {% endfor %}
+      <p class="hint">An agency is spotted from the advert itself: the line
+        saying it acts as an employment agency, "our client", or a name like
+        Hays or "&hellip; Recruitment". <a href="/recruiters">See which
+        recruiters are advertising your kind of work.</a></p>
+    </fieldset>
+
+    <fieldset class="choices">
+      <legend><b>What kind of work</b></legend>
+      {% set picked = (settings.work_types or "permanent,contract,temp").split(",") %}
+      {% for value, title in [("permanent", "Permanent"),
+                              ("contract", "Contract or fixed-term"),
+                              ("temp", "Temporary")] %}
+      <label class="check">
+        <input type="checkbox" name="work_types" value="{{ value }}"
+               {% if value in picked %}checked{% endif %}>
+        <span>{{ title }}</span>
+      </label>
+      {% endfor %}
+      <p class="hint">Adverts that don't say are always included. Tick all
+        three, or none, for any kind.</p>
+    </fieldset>
 
     <label class="check">
       <input type="checkbox" name="follow_up" value="1"

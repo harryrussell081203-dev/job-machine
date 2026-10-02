@@ -2100,7 +2100,10 @@ async def save_sending(request: Request):
         daily_cap=clamp("daily_cap", 12, 1, ceiling),
         search_days=clamp("search_days", 2, 1, config.MAX_SEARCH_DAYS),
         follow_up=1 if form.get("follow_up") else 0,
-        digest=1 if form.get("digest") else 0)
+        digest=1 if form.get("digest") else 0,
+        audience=(form.get("audience") if form.get("audience") in db.AUDIENCES
+                  else "both"),
+        work_types=db.clean_work_types(form.getlist("work_types")))
     return RedirectResponse("/setup", status_code=303)
 
 

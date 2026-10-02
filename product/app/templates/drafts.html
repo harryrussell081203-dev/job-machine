@@ -30,6 +30,12 @@
       &middot; {{ d['salary_text'] or 'Salary not listed' }}
       {% if d['score'] %} &middot; scored {{ d['score'] }}/100{% endif %}
     </p>
+    {% if d['advertiser'] == 'agency' or d['contract'] %}
+    <p class="meta">
+      {% if d['advertiser'] == 'agency' %}<span class="tag">recruitment agency</span>{% endif %}
+      {% if d['contract'] %}<span class="tag">{{ d['contract'] }}</span>{% endif %}
+    </p>
+    {% endif %}
     {# A number on its own is something to be suspicious of. The same number
        with the reasoning under it is something to act on - and it is the one
        thing that shows this picked the job rather than spraying every advert
