@@ -286,9 +286,16 @@ FIND_PER_IP = (30, 3600)
 MAX_ADVERT = 20_000        # a long advert is 5k; past this it is an attack
 
 
+# The search result snippet for /find. Says what the page does in the words
+# people search with, because "Who to write to" said nothing to a stranger.
+FIND_DESCRIPTION = ("Type a company's name or paste a job advert, and get the "
+                    "real email address the employer published, ranked. "
+                    "Never guessed. Free, no account.")
+
+
 @app.get("/find", response_class=HTMLResponse)
 def find_form(request: Request):
-    return render(request, "find.html")
+    return render(request, "find.html", og_description=FIND_DESCRIPTION)
 
 
 # Looking a company up reads its website, so it is rationed harder than an
