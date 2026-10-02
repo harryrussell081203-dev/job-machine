@@ -67,11 +67,41 @@ def webhook_url() -> str:
     return f"{config.BASE_URL}/telegram/{path_secret()}"
 
 
+# What people see before they type anything: on the bot's empty chat
+# (description), on its profile and in share previews (short description),
+# and in the menu (commands). Set with the webhook; change PROFILE_VERSION to
+# send an edited version.
+PROFILE_VERSION = "1"
+DESCRIPTION = (
+    "Send me a company's name, or paste a job advert, and I'll find a real "
+    "email address to write to about the job: one the employer published "
+    "themselves. I never guess an address. Free, from recruited.org.uk.")
+SHORT_DESCRIPTION = ("Type a company name, get a real email address to apply "
+                     "to. Never guessed. Free.")
+COMMANDS = [{"command": "start", "description": "What this bot does"},
+            {"command": "find",
+             "description": "Find the contact: /find Company Name"}]
+
+
+def _set_profile(post) -> None:
+    """Best effort: a missing description must never stop the bot working."""
+    base = f"https://api.telegram.org/bot{token()}"
+    for method, body in (("setMyDescription", {"description": DESCRIPTION}),
+                         ("setMyShortDescription",
+                          {"short_description": SHORT_DESCRIPTION}),
+                         ("setMyCommands", {"commands": COMMANDS})):
+        try:
+            post(f"{base}/{method}", json=body, timeout=15)
+        except Exception:
+            pass
+
+
 def register(*, post=None, get_meta=None, set_meta=None) -> str:
     """Point Telegram at this site, once per token and address. Never raises."""
     if not enabled():
         return "off"
-    marker = hashlib.sha256(webhook_url().encode()).hexdigest()[:16]
+    marker = hashlib.sha256(
+        f"{webhook_url()}|{PROFILE_VERSION}".encode()).hexdigest()[:16]
     if get_meta and get_meta("telegram_webhook") == marker:
         return "already registered"
     if post is None:
@@ -88,6 +118,7 @@ def register(*, post=None, get_meta=None, set_meta=None) -> str:
         return f"could not register: {exc}"
     if not ok:
         return f"could not register: HTTP {r.status_code}"
+    _set_profile(post)
     if set_meta:
         set_meta("telegram_webhook", marker)
     return "registered"
