@@ -150,5 +150,17 @@ class TheWords(unittest.TestCase):
             self.assertNotIn(word, text)
 
 
+class ThePostgresCursor(unittest.TestCase):
+    """The tips job's clean-up counts deleted rows. SQLite's cursor has
+    rowcount; the Postgres wrapper did not, so the first real run failed."""
+
+    def test_the_wrapper_reports_rowcount(self):
+        from app import store
+
+        class Raw:
+            rowcount = 3
+        self.assertEqual(store._PgCursor(Raw()).rowcount, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

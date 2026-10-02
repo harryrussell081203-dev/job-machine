@@ -97,7 +97,11 @@ class Replies(unittest.TestCase):
         self.assertEqual(self.tg.register(post=post, get_meta=kept.get,
                                           set_meta=kept.__setitem__),
                          "already registered")
-        self.assertEqual(len(sent), 1)
+        methods = [url.rsplit("/", 1)[1] for url, _ in sent]
+        self.assertEqual(methods, ["setWebhook", "setMyDescription",
+                                   "setMyShortDescription", "setMyCommands"])
+        self.assertLessEqual(len(self.tg.DESCRIPTION), 512)
+        self.assertLessEqual(len(self.tg.SHORT_DESCRIPTION), 120)
         self.assertEqual(sent[0][1]["secret_token"], self.tg.header_secret())
         self.assertEqual(sent[0][1]["allowed_updates"], ["message"])
 

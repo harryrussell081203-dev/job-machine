@@ -449,6 +449,13 @@ class _PgCursor:
         return iter(self.fetchall())
 
     @property
+    def rowcount(self) -> int:
+        """Rows an UPDATE or DELETE touched, as sqlite3 reports it. Missing
+        until 2 October, when the tips job's clean-up asked for it and the
+        Postgres path raised where SQLite had passed every test."""
+        return self._cur.rowcount
+
+    @property
     def lastrowid(self):
         # Callers that need the new id use insert_returning_id instead; this
         # exists so an accidental read fails loudly rather than silently
