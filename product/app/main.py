@@ -45,8 +45,10 @@ from . import admin as adminlib  # noqa: E402
 from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
+from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
 from . import search_console  # noqa: E402
+from jobseeker.names import company_key  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import views  # noqa: E402
@@ -1156,6 +1158,101 @@ async def set_outcome(request: Request, draft_id: int):
     form = await request.form()
     db.set_outcome(user["id"], draft_id, form.get("outcome") or "")
     return RedirectResponse("/applications", status_code=303)
+
+
+RECRUITER_RESULTS = {
+    "drafted": "Letter written. It's on your drafts screen to check.",
+    "written": "You've already written to this agency.",
+    "blocked": "This agency is on your never-contact list.",
+    "no_address": "No real email address could be found for this agency, "
+                  "in its adverts or on its website. Nothing is guessed.",
+    "undeliverable": "This agency's email domain doesn't accept mail, so "
+                     "nothing was written.",
+    "gone": "That agency is no longer in the list. Refresh it.",
+    "no_profile": "Finish your profile first, so the letter has something "
+                  "true to say.",
+    "never": "Done. This agency will never be written to.",
+}
+
+
+def _recruiter_filters(q) -> dict:
+    def number(name, allowed, default):
+        try:
+            value = int(q.get(name) or default)
+        except (TypeError, ValueError):
+            return default
+        return value if value in allowed else default
+    return {
+        "area": (q.get("area") or "").strip()[:80],
+        "terms": [t for t in q.getlist("terms") if t in db.WORK_TYPES],
+        "days": number("days", dict(recruiterlib.WINDOWS), 30),
+        "min_roles": number("min_roles", dict(recruiterlib.MIN_ROLES), 1),
+        "words": (q.get("words") or "").strip()[:60],
+    }
+
+
+@app.get("/recruiters", response_class=HTMLResponse)
+def recruiters(request: Request):
+    """Agencies advertising this person's kind of work, with filters."""
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if not recruiterlib.enabled():
+        return RedirectResponse("/dashboard", status_code=303)
+    raw = db.load_profile(user["id"])
+    try:
+        profile = Profile.from_dict(raw) if raw else None
+    except ProfileError:
+        profile = None
+    filters = _recruiter_filters(request.query_params)
+    ctx = {"user": user, "profile": profile, "filters": filters,
+           "result": RECRUITER_RESULTS.get(request.query_params.get("r", "")),
+           "boards": runner.credentials().has_adzuna()
+           or runner.credentials().has_reed(),
+           "windows": recruiterlib.WINDOWS, "min_roles": recruiterlib.MIN_ROLES,
+           "now": time.time()}
+    if not profile or not ctx["boards"]:
+        return render(request, "recruiters.html", agencies=[], gathered=None,
+                      **ctx)
+    try:
+        gathered = recruiterlib.gather(
+            user["id"], profile, runner.credentials(),
+            refresh=request.query_params.get("refresh") == "1")
+    except Exception as exc:
+        log.warning("recruiter search failed: %s", exc)
+        gathered = recruiterlib.saved(user["id"]) or {"at": 0, "listings": []}
+    found = recruiterlib.group(gathered["listings"], **filters)
+    for a in found:
+        a["status"] = recruiterlib.status(user["id"], a["name"])
+    return render(request, "recruiters.html", agencies=found,
+                  gathered=gathered, **ctx)
+
+
+@app.post("/recruiters/{key}/write")
+def recruiter_write(request: Request, key: str):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    if not ratelimit.hit(f"recruiter-write:{user['id']}", limit=20,
+                         window=3600):
+        return RedirectResponse("/recruiters", status_code=303)
+    outcome = recruiterlib.write_to(user["id"], key)
+    if outcome == "drafted":
+        return RedirectResponse("/drafts", status_code=303)
+    return RedirectResponse(f"/recruiters?r={outcome}", status_code=303)
+
+
+@app.post("/recruiters/{key}/never")
+def recruiter_never(request: Request, key: str):
+    user, blocked = _gate(request)
+    if blocked:
+        return blocked
+    have = recruiterlib.saved(user["id"]) or {"listings": []}
+    name = next((i["company"] for i in have["listings"]
+                 if company_key(i.get("company") or "") == key), "")
+    if name:
+        db.block_company(user["id"], name, reason="asked by user")
+    return RedirectResponse("/recruiters?r=never", status_code=303)
 
 
 @app.post("/drafts/{draft_id}/block")

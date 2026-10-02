@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Recruiters for your kind of work{% endblock %}
+{% block content %}
+<h1>Recruiters</h1>
+<p class="lede">Recruitment agencies advertising jobs like yours right now.
+A recruiter can put you forward for this job and the next one, so one good
+letter to the right agency goes further than one to an employer.</p>
+
+{% if result %}<div class="note">{{ result }}</div>{% endif %}
+
+{% if not profile %}
+  <div class="panel"><p>Fill in your profile first. The list comes from the
+    jobs and places you search for.</p>
+    <p><a class="btn" href="/setup">Go to setup</a></p></div>
+{% elif not boards %}
+  <div class="panel"><p class="muted">The job boards aren't connected on this
+    site yet, so there's nothing to search.</p></div>
+{% else %}
+
+<form method="get" action="/recruiters" class="panel">
+  <h2>Narrow it down</h2>
+  <div class="row">
+    <label>Area
+      <select name="area">
+        <option value="">Everywhere you search</option>
+        {% for place in profile.locations %}
+          <option value="{{ place }}" {% if filters.area == place %}selected{% endif %}>{{ place }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Advertised in
+      <select name="days">
+        {% for d, label in windows %}
+          <option value="{{ d }}" {% if filters.days == d %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="hint">Area: the places from your profile. Advertised in: an agency
+    with a job posted this week is filling roles now.</p>
+
+  <div class="row">
+    <label>Job title contains
+      <input name="words" value="{{ filters.words }}"
+             placeholder="e.g. electrician">
+    </label>
+    <label>Jobs like yours
+      <select name="min_roles">
+        {% for n, label in min_roles %}
+          <option value="{{ n }}" {% if filters.min_roles == n %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="hint">Job title contains: one or two words from the job you want,
+    like <i>electrician</i> or <i>HGV</i>. Leave empty for everything you
+    search for. Jobs like yours: an agency advertising several is one that
+    specialises in your work.</p>
+
+  <fieldset class="choices">
+    <legend><b>Kind of work</b></legend>
+    {% for value, title in [("permanent", "Permanent"),
+                            ("contract", "Contract or fixed-term"),
+                            ("temp", "Temporary")] %}
+    <label class="check">
+      <input type="checkbox" name="terms" value="{{ value }}"
+             {% if value in filters.terms %}checked{% endif %}>
+      <span>{{ title }}</span>
+    </label>
+    {% endfor %}
+    <p class="hint">Tick none for any kind. Adverts that don't say are always
+      shown.</p>
+  </fieldset>
+  <button class="btn">Show recruiters</button>
+</form>
+
+{% if agencies %}
+  <p class="muted"><small>{{ agencies|length }} agenc{{ 'y' if agencies|length == 1 else 'ies' }}
+    from adverts on Adzuna and Reed for
+    {{ profile.target_roles|join(", ") }}.</small></p>
+{% else %}
+  <div class="panel"><p class="muted">No agency adverts match these filters.
+    Try a longer window, a different area, or fewer words.</p></div>
+{% endif %}
+
+{% for a in agencies %}
+  <div class="panel draft">
+    <h3>{{ a.name }}</h3>
+    <p class="why"><small>{{ a.reason }}</small></p>
+    {% if a.terms %}<p class="meta">{% for t in a.terms %}<span class="tag">{{ t }}</span> {% endfor %}</p>{% endif %}
+    <ul>
+      {% for r in a.roles[:4] %}
+        <li><a href="{{ r.url }}" rel="noopener nofollow" target="_blank">{{ r.title }}</a>
+          <small class="muted">{{ r.location }}</small></li>
+      {% endfor %}
+      {% if a.count > 4 %}<li class="muted"><small>and {{ a.count - 4 }} more</small></li>{% endif %}
+    </ul>
+    {% if a.status == 'written' %}
+      <p class="hint">You've already written to them.</p>
+    {% elif a.status == 'drafted' %}
+      <p class="hint">A letter to them is on your <a href="/drafts">drafts screen</a>.</p>
+    {% elif a.status == 'blocked' %}
+      <p class="hint">On your never-contact list.</p>
+    {% else %}
+      <div class="actions">
+        <form method="post" action="/recruiters/{{ a.key|urlencode }}/write">
+          <button class="btn small">Write to them</button>
+        </form>
+        <form method="post" action="/recruiters/{{ a.key|urlencode }}/never">
+          <button class="btn small ghost">Never contact</button>
+        </form>
+      </div>
+      <p class="hint">Writes one letter about their newest advert, asking to be
+        put forward for it and for similar roles. It goes to an address they
+        published, and lands on your drafts screen first.</p>
+    {% endif %}
+  </div>
+{% endfor %}
+
+{% if gathered and gathered.at %}
+  <form method="get" action="/recruiters">
+    <input type="hidden" name="refresh" value="1">
+    <p class="muted"><small>Searched {{ ((now - gathered.at) / 60)|int }} minutes
+      ago.</small> <button class="btn small ghost">Search again</button></p>
+  </form>
+{% endif %}
+{% endif %}
+{% endblock %}

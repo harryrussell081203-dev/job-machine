@@ -778,6 +778,16 @@ def record_contacted(user_id: int, company: str) -> None:
                   "DO NOTHING", (user_id, company_key(company), now()))
 
 
+def has_draft_for(user_id: int, company: str) -> bool:
+    """A letter to this company already waiting on the drafts screen, or
+    sent. Compared by company key, so two spellings are one company."""
+    want = company_key(company)
+    with connect() as c:
+        rows = c.execute("SELECT company FROM drafts WHERE user_id = ? AND "
+                         "status IN ('draft', 'sent')", (user_id,)).fetchall()
+    return any(company_key(r["company"] or "") == want for r in rows)
+
+
 def is_blocked(user_id: int, company: str) -> bool:
     with connect() as c:
         return c.execute(
