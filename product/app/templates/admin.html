@@ -183,6 +183,23 @@ so this reads high until they age out.</small></p>
   news.</small></p>
 </div>
 
+<h2>Free searches this week</h2>
+<div class="panel">
+  {% if searches_week %}
+  <table>
+    <tr><th>Where, what, how it ended</th><th class="num">Times</th></tr>
+    {% for name, n in searches_week|dictsort %}
+    <tr><td><code>{{ name }}</code></td><td class="num">{{ n }}</td></tr>
+    {% endfor %}
+  </table>
+  <p><small class="muted"><b>found</b>: at least one address.
+  <b>none</b>: nothing published. <b>no-site</b>: couldn't be sure which
+  website was the company's. What was searched for is never kept.</small></p>
+  {% else %}
+  <p class="muted">No searches counted in the last week.</p>
+  {% endif %}
+</div>
+
 <h2>How far people get</h2>
 <div class="panel">
   <div class="funnel">

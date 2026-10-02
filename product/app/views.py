@@ -175,6 +175,11 @@ def crawler_name(user_agent: str) -> str:
 MAX_PATH = 64
 MAX_SOURCE = 64
 
+# How a search ended is kept in the same table under a name no real path can
+# have (every page starts with "/"), and left out of the page totals so a
+# search never counts as a visit.
+OUTCOME_PREFIX = "outcome:"
+
 
 def looks_like_a_robot(user_agent: str) -> bool:
     """Decide in this order, because the order is the whole correction.
@@ -266,6 +271,35 @@ def record(path: str, *, user_agent: str = "", referer: str = "",
         pass
 
 
+def outcome(name: str, *, user_agent: str = "",
+            when: float | None = None) -> None:
+    """Count how a free search ended, in the same tally as a page view.
+
+    A page view says somebody opened /find. It cannot say whether the search
+    they ran found anything, and that is the number that decides what to fix:
+    a visitor who searched and got "no address" leaves for a different reason
+    from one who never searched. The name is the kind of search and how it
+    ended ("find:company:found"), never what was searched for.
+    """
+    record(f"{OUTCOME_PREFIX}{name}", user_agent=user_agent, when=when)
+
+
+def outcomes(*, since: float) -> dict:
+    """{"find:company:found": n, ...} for people, over a window."""
+    try:
+        with connect() as c:
+            rows = c.execute(
+                "SELECT path, SUM(views) AS n FROM page_views "
+                "WHERE kind = ? AND hour_at >= ? AND path LIKE ? "
+                "GROUP BY path",
+                (PERSON, int(since) // HOUR * HOUR,
+                 OUTCOME_PREFIX + "%")).fetchall()
+    except Exception:
+        return {}
+    return {row["path"][len(OUTCOME_PREFIX):]: int(row["n"] or 0)
+            for row in rows}
+
+
 # ----------------------------------------------------------------------
 # reading it back
 # ----------------------------------------------------------------------
@@ -282,8 +316,9 @@ def totals(*, since: float, now: float | None = None) -> dict:
         with connect() as c:
             rows = c.execute(
                 "SELECT path, source, kind, SUM(views) AS n FROM page_views "
-                "WHERE hour_at >= ? GROUP BY path, source, kind",
-                (int(since) // HOUR * HOUR,)).fetchall()
+                "WHERE hour_at >= ? AND path NOT LIKE ? "
+                "GROUP BY path, source, kind",
+                (int(since) // HOUR * HOUR, OUTCOME_PREFIX + "%")).fetchall()
     except Exception:
         return out
 
@@ -330,8 +365,9 @@ def by_hour(*, hours: int = 24, now: float | None = None) -> list[dict]:
         with connect() as c:
             rows = c.execute(
                 "SELECT hour_at, SUM(views) AS n FROM page_views "
-                "WHERE kind = ? AND hour_at >= ? GROUP BY hour_at",
-                (PERSON, earliest)).fetchall()
+                "WHERE kind = ? AND hour_at >= ? AND path NOT LIKE ? "
+                "GROUP BY hour_at",
+                (PERSON, earliest, OUTCOME_PREFIX + "%")).fetchall()
         for row in rows:
             slot = int(row["hour_at"])
             if slot in counts:

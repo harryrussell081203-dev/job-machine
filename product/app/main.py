@@ -341,6 +341,20 @@ def find_submit(request: Request, advert: str = Form(""),
         c["source"] = "the advert" if c["email"] in from_advert else \
             "their website"
 
+    mode = ("both" if company and advert.strip()
+            else "company" if company else "advert")
+    if found:
+        ended = "found"
+    elif company and not (looked_up or {}).get("domain"):
+        ended = "no-site"       # couldn't be sure which website is theirs
+    else:
+        ended = "none"
+    try:
+        views.outcome(f"find:{mode}:{ended}",
+                      user_agent=request.headers.get("user-agent", ""))
+    except Exception:
+        pass
+
     from jobseeker import companies_house
     directors = (companies_house.directors(company)
                  if company and companies_house.enabled() else [])
@@ -371,8 +385,10 @@ async def telegram_webhook(request: Request, secret: str):
         return ratelimit.hit(f"tg:{chat_id}", limit=limit, window=window)
     # The company lookup waits on other sites; run it off the event loop.
     import anyio
+    def tally(name):
+        views.outcome(f"telegram:{name}", user_agent="Mozilla/5.0 Telegram")
     reply = await anyio.to_thread.run_sync(
-        lambda: telegram.reply_to(update, allow=allow))
+        lambda: telegram.reply_to(update, allow=allow, tally=tally))
     return JSONResponse(reply or {})
 
 
@@ -1692,6 +1708,7 @@ def admin(request: Request):
                   traffic_today=views.totals(since=now - 86400, now=now),
                   traffic_week=views.totals(since=now - 7 * 86400, now=now),
                   traffic_hours=views.by_hour(hours=24, now=now),
+                  searches_week=views.outcomes(since=now - 7 * 86400),
                   **adminlib.summarise(rows, now=now))
 
 
