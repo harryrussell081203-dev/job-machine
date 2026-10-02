@@ -1530,6 +1530,18 @@ if config.INDEXNOW_KEY:
         return config.INDEXNOW_KEY
 
 
+# Search Console's "HTML file" check: GET /google<code>.html must answer with
+# one exact line. GOOGLE_SITE_VERIFICATION_FILE holds the file's name (or just
+# the code); read per request, so setting it on Render needs no code change.
+@app.get("/google{code}.html", response_class=PlainTextResponse)
+def google_verification_file(code: str):
+    wanted = settings.text("GOOGLE_SITE_VERIFICATION_FILE").strip()
+    wanted = wanted.removeprefix("google").removesuffix(".html")
+    if not wanted or code != wanted:
+        return PlainTextResponse("Not found", status_code=404)
+    return f"google-site-verification: google{code}.html"
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots():
     lines = ["User-agent: *"]
