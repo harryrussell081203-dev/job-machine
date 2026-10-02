@@ -223,6 +223,34 @@ class TestThroughTheApp(Base):
         self.client.get("/static/style.css", headers={"user-agent": BROWSER})
         self.assertNotIn("/static/style.css", self.counts()["people"])
 
+    def test_a_search_counts_how_it_ended_not_as_a_visit(self):
+        self.client.post("/find", data={"advert": "email jobs@acme.com"},
+                         headers={"user-agent": BROWSER})
+        self.client.post("/find", data={"advert": "no address in here"},
+                         headers={"user-agent": BROWSER})
+        since = time.time() - 3600
+        self.assertEqual(self.views.outcomes(since=since),
+                         {"find:advert:found": 1, "find:advert:none": 1})
+        self.assertEqual(self.counts()["total"], 0)
+        self.assertEqual(self.views.by_hour(hours=1)[-1]["count"], 0)
+
+    def test_what_was_searched_for_is_never_kept(self):
+        self.client.post("/find", data={"advert": "write to fiona@kestrel.co.uk"},
+                         headers={"user-agent": BROWSER})
+        with self.views.connect() as c:
+            rows = [dict(r) for r in c.execute("SELECT * FROM page_views")]
+        self.assertNotIn("kestrel", repr(rows))
+        self.assertNotIn("fiona", repr(rows))
+
+    def test_a_company_with_no_confident_site_is_its_own_outcome(self):
+        from unittest.mock import patch
+        with patch("app.company_lookup.lookup",
+                   return_value={"domain": "", "emails": []}):
+            self.client.post("/find", data={"company": "Smith Ltd"},
+                             headers={"user-agent": BROWSER})
+        self.assertEqual(self.views.outcomes(since=time.time() - 3600),
+                         {"find:company:no-site": 1})
+
     def test_nothing_identifying_is_stored(self):
         """The basis for having no consent banner and nothing worth leaking.
 

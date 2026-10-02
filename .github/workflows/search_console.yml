@@ -1,0 +1,58 @@
+name: search console
+
+# Reads the last 28 days from Google Search Console and stores the to-do list
+# (product/app/search_console.py) for the admin page and the Monday growth
+# check. Read-only: it changes nothing on the site.
+#
+# Needs GSC_SERVICE_ACCOUNT_JSON as a repository secret: the JSON key of a
+# Google Cloud service account that has been added as a user on the
+# Search Console property. Without it the run says so and stops.
+#
+# Off: repository variable SEARCH_CONSOLE_ENABLED=0.
+
+on:
+  schedule:
+    # Sundays, so Monday's growth check reads a fresh report. Not on the hour.
+    - cron: "23 6 * * 0"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: search-console
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Read Search Console
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          CREDENTIAL_KEY: ${{ secrets.CREDENTIAL_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          STRIPE_PAYMENT_LINK: ${{ secrets.STRIPE_PAYMENT_LINK }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
+          GSC_SITE_URL: ${{ vars.GSC_SITE_URL }}
+          SEARCH_CONSOLE_ENABLED: ${{ vars.SEARCH_CONSOLE_ENABLED }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL must be a repository secret."
+            exit 1
+          fi
+          python -m app.search_console

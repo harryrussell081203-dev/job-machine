@@ -147,10 +147,20 @@ def _looks_like_advert(text: str) -> bool:
     return "@" in text or len(text) > 160 or text.count("\n") >= 3
 
 
-def answer(text: str, *, lookup=None) -> str:
+def _note(tally, name: str) -> None:
+    """How the message ended, for the site's tally. Never what was sent."""
+    if tally:
+        try:
+            tally(name)
+        except Exception:
+            pass
+
+
+def answer(text: str, *, lookup=None, tally=None) -> str:
     """The reply to one message: a company name or an advert."""
     text = (text or "").strip()[:MAX_TEXT]
     if not text or text.lower() in ("/start", "/help"):
+        _note(tally, "start")
         return HELLO.format(site=config.BASE_URL)
 
     if _looks_like_advert(text):
@@ -164,6 +174,7 @@ def answer(text: str, *, lookup=None) -> str:
             text, store=db._PlaceCache())
         domain = result.get("domain") or ""
         if not domain:
+            _note(tally, "company:no-site")
             return (f"I couldn't be sure which website is {text}'s, so I "
                     "didn't check anything rather than risk the wrong firm. "
                     "Try the full name as the company writes it, or paste "
@@ -171,6 +182,8 @@ def answer(text: str, *, lookup=None) -> str:
         found = contacts.rank(result.get("emails") or [])
         where = f"on {domain}"
 
+    _note(tally, f"{'company' if domain else 'advert'}:"
+                 f"{'found' if found else 'none'}")
     if not found:
         if domain:
             return (f"{domain} doesn't publish an email address on its main "
@@ -194,7 +207,8 @@ def answer(text: str, *, lookup=None) -> str:
     return "\n".join(lines)
 
 
-def reply_to(update: dict, *, lookup=None, allow=None) -> dict | None:
+def reply_to(update: dict, *, lookup=None, allow=None,
+             tally=None) -> dict | None:
     """The sendMessage call to return to Telegram, or None to stay quiet."""
     message = (update or {}).get("message") or {}
     chat = message.get("chat") or {}
@@ -210,7 +224,7 @@ def reply_to(update: dict, *, lookup=None, allow=None) -> dict | None:
     if allow is not None and not allow(chat_id):
         body = "That's a lot of lookups in an hour. Try again a bit later."
     else:
-        body = answer(text, lookup=lookup)
+        body = answer(text, lookup=lookup, tally=tally)
     out = {"method": "sendMessage", "chat_id": chat_id, "text": body,
            "disable_web_page_preview": True}
     markup = _share_markup()

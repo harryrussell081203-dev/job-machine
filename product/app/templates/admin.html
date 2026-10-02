@@ -183,6 +183,57 @@ so this reads high until they age out.</small></p>
   news.</small></p>
 </div>
 
+<h2>Free searches this week</h2>
+<div class="panel">
+  {% if searches_week %}
+  <table>
+    <tr><th>Where, what, how it ended</th><th class="num">Times</th></tr>
+    {% for name, n in searches_week|dictsort %}
+    <tr><td><code>{{ name }}</code></td><td class="num">{{ n }}</td></tr>
+    {% endfor %}
+  </table>
+  <p><small class="muted"><b>found</b>: at least one address.
+  <b>none</b>: nothing published. <b>no-site</b>: couldn't be sure which
+  website was the company's. What was searched for is never kept.</small></p>
+  {% else %}
+  <p class="muted">No searches counted in the last week.</p>
+  {% endif %}
+</div>
+
+<h2>Google search</h2>
+<div class="panel">
+  {% set gsc = search_console %}
+  {% if gsc %}
+  <p>{{ gsc.from }} to {{ gsc.to }}: <b>{{ gsc.impressions }}</b> times shown,
+  <b>{{ gsc.clicks }}</b> clicks, {{ gsc.queries }} different searches.</p>
+  {% for title, key, note in [
+       ("Nearly there", "nearly_there", "Positions 8 to 20. Answer that exact question higher up the page, and link to it from a stronger page."),
+       ("Seen but not clicked", "seen_not_clicked", "Click rate under half the usual for that position. Rewrite the title and description."),
+       ("Questions without a page", "unanswered", "No answer page is about this. Candidates for the next one."),
+       ("Two pages, one search", "split", "Google is splitting this search between pages. Pick one."),
+       ("Rising and falling", "movers", "Clicks against the 28 days before.")] %}
+    {% if gsc[key] %}
+    <h3>{{ title }}</h3>
+    <p><small class="muted">{{ note }}</small></p>
+    <div class="scroll"><table>
+      {% for r in gsc[key] %}
+      <tr>
+        <td>{{ r.query or r.page }}{% if r.page and r.query %} <small class="muted">{{ r.page }}</small>{% endif %}
+            {% if r.pages %}<small class="muted">{{ r.pages|join(", ") }}</small>{% endif %}
+            {% if r.closest %}<small class="muted">nearest: {{ r.closest }}</small>{% endif %}</td>
+        <td class="num">{% if r.change is defined %}{{ "%+d"|format(r.change) }}{% else %}{{ r.impressions }} shown{% endif %}</td>
+        <td class="num">{% if r.position %}#{{ "%.0f"|format(r.position) }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    {% endif %}
+  {% endfor %}
+  {% else %}
+  <p class="muted">No Search Console report yet. It arrives weekly once
+  GSC_SERVICE_ACCOUNT_JSON is a repository secret.</p>
+  {% endif %}
+</div>
+
 <h2>How far people get</h2>
 <div class="panel">
   <div class="funnel">

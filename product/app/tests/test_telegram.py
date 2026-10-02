@@ -63,6 +63,25 @@ class Replies(unittest.TestCase):
                                lookup=lambda n, **k: {"domain": "", "emails": []})
         self.assertIn("couldn't be sure", out["text"])
 
+    def test_each_message_reports_how_it_ended(self):
+        seen = []
+        self.tg.reply_to(message("/start"), tally=seen.append)
+        self.tg.reply_to(message("CV to fiona.menzies@kestrelfoods.co.uk"),
+                         tally=seen.append)
+        self.tg.reply_to(message("Kestrel Foods"), tally=seen.append,
+                         lookup=lambda n, **k: {"domain": "kestrelfoods.co.uk",
+                                                "emails": []})
+        self.tg.reply_to(message("Smith Ltd"), tally=seen.append,
+                         lookup=lambda n, **k: {"domain": "", "emails": []})
+        self.assertEqual(seen, ["start", "advert:found", "company:none",
+                                "company:no-site"])
+
+    def test_a_broken_tally_never_stops_the_reply(self):
+        def broken(name):
+            raise RuntimeError("database gone")
+        out = self.tg.reply_to(message("/start"), tally=broken)
+        self.assertIn("never guess", out["text"])
+
     def test_a_group_hears_only_its_command(self):
         self.assertIsNone(self.tg.reply_to(message("hello all", "group")))
         out = self.tg.reply_to(message(
