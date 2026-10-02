@@ -46,6 +46,7 @@ from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
 from . import runner  # noqa: E402
+from . import search_console  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import views  # noqa: E402
@@ -1709,6 +1710,7 @@ def admin(request: Request):
                   traffic_week=views.totals(since=now - 7 * 86400, now=now),
                   traffic_hours=views.by_hour(hours=24, now=now),
                   searches_week=views.outcomes(since=now - 7 * 86400),
+                  search_console=search_console.latest(),
                   **adminlib.summarise(rows, now=now))
 
 
