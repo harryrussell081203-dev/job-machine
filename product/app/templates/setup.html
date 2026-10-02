@@ -105,27 +105,40 @@
       <label>What job are you after?
         <input type="text" name="target_roles" required autocomplete="organization-title"
                placeholder="e.g. warehouse operative, electrician"
-               value="{{ q.target_roles or '' }}"></label>
+               value="{{ q.target_roles or '' }}">
+        <small class="hint">The job title an employer would put on the advert.
+          Two or three is fine, separated by commas. "Anything" finds
+          nothing.</small></label>
       <label>Where do you live?
         <input type="text" name="location" required autocomplete="address-level2"
-               placeholder="e.g. Aberdeen" value="{{ q.location or '' }}"></label>
+               placeholder="e.g. Aberdeen" value="{{ q.location or '' }}">
+        <small class="hint">A town or city. Jobs within 25 miles are searched;
+          you can change the distance and add places later.</small></label>
       <label>Your name
         <input type="text" name="name" required autocomplete="name"
-               value="{{ q.name or '' }}"></label>
+               value="{{ q.name or '' }}">
+        <small class="hint">It signs every letter.</small></label>
       <label>Your phone number
         <input name="phone" required type="tel" autocomplete="tel"
-               value="{{ q.phone or '' }}"></label>
+               value="{{ q.phone or '' }}">
+        <small class="hint">Goes at the bottom of every letter, so an employer
+          can ring you. Never shown anywhere else.</small></label>
       <fieldset>
         <legend>Your last job</legend>
         <input type="text" name="last_title" required placeholder="What you did, e.g. forklift driver"
                aria-label="Your last job title" value="{{ q.last_title or '' }}">
         <input type="text" name="last_org" required placeholder="Who it was with"
                aria-label="Who your last job was with" value="{{ q.last_org or '' }}">
+        <small class="hint">Your most recent job, even if it was short or
+          different work. The letter uses it as proof you've worked; it never
+          makes up anything else.</small>
       </fieldset>
       <label>The least you would work for
         <input type="text" name="min_pay" required inputmode="decimal"
                placeholder="a salary like 24000, or hourly like 12.50"
-               value="{{ q.min_pay or '' }}"></label>
+               value="{{ q.min_pay or '' }}">
+        <small class="hint">Jobs that say they pay less are skipped. Adverts
+          that don't say what they pay are kept.</small></label>
       <button class="btn">Start looking</button>
     </form>
     <p class="hint">You can add more detail later to make the letters

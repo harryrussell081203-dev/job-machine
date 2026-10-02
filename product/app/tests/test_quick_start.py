@@ -175,6 +175,24 @@ class TestABadAnswerSaysWhatToFix(QuickStartCase):
         self.assertIn('value="Tesco Distribution"', r.text)
         self.assertIn('value="warehouse operative"', r.text)
 
+    def test_a_job_that_names_no_job_is_sent_back_with_an_example(self):
+        self.sign_in()
+        r = self.post(target_roles="anything")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("too general", r.text)
+        self.assertIn("maintenance technician", r.text)
+        self.assertIsNone(self.main.db.load_profile(self.me()["id"]))
+
+    def test_every_box_says_what_to_put_in_it(self):
+        self.sign_in()
+        page = self.client.get("/setup").text
+        for words in ("The job title an employer would put on the advert",
+                      "A town or city", "It signs every letter",
+                      "so an employer\n          can ring you",
+                      "Your most recent job",
+                      "Jobs that say they pay less are skipped"):
+            self.assertIn(words, page)
+
     def test_nothing_is_saved_and_no_search_starts(self):
         self.sign_in()
         self.post(last_title="", last_org="")

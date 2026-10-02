@@ -78,11 +78,24 @@ def _not_a_place(value: str) -> str:
     return ""
 
 
+# Answers that name no job at all. Sent to a job board they match every advert
+# or none, and either way the scorer has nothing to judge against.
+TOO_GENERAL = frozenset({
+    "any", "anything", "any job", "any jobs", "any work", "anything going",
+    "job", "jobs", "work", "a job", "whatever", "something", "everything",
+    "all", "not sure", "unsure", "dont know", "don't know", "idk", "n/a",
+    "na", "none", "open", "open to anything", "general", "full time",
+    "part time", "full-time", "part-time", "manual", "manual work", "office",
+    "office work", "entry level", "no experience"})
+
+
 def _not_a_job_title(value: str) -> str:
     """Why this is not a job title, or '' if it is fine."""
     text = (value or "").strip()
     if not text:
         return "is blank"
+    if text.lower().strip(" .!?") in TOO_GENERAL or len(text) < 3:
+        return "is too general to search for"
     if len(text) > MAX_TITLE_CHARS:
         return f"is {len(text)} characters, and a job title is not that long"
     if len(text.split()) > MAX_TITLE_WORDS:
