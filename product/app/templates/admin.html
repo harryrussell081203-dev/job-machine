@@ -200,6 +200,28 @@ so this reads high until they age out.</small></p>
   {% endif %}
 </div>
 
+<h2>From search engines, last 28 days</h2>
+<div class="panel">
+  {% if from_search %}
+  <div class="scroll"><table>
+    <tr><th>Page</th><th class="num">From Google</th><th class="num">From Bing</th>
+        <th class="num">Other</th><th class="num">Google read it</th></tr>
+    {% for p in from_search[:25] %}
+    <tr><td><a href="{{ p.path }}">{{ p.path }}</a></td>
+        <td class="num">{{ p.google }}</td><td class="num">{{ p.bing }}</td>
+        <td class="num">{{ p.other }}</td><td class="num">{{ p.google_read }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p><small class="muted">From this site's own count, no Google account
+  needed. It can't see the words people searched: search engines strip them.
+  A page Google reads often that nobody arrives at is ranking for nothing
+  yet; a page people do arrive at is the kind to write more of.</small></p>
+  {% else %}
+  <p class="muted">No visits from search engines yet, and no crawler visits
+  recorded.</p>
+  {% endif %}
+</div>
+
 <h2>Google search</h2>
 <div class="panel">
   {% set gsc = search_console %}

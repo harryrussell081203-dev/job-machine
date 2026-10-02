@@ -284,6 +284,64 @@ def outcome(name: str, *, user_agent: str = "",
     record(f"{OUTCOME_PREFIX}{name}", user_agent=user_agent, when=when)
 
 
+# Where a person arrives from when they tapped a search result. Google's own
+# app sends its package name rather than a web address.
+SEARCH_REFERRERS = {
+    "google": ("google.", "com.google.android.googlequicksearchbox"),
+    "bing": ("bing.com",),
+    "other": ("duckduckgo.com", "search.yahoo.com", "yahoo.com", "ecosia.org",
+              "search.brave.com", "startpage.com", "yandex."),
+}
+
+
+def _engine(source: str) -> str:
+    for engine, marks in SEARCH_REFERRERS.items():
+        if any(source.startswith(m) or f".{m}" in f".{source}"
+               for m in marks):
+            return engine
+    return ""
+
+
+def search_report(*, since: float) -> list[dict]:
+    """Per page: people who arrived from a search engine, and how often the
+    search engines' own crawlers read it, best first.
+
+    This is the part of Search Console a site can see for itself. What it
+    cannot see is the words searched for: search engines strip them from
+    the referrer. A page Google reads often and nobody arrives at is ranking
+    for nothing; a page people arrive at is the kind to write more of."""
+    try:
+        with connect() as c:
+            rows = c.execute(
+                "SELECT path, source, kind, SUM(views) AS n FROM page_views "
+                "WHERE hour_at >= ? AND path NOT LIKE ? "
+                "GROUP BY path, source, kind",
+                (int(since) // HOUR * HOUR, OUTCOME_PREFIX + "%")).fetchall()
+    except Exception:
+        return []
+    pages: dict[str, dict] = {}
+
+    def page(path):
+        return pages.setdefault(path, {"path": path, "google": 0, "bing": 0,
+                                       "other": 0, "arrived": 0,
+                                       "google_read": 0, "bing_read": 0})
+    for row in rows:
+        n = int(row["n"] or 0)
+        source = row["source"] or ""
+        if row["kind"] == PERSON:
+            engine = _engine(source)
+            if engine:
+                p = page(row["path"])
+                p[engine] += n
+                p["arrived"] += n
+        elif source == "search:google":
+            page(row["path"])["google_read"] += n
+        elif source == "search:bing":
+            page(row["path"])["bing_read"] += n
+    return sorted(pages.values(),
+                  key=lambda p: (-p["arrived"], -p["google_read"], p["path"]))
+
+
 def outcomes(*, since: float) -> dict:
     """{"find:company:found": n, ...} for people, over a window."""
     try:

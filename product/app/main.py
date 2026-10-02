@@ -1877,6 +1877,7 @@ def admin(request: Request):
                   traffic_hours=views.by_hour(hours=24, now=now),
                   searches_week=views.outcomes(since=now - 7 * 86400),
                   search_console=search_console.latest(),
+                  from_search=views.search_report(since=now - 28 * 86400),
                   **adminlib.summarise(rows, now=now))
 
 

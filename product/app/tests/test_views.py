@@ -348,3 +348,25 @@ class TestInAppBrowsersAreNotCrawlers(Base):
         ):
             with self.subTest(agent=agent[:40]):
                 self.assertTrue(self.views.looks_like_a_robot(agent))
+
+
+class TestFromSearchEngines(Base):
+    def test_arrivals_and_crawls_per_page(self):
+        self.see("/find", referer="https://www.google.com/")
+        self.see("/find", referer="https://www.google.co.uk/")
+        self.see("/", referer="https://www.bing.com/search")
+        self.see("/", referer="android-app://com.google.android.googlequicksearchbox/")
+        self.see("/answers/x", referer="https://duckduckgo.com/")
+        self.see("/numbers", referer="https://reddit.com/r/UKJobs")
+        self.views.record("/answers/x", user_agent=(
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"))
+        report = {p["path"]: p for p in
+                  self.views.search_report(since=time.time() - 3600)}
+        self.assertEqual(report["/find"]["google"], 2)
+        self.assertEqual((report["/"]["bing"], report["/"]["google"]), (1, 1))
+        self.assertEqual(report["/answers/x"]["other"], 1)
+        self.assertEqual(report["/answers/x"]["google_read"], 1)
+        self.assertNotIn("/numbers", report)
+        # Most arrivals first.
+        self.assertEqual(self.views.search_report(since=time.time() - 3600)[-1]
+                         ["path"], "/answers/x")
