@@ -114,7 +114,7 @@ Written down so the gap is visible rather than implied.
 | --- | --- |
 | `harvest_registers` | Filter and parser exist as `product/tools/find_orgs.py`. No harvest, no cron, no provenance or licence fields. The register URLs are unverified configuration — this sandbox has no web egress |
 | `harvest_jobs` | Not started. **Adzuna's terms forbid republishing vacancy counts or average salaries in aggregate**, which removes two of the planned page families. ONS/NOMIS replaces both under OGL and is better |
-| `page_builder` | Not started |
+| `page_builder` | Built. Reads `/employers.json` from the live site, groups employers by role, and writes one indexable HTML page per role with at least `MIN_EMPLOYERS` matches to `growth/out/pages/roles/`. Idempotent via content hash. Serving the pages from `/roles/<slug>` and adding them to the sitemap is a follow-up |
 | `tool_builder` | Not started |
 | `linker` | Not started |
 | `syndicator` | Not started |
