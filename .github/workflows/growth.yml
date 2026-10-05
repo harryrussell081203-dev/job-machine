@@ -12,15 +12,23 @@ name: growth
 # listener reads a short allowlist of forums, writes a file, and once a week
 # emails Harry a digest - no account access, no replies drafted. page_builder
 # reads /employers.json from the live site and writes HTML files to
-# growth/out/pages/roles/. Agents that would reach further - outreach,
-# syndication, submissions - are gated in their own modules and several of
-# them are human-gated by design. See GROWTH.md.
+# growth/out/pages/roles/. analyst reads /growth/metrics.json and writes a
+# weekly report to growth/data/analyst.json; nothing is sent anywhere.
+# Agents that would reach further - outreach, syndication, submissions -
+# are gated in their own modules and several of them are human-gated by
+# design. See GROWTH.md.
 
 on:
   schedule:
     # Not on the hour: GitHub delays jobs scheduled at popular times, and this
     # workflow has no reason to compete for them.
     - cron: "25 6 * * *"
+    # Analyst: Monday 07:03 UK. Google's Search Console export has a lag of
+    # a day or two, so a weekly read-out that lands first thing Monday is
+    # looking at the week-before window in full. BST and GMT entries, same
+    # as the listener; the state file is idempotent across them.
+    - cron: "3 6 * * 1"
+    - cron: "3 7 * * 1"
     # Listener: sweep forums daily, and fire again on Friday evening UK so
     # the agent lands inside its own email window. Two Friday entries cover
     # BST (17:03 UTC = 18:03 BST) and GMT (18:03 UTC = 18:03 GMT); the agent
@@ -77,6 +85,44 @@ jobs:
           # Rebase rather than merge: this file is a log, the remote's copy is
           # never the one to keep, and a merge commit per day would bury the
           # history it exists to show.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "could not push"
+          exit 1
+
+  analyst:
+    name: weekly read-out
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+
+      - name: Pull metrics and write the weekly report
+        env:
+          # The shared secret the /growth/metrics.json endpoint checks.
+          # Without it the agent fails closed on this run; the state file
+          # keeps whatever the last successful run wrote.
+          METRICS_SECRET: ${{ secrets.METRICS_SECRET }}
+        run: python -m growth.run analyst --base https://recruited.org.uk
+
+      - name: Commit the report
+        run: |
+          set -e
+          git config user.name "growth"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- growth/data/; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git add growth/data/
+          git commit -m "analyst $(date -u +%F)"
           for attempt in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && \
               git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0

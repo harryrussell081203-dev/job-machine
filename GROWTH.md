@@ -120,7 +120,7 @@ Written down so the gap is visible rather than implied.
 | `syndicator` | Not started |
 | `publisher` | Partly: IndexNow, sitemap `lastmod` and `llms.txt` live in the app (`product/app/`) because they are served by it. No sitemap index, no feeds, no `llms-full.txt` |
 | `listener` | Built. Sweeps a short allowlist of UK job-hunting subreddits, scores threads by keyword, keeps the matches in a pending queue, and emails Harry a digest on Friday at 18:00 UK. Reads only; the module exposes no posting function, and a shape test fails if one is added |
-| `analyst` | Not started. Needs Search Console and Bing Webmaster, which need accounts |
+| `analyst` | Built for Google. Reads `/growth/metrics.json` (a new app endpoint, bearer-authed with `METRICS_SECRET`) and writes a weekly report to `growth/data/analyst.json`: AI-answer crawler hits per page, the latest Search Console nearly-there / seen-not-clicked / rising / falling, and the list of allow-list pages that got zero traffic in the window. Bing Webmaster is a follow-up — same shape, slots in alongside the Google block once there is an account to read |
 
 ### Two honest divergences from the brief
 
