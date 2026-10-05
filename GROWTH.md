@@ -119,7 +119,7 @@ Written down so the gap is visible rather than implied.
 | `linker` | Not started |
 | `syndicator` | Not started |
 | `publisher` | Partly: IndexNow, sitemap `lastmod` and `llms.txt` live in the app (`product/app/`) because they are served by it. No sitemap index, no feeds, no `llms-full.txt` |
-| `listener` | Not started |
+| `listener` | Built. Sweeps a short allowlist of UK job-hunting subreddits, scores threads by keyword, keeps the matches in a pending queue, and emails Harry a digest on Friday at 18:00 UK. Reads only; the module exposes no posting function, and a shape test fails if one is added |
 | `analyst` | Not started. Needs Search Console and Bing Webmaster, which need accounts |
 
 ### Two honest divergences from the brief
