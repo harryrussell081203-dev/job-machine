@@ -71,6 +71,7 @@ class ThePages(AppTestCase):
         self.assertIn("careers@pennine.co.uk", page)
         self.assertIn("pennine.co.uk/contact", page)
         self.assertIn("Maintenance Technician", page)
+        self.assertIn("Jobs by <a href=\"https://www.adzuna.co.uk\"", page)
         self.assertNotIn("claire@", page)
         self.assertIn("Pennine Foods Ltd", self.client.get("/employers").text)
         self.assertIn("/employers/pennine-foods",
