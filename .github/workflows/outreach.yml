@@ -1,0 +1,103 @@
+name: outreach
+
+# Letters to the organisations that already hold jobseekers - council
+# employability services, colleges, charities - telling them a free tool
+# exists. See product/outreach.py for the rules; the short version is one
+# letter per organisation ever, to an address they published, never to a
+# person's own inbox, and never to anybody the job hunt already knows.
+#
+# PREVIEW BY DEFAULT. Every run writes the letters it would send into the run
+# summary on the Actions page. That is the human review, and it happens on
+# every run, not just the first: nothing goes out until the repository
+# variable OUTREACH_LIVE is set to 1, or somebody dispatches a run with
+# "send" ticked.
+#
+# Tuesday to Thursday mid-morning, the same window the job machine favours:
+# a letter to a careers adviser is read by a person at a desk, and they are
+# at their desks then.
+
+on:
+  schedule:
+    - cron: "40 9 * * 2-4"      # 10:40 BST / 09:40 GMT
+  workflow_dispatch:
+    inputs:
+      send:
+        description: "Actually send (otherwise preview only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # One at a time: two runs that both believe an organisation has not been
+  # written to would both write to it, and "once ever" is the whole promise.
+  group: outreach
+  cancel-in-progress: false
+
+jobs:
+  outreach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+      - run: pip install -r requirements.txt
+
+      - name: Write the letters
+        env:
+          PYTHONUNBUFFERED: "1"
+          BASE_URL: https://recruited.org.uk
+          # outreach.py sends through app/delivery.py, and importing the app
+          # package reads config, which insists on a session key. Nothing
+          # here signs anything, so a placeholder is honest.
+          SECRET_KEY: outreach-signs-nothing
+          # A mailbox of its own. See _smtp_sender in outreach.py.
+          OUTREACH_FROM: ${{ secrets.OUTREACH_FROM }}
+          OUTREACH_SMTP_USER: ${{ secrets.OUTREACH_SMTP_USER }}
+          OUTREACH_SMTP_PASSWORD: ${{ secrets.OUTREACH_SMTP_PASSWORD }}
+          # Passed ONLY so outreach.py can refuse it. If the outreach login
+          # ever matches the address the job hunt applies from, it stops.
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          # A manual run does exactly what its tick box says, whatever the
+          # live switch is set to - unticked is always a preview. A scheduled
+          # run follows the switch.
+          LIVE: ${{ github.event_name == 'workflow_dispatch' && (inputs.send && 'true' || 'false') || (vars.OUTREACH_LIVE == '1' && 'true' || 'false') }}
+          PER_DAY: ${{ vars.OUTREACH_PER_DAY || '5' }}
+        run: |
+          if [ "$LIVE" = "true" ]; then
+            echo "LIVE: sending up to $PER_DAY"
+            python outreach.py --send --limit "$PER_DAY"
+          else
+            echo "PREVIEW: nothing will be sent. The letters are in the run summary."
+            python outreach.py --dry-run --limit "$PER_DAY"
+          fi
+
+      - name: Remember who has been written to
+        # Only a real send changes this file - a preview never writes it - so
+        # on a preview this finds nothing and stops.
+        run: |
+          set -e
+          if git diff --quiet -- data/outreach_state.json 2>/dev/null && \
+             ! git ls-files --others --exclude-standard -- data/outreach_state.json | grep -q .; then
+            echo "nobody new was written to"
+            exit 0
+          fi
+          git config user.name "outreach"
+          git config user.email "actions@github.com"
+          git add data/outreach_state.json
+          git commit -m "outreach $(date -u +%F)"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "could not record who was written to" >&2
+          exit 1
