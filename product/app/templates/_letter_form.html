@@ -1,0 +1,35 @@
+{# The no-account letter form. Shown under /find's results and on its own
+   page when something needs fixing. `form` carries what was already known:
+   the address, the company and the advert. #}
+<form method="post" action="/find/letter" class="panel quick" id="letterform">
+  <h2 style="margin-top:0">Write the letter for me</h2>
+  <p class="hint">Free, no account. Nothing you type here is kept.</p>
+  <input type="hidden" name="to" value="{{ form.to }}">
+  <input type="hidden" name="company" value="{{ form.company }}">
+  <input type="hidden" name="greet" value="{{ form.greet }}">
+  <textarea name="advert" hidden>{{ form.advert }}</textarea>
+
+  <label>The job you're after
+    <input type="text" name="job" value="{{ form.job }}" maxlength="80"
+           placeholder="e.g. warehouse operative">
+    <small class="hint">The title from the advert. Leave it empty if you
+      pasted the advert above.</small></label>
+
+  <label>Two things you've done that fit
+    <textarea name="about" rows="3" maxlength="600" required
+      placeholder="e.g. 3 years picking and packing at Tesco, forklift licence, never missed a shift">{{ form.about }}</textarea>
+    <small class="hint">Real things, with a number if you have one. The
+      letter only uses what you write here; it never adds anything.</small></label>
+
+  <div class="row">
+    <label>Your name
+      <input type="text" name="name" value="{{ form.name }}" maxlength="60"
+             autocomplete="name"></label>
+    <label>Your phone
+      <input type="tel" name="phone" value="{{ form.phone }}" maxlength="30"
+             autocomplete="tel"></label>
+  </div>
+  <p class="hint">Name and phone go at the bottom so they can ring you.
+    Optional; you can add them yourself.</p>
+  <button class="btn">Write my letter to {{ form.to }}</button>
+</form>

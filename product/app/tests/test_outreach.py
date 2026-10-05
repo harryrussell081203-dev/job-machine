@@ -82,10 +82,40 @@ class TestNoAddressIsEverInvented(Base):
 
     def test_a_published_address_is_used(self):
         done = self.go(FakeSession(
-            {"/contact": "<p>Email jane.mcleod@aberdeen-employ.org</p>"}),
+            {"/contact": "<p>Email info@aberdeen-employ.org</p>"}),
             send=True, sender=self.sender)
         self.assertEqual(done["sent"], 1)
-        self.assertEqual(self.sent[0][0], "jane.mcleod@aberdeen-employ.org")
+        self.assertEqual(self.sent[0][0], "info@aberdeen-employ.org")
+
+    def test_never_a_named_persons_address(self):
+        """Letters go to the organisation, never to an employee's own
+        address."""
+        done = self.go(FakeSession(
+            {"/contact": "<p>Email jane.mcleod@aberdeen-employ.org</p>"}),
+            send=True, sender=self.sender)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(done["no_address"], 1)
+
+    def test_never_their_own_hiring_desk(self):
+        """hr@ and careers@ are about hiring their own staff."""
+        self.go(FakeSession(
+            {"/contact": "hr@aberdeen-employ.org careers@aberdeen-employ.org"}),
+            send=True, sender=self.sender)
+        self.assertEqual(self.sent, [])
+
+    def test_a_service_inbox_beats_the_front_door(self):
+        self.go(FakeSession({"/contact": "info@aberdeen-employ.org "
+                             "employability@aberdeen-employ.org"}),
+                send=True, sender=self.sender)
+        self.assertEqual(self.sent[0][0], "employability@aberdeen-employ.org")
+
+    def test_the_registers_own_address_when_it_is_a_shared_inbox(self):
+        org = dict(ORG, email="enquiries@aberdeen-employ.org")
+        done = outreach.run([org], self.state, session=FakeSession({}),
+                            send=True, sender=self.sender, delay=0,
+                            scrape_delay=0, out=lambda *a: None)
+        self.assertEqual(done["sent"], 1)
+        self.assertEqual(self.sent[0][0], "enquiries@aberdeen-employ.org")
 
     def test_an_address_at_some_other_domain_is_not_taken(self):
         """Charity sites carry funders, partners and web developers. Writing
@@ -119,13 +149,13 @@ class TestOnceAndOnlyOnce(Base):
 
 class TestItDoesNotSendByAccident(Base):
     def test_the_default_is_a_dry_run(self):
-        done = self.go(FakeSession({"/contact": "jane@aberdeen-employ.org"}))
+        done = self.go(FakeSession({"/contact": "info@aberdeen-employ.org"}))
         self.assertEqual(self.sent, [])
         self.assertEqual(done["would_send"], 1)
 
     def test_a_dry_run_does_not_mark_anybody_as_asked(self):
         """Otherwise the first rehearsal silently burns the whole list."""
-        self.go(FakeSession({"/contact": "jane@aberdeen-employ.org"}))
+        self.go(FakeSession({"/contact": "info@aberdeen-employ.org"}))
         self.assertFalse(outreach.already_asked(self.state, ORG))
 
     def test_sending_with_no_sender_is_refused_before_the_loop(self):
@@ -137,7 +167,7 @@ class TestItDoesNotSendByAccident(Base):
         past the cap while appearing to respect it."""
         orgs = [{"name": f"Org {n}", "website": f"https://o{n}.org"}
                 for n in range(6)]
-        session = FakeSession({"/contact": "careers@{host}"})
+        session = FakeSession({"/contact": "info@{host}"})
         done = outreach.run(orgs, {}, session=session, limit=2, delay=0,
                             scrape_delay=0, out=lambda *a: None)
         self.assertEqual(done["would_send"], 2)
@@ -159,7 +189,7 @@ class TestTheLetterItself(Base):
         original = outreach.compose_letter
         outreach.compose_letter = lambda org, c: ("Hi", "I am writing to you!")
         try:
-            done = self.go(FakeSession({"/contact": "jane@aberdeen-employ.org"}),
+            done = self.go(FakeSession({"/contact": "info@aberdeen-employ.org"}),
                            send=True, sender=self.sender)
         finally:
             outreach.compose_letter = original
@@ -167,6 +197,12 @@ class TestTheLetterItself(Base):
         self.assertEqual(done["refused"], 1)
         # Still a target once the letter is fixed - nothing went out.
         self.assertFalse(outreach.already_asked(self.state, ORG))
+
+    def test_nothing_about_his_age_or_employer(self):
+        _, body = self.letter()
+        low = body.lower()
+        for word in (" 22", "aged", "year-old", "year old", "hydro"):
+            self.assertNotIn(word, low)
 
     def test_it_names_the_organisation_and_the_free_thing(self):
         _, body = self.letter()
@@ -184,8 +220,8 @@ class TestTheLetterItself(Base):
     def test_it_asks_for_nothing_and_says_it_will_not_write_again(self):
         _, body = self.letter()
         joined = " ".join(body.split()).lower()
-        self.assertIn("no reply needed", joined)
-        self.assertIn("will not write again", joined)
+        self.assertIn("no reply is needed", joined)
+        self.assertIn("won't write again", joined)
 
 
 if __name__ == "__main__":

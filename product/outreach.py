@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -114,11 +115,36 @@ def record(state, org, outcome, address=""):
                            "outcome": outcome, "address": address}
 
 
+# The organisation's front door. Their careers@ and hr@ are about hiring
+# their own staff, which is the wrong desk for this letter.
+FRONT_DOOR = ("info", "enquiries", "enquiry", "hello", "contact", "office",
+              "admin", "mail", "reception", "general", "team")
+SERVICE_WORDS = ("employ", "skills", "work", "jobclub", "support", "advice")
+
+
+def shared_inbox(address: str) -> bool:
+    """An organisation's front-door inbox (info@, enquiries@, hello@) or a
+    service inbox (employability@, skills@), never a named person's and
+    never their own hr@ or careers@. Letters to organisations go to the
+    organisation: an employee's own address is a person, and this tool does
+    not write to people who did not publish an address for the purpose."""
+    local = (address or "").split("@")[0].lower()
+    if not local or contacts.never_write_to(local):
+        return False
+    if contacts.is_personal(local):
+        return False
+    first = re.split(r"[._\-0-9]+", local)[0]
+    return first in FRONT_DOOR or any(w in local for w in SERVICE_WORDS)
+
+
 def find_address(org, *, session=None, scrape_delay=None):
-    """A real published address on their own site, or None.
+    """A real published shared inbox on their own site, or None.
 
     Exactly the discovery the product sells, pointed at the organisation
-    rather than at an employer. None is the common answer and it is fine.
+    rather than at an employer, and then held to one extra rule: the
+    organisation's shared inbox, never a person's address. The register's
+    own published contact address is used if it is one, on their domain.
+    None is the common answer and it is fine.
 
     `scrape_delay` is separate from the delay between letters. That one is
     politeness to the recipient; this one is politeness to a small charity's
@@ -129,10 +155,21 @@ def find_address(org, *, session=None, scrape_delay=None):
     host = key_for(org)
     if not host:
         return None
+    listed = (org.get("email") or "").strip().lower()
+    if listed and shared_inbox(listed) and (
+            listed.endswith("@" + host) or listed.endswith("." + host)):
+        return {"email": listed, "name": None, "tier": 1,
+                "tier_name": "the address on the charity register"}
     if scrape_delay is None:
         scrape_delay = discover.POLITE_DELAY
     found = discover.scrape_site(host, session=session, delay=scrape_delay)
-    return contacts.best(found)
+    shared = sorted((e for e in (found or []) if shared_inbox(e)),
+                    key=lambda e: (not any(w in e.split("@")[0]
+                                           for w in SERVICE_WORDS), e))
+    if not shared:
+        return None
+    return {"email": shared[0], "name": None, "tier": 1,
+            "tier_name": "their shared inbox"}
 
 
 def compose_letter(org, contact) -> tuple[str, str]:
@@ -140,36 +177,36 @@ def compose_letter(org, contact) -> tuple[str, str]:
 
     Written to be forwarded rather than answered: the thing they might
     actually do with it is paste the link into their own newsletter, so the
-    link and what it does are in the first three lines and the rest is the
-    evidence that it is not junk.
+    link and what it does come early and the rest is the evidence that it
+    is not junk. Every figure in it is one the site already publishes.
+    Nothing about his age or who he works for: public copy never says.
     """
     name = (org.get("name") or "your organisation").strip()
-    greeting = f"Hello {contact['name']}," if contact.get("name") else "Hello,"
 
     subject = "A free tool for the jobseekers you work with"
-    body = f"""{greeting}
+    body = f"""Hello,
 
-I am 22 and job hunting in Aberdeen. Applications kept disappearing into
-portals, so I started emailing a real person at each company instead and
-logged what happened. Out of 86 cold emails, 22 came back. The thing that
-moved the number was who received it: a named person replied 13 times out of
-34, a generic info@ address 4 times out of 42.
+I've been job hunting this year, and applications kept disappearing into
+portals. So I started emailing a real person at each company instead, and
+kept count: 171 applications, 32 replies. Across 86 of those emails, the
+thing that moved the number was who received it. A named person replied 13
+times out of 34; a generic info@ address 4 times out of 42.
 
-I built the address-finding part into a free tool and I thought it might be
-useful to the people {name} works with. Paste a job advert into
-{SITE}/find and it reads the advert, then the company's own site, and tells
-you whether there is a real person worth writing to. No account, nothing to
-install, and it says so plainly when there is nothing to find rather than
-guessing an address.
+I've turned the address-finding part into a free tool that might help the
+people {name} works with. Type a company's name or paste a job advert at
+{SITE}/find and it reads the advert and the company's own website, shows the
+real address to write to, and can write a short letter to it. No account,
+nothing to install, and it says plainly when there is nothing to find
+rather than guessing an address.
 
-The method is written up at {SITE}/playbook, also free, and every figure
-including the bad months is at {SITE}/numbers.
+The method is written up at {SITE}/playbook, and every figure, including
+the bad months, is at {SITE}/numbers.
 
-Pass it on if it is any use. If it is not, no reply needed and I will not
-write again.
+Pass it on if it's any use. If not, no reply is needed and I won't write
+again.
 
 Harry Russell
-{FROM_ADDRESS or SITE}
+Recruited, {SITE}
 """
     return subject, body.strip()
 
