@@ -381,9 +381,69 @@ def find_submit(request: Request, advert: str = Form(""),
     from jobseeker import companies_house
     directors = (companies_house.directors(company)
                  if company and companies_house.enabled() else [])
+    from . import find_letter
     return render(request, "find.html", advert=advert, found=found,
                   searched=True, company=company, directors=directors,
-                  looked_up=looked_up)
+                  looked_up=looked_up, letter_on=find_letter.enabled())
+
+
+LETTER_PER_IP = (5, 3600)
+LETTER_ALL = (150, 86400)
+
+
+@app.post("/find/letter", response_class=HTMLResponse)
+def find_letter_route(request: Request, to: str = Form(""),
+                      company: str = Form(""), advert: str = Form(""),
+                      job: str = Form(""), about: str = Form(""),
+                      greet: str = Form(""), name: str = Form(""),
+                      phone: str = Form("")):
+    """The letter to the address /find just found, with no account. Nothing
+    typed here is stored. See find_letter.py."""
+    from . import find_letter
+    to = (to or "").strip()[:200]
+    if not find_letter.enabled() or "@" not in to:
+        return RedirectResponse("/find", status_code=303)
+    form = {"to": to, "company": company[:160], "advert": advert[:MAX_ADVERT],
+            "job": job[:80], "about": about[:600], "greet": greet[:40],
+            "name": name[:60], "phone": phone[:30]}
+
+    def again(error):
+        return render(request, "find_letter.html", form=form, error=error)
+
+    if not about.strip():
+        return again("Write a line or two about what you've done, so the "
+                     "letter has something true to say.")
+    ip = ratelimit.client_ip(request)
+    per_ip, per_ip_window = LETTER_PER_IP
+    everyone, everyone_window = LETTER_ALL
+    if not (ratelimit.hit(f"letter:ip:{ip}", limit=per_ip,
+                          window=per_ip_window)
+            and ratelimit.hit("letter:all", limit=everyone,
+                              window=everyone_window)):
+        return again("That's a lot of letters for now. Try again later, or "
+                     "start free and it writes them for you every weekday.")
+    letter = None
+    try:
+        from .ai import gemini_now
+        letter = find_letter.write(job=job, company=company, about=about,
+                                   advert=advert, greet=greet, name=name,
+                                   phone=phone, ai=gemini_now)
+    except Exception as exc:
+        log.info("find letter: %s", exc)
+    try:
+        views.outcome(f"letter:{'written' if letter else 'failed'}",
+                      user_agent=request.headers.get("user-agent", ""))
+    except Exception:
+        pass
+    if not letter:
+        return again("Couldn't write it just now. Try again in a minute, or "
+                     "use the 60 to 90 word shape below and write it "
+                     "yourself.")
+    return render(request, "find_letter.html", form=form, letter=letter,
+                  mailto=delivery.mailto_link(to, letter["subject"],
+                                              letter["body"]),
+                  gmail=delivery.gmail_compose_link(to, letter["subject"],
+                                                    letter["body"]))
 
 
 @app.post("/telegram/{secret}")
