@@ -32,6 +32,10 @@ AGENTS = {
     "crawl_health": ("growth.agents.crawl_health",
                      "Fetch every URL in the sitemap and report what a "
                      "machine actually got back."),
+    "listener": ("growth.agents.listener",
+                 "Watch a small allowlist of UK job forums for threads "
+                 "the product might help with; email the digest Fridays "
+                 "at 18:00 UK. Reads only, posts never."),
 }
 
 
