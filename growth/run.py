@@ -40,6 +40,10 @@ AGENTS = {
                      "Build one indexable role-landing page per UK job "
                      "role, from the directory. Writes HTML to "
                      "growth/out/pages/roles/."),
+    "analyst": ("growth.agents.analyst",
+                "Weekly read-out: AI-answer crawler hits per page, "
+                "Search Console nearly-there, zero-impression pages. "
+                "Reads /growth/metrics.json; needs METRICS_SECRET."),
 }
 
 

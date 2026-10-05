@@ -350,6 +350,44 @@ class TestInAppBrowsersAreNotCrawlers(Base):
                 self.assertTrue(self.views.looks_like_a_robot(agent))
 
 
+class TestGrowthMetricsEndpoint(Base):
+    """The endpoint the growth engine's analyst reads. Bearer-authed, so
+    the public gets 401 and the agent gets what views + search_console
+    already measured."""
+
+    def test_without_secret_env_the_route_is_closed(self):
+        # No METRICS_SECRET → the endpoint 404s rather than exposing data.
+        r = self.client.get("/growth/metrics.json")
+        self.assertEqual(r.status_code, 404)
+
+    def test_wrong_secret_is_401(self):
+        os.environ["METRICS_SECRET"] = "right"
+        try:
+            r = self.client.get("/growth/metrics.json",
+                                headers={"Authorization": "Bearer wrong"})
+            self.assertEqual(r.status_code, 401)
+        finally:
+            del os.environ["METRICS_SECRET"]
+
+    def test_right_secret_returns_views_and_pages(self):
+        import json as _json
+        os.environ["METRICS_SECRET"] = "right"
+        try:
+            self.see("/", user_agent="Mozilla/5.0 (compatible; ChatGPT-User/1.0)")
+            r = self.client.get("/growth/metrics.json?window_days=7",
+                                headers={"Authorization": "Bearer right"})
+            self.assertEqual(r.status_code, 200)
+            body = _json.loads(r.text)
+            self.assertEqual(body["window_days"], 7)
+            self.assertIn("views", body)
+            self.assertIn("pages", body)
+            # The ChatGPT-User hit lands under ai-answer:openai.
+            self.assertIn("ai-answer:openai",
+                          body["views"].get("crawlers", {}))
+        finally:
+            del os.environ["METRICS_SECRET"]
+
+
 class TestFromSearchEngines(Base):
     def test_arrivals_and_crawls_per_page(self):
         self.see("/find", referer="https://www.google.com/")

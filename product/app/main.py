@@ -1753,6 +1753,54 @@ def employer_page(request: Request, slug: str):
                       "and how to write to it."))
 
 
+@app.get("/growth/metrics.json")
+def growth_metrics(request: Request):
+    """What the growth engine's analyst reads to produce the weekly report.
+
+    Three things, in one place so the agent makes one fetch:
+
+      search_console - the latest Monday run of the Google Search Console
+                       analysis in `search_console.py` (nearly-there,
+                       seen-not-clicked, rising, falling, two-pages-one-
+                       search). Null until that job has run at least once.
+      views          - views.totals() over `window_days` days: per path,
+                       per crawler, per source. The AI-answer crawler rows
+                       are the highest-signal numbers on the whole site.
+      pages          - the current allow-list from public_pages(), so the
+                       analyst can list pages that got zero traffic without
+                       trying to enumerate them itself.
+
+    Authenticated with a shared secret in the Authorization header. The
+    repo is public and the secret lives in Actions secrets. Without the
+    header this returns 401 - the data is not catastrophic to leak (no
+    user data) but exposing exactly which pages the AI assistants cite
+    to a competitor is a loss, so the default is closed.
+    """
+    import hmac
+    import os
+    expected = os.environ.get("METRICS_SECRET", "")
+    if not expected:
+        return JSONResponse({"error": "metrics endpoint disabled"},
+                            status_code=404)
+    provided = (request.headers.get("authorization", "")
+                .removeprefix("Bearer ").strip())
+    if not hmac.compare_digest(expected, provided):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        window_days = max(1, min(90, int(request.query_params.get(
+            "window_days", "7"))))
+    except ValueError:
+        window_days = 7
+    since = time.time() - window_days * 86400
+    return JSONResponse({
+        "generated_at": int(time.time()),
+        "window_days": window_days,
+        "search_console": search_console.latest(),
+        "views": views.totals(since=since),
+        "pages": list(public_pages()),
+    })
+
+
 @app.get("/employers.json")
 def employers_json():
     """Public machine-readable mirror of /employers.
