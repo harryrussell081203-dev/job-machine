@@ -1753,6 +1753,43 @@ def employer_page(request: Request, slug: str):
                       "and how to write to it."))
 
 
+@app.get("/employers.json")
+def employers_json():
+    """Public machine-readable mirror of /employers.
+
+    The HTML list exists because people read it; the JSON list exists
+    because the growth engine's page_builder reads it to group employers
+    by role. Same filter as the HTML page - live pages only, shared
+    inboxes only - so the two never disagree on what the directory
+    currently publishes.
+
+    The hiring address, when there is one, is lifted out so a reader does
+    not have to guess which of several inboxes is the one for a job.
+    Everything else matches `directory.get` exactly.
+    """
+    if not directory.enabled():
+        return JSONResponse({"employers": []})
+    out = []
+    for row in directory.listed():
+        page = directory.get(row["slug"])
+        if not page:
+            continue
+        hiring = next((i["email"] for i in page["inboxes"]
+                       if i.get("kind") == directory.HIRING), None)
+        general = next((i["email"] for i in page["inboxes"]
+                        if i.get("kind") == directory.GENERAL), None)
+        out.append({
+            "slug": page["slug"],
+            "name": page["company"],
+            "domain": page.get("domain", ""),
+            "hiring_email": hiring,
+            "general_email": general,
+            "roles": page.get("roles", []),
+            "checked_at": page.get("checked_at", 0),
+        })
+    return JSONResponse({"employers": out})
+
+
 @app.post("/employers/{slug}/remove")
 def employer_remove(request: Request, slug: str):
     """Taken down on request, and never rebuilt. Anybody can ask; taking a

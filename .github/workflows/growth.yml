@@ -10,10 +10,11 @@ name: growth
 #
 # NOTHING HERE POSTS. crawl_health reads the live site and writes a file.
 # listener reads a short allowlist of forums, writes a file, and once a week
-# emails Harry a digest - no account access, no replies drafted. Agents that
-# would reach further - outreach, syndication, submissions - are gated in
-# their own modules and several of them are human-gated by design. See
-# GROWTH.md.
+# emails Harry a digest - no account access, no replies drafted. page_builder
+# reads /employers.json from the live site and writes HTML files to
+# growth/out/pages/roles/. Agents that would reach further - outreach,
+# syndication, submissions - are gated in their own modules and several of
+# them are human-gated by design. See GROWTH.md.
 
 on:
   schedule:
@@ -76,6 +77,42 @@ jobs:
           # Rebase rather than merge: this file is a log, the remote's copy is
           # never the one to keep, and a merge commit per day would bury the
           # history it exists to show.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "could not push"
+          exit 1
+
+  page_builder:
+    name: role landing pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+
+      - name: Build one page per qualifying role
+        # Reads /employers.json from the live site, groups employers by
+        # role, and writes HTML files. Idempotent via content hash: an
+        # unchanged page is left alone, which keeps the diff reviewable.
+        run: python -m growth.run page_builder --base https://recruited.org.uk
+
+      - name: Commit the state and the pages
+        run: |
+          set -e
+          git config user.name "growth"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- growth/data/ growth/out/; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git add growth/data/ growth/out/
+          git commit -m "page builder $(date -u +%F)"
           for attempt in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" && \
               git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0

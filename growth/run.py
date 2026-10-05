@@ -36,6 +36,10 @@ AGENTS = {
                  "Watch a small allowlist of UK job forums for threads "
                  "the product might help with; email the digest Fridays "
                  "at 18:00 UK. Reads only, posts never."),
+    "page_builder": ("growth.agents.page_builder",
+                     "Build one indexable role-landing page per UK job "
+                     "role, from the directory. Writes HTML to "
+                     "growth/out/pages/roles/."),
 }
 
 

@@ -101,6 +101,30 @@ class ThePages(AppTestCase):
                                        site("jobs@pennine.co.uk")), "")
         self.assertEqual(self.d.due(["Pennine Foods"]), [])
 
+    def test_employers_json_mirrors_the_html_list(self):
+        """The growth engine's page_builder reads /employers.json. The HTML
+        list and the JSON list share one filter, so they can never disagree
+        on what the directory currently publishes."""
+        import json as _json
+        slug = self.d.record("Pennine Foods Ltd",
+                             site("careers@pennine.co.uk",
+                                  "claire@pennine.co.uk"),
+                             roles=[{"title": "Maintenance Technician",
+                                     "location": "Rotherham",
+                                     "posted_at": ""}])
+        self.assertEqual(slug, "pennine-foods")
+        r = self.client.get("/employers.json")
+        self.assertEqual(r.status_code, 200)
+        data = _json.loads(r.text)
+        [e] = data["employers"]
+        self.assertEqual(e["slug"], "pennine-foods")
+        self.assertEqual(e["name"], "Pennine Foods Ltd")
+        self.assertEqual(e["hiring_email"], "careers@pennine.co.uk")
+        # Personal addresses never appear here, same as the HTML page.
+        self.assertNotIn("claire@pennine.co.uk", r.text)
+        titles = [role["title"] for role in e["roles"]]
+        self.assertIn("Maintenance Technician", titles)
+
     def test_a_find_lookup_feeds_the_directory(self):
         from app import company_lookup, db
 
