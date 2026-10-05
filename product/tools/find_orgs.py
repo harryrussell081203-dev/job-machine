@@ -84,8 +84,12 @@ FIELDS = {
     "name": ("charity name", "charityname", "name", "organisation name",
              "registered name", "charity_name"),
     "website": ("website", "web address", "url", "charity_company_website",
-                "web"),
-    "postcode": ("postcode", "post code", "charity_postcode", "postal code"),
+                "charity_contact_web", "web"),
+    "postcode": ("postcode", "post code", "charity_postcode", "postal code",
+                 "charity_contact_postcode"),
+    "email": ("email", "charity_contact_email", "contact email"),
+    "status": ("charity_registration_status", "registration status",
+               "status"),
     "purpose": ("objectives", "activities", "charitable purposes", "purposes",
                 "charity_activities", "objects"),
 }
@@ -173,7 +177,10 @@ def serves_jobseekers(purpose: str, name: str = "") -> bool:
 
 
 def rows_from_csv(text: str):
-    reader = csv.DictReader(io.StringIO(text))
+    """Comma or tab separated. The Charity Commission's extract is tabs."""
+    first = text.split("\n", 1)[0]
+    delimiter = "\t" if first.count("\t") > first.count(",") else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     if not reader.fieldnames:
         raise SourceError("the file has no header row")
     cols = pick_columns(reader.fieldnames)
@@ -191,6 +198,9 @@ def select(rows, limit: int | None = None) -> list[dict]:
     """
     seen, out = set(), []
     for row in rows:
+        status = (row.get("status") or "").strip().lower()
+        if status and status != "registered":
+            continue                    # removed from the register
         site = tidy_website(row.get("website", ""))
         if not site:
             continue
@@ -202,7 +212,8 @@ def select(rows, limit: int | None = None) -> list[dict]:
         seen.add(key)
         out.append({"name": row.get("name", "").strip(),
                     "website": site,
-                    "postcode": row.get("postcode", "").strip()})
+                    "postcode": row.get("postcode", "").strip(),
+                    "email": row.get("email", "").strip()})
         if limit and len(out) >= limit:
             break
     return out

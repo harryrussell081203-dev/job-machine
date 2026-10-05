@@ -109,7 +109,8 @@ def _body(link: str) -> str:
 
 
 def _send_over_https(address: str, body: str, *, subject: str = SUBJECT,
-                     headers: dict | None = None) -> None:
+                     headers: dict | None = None, reply_to: str = "",
+                     sender_name: str = "Recruited") -> None:
     """Brevo's transactional endpoint, on 443.
 
     Exists because a free host may block every SMTP port outright, and a
@@ -123,10 +124,11 @@ def _send_over_https(address: str, body: str, *, subject: str = SUBJECT,
                      "accept": "application/json",
                      "content-type": "application/json"},
             json={"sender": {"email": config.SMTP_ADDRESS,
-                             "name": "Recruited"},
+                             "name": sender_name},
                   "to": [{"email": address}],
                   "subject": subject,
                   "textContent": body,
+                  **({"replyTo": {"email": reply_to}} if reply_to else {}),
                   **({"headers": headers} if headers else {})},
             timeout=30)
     except httpx.HTTPError as exc:
@@ -139,12 +141,15 @@ def _send_over_https(address: str, body: str, *, subject: str = SUBJECT,
 
 
 def _send_over_smtp(address: str, body: str, *, subject: str = SUBJECT,
-                    headers: dict | None = None) -> None:
+                    headers: dict | None = None, reply_to: str = "",
+                    sender_name: str = "Recruited") -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     for name, value in (headers or {}).items():
         msg[name] = value
-    msg["From"] = config.SMTP_ADDRESS
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    msg["From"] = f"{sender_name} <{config.SMTP_ADDRESS}>"
     msg["To"] = address
     msg.set_content(body)
 
@@ -179,16 +184,21 @@ def send_login_email(address: str, link: str) -> None:
 
 
 def send_app_email(address: str, subject: str, body: str, *,
-                   headers: dict | None = None) -> None:
-    """Any email the app sends its own users, by the same route as sign-in
-    links. Raises if no route is configured; prints it in development."""
+                   headers: dict | None = None, reply_to: str = "",
+                   sender_name: str = "Recruited") -> None:
+    """Any email the app sends, by the same route as sign-in links. Raises
+    if no route is configured; prints it in development. `reply_to` sends
+    answers somewhere a person reads, for mail a person signs."""
     route = config.mail_route()
     if config.DEV and not route:
         print(f"\n  [dev] email to {address}: {subject}\n{body}\n", flush=True)
         return
     if not route:
         raise RuntimeError("No way to send mail is configured.")
+    extra = {"reply_to": reply_to, "sender_name": sender_name}
     if route == "brevo":
-        _send_over_https(address, body, subject=subject, headers=headers)
+        _send_over_https(address, body, subject=subject, headers=headers,
+                         **extra)
     else:
-        _send_over_smtp(address, body, subject=subject, headers=headers)
+        _send_over_smtp(address, body, subject=subject, headers=headers,
+                        **extra)

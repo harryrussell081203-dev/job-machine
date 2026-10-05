@@ -378,6 +378,17 @@ CREATE TABLE IF NOT EXISTS employer_pages (
     removed_at  BIGINT
 );
 
+-- Every organisation the weekly outreach has looked at, keyed by its web
+-- address, so each one is written to once, ever. outcome is sent or
+-- no_address. See app/org_outreach.py.
+CREATE TABLE IF NOT EXISTS outreach_log (
+    org_key   TEXT    PRIMARY KEY,
+    name      TEXT    NOT NULL DEFAULT '',
+    address   TEXT    NOT NULL DEFAULT '',
+    outcome   TEXT    NOT NULL,
+    at        BIGINT  NOT NULL
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
