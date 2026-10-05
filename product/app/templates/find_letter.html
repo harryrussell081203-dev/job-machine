@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Your letter &middot; Recruited{% endblock %}
+{% block content %}
+{% if letter %}
+<h1>Your letter to {{ form.company or form.to }}</h1>
+<p class="lede">Read it, change anything that isn't quite you, then send it
+from your own email. Attach your CV if you have it.</p>
+
+<div class="panel">
+  <p class="meta">To <b>{{ form.to }}</b></p>
+  <p><b>{{ letter.subject }}</b></p>
+  <div class="letter">{{ letter.body }}</div>
+  <p class="actions" style="margin-top:14px">
+    <a class="btn" href="{{ gmail }}" target="_blank" rel="noopener">Open in Gmail</a>
+    <a class="btn ghost" href="{{ mailto }}">Open in my email app</a>
+    <button class="btn ghost" id="copyletter" hidden>Copy it</button>
+  </p>
+  <p class="hint" id="copied" hidden>Copied.</p>
+  <p class="hint">Nothing you typed was kept. Check every claim in it is
+    true before you send; it was only allowed to use what you wrote.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Want this for every job you'd go for?</h2>
+  <p>Tell it the work you want once. Every weekday it finds fresh jobs, the
+    real address at each employer, never a guessed one, and writes a letter
+    like this one for you to send. One email per employer, ever.</p>
+  <p><a class="btn" href="/login">{% if config.FREE_SPOTS %}Start free{% else %}Start{% endif %}</a>
+     <a class="btn ghost" href="/find">Look up another company</a></p>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById("copyletter");
+  if (!btn || !(navigator.clipboard && navigator.clipboard.writeText)) return;
+  btn.hidden = false;
+  btn.addEventListener("click", function () {
+    navigator.clipboard.writeText({{ (letter.subject ~ "\n\n" ~ letter.body) | tojson }})
+      .then(function () { document.getElementById("copied").hidden = false; })
+      .catch(function () {});
+  });
+})();
+</script>
+{% else %}
+<h1>Write the letter</h1>
+{% if error %}<div class="note bad">{{ error }}</div>{% endif %}
+{% include "_letter_form.html" %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,73 @@
+name: outreach
+
+# One letter a week to each of up to OUTREACH_PER_RUN (default 20)
+# organisations that help people into work: employability charities, job
+# clubs, careers services. Never to a person's address, never twice to the
+# same organisation, never from the mailbox the job hunt runs on. See
+# product/outreach.py and product/app/org_outreach.py.
+#
+# The list comes from the Charity Commission's public register extract,
+# filtered by tools/find_orgs.py to charities whose stated activities are
+# getting people into work.
+#
+# Sends nothing until the repository variable OUTREACH_REPLY_TO is set (the
+# address replies go to). Until then every run is a rehearsal whose log shows
+# the letters it would have sent. Off: OUTREACH_ENABLED=0.
+
+on:
+  schedule:
+    # Tuesdays, mid-morning UK, when a small charity's inbox is read.
+    - cron: "13 9 * * 2"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: outreach
+  cancel-in-progress: false
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: product
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: product/requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Fetch the charity register
+        env:
+          CCEW_REGISTER_URL: ${{ vars.CCEW_REGISTER_URL || 'https://ccewuksprdoneregsadata1.blob.core.windows.net/data/txt/publicextract.charity.zip' }}
+        run: |
+          curl -sSfL "$CCEW_REGISTER_URL" -o register.zip
+          unzip -o -q register.zip -d register
+          ls -la register
+      - name: Pick the organisations that help people into work
+        run: python -m tools.find_orgs --from-file register/*.txt --out orgs.json
+      - name: Write to this week's
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          CREDENTIAL_KEY: ${{ secrets.CREDENTIAL_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+          STRIPE_PAYMENT_LINK: ${{ secrets.STRIPE_PAYMENT_LINK }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          APP_SMTP_ADDRESS: ${{ secrets.APP_SMTP_ADDRESS }}
+          OUTREACH_ENABLED: ${{ vars.OUTREACH_ENABLED }}
+          OUTREACH_REPLY_TO: ${{ vars.OUTREACH_REPLY_TO }}
+          OUTREACH_PER_RUN: ${{ vars.OUTREACH_PER_RUN }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL must be a repository secret."
+            exit 1
+          fi
+          python -m app.org_outreach --orgs orgs.json

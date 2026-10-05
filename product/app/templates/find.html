@@ -63,6 +63,15 @@ find a real address to write to. Free, no account.</p>
       two proof points, one question. <a href="/playbook">The full method is
       here, free.</a></p>
     </div>
+
+    {% if letter_on %}
+      {% set top = found[0] %}
+      {% set form = {"to": top.email, "company": company or "",
+                     "advert": advert or "",
+                     "greet": (top.name if top.tier == 3 and top.name else ""),
+                     "job": "", "about": "", "name": "", "phone": ""} %}
+      {% include "_letter_form.html" %}
+    {% endif %}
   {% else %}
     {% if looked_up and not looked_up.domain %}
     <div class="note">
