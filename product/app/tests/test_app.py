@@ -77,7 +77,7 @@ class TestPublicPages(AppTestCase):
     def test_landing_renders_and_shows_the_evidence(self):
         r = self.client.get("/")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("Get your CV in front of a human", r.text)
+        self.assertIn("emailed the person hiring", r.text)
 
     def test_the_claim_matches_what_is_actually_counted(self):
         """The claim went away and came back, and which is correct depends
@@ -128,7 +128,7 @@ class TestPublicPages(AppTestCase):
         """
         body = self.client.get("/").text
         cta = body.find('class="hero-cta"')
-        stats = body.find('class="stats"')
+        stats = body.find('class="stats')
         self.assertNotEqual(cta, -1, "no call to action in the hero")
         self.assertLess(cta, stats,
                         "the call to action is below the evidence again")
