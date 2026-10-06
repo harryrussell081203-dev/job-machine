@@ -14,7 +14,16 @@
 
 <p class="steplabel">Step 1 of 2</p>
 <h1>What work do you want?</h1>
-<p class="lede">Say it like you'd say it to a mate. One or two sentences.</p>
+{# Exactly the four things the search runs on, each with an example. "Say
+   it however you like" invited answers the machine cannot use - a mood, a
+   career story, three cities - and every vague answer is a worse search. #}
+<p class="lede">Tell us these four things, in one or two sentences:</p>
+<ol class="needs">
+  <li><b>The job you want</b> <span>e.g. warehouse operative</span></li>
+  <li><b>Your town or city</b> <span>e.g. Leeds</span></li>
+  <li><b>Your last job, and who it was with</b> <span>e.g. forklift driver at Tesco</span></li>
+  <li><b>The least you&rsquo;d take</b> <span>e.g. &pound;12 an hour, or &pound;24,000 a year</span></li>
+</ol>
 
 {% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
 
@@ -22,9 +31,10 @@
   <label for="about" class="sr-only">The work you want</label>
   <textarea id="about" name="about" rows="4" maxlength="600" required autofocus
     style="min-height:110px"
-    placeholder="e.g. I've driven forklifts at Tesco in Leeds for 3 years and want warehouse or driving work, at least £12 an hour">{{ about or '' }}</textarea>
-  <p class="hint">The job you want, where, your last job and the least you'd
-    take. Leave out anything you're not sure of; you'll be asked.</p>
+    placeholder="Warehouse operative in Leeds. Last job: forklift driver at Tesco. At least £12 an hour.">{{ about or '' }}</textarea>
+  <p class="hint">Miss one out and we&rsquo;ll ask for it on the next
+    screen. You&rsquo;ll see exactly what we understood before anything
+    starts.</p>
   <button class="btn">Next</button>
 </form>
 <p class="hint"><a href="/start?boxes=1">I'd rather answer questions</a></p>

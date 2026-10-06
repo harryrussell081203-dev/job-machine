@@ -953,3 +953,8 @@ figure.demo video { display: block; width: 100%; height: auto;
   box-shadow: 0 12px 34px rgba(0, 0, 0, .18); }
 figure.demo figcaption { margin-top: 10px; font-size: 13.5px;
   color: var(--muted); line-height: 1.45; }
+
+/* The four things /start needs, each with an example. */
+ol.needs { margin: 6px 0 16px; padding-left: 22px; line-height: 1.5; }
+ol.needs li { margin: 5px 0; }
+ol.needs span { display: block; color: var(--muted); font-size: 14px; }
