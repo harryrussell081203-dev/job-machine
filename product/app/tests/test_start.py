@@ -149,7 +149,7 @@ class ANewAddressIsStraightIn(StartCase):
     def test_no_link_before_the_search_starts(self):
         r = self.join()
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/dashboard?welcome=1")
+        self.assertEqual(r.headers["location"], "/dashboard?welcome=1#welcome")
         self.assertEqual(self.mail, [])
         profile = self.profile()
         self.assertEqual(profile["target_roles"], ["warehouse operative"])

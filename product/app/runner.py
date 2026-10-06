@@ -48,10 +48,24 @@ class RunReport:
     errors: list = field(default_factory=list)
 
     def summary(self) -> str:
+        """Every listing accounted for. It used to name only three reasons,
+        so "2 drafted from 5 (1 had no real address)" left two jobs
+        unexplained to the person reading it, and the honest reason - a
+        domain that takes no mail, a firm that has closed - was the one
+        they most needed to see."""
+        reasons = [f"{self.no_address} had no real address",
+                   f"{self.scored_out} scored too low",
+                   f"{self.already_contacted} already contacted"]
+        for count, words in ((self.prefiltered, "below your pay floor or not a real vacancy"),
+                             (self.undeliverable, "the email domain takes no mail"),
+                             (self.too_far, "too far away"),
+                             (self.dissolved, "the company has closed"),
+                             (self.other_kind, "not the kind of job you picked"),
+                             (self.blocked, "on your never-write-to list")):
+            if count:
+                reasons.append(f"{count}: {words}")
         return (f"{self.drafted} drafted from {self.harvested} listings "
-                f"({self.no_address} had no real address, "
-                f"{self.scored_out} scored too low, "
-                f"{self.already_contacted} already contacted)")
+                f"({', '.join(reasons)})")
 
 
 def wanted(listing, settings: dict) -> bool:
