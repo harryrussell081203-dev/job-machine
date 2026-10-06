@@ -1,0 +1,79 @@
+{# "What's stopping you?" - asked once, to somebody who has been on the page a
+   while without starting. One tap answers it. The reasons are fixed (see
+   app/pulse.py) so the answers add up; "something else" opens one short
+   line. Remembered on this device only, so nobody is asked twice, and
+   nothing about the person is sent. #}
+<div class="why-card" id="whycard" hidden role="dialog" aria-labelledby="whytitle">
+  <button class="why-close" type="button" aria-label="Close">&times;</button>
+  <p id="whytitle"><b>Quick question: what&rsquo;s stopping you?</b></p>
+  <div class="why-options">
+    {% for key, label in [("unsure", "I'm not sure it works"),
+                          ("unclear", "I don't get what it does"),
+                          ("details", "I don't want to give my details"),
+                          ("not-looking", "I'm not looking right now"),
+                          ("browsing", "Just having a look"),
+                          ("other", "Something else")] %}
+      <button type="button" class="why-opt" data-reason="{{ key }}">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <form class="why-other" hidden>
+    <input type="text" maxlength="200" placeholder="What would help? (no personal details)">
+    <button class="btn small" type="submit">Send</button>
+  </form>
+  <p class="why-thanks" hidden>Thanks. That helps us fix it.</p>
+  <p class="hint" style="margin:6px 0 0">Anonymous. One tap.</p>
+</div>
+<script>
+(function () {
+  var card = document.getElementById("whycard");
+  if (!card) return;
+  var KEY = "rc-why-asked";
+  var page = "{{ why_page }}";
+  try { if (localStorage.getItem(KEY)) return; } catch (e) {}
+  var acted = false;
+  document.addEventListener("click", function (ev) {
+    var el = ev.target.closest && ev.target.closest("[data-pulse^='land:cta'], form[action='/start'] button, form[action='/start/read'] button");
+    if (el) acted = true;
+  }, true);
+  document.addEventListener("input", function () { acted = true; }, true);
+
+  function remember() { try { localStorage.setItem(KEY, "1"); } catch (e) {} }
+  function show() {
+    if (acted || !card.hidden) return;
+    card.hidden = false; remember();
+    window.rcPulse && rcPulse("why:shown");
+  }
+  // Long enough to have read the top of the page and decided something.
+  setTimeout(show, {{ why_after or 35 }} * 1000);
+  // On a computer, the pointer heading for the tab bar is the moment.
+  document.addEventListener("mouseout", function (ev) {
+    if (!ev.relatedTarget && ev.clientY <= 0) show();
+  });
+
+  function send(reason, text) {
+    fetch("/why", { method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reason: reason, text: text || "", page: page }) })
+      .catch(function () {});
+    card.querySelector(".why-options").hidden = true;
+    card.querySelector(".why-other").hidden = true;
+    card.querySelector(".why-thanks").hidden = false;
+    setTimeout(function () { card.hidden = true; }, 2200);
+  }
+  card.querySelectorAll(".why-opt").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var reason = b.getAttribute("data-reason");
+      if (reason === "other") {
+        card.querySelector(".why-options").hidden = true;
+        var f = card.querySelector(".why-other");
+        f.hidden = false; f.querySelector("input").focus();
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault(); send("other", f.querySelector("input").value);
+        }, { once: true });
+      } else { send(reason); }
+    });
+  });
+  card.querySelector(".why-close").addEventListener("click", function () {
+    card.hidden = true; window.rcPulse && rcPulse("why:dismissed");
+  });
+})();
+</script>

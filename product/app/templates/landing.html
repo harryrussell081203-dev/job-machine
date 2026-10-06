@@ -87,7 +87,7 @@ and write them a short email from you. You just tell us what work you
 want.</p>
 
 <p class="hero-cta">
-  <a class="btn" href="/start">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
+  <a class="btn" href="/start" data-pulse="land:cta:hero">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
   <a class="btn ghost" href="#how">See how it works</a>
 </p>
 <p class="hero-note"><small>
@@ -285,7 +285,7 @@ or tell you straight if there are none.</p>
   <h2 style="margin-top:0">Ready to get replies?</h2>
   <p>Tell us the job you want. We will start looking straight away.</p>
   <p class="hero-cta" style="margin-bottom:0">
-    <a class="btn" href="/start">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
+    <a class="btn" href="/start" data-pulse="land:cta:final">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
     <a class="btn ghost" href="/find">Try it on one company</a></p>
   {% if spots_left %}<p class="hint" style="margin-bottom:0">{{ spots_left }}
     free place{{ '' if spots_left == 1 else 's' }} left. No card.</p>{% endif %}
@@ -316,4 +316,9 @@ not counted in that {{ record.reply_rate }}% reply rate.
 <a href="/numbers">Every figure.</a>{% endif %}</small></p>
 </details>
 
+{# Where people stop, and why (app/pulse.py). Anonymous counts only. #}
+<script>document.body.setAttribute("data-pulse-page", "landing");</script>
+<script src="/static/pulse.js?v={{ asset_version }}" defer></script>
+{% set why_page = "landing" %}{% set why_after = 35 %}
+{% include "_why.html" %}
 {% endblock %}
