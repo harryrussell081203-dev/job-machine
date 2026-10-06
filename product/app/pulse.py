@@ -46,6 +46,7 @@ EVENTS = (
 )
 
 MAX_TEXT = 200
+KEEP_FOR = 60 * 86400
 
 
 def allowed(name: str) -> bool:
@@ -85,10 +86,13 @@ def save_reason(reason: str, text: str, page: str, user_agent: str = "") -> bool
     text = " ".join((text or "").split())[:MAX_TEXT]
     if text and not views.looks_like_a_robot(user_agent):
         try:
+            now = int(time.time())
             with connect() as c:
                 c.execute("INSERT INTO feedback (at, page, reason, text) "
-                          "VALUES (?, ?, ?, ?)",
-                          (int(time.time()), page[:40], reason, text))
+                          "VALUES (?, ?, ?, ?)", (now, page[:40], reason, text))
+                # The privacy notice says 60 days, the same as the tallies.
+                c.execute("DELETE FROM feedback WHERE at < ?",
+                          (now - KEEP_FOR,))
         except Exception:
             pass
     return True

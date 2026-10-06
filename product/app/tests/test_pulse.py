@@ -47,6 +47,18 @@ class Counting(AppTestCase):
         said = self.main.pulse.comments(since=time.time() - 60)
         self.assertEqual(said[0]["text"], "Is it really free?")
 
+    def test_words_are_kept_sixty_days_as_the_privacy_notice_says(self):
+        import time
+        from app.store import connect
+        with connect() as c:
+            c.execute("INSERT INTO feedback (at, page, reason, text) "
+                      "VALUES (?, 'landing', 'other', 'old')",
+                      (int(time.time()) - 61 * 86400,))
+        self.client.post("/why", headers=PHONE, json={
+            "reason": "other", "text": "new", "page": "landing"})
+        texts = [c["text"] for c in self.main.pulse.comments(since=0)]
+        self.assertEqual(texts, ["new"])
+
     def test_an_unknown_reason_is_refused(self):
         r = self.client.post("/why", headers=PHONE, json={"reason": "hack"})
         self.assertEqual(r.status_code, 400)
