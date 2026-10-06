@@ -62,25 +62,20 @@
 }
 </script>
 
-<h1>Get your CV in front of a human</h1>
-<p class="lede">Most applications vanish into a system. This emails the person
-who actually does the hiring, from your own address.</p>
+{# The founder's own results lead, because a stranger trusts a person's
+   outcome over a product's promise. Every figure is from app/proof.py,
+   counted from his inbox, and the fold says exactly how. No employer is
+   named: one is his current one. #}
+<h1>I stopped clicking Apply and emailed the person hiring. 3 job offers.</h1>
+<p class="lede">This is the tool I built to do it. It finds the real address
+at the company, writes a short letter, and you send it from your own email.</p>
 
-{# The free tool leads now. A stranger who has watched it find a real address
-   will sign up; a stranger shown a sign-up box first mostly will not. Nine
-   people reached this page one evening and two signed up - the other seven
-   left at a form they had no reason yet to trust.
-
-   And it is no longer a LINK to the tool, it is the tool. 122 real people
-   reached this page over a week and 17 went on to /find. The button was not
-   the obstacle - it said "See it work. No account" and was the first thing on
-   the page. The obstacle was that it was a button at all, because a stranger
-   who is not yet sure this is worth a tap does not spend one. #}
-{% include "_finder.html" %}
-
+{# The account button sits above the evidence: a reader sold by the headline
+   should not have to scroll past it to act. The finder below is the
+   no-account route for everybody else. #}
 <p class="hero-cta">
-  <a class="btn ghost" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
-  <a class="btn ghost" href="/playbook">Read the method free</a>
+  <a class="btn" href="/login">{% if spots_left %}Start free: no card{% else %}Start{% endif %}</a>
+  <a class="btn ghost" href="#try">Try it on a company first</a>
 </p>
 <p class="hero-note"><small>
   {%- if spots_left %}
@@ -90,32 +85,71 @@ who actually does the hiring, from your own address.</p>
     application. Cancel any time.{% endif %}
 </small></p>
 
-{% if record %}
-<div class="stats">
-  <div class="stat"><b>{{ record.applications }}</b><span>emails sent</span></div>
-  <div class="stat"><b>{{ record.replies }}</b><span>replies</span></div>
-  <div class="stat"><b>{{ record.reply_rate }}%</b><span>reply rate</span></div>
+<div class="stats proof">
+  <div class="stat"><b>{{ proof.sent }}</b><span>applications emailed</span></div>
+  <div class="stat"><b>{{ proof.replied }}</b><span>people wrote back</span></div>
+  <div class="stat"><b>{{ proof.interviews }}</b><span>employers interviewed me</span></div>
+  <div class="stat"><b>{{ proof.offers }}</b><span>job offers</span></div>
 </div>
-{# Five things this paragraph has to keep doing, in eight lines instead of
-   twenty. Cutting for length lost three of them on the first pass and the
-   tests caught it, which is what they are for:
+<p class="hint">These are the founder's own results: my job search,
+  {{ proof.period }}, counted email by email from my inbox.</p>
 
+<div class="panel quote">
+  <p>&ldquo;Portals never answered. When I wrote to a real person instead,
+  people wrote back, and three of them offered me a job. One offer came 16
+  days after a single email to a company&rsquo;s info@ address.&rdquo;</p>
+  <p class="muted"><small>Harry, who built this</small></p>
+  <ol class="timeline">
+    {% for when, what in proof.timeline %}
+      <li><b>{{ when }}</b> {{ what }}</li>
+    {% endfor %}
+  </ol>
+</div>
+
+<h2 id="try">Try it: no account</h2>
+<p>Type any company. It shows the addresses that company publishes, or says
+plainly that there are none.</p>
+{% include "_finder.html" %}
+
+<h2>Why it works: it never guesses</h2>
+<div class="panel scroll">
+<table>
+  <tr><th></th><th class="num">Sent</th><th class="num">Bounced</th><th class="num">A person replied</th></tr>
+  <tr><td>{{ proof.guessed.label }}</td>
+      <td class="num">{{ proof.guessed.sent }}</td>
+      <td class="num">{{ proof.guessed.bounced }} ({{ proof.guessed.bounce_pct }}%)</td>
+      <td class="num">{{ proof.guessed.replied }} ({{ proof.guessed.reply_pct }}%)</td></tr>
+  <tr><td><b>{{ proof.published.label }}</b></td>
+      <td class="num">{{ proof.published.sent }}</td>
+      <td class="num"><b>{{ proof.published.bounced }} ({{ proof.published.bounce_pct }}%)</b></td>
+      <td class="num"><b>{{ proof.published.replied }} ({{ proof.published.reply_pct }}%)</b></td></tr>
+</table>
+</div>
+<p>Guessed addresses bounced almost half the time. Addresses the employer
+published reached a person, and 1 in 4 wrote back. That rule is the whole
+product.</p>
+
+{# What the fold has to keep saying, each for a reason (tests hold it):
      whose numbers they are      or they are not checkable
      that it is every letter     or they could be a good fortnight
      what is excluded            or the rate is the usual inflated kind
-     that a reply is not a job   or 19% reads as 19% getting hired
-     that no trade is assumed    or every non-engineer reads themselves out
-#}
+     that a reply is not a job   or a reply count reads as hires
+     that no trade is assumed    or every non-engineer reads themselves out #}
 <details class="fold"><summary><small>How these are counted</small></summary>
-<p><small>These are the founder's own, across {{ record.employers }} employers
-from August to 23 September &mdash; every letter, not a good fortnight chosen
-out of it. His search runs on this site now. Cold email normally
-gets 1&ndash;5%. Autoresponders and rejections are not counted in that
-{{ record.reply_rate }}%, and a reply is not the same thing as an interview.
+<p><small>Every application email in my sent mail since 1 May, counted on
+{{ proof.counted_on }}: every letter, not a good fortnight chosen out of it.
+"A person wrote back" includes polite noes, because a no from a person still
+means the email reached one; automatic replies and bounces are not counted.
+Replies that arrived as a new email are missed, so it is a floor.
+And a reply is not the same thing as an interview: interviews and offers are
+only the ones I have in writing.
 Nothing in it is built around a trade: a carer, a driver and a welder get the
-same machine. <a href="/numbers">Every figure.</a></small></p>
+same machine.
+{% if record %}The machine's own running tally since August is
+{{ record.applications }} letters; autoresponders and rejections are
+not counted in that {{ record.reply_rate }}% reply rate.
+<a href="/numbers">Every figure.</a>{% endif %}</small></p>
 </details>
-{% endif %}
 
 <h2>Who you write to decides everything</h2>
 <div class="panel scroll">

@@ -888,3 +888,11 @@ fieldset.choices legend { padding: 0; margin-bottom: 4px; }
 /* The employer directory index: a plain A to Z list in columns. */
 ul.employers { columns: 2; column-gap: 24px; padding-left: 18px; }
 @media (max-width: 520px) { ul.employers { columns: 1; } }
+
+/* The founder's results on the landing page: four figures, a quote, and the
+   one application told start to finish. */
+.stats.proof { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 520px) { .stats.proof { grid-template-columns: repeat(2, 1fr); } }
+.panel.quote p:first-child { font-size: 1.08em; }
+ol.timeline { margin: 10px 0 0; padding-left: 18px; }
+ol.timeline li { margin: 4px 0; }

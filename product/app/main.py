@@ -46,6 +46,7 @@ from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
 from . import directory  # noqa: E402
+from . import proof  # noqa: E402
 from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
 from . import search_console  # noqa: E402
@@ -276,7 +277,8 @@ def needs_login(request: Request | None = None):
 def landing(request: Request):
     if current_user(request):
         return RedirectResponse("/dashboard", status_code=303)
-    return render(request, "landing.html", spots_left=db.free_spots_left())
+    return render(request, "landing.html", spots_left=db.free_spots_left(),
+                  proof=proof.summary())
 
 
 # ----------------------------------------------------------------------

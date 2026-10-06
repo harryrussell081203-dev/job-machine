@@ -148,9 +148,11 @@ class TestOnThePage(AppTestCase):
         try:
             r = self.client.get("/")
             self.assertEqual(r.status_code, 200)
-            self.assertIn("Get your CV in front of a human", r.text)
-            # No claim at all, rather than a stale or empty one.
-            self.assertNotIn("emails sent", r.text)
+            self.assertIn("emailed the person hiring", r.text)
+            # No claim about the machine's tally, rather than a stale or
+            # empty one. The founder's inbox count does not depend on it.
+            self.assertNotIn("running tally", r.text)
+            self.assertNotIn("Every figure.", r.text)
         finally:
             tr.PATH, tr._cache = real, cache
 
