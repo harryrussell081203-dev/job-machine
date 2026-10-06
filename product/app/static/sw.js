@@ -61,6 +61,11 @@ self.addEventListener("fetch", (event) => {
 
   // Static only. Note what is NOT here: documents, JSON, anything under a
   // path that needs a session.
+  // Video is left to the browser entirely. Safari fetches it in byte
+  // ranges and will not play a whole-file answer from a cache, so the clip
+  // on the landing page would sit on its poster frame forever.
+  if (req.headers.has("range") || url.pathname.startsWith("/static/demo/")) return;
+
   const isStatic = url.pathname.startsWith("/static/");
   if (!isStatic) {
     event.respondWith(

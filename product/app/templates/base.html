@@ -17,13 +17,13 @@
    where it is declared, so the obvious version leaks the description into
    the top of the page as loose text. Any view can override by passing
    og_title / og_description to render(). #}
-{% set _og_title = og_title | default("Recruited - your CV, in front of a human") %}
+{% set _og_title = og_title | default("Recruited: stop clicking Apply, start getting replies") %}
 {# The numbers here were typed in by hand and went stale the same week. They
    come from the published track record now, and the sentence stands on its
    own when there is none - a description is not worth a blank where a figure
    should be. #}
 {% set _og_proof %}{% if record %} {{ record.applications }} applications, {{ record.replies }} replies, {{ record.reply_rate }}%.{% endif %}{% endset %}
-{% set _og_desc = og_description | default("A real email address at every company, never guessed." ~ _og_proof) %}
+{% set _og_desc = og_description | default("We find UK jobs, find the real person hiring, and write them a short email from you. Real addresses only, never guessed." ~ _og_proof) %}
 <meta name="description" content="{{ _og_desc }}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Recruited">
