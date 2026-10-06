@@ -64,5 +64,32 @@ class TheRunSummary(unittest.TestCase):
         self.assertIn("243: below your pay floor", r.summary())
 
 
+from test_app import AppTestCase  # noqa: E402
+
+
+class SendingItYourself(AppTestCase):
+    def draft(self, body):
+        self.sign_in()
+        user = self.main.db.get_user_by_email("sam@example.com")
+        self.main.db.add_draft(user["id"], job_title="Forklift Driver",
+                               company="Aire Valley Foods", location="Bradford",
+                               listing_url="", salary_text="", score=80,
+                               to_email="jane@airevalley.example",
+                               to_name="Jane", contact_tier=3,
+                               subject="Forklift Driver", body=body)
+        return self.client.get("/drafts").text
+
+    def test_a_letter_that_promises_a_cv_says_to_attach_it(self):
+        """A Gmail or mail-app link cannot carry a file, so the letter's
+        'CV attached' was true only on automatic sending."""
+        page = self.draft("Hi Jane,\n\nShort.\n\nSam\nSam Example / 07700 900123 / CV attached")
+        self.assertIn("Attach your CV", page)
+        self.assertIn('href="/cv"', page)
+
+    def test_a_letter_without_one_does_not(self):
+        page = self.draft("Hi Jane,\n\nShort.\n\nSam\nSam Example / 07700 900123")
+        self.assertNotIn("Attach your CV", page)
+
+
 if __name__ == "__main__":
     unittest.main()
