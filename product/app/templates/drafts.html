@@ -69,6 +69,16 @@
     {% endif %}
 
     {% if status == 'draft' %}
+      {# The letter promises a CV. Automatic sending attaches it; a mail or
+         Gmail link cannot carry a file, so somebody sending by hand would
+         otherwise send "CV attached" with nothing attached - the one claim
+         this product says it never makes. #}
+      {% if 'CV attached' in d['body'] %}
+        <p class="note attach"><b>Sending it yourself? Attach your CV
+          first.</b> This email says it's attached, and the links below can't
+          add files for you. <a href="/cv">Download your CV</a>.
+          <small>Automatic sending attaches it for you.</small></p>
+      {% endif %}
       <div class="actions">
         <a class="btn" href="{{ item.mailto }}">Open in mail app</a>
         <a class="btn ghost" href="{{ item.gmail }}" target="_blank"
