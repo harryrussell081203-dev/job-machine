@@ -389,6 +389,17 @@ CREATE TABLE IF NOT EXISTS outreach_log (
     at        BIGINT  NOT NULL
 );
 
+-- Answers given on /start before an account exists, keyed by the id of the
+-- sign-in link they were sent with. Kept server side so nothing personal
+-- rides in the link itself, taken (and deleted) when that link is tapped,
+-- and pruned after a couple of days if it never is.
+CREATE TABLE IF NOT EXISTS signup_drafts (
+    jti        TEXT    PRIMARY KEY,
+    email      TEXT    NOT NULL,
+    data       TEXT    NOT NULL,
+    created_at BIGINT  NOT NULL
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The

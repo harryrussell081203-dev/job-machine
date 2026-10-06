@@ -71,12 +71,12 @@
     <h2 style="margin-top:0">What it cannot tell us</h2>
 
     <label for="min_salary_annual">The least you will work for, a year</label>
-    <input id="min_salary_annual" name="min_salary_annual" type="number"
+    <input id="min_salary_annual" name="min_salary_annual" type="number" data-echo="pay-year"
            min="0" inputmode="numeric" placeholder="35000"
            value="{{ data.get('min_salary_annual') or '' }}">
 
     <label for="min_rate_hourly">Or an hour, on a contract</label>
-    <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0"
+    <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0" data-echo="pay-hour"
            inputmode="numeric" placeholder="18"
            value="{{ data.get('min_rate_hourly') or '' }}">
     <p class="hint">Either one is enough. Anything paying less is refused.</p>

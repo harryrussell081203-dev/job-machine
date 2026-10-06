@@ -74,15 +74,16 @@ at the company, writes a short letter, and you send it from your own email.</p>
    should not have to scroll past it to act. The finder below is the
    no-account route for everybody else. #}
 <p class="hero-cta">
-  <a class="btn" href="/login">{% if spots_left %}Start free: no card{% else %}Start{% endif %}</a>
+  <a class="btn" href="/start">{% if spots_left %}Start free: no card{% else %}Start{% endif %}</a>
   <a class="btn ghost" href="#try">Try it on a company first</a>
 </p>
 <p class="hero-note"><small>
-  {%- if spots_left %}
-    {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,
+  About a minute: say what work you want, and it starts looking.
+  {% if spots_left %}{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,
     then {{ config.PRICE_LABEL }}. No card.
   {%- else %}{{ config.PRICE_LABEL }}. No credits, no charge per
     application. Cancel any time.{% endif %}
+  Already signed up? <a href="/login">Sign in</a>.
 </small></p>
 
 <div class="stats proof">
@@ -239,7 +240,7 @@ Sam Doherty
   </ul>
   <p class="hint">No credits, no charge per application. Cancel from your
     account page.</p>
-  <p><a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
+  <p><a class="btn" href="/start">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
   {% if spots_left %}<small class="muted">&nbsp;{{ spots_left }} free
     place{{ '' if spots_left == 1 else 's' }} left. No card.</small>{% endif %}</p>
 </div>

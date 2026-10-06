@@ -27,7 +27,7 @@ sys.path.insert(0, ROOT)
 from app.tests.test_sending import Base  # noqa: E402
 
 PUBLIC = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
-          "/privacy", "/login")
+          "/privacy", "/login", "/start")
 
 
 class TestOneAddressPerPage(Base):

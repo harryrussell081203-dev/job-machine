@@ -1,0 +1,20 @@
+{# What somebody told us, said back with a tick against each line.
+
+   Used wherever answers turn into something the machine now knows: after
+   reading a sentence on /start, on the "check your email" screen, on the
+   one-tap confirm, and from the CV. Only lines that were actually answered
+   appear; nothing here is a guess dressed as a fact. #}
+{% macro understood(items, title="") -%}
+{% if items %}
+<div class="understood">
+  {% if title %}<p class="understood-title">{{ title }}</p>{% endif %}
+  <ul>
+    {% for item in items %}
+      <li><span class="tick" aria-hidden="true">&#10003;</span>
+        <span><span class="label">{{ item.label }}</span>
+        <b>{{ item.text }}</b></span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{%- endmacro %}

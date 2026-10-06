@@ -70,7 +70,9 @@ class ThePage(AppTestCase):
                 "min_pay": "13"})):
             r = self.client.post("/setup/describe",
                                  data={"about": "cook in York at Bettys"})
-        self.assertIn("Filled in from what you wrote", r.text)
+        # Said back in words, then left in the boxes to check.
+        self.assertIn("£13 an hour or more", r.text)
+        self.assertIn("York, and 25 miles around", r.text)
         for value in ('value="chef"', 'value="York"', 'value="Bettys"',
                       'value="13"'):
             self.assertIn(value, r.text)

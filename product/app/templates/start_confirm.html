@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_understood.html" import understood %}
+{% block title %}Ready to start &middot; Recruited{% endblock %}
+{% block content %}
+
+{# Reached when a sign-in link is opened somewhere other than the browser
+   that answered the questions - a mail app's own browser, usually. One
+   screen, one button: the answers are shown so the person who typed them
+   recognises them, and so anybody who did not type them sees what would be
+   sent in their name before anything is. #}
+<p class="steplabel">You're in</p>
+<h1>Ready to start looking{% if headline %} for {{ headline }}{% endif %}</h1>
+
+{{ understood(playback, "Here's what you told us") }}
+
+<form method="post" action="/start/confirm">
+  <input type="hidden" name="draft" value="{{ draft_id }}">
+  <p><button class="btn" type="submit">Start looking</button></p>
+  <p class="hint"><button class="link" type="submit" name="action"
+    value="edit">Change something first</button></p>
+</form>
+
+<p class="hint">Didn't fill this in? Don't press anything. Nothing is saved
+  or sent until you do.</p>
+
+{% endblock %}

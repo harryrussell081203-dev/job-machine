@@ -37,13 +37,13 @@
       <div>
         <label for="name">Full name</label>
         <p class="hint">As it signs a letter.</p>
-        <input id="name" name="name" type="text" required
+        <input id="name" name="name" type="text" required data-echo="name"
                value="{{ data.get('name','') }}">
       </div>
       <div>
         <label for="phone">Phone</label>
         <p class="hint">Printed in every sign-off.</p>
-        <input id="phone" name="phone" type="text" required
+        <input id="phone" name="phone" type="text" required data-echo="phone"
                value="{{ data.get('phone','') }}">
       </div>
     </div>
@@ -52,7 +52,7 @@
         <label for="location">Where you are</label>
         <p class="hint">Your home town. Distances on each job are measured from
           here.</p>
-        <input id="location" name="location" type="text" required
+        <input id="location" name="location" type="text" required data-echo="place"
                placeholder="Sheffield, England"
                value="{{ data.get('location','') }}">
       </div>
@@ -101,12 +101,12 @@
     <div class="row">
       <div>
         <label for="min_salary_annual">Lowest yearly salary worth your time</label>
-        <input id="min_salary_annual" name="min_salary_annual" type="number"
+        <input id="min_salary_annual" name="min_salary_annual" type="number" data-echo="pay-year"
                min="0" value="{{ data.get('min_salary_annual') or '' }}">
       </div>
       <div>
         <label for="min_rate_hourly">Lowest hourly rate on a contract</label>
-        <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0"
+        <input id="min_rate_hourly" name="min_rate_hourly" type="number" min="0" data-echo="pay-hour"
                value="{{ data.get('min_rate_hourly') or '' }}">
       </div>
     </div>

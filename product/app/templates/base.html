@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Recruited{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
+<script src="/static/understood.js?v={{ asset_version }}" defer></script>
 
 {# What a link to this site looks like when somebody shares it.
    Without these it is a bare grey URL with no title and no picture - on
@@ -100,7 +101,7 @@
          in" to an audience that has overwhelmingly never been here. It is the
          same button either way - there is no separate signup - so it should
          say the thing a first-time reader can act on. #}
-      <a class="cta" href="/login">{% if config.FREE_SPOTS %}Start free{% else %}Sign in{% endif %}</a>
+      <a class="cta" href="{% if config.FREE_SPOTS %}/start{% else %}/login{% endif %}">{% if config.FREE_SPOTS %}Start free{% else %}Sign in{% endif %}</a>
     {% endif %}
   </nav>
 </header>

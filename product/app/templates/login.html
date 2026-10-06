@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_understood.html" import understood %}
 {% block title %}{% if sent %}Check your email{% else %}Start{% endif %} &middot; Recruited{% endblock %}
 {% block content %}
 
@@ -6,13 +7,19 @@
   {# The screen somebody stares at wondering whether it worked. It has one
      job: get them into their inbox knowing exactly what they are looking
      for. Vague reassurance is what makes people give up here. #}
-  <h1>Check your email</h1>
+  <h1>{% if waiting %}One last tap{% else %}Check your email{% endif %}</h1>
   <div class="note good">
     <p style="margin-top:0">We have just sent a link to <b>{{ sent }}</b>.
-       Open it and you are in. There is no password to make up.</p>
+       {% if waiting %}Tap it and it starts looking for you straight
+       away.{% else %}Open it and you are in.{% endif %} There is no password
+       to make up.</p>
     <p style="margin-bottom:0">It is from <b>Recruited</b> and the subject is
        <b>&ldquo;Your sign-in link&rdquo;</b>.</p>
   </div>
+
+  {# Everything they answered, held for them, so the inbox is the last step
+     of something already built rather than the first step of a form. #}
+  {{ understood(waiting, "Saved and waiting for you") }}
 
   <div class="panel">
     <p><b>Not there after a minute?</b></p>
@@ -44,7 +51,7 @@
   <div class="panel">
     <form method="post" action="/login">
       <label for="email">Your email address</label>
-      <input id="email" name="email" type="email" required autofocus
+      <input id="email" name="email" type="email" required autofocus data-echo="email"
              autocomplete="email" inputmode="email" placeholder="you@example.com">
       <p style="margin-top:14px">
         <button type="submit">Email me a link</button></p>
