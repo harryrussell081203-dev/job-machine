@@ -102,10 +102,11 @@
     <form method="post" action="/setup/describe#quickerror" class="quick" data-busy="Reading what you wrote&hellip;">
       <label>Quicker: describe it in a sentence
         <textarea name="about" rows="3" maxlength="600" style="min-height:80px"
-          placeholder="e.g. I've driven forklifts at Tesco in Leeds for 3 years and want warehouse or driving work, at least £12 an hour">{{ about or '' }}</textarea>
-        <small class="hint">Say the job you want, where, your last job and
-          the least you'd take. It fills in the boxes below for you to check;
-          nothing is saved until you press Start looking.</small></label>
+          placeholder="Warehouse operative in Leeds. Last job: forklift driver at Tesco. At least £12 an hour.">{{ about or '' }}</textarea>
+        <small class="hint">Include the job you want, your town, your last
+          job and who it was with, and the least you'd take. It fills in the
+          boxes below for you to check; nothing is saved until you press
+          Start looking.</small></label>
       <button class="btn small ghost">Fill in the boxes for me</button>
     </form>
 
