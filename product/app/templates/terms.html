@@ -73,6 +73,14 @@ mailbox deletes the stored credential.</p>
 
 <h2>Paying</h2>
 <div class="panel">
+{% if config.FREE_SPOTS %}
+<p><b>Free places.</b> The first {{ config.FREE_SPOTS }} accounts are free
+for life: no card is asked for and nothing is ever charged to them, for as
+long as Recruited runs. A free place stays with the account that took it,
+including if the number of places is later changed. Deleting the account
+gives it up. Accounts made after the places are gone pay the price
+below.</p>
+{% endif %}
 <p>{{ config.PRICE_LABEL }}, taken by Stripe. Access starts when Stripe
 confirms the payment.</p>
 <p><b>Cancel any time</b>, from your account page. Cancelling stops the next

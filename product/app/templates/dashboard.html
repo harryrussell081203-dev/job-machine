@@ -2,9 +2,39 @@
 {% block content %}
 <h1>Dashboard</h1>
 
+{# The first screen after the link is tapped. It says, in their own terms,
+   that it understood and is already at work, because the only other sign of
+   that for the next few minutes is a progress bar. #}
+{% if welcome and profile %}
+  <div class="note good welcome">
+    <b>You're in{% if profile.name %}, {{ profile.name.split(' ')[0] }}{% endif %}.
+    It's looking for
+    {% if profile.target_roles %}{{ profile.target_roles | join(', ') }}{% else %}work{% endif %}
+    {% if profile.locations %}around {{ profile.locations | join(', ') }}{% endif %}
+    right now.</b>
+    Letters appear here as they're written. You don't need to keep this page
+    open.
+    {% if not machine.mailbox %}<br><a href="/setup/mail">Want it to send them
+    by itself? Connect your email</a>, about two minutes.{% endif %}
+  </div>
+{% endif %}
+
+{% if request.query_params.get('confirmed') == '1' %}
+  <div class="note good">Email confirmed. You can sign in with it on any
+    device now.</div>
+{% elif unconfirmed and not welcome %}
+  {# Never in the way: the search runs either way. It matters for signing in
+     elsewhere and for sending from a Recruited address. #}
+  <p class="hint">We sent a link to {{ user['email'] }} to confirm it's you.
+    {% if request.query_params.get('e') == 'resent' %}Sent again.{% else %}
+    <form method="post" action="/account/confirm" class="inline">
+      <input type="hidden" name="next" value="/dashboard">
+      <button class="link">Send it again</button></form>{% endif %}</p>
+{% endif %}
+
 {% if not profile %}
-  <div class="note">Upload your CV and we fill in most of the rest. About
-  ten minutes.</div>
+  <div class="note">Answer a few questions and it starts looking. About a
+  minute, no CV needed.</div>
   <p><a class="btn" href="/setup">Get started</a></p>
 {% else %}
   <div class="stats four">

@@ -66,6 +66,15 @@
    outcome over a product's promise. Every figure is from app/proof.py,
    counted from his inbox, and the fold says exactly how. No employer is
    named: one is his current one. #}
+{# The offer, above everything, while there is one. Every word of it is
+   true in the code: a claimed place is never taken back (db.is_paid), and
+   the count is live. When the places are gone this line goes with them. #}
+{% if spots_left %}
+<p class="offer"><b>Free for life</b> for the first {{ config.FREE_SPOTS }}
+  people &middot;
+  <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left</b>,
+  then {{ config.PRICE_LABEL }}</p>
+{% endif %}
 <h1>I stopped clicking Apply and emailed the person hiring. 3 job offers.</h1>
 <p class="lede">This is the tool I built to do it. It finds the real address
 at the company, writes a short letter, and you send it from your own email.</p>
@@ -74,15 +83,17 @@ at the company, writes a short letter, and you send it from your own email.</p>
    should not have to scroll past it to act. The finder below is the
    no-account route for everybody else. #}
 <p class="hero-cta">
-  <a class="btn" href="/login">{% if spots_left %}Start free: no card{% else %}Start{% endif %}</a>
+  <a class="btn" href="/start">{% if spots_left %}Get it free for life{% else %}Start{% endif %}</a>
   <a class="btn ghost" href="#try">Try it on a company first</a>
 </p>
 <p class="hero-note"><small>
-  {%- if spots_left %}
-    {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left,
-    then {{ config.PRICE_LABEL }}. No card.
+  About a minute: say what work you want, and it starts looking.
+  {% if spots_left %}No card, and nothing to pay later: when the free places
+    are gone, everyone after you pays {{ config.PRICE_LABEL }} and you never
+    do.
   {%- else %}{{ config.PRICE_LABEL }}. No credits, no charge per
     application. Cancel any time.{% endif %}
+  Already signed up? <a href="/login">Sign in</a>.
 </small></p>
 
 <div class="stats proof">
@@ -228,9 +239,15 @@ Sam Doherty
 </table>
 </div>
 
-<h2>One price</h2>
+<h2>One price{% if spots_left %}, unless you're early{% endif %}</h2>
 <div class="panel price">
+  {% if spots_left %}
+  <p class="price-line"><b>Free for life</b>
+    <small class="muted">for the first {{ config.FREE_SPOTS }} people,
+      then {{ config.PRICE_LABEL }}</small></p>
+  {% else %}
   <p class="price-line"><b>{{ config.PRICE_LABEL }}</b></p>
+  {% endif %}
   <ul>
     <li>Jobs found and letters written every weekday</li>
     <li>Sent from your email, or you press send</li>
@@ -239,9 +256,9 @@ Sam Doherty
   </ul>
   <p class="hint">No credits, no charge per application. Cancel from your
     account page.</p>
-  <p><a class="btn" href="/login">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
+  <p><a class="btn" href="/start">{% if spots_left %}Take a free place{% else %}Start{% endif %}</a>
   {% if spots_left %}<small class="muted">&nbsp;{{ spots_left }} free
-    place{{ '' if spots_left == 1 else 's' }} left. No card.</small>{% endif %}</p>
+    place{{ '' if spots_left == 1 else 's' }} left, free for life. No card.</small>{% endif %}</p>
 </div>
 
 <h2>Questions</h2>

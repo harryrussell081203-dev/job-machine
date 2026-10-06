@@ -90,7 +90,7 @@ class ThePage(AppTestCase):
         self.assertIn("Open in Gmail", r.text)
         self.assertIn("mail.google.com/mail/?view=cm", r.text)
         self.assertIn("mailto:jobs%40pennine.co.uk", r.text)
-        self.assertIn('<a class="btn" href="/login">', r.text)
+        self.assertIn('<a class="btn" href="/start">', r.text)
 
     def test_nothing_typed_is_stored(self):
         with patch("app.ai.gemini_now",

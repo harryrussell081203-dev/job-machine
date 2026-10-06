@@ -132,6 +132,41 @@ def _has_free_spot(user) -> bool:
         return False
 
 
+def email_unconfirmed(user) -> bool:
+    """Made without a sign-in link and not yet proved. Tolerant of a row
+    read before the column existed."""
+    try:
+        return bool(user["email_unconfirmed"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def session_epoch(user) -> int:
+    try:
+        return int(user["session_epoch"] or 0)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0
+
+
+def mark_unconfirmed(user_id: int) -> None:
+    with connect() as c:
+        c.execute("UPDATE users SET email_unconfirmed = 1 WHERE id = ?",
+                  (user_id,))
+
+
+def confirm_email(user_id: int) -> int:
+    """A link sent to this address was tapped. Returns the session epoch to
+    sign in with: unchanged for an address already confirmed, one higher -
+    signing out every older session - for one that was not."""
+    with connect() as c:
+        c.execute("UPDATE users SET email_unconfirmed = 0, "
+                  "session_epoch = session_epoch + 1 "
+                  "WHERE id = ? AND email_unconfirmed = 1", (user_id,))
+        row = c.execute("SELECT session_epoch FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+    return int(row["session_epoch"] or 0) if row else 0
+
+
 def free_spots_taken() -> int:
     with connect() as c:
         row = c.execute(
@@ -238,6 +273,58 @@ def overview() -> list[dict]:
 # ----------------------------------------------------------------------
 # magic-link replay protection
 # ----------------------------------------------------------------------
+# A ceiling on how long answers given on /start sit unclaimed. The link
+# they were sent with dies after fifteen minutes anyway; this only bounds how
+# long the personal details outlive it.
+SIGNUP_DRAFT_TTL = 2 * 86400
+
+
+def save_signup_draft(jti: str, email: str, data: dict) -> None:
+    """Keep /start's answers until the link sent with them is tapped."""
+    with connect() as c:
+        c.execute("DELETE FROM signup_drafts WHERE created_at < ?",
+                  (now() - SIGNUP_DRAFT_TTL,))
+        c.execute("INSERT INTO signup_drafts (jti, email, data, created_at) "
+                  "VALUES (?, ?, ?, ?) ON CONFLICT (jti) DO NOTHING",
+                  (jti, email.strip().lower(), json.dumps(data), now()))
+
+
+def signup_draft(email: str, jti: str = "") -> tuple[str, dict] | None:
+    """(its id, the answers) waiting for this address, or None.
+
+    The draft sent with this very link first; failing that the newest one for
+    the address, so somebody whose fifteen-minute link ran out and who asked
+    for another from the sign-in screen does not lose what they typed. That
+    second way is why tapping a link never saves a draft on its own: see
+    /start/confirm.
+    """
+    address = (email or "").strip().lower()
+    with connect() as c:
+        row = None
+        if jti:
+            row = c.execute("SELECT jti, email, data, created_at FROM "
+                            "signup_drafts WHERE jti = ?", (jti,)).fetchone()
+            if row and row["email"] != address:
+                row = None
+        if not row:
+            row = c.execute("SELECT jti, email, data, created_at FROM "
+                            "signup_drafts WHERE email = ? "
+                            "ORDER BY created_at DESC LIMIT 1",
+                            (address,)).fetchone()
+    if not row or row["created_at"] < now() - SIGNUP_DRAFT_TTL:
+        return None
+    try:
+        data = json.loads(row["data"])
+    except ValueError:
+        return None
+    return (row["jti"], data) if isinstance(data, dict) else None
+
+
+def drop_signup_draft(jti: str) -> None:
+    with connect() as c:
+        c.execute("DELETE FROM signup_drafts WHERE jti = ?", (jti,))
+
+
 def claim_token(jti: str) -> bool:
     """True the first time a token id is seen, False every time after.
 

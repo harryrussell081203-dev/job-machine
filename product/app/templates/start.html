@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "_understood.html" import understood %}
+{% block title %}Start &middot; Recruited{% endblock %}
+{% block content %}
+
+{# Two steps and a tap, in the order that keeps people going: the work first,
+   said back so they can see it was understood, then the email address as
+   the way to switch it on. See the note above /start in main.py for why the
+   account comes last. #}
+
+{% set q = q or {} %}
+
+{% if stage == "describe" %}
+
+<p class="steplabel">Step 1 of 2</p>
+<h1>What work do you want?</h1>
+<p class="lede">Say it like you'd say it to a mate. One or two sentences.</p>
+
+{% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
+
+<form method="post" action="/start/read" class="quick" data-busy="Reading what you wrote&hellip;">
+  <label for="about" class="sr-only">The work you want</label>
+  <textarea id="about" name="about" rows="4" maxlength="600" required autofocus
+    style="min-height:110px"
+    placeholder="e.g. I've driven forklifts at Tesco in Leeds for 3 years and want warehouse or driving work, at least £12 an hour">{{ about or '' }}</textarea>
+  <p class="hint">The job you want, where, your last job and the least you'd
+    take. Leave out anything you're not sure of; you'll be asked.</p>
+  <button class="btn">Next</button>
+</form>
+<p class="hint"><a href="/start?boxes=1">I'd rather answer questions</a></p>
+
+{% else %}
+
+<p class="steplabel">Step {% if missing %}1{% else %}2{% endif %} of 2</p>
+{% if playback %}
+  <h1>Got it.{% if not missing %} Nearly there.{% endif %}</h1>
+  {{ understood(playback, "Here's what I understood") }}
+{% else %}
+  <h1>A few quick questions</h1>
+  <p class="lede">About a minute. Then it starts looking for you.</p>
+{% endif %}
+
+{% if note %}<div class="note">{{ note }}</div>{% endif %}
+{% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
+
+<form method="post" action="/start#starterror" class="quick" data-busy="Setting it up&hellip;">
+  <input type="hidden" name="about" value="{{ about or '' }}">
+
+  {% macro field(key) %}
+    {% if key == "target_roles" %}
+      <label>What job are you after?
+        <input type="text" name="target_roles" required data-echo="role"
+               autocomplete="organization-title"
+               placeholder="e.g. warehouse operative, electrician"
+               value="{{ q.target_roles or '' }}">
+        <small class="hint">The title an employer would put on the advert. Two
+          or three is fine, with commas.</small></label>
+    {% elif key == "location" %}
+      <label>Where do you live?
+        <input type="text" name="location" required data-echo="place"
+               autocomplete="address-level2" placeholder="e.g. Leeds"
+               value="{{ q.location or '' }}"></label>
+    {% elif key == "last_title" %}
+      <label>Your last job: what you did
+        <input type="text" name="last_title" required data-echo="title"
+               placeholder="e.g. forklift driver" value="{{ q.last_title or '' }}">
+        <small class="hint">Even if it was short or different work. The letter
+          uses it as proof you've worked and never makes up anything
+          else.</small></label>
+    {% elif key == "last_org" %}
+      <label>Your last job: who it was with
+        <input type="text" name="last_org" required data-echo="org"
+               placeholder="e.g. Tesco" value="{{ q.last_org or '' }}"></label>
+    {% elif key == "min_pay" %}
+      <label>The least you'd work for
+        <input type="text" name="min_pay" required inputmode="decimal"
+               data-echo="pay"
+               placeholder="e.g. 24000 a year, or 12.50 an hour"
+               value="{{ q.min_pay or '' }}">
+        <small class="hint">Jobs that say they pay less are skipped.</small></label>
+    {% endif %}
+  {% endmacro %}
+
+  {# Only what is still unanswered is asked. What was understood is said
+     back above, and its boxes are folded here rather than gone, so a wrong
+     reading is one tap from being fixed. #}
+  {% set work = ["target_roles", "location", "last_title", "last_org", "min_pay"] %}
+  {% set asked = missing if playback else work %}
+  {% if asked %}
+    <div class="panel">
+      {% if playback %}
+        <h2 style="margin-top:0">Just {{ asked | length }} more thing{{ '' if asked | length == 1 else 's' }}</h2>
+      {% endif %}
+      {% for key in asked %}{{ field(key) }}{% endfor %}
+    </div>
+  {% endif %}
+  {% if playback %}
+    <details class="fold"><summary><small>Something I understood wrong? Change it</small></summary>
+      <div class="panel">
+        {% for key in work if key not in asked %}{{ field(key) }}{% endfor %}
+      </div>
+    </details>
+  {% endif %}
+
+  <div class="panel">
+    <p class="steplabel" style="margin-top:0">Step 2 of 2</p>
+    <h2 style="margin-top:0">How employers reach you</h2>
+    <label>Your name
+      <input type="text" name="name" required autocomplete="name"
+             data-echo="name" value="{{ q.name or '' }}">
+      <small class="hint">It signs every letter.</small></label>
+    <label>Your phone number
+      <input name="phone" required type="tel" autocomplete="tel"
+             data-echo="phone" value="{{ q.phone or '' }}">
+      <small class="hint">At the bottom of each letter, so an employer can
+        ring you. Never shown anywhere else.</small></label>
+    <label>Your email
+      <input name="email" required type="email" autocomplete="email"
+             inputmode="email" data-echo="email" placeholder="you@example.com"
+             value="{{ email or '' }}">
+      <small class="hint">Where you sign in from, with no password to
+        remember. Employers' replies come to the address you send from.</small></label>
+    <button class="btn">Start looking</button>
+    <p class="hint" style="margin-bottom:0">
+      {%- if spots_left %}<b>Free for life</b>: you're taking one of the last
+        {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }}. No card.
+      {%- else %}{{ config.PRICE_LABEL }}, cancel any time.{% endif %}
+      By carrying on you agree to the <a href="/terms">terms</a> and the
+      <a href="/privacy">privacy notice</a>.</p>
+  </div>
+</form>
+
+{% endif %}
+
+<p class="hint">Already have an account? <a href="/login">Sign in</a>.</p>
+
+{% endblock %}

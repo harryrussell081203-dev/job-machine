@@ -10,6 +10,10 @@
   <p class="lede">So letters go out from your address, not from a service.</p>
 {% endif %}
 
+{% if request.query_params.get('e') == 'confirm' %}
+  <div class="note bad">Confirm your email first: tap the link we sent to
+    {{ user['email'] }}. Your own mailbox, below, needs no link.</div>
+{% endif %}
 {% if request.query_params.get('e') == 'needed' %}
   <div class="note bad">Automatic sending needs an email account connected
     first.</div>
@@ -55,9 +59,27 @@
   {# The label deliberately does not repeat the address. It is set out in
      full directly above, and putting a 38-character address inside a button
      overflowed the panel on a 390px screen. #}
+  {% if unconfirmed %}
+    {# Replies to these letters go to the account's address, so it has to be
+       proved first. Their own mailbox, below, proves itself. #}
+    <div class="note" id="confirm">
+      <p><b>One tap first.</b> Employers' replies to these letters go to
+        <b>{{ user['email'] }}</b>, so we need to know it's yours. We emailed
+        it a link when you signed up; tap that and come back.</p>
+      {% if request.query_params.get('e') == 'resent' %}
+        <p class="ok">Sent again. Check spam if it isn't there.</p>
+      {% else %}
+        <form method="post" action="/account/confirm" class="inline">
+          <input type="hidden" name="next" value="/setup/mail">
+          <button class="link">Send the link again</button>
+        </form>
+      {% endif %}
+    </div>
+  {% else %}
   <form method="post" action="/setup/mail/managed">
     <button class="btn ghost">Use this address</button>
   </form>
+  {% endif %}
 </div>
 
 <h2>Use your own mailbox</h2>

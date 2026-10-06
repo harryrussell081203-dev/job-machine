@@ -896,3 +896,30 @@ ul.employers { columns: 2; column-gap: 24px; padding-left: 18px; }
 .panel.quote p:first-child { font-size: 1.08em; }
 ol.timeline { margin: 10px 0 0; padding-left: 18px; }
 ol.timeline li { margin: 4px 0; }
+
+/* Saying answers back. A tick against each thing the system now knows, and
+   a live line under each box as it is typed: the difference between a form
+   that swallows answers and one that is listening. */
+.steplabel { font-size: 12.5px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.understood { background: var(--good-bg); border-radius: var(--radius);
+  padding: 14px 18px; margin: 14px 0 18px; }
+.understood-title { margin: 0 0 6px; font-weight: 600; color: var(--good); }
+.understood ul { list-style: none; padding: 0; margin: 0; }
+.understood li { display: flex; gap: 10px; align-items: baseline;
+  padding: 7px 0; border-top: 1px solid var(--line); }
+.understood li:first-child { border-top: 0; }
+.understood .tick { color: var(--good); font-weight: 700; flex: none; }
+.understood .label { display: block; font-size: 13px; color: var(--muted); }
+.understood b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+small.echo { display: block; margin-top: 6px; color: var(--good);
+  font-weight: 500; min-height: 0; }
+small.echo:empty { display: none; }
+small.echo.wait { color: var(--muted); font-weight: 400; }
+.note.welcome { font-size: 15.5px; }
+
+/* The early offer, above the headline while places last. */
+.offer { display: inline-block; margin: 0 0 14px; padding: 7px 14px;
+  border-radius: var(--pill); background: var(--good-bg); color: var(--good);
+  font-size: 14px; line-height: 1.4; }
+.offer b { font-weight: 700; }

@@ -53,6 +53,7 @@ from . import search_console  # noqa: E402
 from jobseeker.names import company_key  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
+from . import understood  # noqa: E402
 from . import views  # noqa: E402
 
 log = logging.getLogger("recruited")
@@ -176,10 +177,13 @@ def current_user(request: Request):
     It is throttled in db.touch_user, so a screen polled every few seconds
     costs one write a quarter of an hour rather than one a poll.
     """
-    uid = auth.read_session(request.cookies.get(SESSION_COOKIE))
+    uid, epoch = auth.read_session_epoch(request.cookies.get(SESSION_COOKIE))
     if not uid:
         return None
     user = db.get_user(uid)
+    # Signed out by an address being confirmed: see db.confirm_email.
+    if user and epoch != db.session_epoch(user):
+        return None
     if user:
         db.touch_user(user["id"], user["last_seen_at"])
     return user
@@ -812,7 +816,7 @@ def _landing_for(user) -> str:
 
 @app.get("/auth/verify")
 def verify(request: Request, token: str = ""):
-    email = auth.consume_login_token(token)
+    email, link_id = auth.consume_login(token)
     if not email:
         # A used link plus a live session is by far the commonest way to get
         # here, and it is not a failure: somebody goes back to their inbox and
@@ -835,34 +839,53 @@ def verify(request: Request, token: str = ""):
                             "again and we will send a fresh one.")
     existed = db.get_user_by_email(email) is not None
     user = db.get_or_create_user(email)
-    # A free launch place is taken by a new account, not by anybody who signs
-    # in again. Claiming on every sign-in would hand a place to somebody who
-    # already decided not to pay, which is the opposite of what it is for.
+    # Tapping a link sent to the address proves it, so an account made on
+    # /start without one is confirmed here - and every session made before
+    # this moment is signed out, in case it was not theirs.
+    was_unconfirmed = db.email_unconfirmed(user)
+    epoch = db.confirm_email(user["id"])
     if not existed:
-        db.claim_free_spot(user["id"])
-        # Where they came from, read off the cookie set on the page they first
-        # landed on. This request cannot answer it: it arrived from a mail
-        # client, so it carries no referrer and no campaign.
-        #
-        # New accounts only, and set_user_source will not overwrite either.
-        # A returning user signing in from a different link is the same user,
-        # and re-attributing them would move a sign-up between channels weeks
-        # later and make a report that has already been read change.
-        try:
-            source = attribution.read(request)
-            db.set_user_source(user["id"], source)
-            db.record_event(user["id"], "signed_up",
-                            detail=attribution.describe(source))
-            referrals.credit_signup(user["id"], source.get("ref", ""))
-        except Exception:
-            # Never between a person and their account.
-            log.exception("could not record the sign-up")
-    response = RedirectResponse(_landing_for(user), status_code=303)
+        _new_account(request, user)
+    target = _landing_for(user)
+    if target == "/setup":
+        target = _after_start(request, user, email, link_id) or target
+    elif was_unconfirmed and target == "/dashboard":
+        target = "/dashboard?confirmed=1"
+    response = RedirectResponse(target, status_code=303)
+    response.delete_cookie(START_COOKIE)
     response.set_cookie(
-        SESSION_COOKIE, auth.make_session(user["id"]),
+        SESSION_COOKIE, auth.make_session(user["id"], epoch),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
         secure=not config.DEV)
     return response
+
+
+def _new_account(request: Request, user) -> None:
+    """The bookkeeping for an account that did not exist a moment ago,
+    whichever door it came through.
+
+    A free launch place is taken here, by a new account, not by anybody who
+    signs in again: claiming on every sign-in would hand a place to somebody
+    who already decided not to pay.
+    """
+    db.claim_free_spot(user["id"])
+    # Where they came from, read off the cookie set on the page they first
+    # landed on. A link tapped in a mail app carries no referrer and no
+    # campaign, so the request itself cannot say.
+    #
+    # New accounts only, and set_user_source will not overwrite either. A
+    # returning user signing in from a different link is the same user, and
+    # re-attributing them would move a sign-up between channels weeks later
+    # and make a report that has already been read change.
+    try:
+        source = attribution.read(request)
+        db.set_user_source(user["id"], source)
+        db.record_event(user["id"], "signed_up",
+                        detail=attribution.describe(source))
+        referrals.credit_signup(user["id"], source.get("ref", ""))
+    except Exception:
+        # Never between a person and their account.
+        log.exception("could not record the sign-up")
 
 
 @app.post("/logout")
@@ -870,6 +893,243 @@ def logout():
     response = RedirectResponse("/", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
     return response
+
+
+# ----------------------------------------------------------------------
+# start: the questions first, the account last
+# ----------------------------------------------------------------------
+# WHY THE ORDER CHANGED. Nine people took a free place and not one of them
+# saved a profile. Every one of them got through the email - they tapped the
+# link - and stopped on the setup screen that came after it: an account they
+# had already made, then a form. By then the part that felt like progress
+# was over.
+#
+# So /start asks about the work first, says back what it understood, and
+# asks for the email address last, as the way to switch on something they
+# have already built. Tapping the link in the same browser starts the search
+# straight away. In any other browser - a mail app's own, usually - it lands
+# on one screen showing the answers and one button, because a link alone
+# only proves somebody can read that inbox, not that they typed the answers:
+# anybody can put anybody's address into a form.
+START_COOKIE = "start_link"
+START_READ_PER_IP = (10, 3600)
+START_READ_ALL = (400, 86400)
+
+
+def _start_answers(form) -> dict:
+    return {k: (form.get(k) or "").strip()[:200] for k in understood.FIELDS}
+
+
+def _start_page(request: Request, *, stage: str = "describe",
+                answers: dict | None = None, **extra):
+    answers = answers or {}
+    return render(request, "start.html", stage=stage, q=answers,
+                  playback=understood.playback(answers),
+                  missing=understood.missing(answers, understood.WORK),
+                  spots_left=db.free_spots_left(), **extra)
+
+
+@app.get("/start", response_class=HTMLResponse)
+def start(request: Request, boxes: str = ""):
+    user = current_user(request)
+    if user:
+        return RedirectResponse(_landing_for(user), status_code=303)
+    return _start_page(request, stage="check" if boxes else "describe")
+
+
+@app.post("/start/read", response_class=HTMLResponse)
+async def start_read(request: Request):
+    """One sentence in, the answers it gave said back. Saves nothing."""
+    form = await request.form()
+    text = (form.get("about") or "").strip()
+    if not text:
+        return _start_page(request, error="Write a sentence about the work "
+                           "you want, or fill in the boxes instead.")
+    read = {}
+    limit, window = START_READ_PER_IP
+    every, day = START_READ_ALL
+    allowed = ratelimit.hit(f"start:ip:{ratelimit.client_ip(request)}",
+                            limit=limit, window=window)
+    allowed = allowed and ratelimit.hit("start:all", limit=every, window=day)
+    if allowed:
+        try:
+            from . import describe
+            from .ai import gemini_now
+            read = describe.read(text, gemini_now)
+        except Exception as exc:
+            log.info("start: %s", exc)
+    views.outcome("start:read:" + ("understood" if read else "unread"),
+                  user_agent=request.headers.get("user-agent", ""))
+    if not read:
+        return _start_page(request, stage="check", about=text, note=(
+            "I couldn't read that just now, so here are the questions "
+            "instead. It's a minute's work."))
+    return _start_page(request, stage="check", answers=read, about=text)
+
+
+# A new address gets an account straight away. Generous for a person, and a
+# ceiling on how many free places one machine can take.
+START_ACCOUNTS_PER_IP = (5, 86400)
+
+
+@app.post("/start", response_class=HTMLResponse)
+async def start_submit(request: Request):
+    """Every answer checked by the same Profile the machine runs on, then in.
+
+    WHY THERE IS NO LINK TO TAP FOR A NEW ADDRESS. The link proved the
+    address belonged to whoever typed it, and for a new address there is
+    nothing yet that proof protects: no letters, no replies, no mailbox. So
+    a new address is signed in on the spot and the search starts. The link
+    is still sent, as a confirmation that also signs them in on another
+    device, and it is still required where the proof does protect something:
+
+      - an address that already has an account. Signing in by typing an
+        email would be no lock at all, so that is a link, as on /login.
+      - sending from a Recruited address, which puts this address on
+        Reply-To for employers. See mail_managed.
+
+    Connecting their own mailbox proves the address by signing in to it, so
+    sending on autopilot from their own email needs no link at all.
+    """
+    form = await request.form()
+    answers = _start_answers(form)
+    email = (form.get("email") or "").strip()
+    about = (form.get("about") or "").strip()
+
+    def again(error: str):
+        return _start_page(request, stage="check", answers=answers,
+                           about=about, email=email, error=error)
+
+    try:
+        Profile.from_dict(_quick_profile(answers))
+    except ProfileError as exc:
+        return again(_friendly(str(exc)))
+    if not auth.valid_email(email):
+        return again("That email address doesn't look right. It needs an @ "
+                     "in it, like you@example.com.")
+
+    address = email.lower()
+    ip = ratelimit.client_ip(request)
+    if db.get_user_by_email(address) is None:
+        limit, window = START_ACCOUNTS_PER_IP
+        if ratelimit.hit(f"start:new:{ip}", limit=limit, window=window):
+            return _start_new_account(request, address, answers)
+
+    # An existing account (or a machine that has made plenty today): the
+    # answers wait for the link, exactly as before.
+    waiting = understood.playback(answers)
+    limit, window = LOGIN_PER_EMAIL
+    ip_limit, ip_window = LOGIN_PER_IP
+    allowed = ratelimit.hit(f"login:email:{address}", limit=limit, window=window)
+    allowed &= ratelimit.hit(f"login:ip:{ip}", limit=ip_limit, window=ip_window)
+    link_id = auth.new_link_id()
+    if allowed:
+        db.save_signup_draft(link_id, address, answers)
+        try:
+            auth.send_login_email(address, auth.make_login_link(address, link_id),
+                                  waiting=understood.for_email(answers))
+        except Exception:
+            log.exception("start: sign-in email could not be sent")
+            return again("Something went wrong sending your link. It is our "
+                         "end, not yours. Try again in a minute.")
+        views.outcome("start:sent",
+                      user_agent=request.headers.get("user-agent", ""))
+    # Same screen whether or not it was rate limited, as on /login.
+    response = render(request, "login.html", sent=email, waiting=waiting)
+    response.set_cookie(START_COOKIE, link_id, max_age=86400, httponly=True,
+                        samesite="lax", secure=not config.DEV)
+    return response
+
+
+def _start_new_account(request: Request, address: str, answers: dict):
+    """Make the account, save the answers, start looking, sign them in."""
+    user = db.get_or_create_user(address)
+    db.mark_unconfirmed(user["id"])
+    _new_account(request, user)
+    user = db.get_user(user["id"])
+    _save_start(user, answers)
+    views.outcome("start:in", user_agent=request.headers.get("user-agent", ""))
+    try:
+        auth.send_confirm_email(address, auth.make_login_link(address, long=True),
+                                waiting=understood.for_email(answers))
+    except Exception:
+        # Confirming is for later. Nothing about it may stand between a new
+        # person and the search they just started.
+        log.exception("start: confirm email could not be sent")
+    response = RedirectResponse("/dashboard?welcome=1", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, auth.make_session(user["id"], db.session_epoch(user)),
+        max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
+        secure=not config.DEV)
+    return response
+
+
+def _save_start(user, answers: dict) -> bool:
+    """Make /start's answers this account's profile, and start looking."""
+    data = _quick_profile(answers)
+    try:
+        Profile.from_dict(data)
+    except ProfileError:
+        return False
+    db.save_profile(user["id"], data)
+    funnel.reached(user["id"], "onboarded", detail="start")
+    if db.is_paid(db.get_user_by_email(user["email"]) or user):
+        _start_run(user["id"])
+    return True
+
+
+def _after_start(request: Request, user, email: str, link_id: str) -> str:
+    """Where a link tap goes when /start's answers are waiting, or ""."""
+    found = db.signup_draft(email, link_id)
+    if not found:
+        return ""
+    draft_id, answers = found
+    if request.cookies.get(START_COOKIE) == draft_id and _save_start(user, answers):
+        db.drop_signup_draft(draft_id)
+        return "/dashboard?welcome=1"
+    return "/start/confirm"
+
+
+@app.get("/start/confirm", response_class=HTMLResponse)
+def start_confirm(request: Request):
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    if db.load_profile(user["id"]):
+        return RedirectResponse("/dashboard", status_code=303)
+    found = db.signup_draft(user["email"])
+    if not found:
+        return RedirectResponse("/setup", status_code=303)
+    draft_id, answers = found
+    return render(request, "start_confirm.html", user=user, draft_id=draft_id,
+                  playback=understood.playback(answers),
+                  headline=understood.headline(answers))
+
+
+@app.post("/start/confirm", response_class=HTMLResponse)
+async def start_confirm_save(request: Request):
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    if db.load_profile(user["id"]):
+        return RedirectResponse("/dashboard", status_code=303)
+    form = await request.form()
+    found = db.signup_draft(user["email"], form.get("draft") or "")
+    if not found:
+        return RedirectResponse("/setup", status_code=303)
+    draft_id, answers = found
+    if (form.get("action") or "") == "edit":
+        return render(request, "setup.html", user=user,
+                      cv=db.cv_summary(user["id"]), profile=None,
+                      mail=db.get_mail_account(user["id"]),
+                      settings=db.get_send_settings(user["id"]),
+                      vault_ready=vault.available(), quick=answers,
+                      quick_note="Here's what you told us. Change anything, "
+                                 "then press Start looking.")
+    if not _save_start(user, answers):
+        return RedirectResponse("/setup", status_code=303)
+    db.drop_signup_draft(draft_id)
+    return RedirectResponse("/dashboard?welcome=1", status_code=303)
 
 
 # ----------------------------------------------------------------------
@@ -896,7 +1156,9 @@ def dashboard(request: Request):
                   # still sees where a run has got to on a refresh.
                   progress=db.run_progress(user["id"]),
                   push_key=push.public_key() if push.available() else "",
-                  referral=referrals.card(user["id"]))
+                  referral=referrals.card(user["id"]),
+                  welcome=request.query_params.get("welcome") == "1",
+                  unconfirmed=db.email_unconfirmed(user))
 
 
 @app.post("/push/subscribe")
@@ -1408,6 +1670,29 @@ def billing_done(request: Request, ok: str = "0"):
     return render(request, "billing_done.html", user=user, ok=(ok == "1"))
 
 
+CONFIRM_RESEND = (3, 3600)
+
+
+@app.post("/account/confirm")
+async def resend_confirm(request: Request):
+    """Send the confirm link again, to the account's own address only."""
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    form = await request.form()
+    back = form.get("next") if form.get("next") in (
+        "/dashboard", "/setup/mail") else "/dashboard"
+    limit, window = CONFIRM_RESEND
+    if db.email_unconfirmed(user) and ratelimit.hit(
+            f"confirm:{user['id']}", limit=limit, window=window):
+        try:
+            auth.send_confirm_email(
+                user["email"], auth.make_login_link(user["email"], long=True))
+        except Exception:
+            log.exception("could not resend the confirm email")
+    return RedirectResponse(f"{back}?e=resent", status_code=303)
+
+
 @app.get("/account", response_class=HTMLResponse)
 def account(request: Request):
     user = current_user(request)
@@ -1695,7 +1980,7 @@ def healthz():
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
-                "/privacy", "/login", "/app") + tuple(answerlib.paths())
+                "/privacy", "/login", "/start", "/app") + tuple(answerlib.paths())
 
 # The free tools, listed only while they are switched on, so the sitemap
 # never points a crawler at a page that answers 404.
@@ -2013,41 +2298,9 @@ def setup(request: Request):
                   vault_ready=vault.available())
 
 
-# What "the least you will work for" means when somebody types one number.
-# Below this it is an hourly rate; at or above it, a salary. Nobody earns
-# £200 an hour in this market and nobody's salary is £199 a year, so one box
-# can take either and the machine can tell which.
-HOURLY_BELOW = 200
-
-
-def _pay(raw: str) -> tuple[int, int]:
-    """One free-text pay box -> (min_salary_annual, min_rate_hourly).
-
-    Accepts what people actually type on a phone: "25000", "£25,000", "25k",
-    "12.50". Returns (0, 0) for anything unreadable, which the Profile then
-    refuses with its own message - so a bad value is caught by the same rule
-    as every other route, rather than by a second copy of it here.
-    """
-    text = (raw or "").lower().replace("£", "").replace(",", "").strip()
-    thousands = text.endswith("k")
-    text = text.rstrip("k").strip()
-    for suffix in ("per hour", "an hour", "/hr", "/h", "ph", "p/h", "per year",
-                   "a year", "pa", "p.a."):
-        text = text.replace(suffix, "").strip()
-    try:
-        value = float(text)
-    except ValueError:
-        return 0, 0
-    if thousands:
-        value *= 1000
-    if value <= 0:
-        return 0, 0
-    # Rounded UP. This is a floor, and rounding a floor down quietly accepts
-    # work below what the person said - "12.50" stored as 12 lets through a
-    # £12.00 job they told us they would not take.
-    if value < HOURLY_BELOW:
-        return 0, math.ceil(value)
-    return math.ceil(value), 0
+# The pay box's parser lives with the words that read it back, so the
+# sentence on the screen and the floor the machine filters on cannot differ.
+from .understood import HOURLY_BELOW, parse_pay as _pay  # noqa: E402,F401
 
 
 def _quick_profile(form) -> dict:
@@ -2162,9 +2415,9 @@ async def describe_yourself(request: Request):
     if not filled:
         return page(quick_error="Couldn't read that just now. Fill in the "
                                 "boxes below instead; it's six questions.")
-    return page(quick=filled, quick_note=(
-        "Filled in from what you wrote. Check each box, add your name and "
-        "phone number, then press Start looking."))
+    return page(quick=filled, playback=understood.playback(filled),
+                quick_note=("Filled in below. Add your name and phone number, "
+                            "then press Start looking."))
 
 
 # The Profile's messages are written for a JSON file ("target_roles is empty -
@@ -2423,6 +2676,7 @@ def mail_form(request: Request):
     profile = db.load_profile(user["id"]) or {}
     return render(request, "mail.html", user=user,
                   mail=db.get_mail_account(user["id"]),
+                  unconfirmed=db.email_unconfirmed(user),
                   vault_ready=vault.available(),
                   managed_ready=config.managed_mail_available(),
                   managed_preview=(
@@ -2452,6 +2706,13 @@ def mail_managed(request: Request):
                       managed_ready=config.managed_mail_available(),
                       managed_preview="", profile=profile,
                       error="Recruited addresses are not switched on here.")
+
+    # Letters from a Recruited address carry this account's address on
+    # Reply-To. Until a link sent there has been tapped, nothing shows it
+    # belongs to whoever is signed in, and an employer's reply would go to a
+    # stranger who never applied.
+    if db.email_unconfirmed(user):
+        return RedirectResponse("/setup/mail?e=confirm", status_code=303)
 
     # Where replies land. Their account address unless they gave a different
     # one on their profile - and never blank, because a letter no employer

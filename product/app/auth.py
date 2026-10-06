@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import time
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -39,46 +40,81 @@ def valid_email(address: str) -> bool:
 # ----------------------------------------------------------------------
 # magic links
 # ----------------------------------------------------------------------
-def make_login_link(email: str) -> str:
-    token = _login_signer.dumps({"email": email.strip().lower(),
-                                 "jti": secrets.token_urlsafe(16)})
+CONFIRM_LINK_MAX_AGE = 86400
+
+
+def new_link_id() -> str:
+    return secrets.token_urlsafe(16)
+
+
+def make_login_link(email: str, jti: str = "", *, long: bool = False) -> str:
+    """`jti` is passed when something is filed under the link's id first -
+    /start's answers - so the link and what it unlocks share one key.
+
+    `long` is for the confirm link sent after an instant sign-up. Nobody is
+    waiting on that one with the page open, so fifteen minutes would mostly
+    expire unread; it lasts a day instead. It is still single use."""
+    payload = {"email": email.strip().lower(), "jti": jti or new_link_id()}
+    if long:
+        payload["long"] = 1
+    token = _login_signer.dumps(payload)
     return f"{config.BASE_URL}/auth/verify?token={token}"
 
 
 def consume_login_token(token: str) -> str | None:
     """Return the email a valid, unused, unexpired token belongs to."""
+    return consume_login(token)[0]
+
+
+def consume_login(token: str) -> tuple[str | None, str]:
+    """(email, link id) for a valid, unused, unexpired token; (None, "")
+    otherwise. The id finds anything /start filed under it."""
     try:
-        payload = _login_signer.loads(token, max_age=config.MAGIC_LINK_MAX_AGE)
+        payload, signed_at = _login_signer.loads(
+            token, max_age=CONFIRM_LINK_MAX_AGE, return_timestamp=True)
     except SignatureExpired:
-        return None
+        return None, ""
     except BadSignature:
-        return None
+        return None, ""
     if not isinstance(payload, dict):
-        return None
+        return None, ""
+    age = time.time() - signed_at.timestamp()
+    if not payload.get("long") and age > config.MAGIC_LINK_MAX_AGE:
+        return None, ""
     jti, email = payload.get("jti"), payload.get("email")
     if not jti or not email:
-        return None
+        return None, ""
     if not db.claim_token(jti):      # already used
-        return None
-    return email
+        return None, ""
+    return email, jti
 
 
 # ----------------------------------------------------------------------
 # sessions
 # ----------------------------------------------------------------------
-def make_session(user_id: int) -> str:
-    return _session_signer.dumps({"uid": user_id})
+def make_session(user_id: int, epoch: int = 0) -> str:
+    return _session_signer.dumps({"uid": user_id, "sv": epoch})
 
 
 def read_session(cookie: str | None) -> int | None:
+    return read_session_epoch(cookie)[0]
+
+
+def read_session_epoch(cookie: str | None) -> tuple[int | None, int]:
+    """(user id, the epoch it was issued in). A cookie made before epochs
+    existed reads as epoch 0, which every existing account is still in."""
     if not cookie:
-        return None
+        return None, 0
     try:
         payload = _session_signer.loads(cookie, max_age=config.SESSION_MAX_AGE)
     except (BadSignature, SignatureExpired):
-        return None
-    uid = payload.get("uid") if isinstance(payload, dict) else None
-    return uid if isinstance(uid, int) else None
+        return None, 0
+    if not isinstance(payload, dict):
+        return None, 0
+    uid, epoch = payload.get("uid"), payload.get("sv", 0)
+    if not isinstance(uid, int):
+        return None, 0
+    return uid, epoch if isinstance(epoch, int) else 0
 
 
 # ----------------------------------------------------------------------
@@ -87,7 +123,7 @@ def read_session(cookie: str | None) -> int | None:
 SUBJECT = "Your sign-in link"
 
 
-def _body(link: str) -> str:
+def _body(link: str, waiting: str = "") -> str:
     """Written for somebody who tapped a link on their phone two minutes ago.
 
     The old version opened with "Here is your sign-in link", which assumes the
@@ -97,8 +133,14 @@ def _body(link: str) -> str:
     line, is the difference between a tap and a report-as-spam - and a spam
     complaint on a young sending domain costs every other customer's link too.
     """
-    return ("Tap the link below and you are signed in to Recruited. There is "
-            "no password to make up.\n\n"
+    # Somebody who answered the questions on /start is told the link
+    # finishes the job they started, in their own words, which is both the
+    # reason to tap it and proof that the email is the one they asked for.
+    opening = (f"Tap the link below and your search for {waiting} starts. "
+               "There is no password to make up.\n\n" if waiting else
+               "Tap the link below and you are signed in to Recruited. There "
+               "is no password to make up.\n\n")
+    return (opening +
             f"{link}\n\n"
             "It works once, and it runs out after fifteen minutes. If that "
             "happens, just ask for another one - they are free.\n\n"
@@ -160,7 +202,7 @@ def _send_over_smtp(address: str, body: str, *, subject: str = SUBJECT,
         s.send_message(msg)
 
 
-def send_login_email(address: str, link: str) -> None:
+def send_login_email(address: str, link: str, waiting: str = "") -> None:
     """In development the link goes to the console, so no mail setup is
     needed to work on the app. In production a missing mail configuration is
     an error rather than a silently unsent link."""
@@ -176,11 +218,39 @@ def send_login_email(address: str, link: str) -> None:
             "APP_SMTP_PASSWORD to send over SMTP. Note that a free Render "
             "web service cannot reach an SMTP port at all.")
 
-    body = _body(link)
+    body = _body(link, waiting)
     if route == "brevo":
         _send_over_https(address, body)
     else:
         _send_over_smtp(address, body)
+
+
+CONFIRM_SUBJECT = "Your search has started"
+
+
+def _confirm_body(link: str, waiting: str = "") -> str:
+    """Sent once, after an account was made on /start without a link.
+
+    The person is already in and their search is running, so this asks for
+    nothing urgent. It has to work just as well for somebody who never
+    signed up - an address anybody can type - so it says plainly that
+    ignoring it is safe and that nothing else will follow.
+    """
+    what = f"Your search for {waiting}" if waiting else "Your job search"
+    return (f"{what} has started on Recruited.\n\n"
+            "One tap confirms this is your email. It also signs you in on "
+            "any other phone or computer:\n\n"
+            f"{link}\n\n"
+            "The link works once and lasts a day. You can keep using "
+            "Recruited without it; you need it before letters go out from a "
+            "Recruited address, because employers' replies come here.\n\n"
+            "If you did not sign up, ignore this. Nothing else will be sent "
+            "to this address unless the link is tapped.\n")
+
+
+def send_confirm_email(address: str, link: str, waiting: str = "") -> None:
+    """The one email an instant sign-up gets, by the same route as links."""
+    send_app_email(address, CONFIRM_SUBJECT, _confirm_body(link, waiting))
 
 
 def send_app_email(address: str, subject: str, body: str, *,

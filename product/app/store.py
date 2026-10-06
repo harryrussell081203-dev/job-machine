@@ -389,6 +389,17 @@ CREATE TABLE IF NOT EXISTS outreach_log (
     at        BIGINT  NOT NULL
 );
 
+-- Answers given on /start before an account exists, keyed by the id of the
+-- sign-in link they were sent with. Kept server side so nothing personal
+-- rides in the link itself, taken (and deleted) when that link is tapped,
+-- and pruned after a couple of days if it never is.
+CREATE TABLE IF NOT EXISTS signup_drafts (
+    jti        TEXT    PRIMARY KEY,
+    email      TEXT    NOT NULL,
+    data       TEXT    NOT NULL,
+    created_at BIGINT  NOT NULL
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
@@ -615,6 +626,15 @@ _ADDED_COLUMNS = [
     # only, comma-separated, as a pointer to who is likely hiring. Empty
     # when the firm is not small, not matched, or the key is not set.
     ("drafts", "directors", "TEXT NOT NULL DEFAULT ''"),
+    # 1 for an account made on /start without a sign-in link, until a link
+    # sent to that address is tapped. Every account before this column came
+    # through a link, so the default is confirmed. See main.py's start_submit.
+    ("users", "email_unconfirmed", "INTEGER NOT NULL DEFAULT 0"),
+    # Bumped when an unconfirmed address is confirmed, which signs out every
+    # session made before that. Otherwise somebody who typed another
+    # person's address first would keep a way into the account its real owner
+    # goes on to use.
+    ("users", "session_epoch", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

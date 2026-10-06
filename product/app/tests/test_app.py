@@ -138,7 +138,7 @@ class TestPublicPages(AppTestCase):
         headline, one who needed the numbers first. Adding the hero one must
         not have replaced the other."""
         body = self.client.get("/").text
-        self.assertGreater(body.count('href="/login"'), 1)
+        self.assertGreater(body.count('href="/start"'), 1)
 
     def test_health(self):
         self.assertEqual(self.client.get("/healthz").json(), {"ok": True})
