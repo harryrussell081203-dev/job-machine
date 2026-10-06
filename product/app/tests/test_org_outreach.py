@@ -93,6 +93,14 @@ class TheCharityCommissionFile(unittest.TestCase):
         self.assertEqual(out[0]["email"], "info@leedsjobclub.org")
         self.assertEqual(out[0]["website"], "https://www.leedsjobclub.org")
 
+    def test_a_very_long_field_does_not_stop_the_run(self):
+        from tools import find_orgs
+        text = ("charity_name\tcharity_contact_web\tcharity_activities\n"
+                "Big Words\twww.bigwords.org\t" + "word " * 60000 + "\n"
+                "Leeds Job Club\twww.leedsjobclub.org\tjob club\n")
+        out = find_orgs.select(find_orgs.rows_from_csv(text))
+        self.assertEqual([o["name"] for o in out], ["Leeds Job Club"])
+
 
 if __name__ == "__main__":
     unittest.main()

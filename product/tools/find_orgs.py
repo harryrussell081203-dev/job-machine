@@ -178,6 +178,9 @@ def serves_jobseekers(purpose: str, name: str = "") -> bool:
 
 def rows_from_csv(text: str):
     """Comma or tab separated. The Charity Commission's extract is tabs."""
+    # Some charities' activity text runs past the csv module's 128KB default
+    # field size, which stopped the first real run on the full register.
+    csv.field_size_limit(sys.maxsize)
     first = text.split("\n", 1)[0]
     delimiter = "\t" if first.count("\t") > first.count(",") else ","
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
