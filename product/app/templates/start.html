@@ -37,7 +37,7 @@
     starts.</p>
   <button class="btn">Next</button>
 </form>
-<p class="hint"><a href="/start?boxes=1">I'd rather answer questions</a></p>
+<p class="hint"><a href="/start?boxes=1" data-pulse="start:boxes">I'd rather answer questions</a></p>
 
 {% else %}
 
@@ -144,4 +144,11 @@
 
 <p class="hint">Already have an account? <a href="/login">Sign in</a>.</p>
 
+{# Where people stop on this page, and why (app/pulse.py). #}
+<script>document.body.setAttribute("data-pulse-page", "{{ 'start-describe' if stage == 'describe' else 'start-check' }}");</script>
+<script src="/static/pulse.js?v={{ asset_version }}" defer></script>
+{% if stage == "describe" %}
+  {% set why_page = "start" %}{% set why_after = 45 %}
+  {% include "_why.html" %}
+{% endif %}
 {% endblock %}

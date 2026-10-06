@@ -183,6 +183,48 @@ so this reads high until they age out.</small></p>
   news.</small></p>
 </div>
 
+{# Where the people who did not sign up stopped, and why the ones who
+   answered said so. All anonymous counts; see app/pulse.py. #}
+<h2>Why people don't sign up, last 7 days</h2>
+<div class="panel">
+  {% set w = signup_why %}
+  <div class="scroll"><table>
+    <tr><th>Step</th><th class="num">People</th><th class="num">Kept from the step before</th></tr>
+    {% for step in w.funnel %}
+      <tr><td>{{ step.label }}</td><td class="num">{{ step.n }}</td>
+          <td class="num">{% if step.kept is not none %}{{ step.kept }}%{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted"><small>The biggest fall tells you which kind of problem it
+    is. Lost before the button: they don't believe it or don't want it yet.
+    Lost after they start typing: the form is confusing or asks too
+    much.</small></p>
+
+  <h3>What the ones who answered said</h3>
+  {% if w.why %}
+    <table>{% for label, n in w.why %}
+      <tr><td>{{ label }}</td><td class="num">{{ n }}</td></tr>{% endfor %}</table>
+    <p class="muted"><small>Asked {{ w.asked }} times; closed without an
+      answer {{ w.dismissed }} times.</small></p>
+  {% else %}
+    <p class="muted">Nobody has answered yet{% if w.asked %} (asked {{ w.asked }} times){% endif %}.</p>
+  {% endif %}
+  {% if w.comments %}
+    <ul class="blocks">{% for c in w.comments %}
+      <li><span>&ldquo;{{ c.text }}&rdquo; <small class="muted">{{ c.page }}</small></span></li>
+    {% endfor %}</ul>
+  {% endif %}
+
+  {% if w.ctas or w.left or w.errors %}
+  <h3>Detail</h3>
+  <p><small>
+    {% if w.ctas %}Buttons tapped: {% for k, v in w.ctas.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}.<br>{% endif %}
+    {% if w.left %}Left sign-up at: {% for k, v in w.left.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}.<br>{% endif %}
+    {% if w.errors %}Errors shown: {% for k, v in w.errors.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}.{% endif %}
+  </small></p>
+  {% endif %}
+</div>
+
 <h2>Free searches this week</h2>
 <div class="panel">
   {% if searches_week %}

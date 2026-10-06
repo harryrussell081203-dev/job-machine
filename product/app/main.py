@@ -54,6 +54,7 @@ from jobseeker.names import company_key  # noqa: E402
 from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import understood  # noqa: E402
+from . import pulse  # noqa: E402
 from . import views  # noqa: E402
 
 log = logging.getLogger("recruited")
@@ -967,6 +968,42 @@ async def start_read(request: Request):
     return _start_page(request, stage="check", answers=read, about=text)
 
 
+PULSE_PER_IP = (120, 3600)
+
+
+@app.post("/pulse")
+async def pulse_event(request: Request):
+    """One anonymous count from the landing or sign-up page: how far down,
+    which button, which step they left on. Fixed names only - see pulse.py."""
+    try:
+        name = str((await request.json()).get("e", ""))[:60]
+    except Exception:
+        return Response(status_code=204)
+    limit, window = PULSE_PER_IP
+    if pulse.allowed(name) and ratelimit.hit(
+            f"pulse:{ratelimit.client_ip(request)}", limit=limit, window=window):
+        pulse.count(name, request.headers.get("user-agent", ""))
+    return Response(status_code=204)
+
+
+@app.post("/why")
+async def why_not(request: Request):
+    """The answer to "what's stopping you?". One per visit, anonymous."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    limit, window = (10, 3600)
+    if not ratelimit.hit(f"why:{ratelimit.client_ip(request)}",
+                         limit=limit, window=window):
+        return JSONResponse({"ok": True})
+    ok = pulse.save_reason(str(data.get("reason", ""))[:20],
+                           str(data.get("text", "")),
+                           str(data.get("page", ""))[:40],
+                           request.headers.get("user-agent", ""))
+    return JSONResponse({"ok": ok}, status_code=200 if ok else 400)
+
+
 # A new address gets an account straight away. Generous for a person, and a
 # ceiling on how many free places one machine can take.
 START_ACCOUNTS_PER_IP = (5, 86400)
@@ -997,6 +1034,10 @@ async def start_submit(request: Request):
     about = (form.get("about") or "").strip()
 
     def again(error: str):
+        # Which kind of answer was refused, never the answer: the most
+        # common one is the fix to make next.
+        views.outcome(f"start:error:{pulse.error_kind(error)}",
+                      user_agent=request.headers.get("user-agent", ""))
         return _start_page(request, stage="check", answers=answers,
                            about=about, email=email, error=error)
 
@@ -2262,7 +2303,12 @@ def admin(request: Request):
                   traffic_today=views.totals(since=now - 86400, now=now),
                   traffic_week=views.totals(since=now - 7 * 86400, now=now),
                   traffic_hours=views.by_hour(hours=24, now=now),
-                  searches_week=views.outcomes(since=now - 7 * 86400),
+                  searches_week={k: v for k, v in views.outcomes(
+                      since=now - 7 * 86400).items()
+                      if not k.startswith(("land:", "start:", "why:"))},
+                  # Where people stop before an account exists, and what
+                  # the ones who answered said was stopping them.
+                  signup_why=pulse.report(since=now - 7 * 86400),
                   search_console=search_console.latest(),
                   from_search=views.search_report(since=now - 28 * 86400),
                   **adminlib.summarise(rows, now=now))

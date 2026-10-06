@@ -400,6 +400,18 @@ CREATE TABLE IF NOT EXISTS signup_drafts (
     created_at BIGINT  NOT NULL
 );
 
+-- What a visitor leaving without an account said was stopping them, when
+-- they chose to type something. Anonymous: no address, no cookie, nothing
+-- tying a row to a person. The choice itself is counted in page_views; this
+-- keeps only the optional line of text. See app/pulse.py.
+CREATE TABLE IF NOT EXISTS feedback (
+    id      {key},
+    at      BIGINT  NOT NULL,
+    page    TEXT    NOT NULL DEFAULT '',
+    reason  TEXT    NOT NULL DEFAULT '',
+    text    TEXT    NOT NULL DEFAULT ''
+);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The
