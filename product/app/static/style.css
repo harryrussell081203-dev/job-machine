@@ -923,3 +923,25 @@ small.echo.wait { color: var(--muted); font-weight: 400; }
   border-radius: var(--pill); background: var(--good-bg); color: var(--good);
   font-size: 14px; line-height: 1.4; }
 .offer b { font-weight: 700; }
+
+/* Landing: one idea per block. */
+.proof-intro { margin: 26px 0 10px; font-size: 16.5px; }
+.stats.two { grid-template-columns: repeat(2, 1fr); }
+.stats.two .stat b { font-size: 30px; }
+ol.steps3 { list-style: none; padding: 0; margin: 14px 0 8px; counter-reset: none; }
+ol.steps3 li { display: flex; gap: 14px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px; margin-bottom: 10px;
+  line-height: 1.5; }
+ol.steps3 .n { flex: none; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700;
+  display: flex; align-items: center; justify-content: center; }
+ol.steps3 b { display: block; font-size: 17px; margin-bottom: 2px; }
+ul.promises { list-style: none; padding: 0; margin: 10px 0; }
+ul.promises li { padding: 9px 0 9px 30px; position: relative;
+  border-top: 1px solid var(--line); line-height: 1.5; }
+ul.promises li:first-child { border-top: 0; }
+ul.promises li::before { content: "\2713"; position: absolute; left: 4px;
+  color: var(--good); font-weight: 700; }
+.panel.final-cta { margin-top: 30px; text-align: left; }
+@media (max-width: 520px) { .stats.two { grid-template-columns: 1fr; } }

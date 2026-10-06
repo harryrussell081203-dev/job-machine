@@ -190,7 +190,7 @@ class TestPublicPages(AppTestCase):
         declared block prints its body where it is declared - which puts the
         marketing description as loose text at the top of every screen."""
         body = self.client.get("/").text.split("<body>", 1)[1]
-        self.assertNotIn("A real email address at every company", body)
+        self.assertNotIn("find the real person hiring, and write them", body)
 
 
 class TestSignIn(AppTestCase):
