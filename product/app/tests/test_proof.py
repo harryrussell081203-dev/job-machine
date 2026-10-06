@@ -32,7 +32,7 @@ class OnTheLandingPage(AppTestCase):
     def test_every_figure_is_on_the_page(self):
         from app import proof
         page = self.client.get("/").text
-        for n in (proof.SENT, proof.REPLIED, proof.INTERVIEW_EMPLOYERS,
+        for n in (proof.SENT, proof.REPLIED, proof.INTERVIEWS,
                   proof.OFFERS):
             self.assertIn(f"<b>{n}</b>", page)
         self.assertIn("job offers", page)
@@ -43,6 +43,9 @@ class OnTheLandingPage(AppTestCase):
         page = self.client.get("/").text.lower()
         for name in ("hydro", "tekever"):
             self.assertNotIn(name, page)
+        # Nor anything that dates the offer or says which one he took.
+        for tell in ("accepted", "1 october", "15 september"):
+            self.assertNotIn(tell, page)
 
     def test_the_account_button_comes_before_the_finder(self):
         body = self.client.get("/").text

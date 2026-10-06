@@ -18,7 +18,9 @@ How each figure was counted, so anybody can check it the same way:
     a no from a person still means the email reached a person. Replies that
     started a new thread (some interview invitations do) are not counted, so
     this is a floor.
-  - **Interviews**: employers that invited him to an interview in writing.
+  - **Interviews**: 12, Harry's own count, which takes in rounds and
+    invitations by phone. The written invitations in the inbox alone come
+    from 8 employers, and the page says so.
   - **Offers**: written offers of employment.
 
 May was the old way: addresses were guessed from a pattern. From August on,
@@ -26,7 +28,9 @@ the machine only used addresses an employer published. The split is kept
 because it is the clearest evidence there is for the product's one rule.
 
 No employer is named here, and none is named on the page. One of them is his
-current employer, which public copy never mentions.
+current employer, which public copy never mentions. The timeline is in days,
+not dates, and says nothing about which offer he took: nothing on the page
+should let an employer recognise itself or learn he is moving.
 """
 
 from __future__ import annotations
@@ -41,15 +45,16 @@ PUBLISHED = {"label": "Published address only (Aug to Oct)",
 
 SENT = GUESSED["sent"] + PUBLISHED["sent"]            # 568
 REPLIED = GUESSED["replied"] + PUBLISHED["replied"]   # 87
-INTERVIEW_EMPLOYERS = 8
+INTERVIEWS = 12
+INTERVIEW_EMPLOYERS_IN_WRITING = 8
 OFFERS = 3
 
-# One application, start to finish, with the employer left out.
+# One application, start to finish, with the employer and the dates left out.
 TIMELINE = (
-    ("15 September", "One short email to an engineering firm's info@ address."),
-    ("24 September", "First interview."),
-    ("25 September", "Second interview."),
-    ("1 October", "Written job offer. Accepted."),
+    ("Day 1", "One short email to a company's info@ address."),
+    ("Day 10", "First interview."),
+    ("Day 11", "Second interview."),
+    ("Day 17", "Written job offer."),
 )
 
 
@@ -60,7 +65,8 @@ def pct(part: int, whole: int) -> int:
 def summary() -> dict:
     return {
         "sent": SENT, "replied": REPLIED,
-        "interviews": INTERVIEW_EMPLOYERS, "offers": OFFERS,
+        "interviews": INTERVIEWS, "offers": OFFERS,
+        "interview_employers": INTERVIEW_EMPLOYERS_IN_WRITING,
         "period": PERIOD, "counted_on": COUNTED_ON,
         "guessed": dict(GUESSED, bounce_pct=pct(GUESSED["bounced"],
                                                 GUESSED["sent"]),

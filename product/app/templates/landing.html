@@ -88,16 +88,14 @@ at the company, writes a short letter, and you send it from your own email.</p>
 <div class="stats proof">
   <div class="stat"><b>{{ proof.sent }}</b><span>applications emailed</span></div>
   <div class="stat"><b>{{ proof.replied }}</b><span>people wrote back</span></div>
-  <div class="stat"><b>{{ proof.interviews }}</b><span>employers interviewed me</span></div>
+  <div class="stat"><b>{{ proof.interviews }}</b><span>interviews</span></div>
   <div class="stat"><b>{{ proof.offers }}</b><span>job offers</span></div>
 </div>
 <p class="hint">These are the founder's own results: my job search,
   {{ proof.period }}, counted email by email from my inbox.</p>
 
 <div class="panel quote">
-  <p>&ldquo;Portals never answered. When I wrote to a real person instead,
-  people wrote back, and three of them offered me a job. One offer came 16
-  days after a single email to a company&rsquo;s info@ address.&rdquo;</p>
+  <p>&ldquo;I&rsquo;ve had 3 job offers because of this system.&rdquo;</p>
   <p class="muted"><small>Harry, who built this</small></p>
   <ol class="timeline">
     {% for when, what in proof.timeline %}
@@ -141,8 +139,10 @@ product.</p>
 "A person wrote back" includes polite noes, because a no from a person still
 means the email reached one; automatic replies and bounces are not counted.
 Replies that arrived as a new email are missed, so it is a floor.
-And a reply is not the same thing as an interview: interviews and offers are
-only the ones I have in writing.
+And a reply is not the same thing as an interview. The {{ proof.interviews }}
+interviews are my own count, rounds and phone invitations included; the
+written invitations in my inbox alone come from {{ proof.interview_employers }}
+employers. The offers are all in writing.
 Nothing in it is built around a trade: a carer, a driver and a welder get the
 same machine.
 {% if record %}The machine's own running tally since August is
