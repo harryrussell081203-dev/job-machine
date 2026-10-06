@@ -107,10 +107,24 @@ WANTED = (
     "employment advice", "return to work", "labour market",
 )
 
+# Any one of these is enough on its own: it says getting people into work
+# is the job. The rest of WANTED counts only in pairs, because one passing
+# mention of "work experience" or "apprenticeship" in a long list of
+# activities is a farm charity or a benevolent fund, not an employability
+# service. The first run on the full register matched 1,225 with any single
+# word, including exactly those.
+STRONG = (
+    "employability", "employment support", "back to work", "into work",
+    "into employment", "job club", "jobclub", "job search", "jobseeker",
+    "job seeker", "unemployed", "unemployment", "worklessness",
+    "employment advice", "careers service", "careers guidance",
+)
+
 # Present in the objectives and the row is out, whatever else it says. These
 # are organisations whose people are not looking for a job this week, or whose
 # "employment" is somebody else's.
 UNWANTED = (
+    "benevolent", "almshouse", "relief in need", "pensioner",
     "employment law", "employment tribunal", "employment rights",
     "sheltered employment", "employer's liability",
     "animal", "church building", "cathedral", "village hall",
@@ -173,7 +187,9 @@ def serves_jobseekers(purpose: str, name: str = "") -> bool:
     text = _norm(f"{name} {purpose}")
     if any(bad in text for bad in UNWANTED):
         return False
-    return any(good in text for good in WANTED)
+    if any(strong in text for strong in STRONG):
+        return True
+    return sum(1 for good in WANTED if good in text) >= 2
 
 
 def rows_from_csv(text: str):
@@ -260,7 +276,7 @@ def main(argv=None):
         print("\n--dry-run: nothing written")
         return 0
 
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(orgs, f, indent=1, ensure_ascii=False)
     print(f"\nwritten to {args.out}")

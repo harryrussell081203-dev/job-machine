@@ -55,6 +55,19 @@ class TestWhoCounts(unittest.TestCase):
         self.no("Promotes the welfare of animals and finds employment for "
                 "retired greyhounds.")
 
+    def test_one_passing_mention_is_not_enough(self):
+        """What the first run on the full register let through."""
+        self.no("Promotes horticulture and supports women into farming "
+                "careers, including apprenticeships.",
+                "The Women's Farm and Garden Association")
+        self.no("Relief of need among members and former members, including "
+                "help to return to work after illness.",
+                "Institution Benevolent Fund")
+        self.no("A residential home for older people.", "Parker Memorial Home")
+
+    def test_two_weaker_signals_together_are_enough(self):
+        self.yes("CV writing and interview skills sessions for young people.")
+
     def test_it_reads_the_name_as_well_as_the_objects(self):
         """Registers often carry a one-line object and a telling name."""
         self.yes("Charitable purposes for the public benefit.",
