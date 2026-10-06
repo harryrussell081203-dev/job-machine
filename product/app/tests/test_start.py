@@ -8,8 +8,14 @@ What these hold:
     silent form.
   - THE SAME CHECKS AS EVERYWHERE ELSE. Nothing reaches an inbox until the
     answers would pass the Profile the machine runs on.
-  - A LINK ALONE NEVER SAVES ANYTHING IN SOMEBODY'S NAME. Same browser that
-    answered: it starts at once. Any other: one screen, one button.
+  - A NEW ADDRESS IS STRAIGHT IN. No link to tap before the search starts;
+    the link that follows confirms the address and is only required where
+    that proof protects something.
+  - AN EXISTING ACCOUNT STILL NEEDS ITS LINK, and a link alone never saves
+    anything in somebody's name. Same browser that answered: it starts at
+    once. Any other: one screen, one button.
+  - TYPING SOMEBODY ELSE'S ADDRESS FIRST GETS YOU NOTHING LASTING. Their
+    confirming it signs out every session made before.
 """
 
 import html
@@ -56,6 +62,18 @@ class StartCase(AppTestCase):
             lambda address, link, waiting="": self.mail.append(
                 (address, link, waiting)))
         self.addCleanup(setattr, self.main.auth, "send_login_email", real_send)
+        self.confirms = []
+        real_confirm = self.main.auth.send_confirm_email
+        self.main.auth.send_confirm_email = (
+            lambda address, link, waiting="": self.confirms.append(
+                (address, link, waiting)))
+        self.addCleanup(setattr, self.main.auth, "send_confirm_email",
+                        real_confirm)
+
+    def existing(self, email="sam@example.com"):
+        """An account that already exists, made elsewhere: these tests are
+        about what /start does for it, not about how it was made."""
+        self.main.db.get_or_create_user(email)
 
     def read(self, answer, text="forklift at Tesco, want warehouse work in Leeds"):
         with patch("app.ai.gemini_now", model(answer)):
@@ -65,6 +83,10 @@ class StartCase(AppTestCase):
     def submit(self, **overrides):
         return html.unescape(
             self.client.post("/start", data=dict(ALL, **overrides)).text)
+
+    def join(self, **overrides):
+        return self.client.post("/start", data=dict(ALL, **overrides),
+                                follow_redirects=False)
 
     def get(self, path):
         return html.unescape(self.client.get(path).text)
@@ -123,16 +145,131 @@ class SayingItBack(StartCase):
         self.assertIn('name="target_roles"', page)
 
 
-class TheLink(StartCase):
-    def test_nothing_is_sent_until_the_answers_would_pass(self):
-        page = self.submit(phone="")
+class ANewAddressIsStraightIn(StartCase):
+    def test_no_link_before_the_search_starts(self):
+        r = self.join()
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/dashboard?welcome=1")
         self.assertEqual(self.mail, [])
+        profile = self.profile()
+        self.assertEqual(profile["target_roles"], ["warehouse operative"])
+        self.assertEqual(profile["min_rate_hourly"], 13)
+        self.assertEqual(len(self.started), 1)
+
+    def test_signed_in_and_welcomed(self):
+        self.join()
+        page = self.get("/dashboard?welcome=1")
+        self.assertIn("You're in, Sam", page)
+        self.assertIn("around Leeds", page)
+
+    def test_takes_a_free_place(self):
+        with patch.object(self.main.config, "FREE_SPOTS", 3):
+            self.join()
+        user = self.main.db.get_user_by_email("sam@example.com")
+        self.assertTrue(user["free_spot"])
+
+    def test_one_email_follows_to_confirm_it(self):
+        self.join()
+        self.assertEqual(len(self.confirms), 1)
+        address, link, waiting = self.confirms[0]
+        self.assertEqual(address, "sam@example.com")
+        self.assertEqual(waiting, "warehouse operative work around Leeds")
+
+    def test_the_confirm_email_is_safe_to_receive_by_mistake(self):
+        from app import auth
+        body = auth._confirm_body("https://x/y", "chef work around York")
+        self.assertIn("If you did not sign up, ignore this", body)
+        self.assertIn("Nothing else will be sent", body)
+
+    def test_nothing_is_made_until_the_answers_would_pass(self):
+        page = self.submit(phone="")
         self.assertIn("phone", page.lower())
+        self.assertIsNone(self.main.db.get_user_by_email("sam@example.com"))
 
     def test_a_bad_email_is_said_plainly(self):
         page = self.submit(email="sam")
-        self.assertEqual(self.mail, [])
         self.assertIn("doesn't look right", page)
+
+    def test_one_machine_cannot_take_every_free_place(self):
+        for i in range(5):
+            self.client.cookies.clear()
+            self.assertEqual(self.join(email=f"p{i}@example.com").status_code,
+                             303)
+        self.client.cookies.clear()
+        page = self.submit(email="p6@example.com")
+        self.assertIn("One last tap", page)
+        self.assertIsNone(self.main.db.get_user_by_email("p6@example.com"))
+
+
+class ConfirmingTheAddress(StartCase):
+    def tap_confirm(self, client=None):
+        token = self.confirms[-1][1].split("token=", 1)[1]
+        return (client or self.client).get(f"/auth/verify?token={token}",
+                                           follow_redirects=False)
+
+    def test_tapping_it_confirms_and_keeps_them_signed_in(self):
+        self.join()
+        r = self.tap_confirm()
+        self.assertEqual(r.headers["location"], "/dashboard?confirmed=1")
+        user = self.main.db.get_user_by_email("sam@example.com")
+        self.assertFalse(self.main.db.email_unconfirmed(user))
+        self.assertIn("Email confirmed", self.get("/dashboard?confirmed=1"))
+
+    def test_whoever_typed_it_first_is_signed_out(self):
+        """Somebody types another person's address and keeps the session.
+        The moment the real owner taps the link, that session is dead."""
+        from fastapi.testclient import TestClient
+        self.join()
+        squatter = dict(self.client.cookies)
+        owner = TestClient(self.main.app)
+        self.tap_confirm(owner)
+        self.client.cookies.clear()
+        for k, v in squatter.items():
+            self.client.cookies.set(k, v)
+        r = self.client.get("/dashboard", follow_redirects=False)
+        self.assertNotEqual(r.status_code, 200)
+
+    def test_the_confirm_link_outlasts_a_sign_in_link(self):
+        import time as _t
+        self.join()
+        token = self.confirms[-1][1].split("token=", 1)[1]
+        later = _t.time() + 3600
+        with patch("app.auth.time.time", return_value=later):
+            email, _ = self.main.auth.consume_login(token)
+        self.assertEqual(email, "sam@example.com")
+
+    def test_an_ordinary_link_still_dies_in_fifteen_minutes(self):
+        import time as _t
+        token = self.main.auth.make_login_link("x@example.com").split("token=")[1]
+        with patch("app.auth.time.time", return_value=_t.time() + 3600):
+            self.assertEqual(self.main.auth.consume_login(token), (None, ""))
+
+    def test_a_recruited_address_waits_for_it(self):
+        """Its letters carry this address on Reply-To."""
+        self.join()
+        with patch.object(self.main.config, "managed_mail_available",
+                          lambda: True), \
+                patch.object(self.main.vault, "available", lambda: True):
+            r = self.client.post("/setup/mail/managed", follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/setup/mail?e=confirm")
+        user = self.main.db.get_user_by_email("sam@example.com")
+        self.assertIsNone(self.main.db.get_mail_account(user["id"]))
+
+    def test_send_it_again(self):
+        self.join()
+        self.client.post("/account/confirm", data={"next": "/dashboard"})
+        self.assertEqual(len(self.confirms), 2)
+
+
+class AnExistingAccountStillGetsALink(StartCase):
+    def setUp(self):
+        super().setUp()
+        self.existing()
+    def test_typing_its_address_does_not_sign_anybody_in(self):
+        r = self.join()
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(self.client.cookies.get("jm_session"))
+        self.assertIsNone(self.profile())
 
     def test_the_inbox_screen_shows_what_is_waiting(self):
         page = self.submit()
@@ -160,6 +297,10 @@ class TheLink(StartCase):
 
 
 class TappingIt(StartCase):
+    def setUp(self):
+        super().setUp()
+        self.existing()
+
     def test_same_browser_starts_at_once(self):
         self.submit()
         r = self.tap()
@@ -208,6 +349,7 @@ class TappingIt(StartCase):
     def test_answers_for_one_address_are_never_another_accounts(self):
         self.submit()
         self.client.cookies.clear()
+        self.existing("someone.else@example.com")
         self.sign_in("someone.else@example.com")
         self.assertEqual(self.client.get("/start/confirm",
                                          follow_redirects=False).headers["location"],

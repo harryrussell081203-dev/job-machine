@@ -86,7 +86,7 @@
     email: function (v) {
       if (!v) return null;
       return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)
-        ? ["Your link goes here", true]
+        ? ["Looks right", true]
         : ["Needs to look like you@example.com", false];
     }
   };

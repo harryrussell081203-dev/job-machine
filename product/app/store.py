@@ -626,6 +626,15 @@ _ADDED_COLUMNS = [
     # only, comma-separated, as a pointer to who is likely hiring. Empty
     # when the firm is not small, not matched, or the key is not set.
     ("drafts", "directors", "TEXT NOT NULL DEFAULT ''"),
+    # 1 for an account made on /start without a sign-in link, until a link
+    # sent to that address is tapped. Every account before this column came
+    # through a link, so the default is confirmed. See main.py's start_submit.
+    ("users", "email_unconfirmed", "INTEGER NOT NULL DEFAULT 0"),
+    # Bumped when an unconfirmed address is confirmed, which signs out every
+    # session made before that. Otherwise somebody who typed another
+    # person's address first would keep a way into the account its real owner
+    # goes on to use.
+    ("users", "session_epoch", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

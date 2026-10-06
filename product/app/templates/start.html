@@ -43,7 +43,7 @@
 {% if note %}<div class="note">{{ note }}</div>{% endif %}
 {% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
 
-<form method="post" action="/start#starterror" class="quick" data-busy="Sending your link&hellip;">
+<form method="post" action="/start#starterror" class="quick" data-busy="Setting it up&hellip;">
   <input type="hidden" name="about" value="{{ about or '' }}">
 
   {% macro field(key) %}
@@ -118,12 +118,12 @@
       <input name="email" required type="email" autocomplete="email"
              inputmode="email" data-echo="email" placeholder="you@example.com"
              value="{{ email or '' }}">
-      <small class="hint">We email you a link instead of a password. Tap it
-        and it starts looking.</small></label>
-    <button class="btn">Email me my link</button>
+      <small class="hint">Where you sign in from, with no password to
+        remember. Employers' replies come to the address you send from.</small></label>
+    <button class="btn">Start looking</button>
     <p class="hint" style="margin-bottom:0">
-      {%- if spots_left %}Free for the first {{ config.FREE_SPOTS }} people,
-        {{ spots_left }} place{{ '' if spots_left == 1 else 's' }} left. No card.
+      {%- if spots_left %}<b>Free for life</b>: you're taking one of the last
+        {{ spots_left }} free place{{ '' if spots_left == 1 else 's' }}. No card.
       {%- else %}{{ config.PRICE_LABEL }}, cancel any time.{% endif %}
       By carrying on you agree to the <a href="/terms">terms</a> and the
       <a href="/privacy">privacy notice</a>.</p>

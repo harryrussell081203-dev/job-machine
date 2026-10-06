@@ -132,6 +132,41 @@ def _has_free_spot(user) -> bool:
         return False
 
 
+def email_unconfirmed(user) -> bool:
+    """Made without a sign-in link and not yet proved. Tolerant of a row
+    read before the column existed."""
+    try:
+        return bool(user["email_unconfirmed"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def session_epoch(user) -> int:
+    try:
+        return int(user["session_epoch"] or 0)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0
+
+
+def mark_unconfirmed(user_id: int) -> None:
+    with connect() as c:
+        c.execute("UPDATE users SET email_unconfirmed = 1 WHERE id = ?",
+                  (user_id,))
+
+
+def confirm_email(user_id: int) -> int:
+    """A link sent to this address was tapped. Returns the session epoch to
+    sign in with: unchanged for an address already confirmed, one higher -
+    signing out every older session - for one that was not."""
+    with connect() as c:
+        c.execute("UPDATE users SET email_unconfirmed = 0, "
+                  "session_epoch = session_epoch + 1 "
+                  "WHERE id = ? AND email_unconfirmed = 1", (user_id,))
+        row = c.execute("SELECT session_epoch FROM users WHERE id = ?",
+                        (user_id,)).fetchone()
+    return int(row["session_epoch"] or 0) if row else 0
+
+
 def free_spots_taken() -> int:
     with connect() as c:
         row = c.execute(

@@ -177,10 +177,13 @@ def current_user(request: Request):
     It is throttled in db.touch_user, so a screen polled every few seconds
     costs one write a quarter of an hour rather than one a poll.
     """
-    uid = auth.read_session(request.cookies.get(SESSION_COOKIE))
+    uid, epoch = auth.read_session_epoch(request.cookies.get(SESSION_COOKIE))
     if not uid:
         return None
     user = db.get_user(uid)
+    # Signed out by an address being confirmed: see db.confirm_email.
+    if user and epoch != db.session_epoch(user):
+        return None
     if user:
         db.touch_user(user["id"], user["last_seen_at"])
     return user
@@ -836,38 +839,53 @@ def verify(request: Request, token: str = ""):
                             "again and we will send a fresh one.")
     existed = db.get_user_by_email(email) is not None
     user = db.get_or_create_user(email)
-    # A free launch place is taken by a new account, not by anybody who signs
-    # in again. Claiming on every sign-in would hand a place to somebody who
-    # already decided not to pay, which is the opposite of what it is for.
+    # Tapping a link sent to the address proves it, so an account made on
+    # /start without one is confirmed here - and every session made before
+    # this moment is signed out, in case it was not theirs.
+    was_unconfirmed = db.email_unconfirmed(user)
+    epoch = db.confirm_email(user["id"])
     if not existed:
-        db.claim_free_spot(user["id"])
-        # Where they came from, read off the cookie set on the page they first
-        # landed on. This request cannot answer it: it arrived from a mail
-        # client, so it carries no referrer and no campaign.
-        #
-        # New accounts only, and set_user_source will not overwrite either.
-        # A returning user signing in from a different link is the same user,
-        # and re-attributing them would move a sign-up between channels weeks
-        # later and make a report that has already been read change.
-        try:
-            source = attribution.read(request)
-            db.set_user_source(user["id"], source)
-            db.record_event(user["id"], "signed_up",
-                            detail=attribution.describe(source))
-            referrals.credit_signup(user["id"], source.get("ref", ""))
-        except Exception:
-            # Never between a person and their account.
-            log.exception("could not record the sign-up")
+        _new_account(request, user)
     target = _landing_for(user)
     if target == "/setup":
         target = _after_start(request, user, email, link_id) or target
+    elif was_unconfirmed and target == "/dashboard":
+        target = "/dashboard?confirmed=1"
     response = RedirectResponse(target, status_code=303)
     response.delete_cookie(START_COOKIE)
     response.set_cookie(
-        SESSION_COOKIE, auth.make_session(user["id"]),
+        SESSION_COOKIE, auth.make_session(user["id"], epoch),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
         secure=not config.DEV)
     return response
+
+
+def _new_account(request: Request, user) -> None:
+    """The bookkeeping for an account that did not exist a moment ago,
+    whichever door it came through.
+
+    A free launch place is taken here, by a new account, not by anybody who
+    signs in again: claiming on every sign-in would hand a place to somebody
+    who already decided not to pay.
+    """
+    db.claim_free_spot(user["id"])
+    # Where they came from, read off the cookie set on the page they first
+    # landed on. A link tapped in a mail app carries no referrer and no
+    # campaign, so the request itself cannot say.
+    #
+    # New accounts only, and set_user_source will not overwrite either. A
+    # returning user signing in from a different link is the same user, and
+    # re-attributing them would move a sign-up between channels weeks later
+    # and make a report that has already been read change.
+    try:
+        source = attribution.read(request)
+        db.set_user_source(user["id"], source)
+        db.record_event(user["id"], "signed_up",
+                        detail=attribution.describe(source))
+        referrals.credit_signup(user["id"], source.get("ref", ""))
+    except Exception:
+        # Never between a person and their account.
+        log.exception("could not record the sign-up")
 
 
 @app.post("/logout")
@@ -949,10 +967,30 @@ async def start_read(request: Request):
     return _start_page(request, stage="check", answers=read, about=text)
 
 
+# A new address gets an account straight away. Generous for a person, and a
+# ceiling on how many free places one machine can take.
+START_ACCOUNTS_PER_IP = (5, 86400)
+
+
 @app.post("/start", response_class=HTMLResponse)
 async def start_submit(request: Request):
-    """Every answer checked by the same Profile the machine runs on, then a
-    sign-in link that switches it on."""
+    """Every answer checked by the same Profile the machine runs on, then in.
+
+    WHY THERE IS NO LINK TO TAP FOR A NEW ADDRESS. The link proved the
+    address belonged to whoever typed it, and for a new address there is
+    nothing yet that proof protects: no letters, no replies, no mailbox. So
+    a new address is signed in on the spot and the search starts. The link
+    is still sent, as a confirmation that also signs them in on another
+    device, and it is still required where the proof does protect something:
+
+      - an address that already has an account. Signing in by typing an
+        email would be no lock at all, so that is a link, as on /login.
+      - sending from a Recruited address, which puts this address on
+        Reply-To for employers. See mail_managed.
+
+    Connecting their own mailbox proves the address by signing in to it, so
+    sending on autopilot from their own email needs no link at all.
+    """
     form = await request.form()
     answers = _start_answers(form)
     email = (form.get("email") or "").strip()
@@ -971,12 +1009,19 @@ async def start_submit(request: Request):
                      "in it, like you@example.com.")
 
     address = email.lower()
+    ip = ratelimit.client_ip(request)
+    if db.get_user_by_email(address) is None:
+        limit, window = START_ACCOUNTS_PER_IP
+        if ratelimit.hit(f"start:new:{ip}", limit=limit, window=window):
+            return _start_new_account(request, address, answers)
+
+    # An existing account (or a machine that has made plenty today): the
+    # answers wait for the link, exactly as before.
     waiting = understood.playback(answers)
     limit, window = LOGIN_PER_EMAIL
     ip_limit, ip_window = LOGIN_PER_IP
     allowed = ratelimit.hit(f"login:email:{address}", limit=limit, window=window)
-    allowed &= ratelimit.hit(f"login:ip:{ratelimit.client_ip(request)}",
-                             limit=ip_limit, window=ip_window)
+    allowed &= ratelimit.hit(f"login:ip:{ip}", limit=ip_limit, window=ip_window)
     link_id = auth.new_link_id()
     if allowed:
         db.save_signup_draft(link_id, address, answers)
@@ -993,6 +1038,29 @@ async def start_submit(request: Request):
     response = render(request, "login.html", sent=email, waiting=waiting)
     response.set_cookie(START_COOKIE, link_id, max_age=86400, httponly=True,
                         samesite="lax", secure=not config.DEV)
+    return response
+
+
+def _start_new_account(request: Request, address: str, answers: dict):
+    """Make the account, save the answers, start looking, sign them in."""
+    user = db.get_or_create_user(address)
+    db.mark_unconfirmed(user["id"])
+    _new_account(request, user)
+    user = db.get_user(user["id"])
+    _save_start(user, answers)
+    views.outcome("start:in", user_agent=request.headers.get("user-agent", ""))
+    try:
+        auth.send_confirm_email(address, auth.make_login_link(address, long=True),
+                                waiting=understood.for_email(answers))
+    except Exception:
+        # Confirming is for later. Nothing about it may stand between a new
+        # person and the search they just started.
+        log.exception("start: confirm email could not be sent")
+    response = RedirectResponse("/dashboard?welcome=1", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, auth.make_session(user["id"], db.session_epoch(user)),
+        max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",
+        secure=not config.DEV)
     return response
 
 
@@ -1089,7 +1157,8 @@ def dashboard(request: Request):
                   progress=db.run_progress(user["id"]),
                   push_key=push.public_key() if push.available() else "",
                   referral=referrals.card(user["id"]),
-                  welcome=request.query_params.get("welcome") == "1")
+                  welcome=request.query_params.get("welcome") == "1",
+                  unconfirmed=db.email_unconfirmed(user))
 
 
 @app.post("/push/subscribe")
@@ -1599,6 +1668,29 @@ def billing_done(request: Request, ok: str = "0"):
     # Note what this does NOT do: it does not mark the user paid. Only a
     # verified webhook does that. This page just says what happened.
     return render(request, "billing_done.html", user=user, ok=(ok == "1"))
+
+
+CONFIRM_RESEND = (3, 3600)
+
+
+@app.post("/account/confirm")
+async def resend_confirm(request: Request):
+    """Send the confirm link again, to the account's own address only."""
+    user = current_user(request)
+    if not user:
+        return needs_login()
+    form = await request.form()
+    back = form.get("next") if form.get("next") in (
+        "/dashboard", "/setup/mail") else "/dashboard"
+    limit, window = CONFIRM_RESEND
+    if db.email_unconfirmed(user) and ratelimit.hit(
+            f"confirm:{user['id']}", limit=limit, window=window):
+        try:
+            auth.send_confirm_email(
+                user["email"], auth.make_login_link(user["email"], long=True))
+        except Exception:
+            log.exception("could not resend the confirm email")
+    return RedirectResponse(f"{back}?e=resent", status_code=303)
 
 
 @app.get("/account", response_class=HTMLResponse)
@@ -2584,6 +2676,7 @@ def mail_form(request: Request):
     profile = db.load_profile(user["id"]) or {}
     return render(request, "mail.html", user=user,
                   mail=db.get_mail_account(user["id"]),
+                  unconfirmed=db.email_unconfirmed(user),
                   vault_ready=vault.available(),
                   managed_ready=config.managed_mail_available(),
                   managed_preview=(
@@ -2613,6 +2706,13 @@ def mail_managed(request: Request):
                       managed_ready=config.managed_mail_available(),
                       managed_preview="", profile=profile,
                       error="Recruited addresses are not switched on here.")
+
+    # Letters from a Recruited address carry this account's address on
+    # Reply-To. Until a link sent there has been tapped, nothing shows it
+    # belongs to whoever is signed in, and an employer's reply would go to a
+    # stranger who never applied.
+    if db.email_unconfirmed(user):
+        return RedirectResponse("/setup/mail?e=confirm", status_code=303)
 
     # Where replies land. Their account address unless they gave a different
     # one on their profile - and never blank, because a letter no employer

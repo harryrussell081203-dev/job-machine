@@ -917,3 +917,9 @@ small.echo { display: block; margin-top: 6px; color: var(--good);
 small.echo:empty { display: none; }
 small.echo.wait { color: var(--muted); font-weight: 400; }
 .note.welcome { font-size: 15.5px; }
+
+/* The early offer, above the headline while places last. */
+.offer { display: inline-block; margin: 0 0 14px; padding: 7px 14px;
+  border-radius: var(--pill); background: var(--good-bg); color: var(--good);
+  font-size: 14px; line-height: 1.4; }
+.offer b { font-weight: 700; }
