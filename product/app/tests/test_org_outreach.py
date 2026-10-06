@@ -93,6 +93,26 @@ class TheCharityCommissionFile(unittest.TestCase):
         self.assertEqual(out[0]["email"], "info@leedsjobclub.org")
         self.assertEqual(out[0]["website"], "https://www.leedsjobclub.org")
 
+    def test_writing_the_list_to_a_bare_file_name(self):
+        """The workflow writes orgs.json in the working directory, which has
+        no directory part; the first run on the full register died there."""
+        import json
+        import tempfile
+        from tools import find_orgs
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "reg.txt")
+            with open(src, "w") as f:
+                f.write("charity_name\tcharity_contact_web\tcharity_activities"
+                        "\nLeeds Job Club\twww.leedsjobclub.org\tjob club\n")
+            here = os.getcwd()
+            os.chdir(d)
+            try:
+                find_orgs.main(["--from-file", src, "--out", "orgs.json"])
+                with open("orgs.json") as f:
+                    self.assertEqual(json.load(f)[0]["name"], "Leeds Job Club")
+            finally:
+                os.chdir(here)
+
     def test_a_very_long_field_does_not_stop_the_run(self):
         from tools import find_orgs
         text = ("charity_name\tcharity_contact_web\tcharity_activities\n"
