@@ -1056,7 +1056,10 @@ def _start_new_account(request: Request, address: str, answers: dict):
         # Confirming is for later. Nothing about it may stand between a new
         # person and the search they just started.
         log.exception("start: confirm email could not be sent")
-    response = RedirectResponse("/dashboard?welcome=1", status_code=303)
+    # The anchor is not decoration. The form posts to /start#starterror, and
+    # a browser carries that fragment through a redirect that names none, so
+    # people arrived at /dashboard?welcome=1#starterror.
+    response = RedirectResponse("/dashboard?welcome=1#welcome", status_code=303)
     response.set_cookie(
         SESSION_COOKIE, auth.make_session(user["id"], db.session_epoch(user)),
         max_age=config.SESSION_MAX_AGE, httponly=True, samesite="lax",

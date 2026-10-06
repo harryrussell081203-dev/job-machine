@@ -6,7 +6,7 @@
    that it understood and is already at work, because the only other sign of
    that for the next few minutes is a progress bar. #}
 {% if welcome and profile %}
-  <div class="note good welcome">
+  <div class="note good welcome" id="welcome">
     <b>You're in{% if profile.name %}, {{ profile.name.split(' ')[0] }}{% endif %}.
     It's looking for
     {% if profile.target_roles %}{{ profile.target_roles | join(', ') }}{% else %}work{% endif %}

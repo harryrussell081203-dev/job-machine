@@ -35,7 +35,7 @@ import imaplib
 import smtplib
 import ssl
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from urllib.parse import quote
 
 from . import config
@@ -116,6 +116,12 @@ def send_via_smtp(*, host: str, port: int, username: str, password: str,
     msg["To"] = to_email
     if reply_to:
         msg["Reply-To"] = reply_to
+    # Both are required of every email (RFC 5322) and a message without them
+    # is one more reason for a filter to doubt it. Gmail fills them in on the
+    # way out; plenty of other providers do not, and we cannot know which
+    # one a user's mailbox is.
+    msg["Date"] = formatdate(localtime=False)
+    msg["Message-ID"] = make_msgid(domain=sender.rpartition("@")[2] or None)
     msg.set_content(body)
 
     if attachment:
