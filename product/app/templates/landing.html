@@ -112,6 +112,28 @@ want.</p>
   counted email by email from his inbox. <a href="#counted">How we counted</a>.</p>
 
 <h2 id="how">How it works</h2>
+{# The real sign-up, recorded from the app itself (example details, sped up
+   about a third). Muted and looping so it plays inline on a phone like a
+   picture; paused for anybody whose phone asks for less motion. Both
+   formats are small: WebM for most browsers, MP4 for Safari. #}
+<figure class="demo">
+  <video autoplay muted loop playsinline preload="metadata"
+         width="390" height="760" poster="/static/demo/signup-poster.jpg"
+         aria-label="Signing up: type one sentence about the work you want, it says back what it understood, add your pay, name, phone and email, and it starts looking">
+    <source src="/static/demo/signup.webm" type="video/webm">
+    <source src="/static/demo/signup.mp4" type="video/mp4">
+  </video>
+  <figcaption>The real sign-up, with example details. One sentence, a few
+    boxes, and it starts looking.</figcaption>
+</figure>
+<script>
+(function () {
+  var v = document.querySelector("figure.demo video");
+  if (v && window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    v.removeAttribute("autoplay"); v.pause(); v.controls = true;
+  }
+})();
+</script>
 <ol class="steps3">
   <li><span class="n">1</span><div><b>Tell us the job you want.</b>
     One sentence is enough, like &ldquo;warehouse work in Leeds, at least

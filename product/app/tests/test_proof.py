@@ -47,6 +47,17 @@ class OnTheLandingPage(AppTestCase):
         for tell in ("accepted", "1 october", "15 september"):
             self.assertNotIn(tell, page)
 
+    def test_the_sign_up_clip_is_there_and_its_files_are_served(self):
+        """Muted, looping and inline, or a phone opens it full screen or
+        not at all; and every file it names has to exist."""
+        page = self.client.get("/").text
+        for attr in ("autoplay", "muted", "loop", "playsinline"):
+            self.assertIn(attr, page.split('<figure class="demo">', 1)[1][:400])
+        for path in ("/static/demo/signup.webm", "/static/demo/signup.mp4",
+                     "/static/demo/signup-poster.jpg"):
+            self.assertIn(path, page)
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+
     def test_the_account_button_comes_before_the_finder(self):
         body = self.client.get("/").text
         self.assertLess(body.find('class="hero-cta"'), body.find('id="try"'))

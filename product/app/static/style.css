@@ -945,3 +945,11 @@ ul.promises li::before { content: "\2713"; position: absolute; left: 4px;
   color: var(--good); font-weight: 700; }
 .panel.final-cta { margin-top: 30px; text-align: left; }
 @media (max-width: 520px) { .stats.two { grid-template-columns: 1fr; } }
+
+/* The sign-up clip, in a phone-shaped frame. */
+figure.demo { margin: 14px auto 18px; max-width: 250px; text-align: center; }
+figure.demo video { display: block; width: 100%; height: auto;
+  border-radius: 30px; border: 7px solid var(--ink); background: var(--panel);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .18); }
+figure.demo figcaption { margin-top: 10px; font-size: 13.5px;
+  color: var(--muted); line-height: 1.45; }
