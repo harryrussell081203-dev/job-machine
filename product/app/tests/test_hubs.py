@@ -33,10 +33,17 @@ def job(title, town="Leeds", search="warehouse operative", posted="2026-10-01"):
 
 
 class Matching(unittest.TestCase):
-    def test_by_the_search_that_found_it(self):
+    def test_by_the_adverts_own_title(self):
         from app import hubs
-        self.assertEqual(hubs.role_of(job("Picker")), "warehouse operative")
-        self.assertEqual(hubs.town_of(job("Picker")), "Leeds")
+        self.assertEqual(hubs.role_of(job("Warehouse Operative - Nights")),
+                         "warehouse operative")
+        self.assertEqual(hubs.town_of(job("Picker", town="Leeds")), "Leeds")
+
+    def test_not_by_the_search_that_found_it(self):
+        """The first live run: a "warehouse operative" search in Edinburgh
+        returned "Tech Lead, Android Core Product"."""
+        from app import hubs
+        self.assertEqual(hubs.role_of(job("Tech Lead, Android Core Product")), "")
 
     def test_older_entries_by_their_own_words(self):
         from app import hubs
@@ -52,7 +59,7 @@ class Pages(AppTestCase):
     def publish(self, *names, roles=None):
         from app import directory
         for n in names:
-            directory.record(n, site(n), roles=roles or [job(f"{n} picker")])
+            directory.record(n, site(n), roles=roles or [job("Warehouse Operative")])
 
     def test_no_page_below_three_employers(self):
         self.publish("Pennine Foods", "Kestrel Logistics")
@@ -94,7 +101,7 @@ class Pages(AppTestCase):
     def test_links_to_the_same_role_elsewhere(self):
         self.publish("Pennine Foods", "Kestrel Logistics", "Aire Valley Stores")
         self.publish("Humber Freight", "Hull Docks Supply", "East Coast Pick",
-                     roles=[job("Picker", town="Hull")])
+                     roles=[job("Warehouse Operatives", town="Hull")])
         page = self.client.get("/jobs/warehouse-operative/leeds").text
         self.assertIn('href="/jobs/warehouse-operative/hull"', page)
 
