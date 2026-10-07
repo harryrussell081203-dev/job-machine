@@ -72,7 +72,7 @@
 <meta name="apple-mobile-web-app-title" content="Recruited">
 <meta name="mobile-web-app-capable" content="yes">
 </head>
-<body>
+<body{% if consent_yes %} data-consent="yes"{% endif %}>
 
 <header class="bar">
   {# The span is the lighter half of the wordmark. Splitting the name here
@@ -106,6 +106,10 @@
   </nav>
 </header>
 
+{# Signed in only. On a first visit it sat above the headline on every
+   iPhone, asking a stranger to install an app they had not yet signed up
+   for, and pushing the one button that matters below the fold. #}
+{% if user %}
 <div class="installbar" id="installbar" hidden>
   <span>Add Recruited to your home screen.</span>
   <span class="installbtns">
@@ -117,6 +121,7 @@
     <button class="link" id="installno">Not now</button>
   </span>
 </div>
+{% endif %}
 
 <main>
   {% if error %}<div class="note bad">{{ error }}</div>{% endif %}
@@ -336,5 +341,6 @@ if ("serviceWorker" in navigator) {
 })();
 </script>
 
+{% if not consent_asked %}{% include "_consent.html" %}{% endif %}
 </body>
 </html>

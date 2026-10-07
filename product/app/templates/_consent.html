@@ -1,0 +1,34 @@
+{# The analytics cookie, asked once. Accept and No thanks are the same size
+   and the same distance from a thumb: a no has to be as easy as a yes, or
+   the yes means nothing (and the ICO says so). Nothing is set or recorded
+   about the visitor until they choose, and a no is remembered so they are
+   not asked again. See app/journey.py. #}
+<div class="consentbar" id="consentbar" role="region" aria-label="Cookies">
+  <p>Can we use a cookie to see how people use this site? It helps us make
+    sign-up easier. No ads, nothing shared.
+    <a href="/privacy#cookies">More</a></p>
+  <div class="consent-btns">
+    <button type="button" class="btn small" data-consent="yes">Accept</button>
+    <button type="button" class="btn small" data-consent="no">No thanks</button>
+  </div>
+</div>
+<script>
+(function () {
+  var bar = document.getElementById("consentbar");
+  if (!bar) return;
+  bar.querySelectorAll("[data-consent]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var choice = b.getAttribute("data-consent");
+      bar.remove();
+      fetch("/consent", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choice: choice, path: location.pathname,
+                               referrer: document.referrer || "" }) })
+        .then(function () {
+          if (choice === "yes") document.body.setAttribute("data-consent", "yes");
+          document.dispatchEvent(new Event("consent-answered"));
+        }).catch(function () {});
+    });
+  });
+})();
+</script>

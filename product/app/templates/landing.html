@@ -81,10 +81,10 @@
   <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left</b></p>
 {% endif %}
 
-<h1>Stop clicking Apply. Start getting replies.</h1>
-<p class="lede">We find jobs near you, find the real person who is hiring,
-and write them a short email from you. You just tell us what work you
-want.</p>
+{# Two headlines, tested fairly: a visitor who accepted the cookie keeps the
+   version they first saw; everybody else sees A. See journey.HEADLINES. #}
+<h1 data-section="hero">{{ headline.title }}</h1>
+<p class="lede">{{ headline.lede }}</p>
 
 <p class="hero-cta">
   <a class="btn" href="/start" data-pulse="land:cta:hero">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
@@ -99,7 +99,7 @@ want.</p>
 </small></p>
 
 {# Proof in the first screen, as one person's real results. #}
-<p class="proof-intro">Harry built this for his own job hunt.
+<p class="proof-intro" data-section="proof">Harry built this for his own job hunt.
   He emailed the person hiring instead of clicking Apply.
   Here is what happened:</p>
 <div class="stats proof">
@@ -111,7 +111,7 @@ want.</p>
 <p class="hint">These are the founder's own results, {{ proof.period }},
   counted email by email from his inbox. <a href="#counted">How we counted</a>.</p>
 
-<h2 id="how">How it works</h2>
+<h2 id="how" data-section="how">How it works</h2>
 {# The real sign-up, recorded from the app itself (example details, sped up
    about a third). Muted and looping so it plays inline on a phone like a
    picture; paused for anybody whose phone asks for less motion. Both
@@ -151,7 +151,7 @@ want.</p>
    dark mode, and shows exactly what the machine writes and what the tracker
    shows. Labelled as an example because it is one - made-up firms, so no
    stranger's curiosity is pointed at a real inbox. #}
-<h2>What it looks like</h2>
+<h2 data-section="looks">What it looks like</h2>
 <div class="showcase">
   <div class="panel shot">
     <p class="shot-label">The email <small class="muted">&middot; example, names changed</small></p>
@@ -178,7 +178,7 @@ Sam Doherty
   </div>
 </div>
 
-<div class="panel quote">
+<div class="panel quote" data-section="story">
   <p>&ldquo;I&rsquo;ve had 3 job offers because of this system.&rdquo;</p>
   <p class="muted"><small>Harry, who built this</small></p>
   <p style="margin-bottom:6px"><b>One email, start to finish:</b></p>
@@ -189,7 +189,7 @@ Sam Doherty
   </ol>
 </div>
 
-<h2>Why email a person?</h2>
+<h2 data-section="why">Why email a person?</h2>
 <p>When you click Apply, your CV joins a pile of hundreds and a computer
 sorts it. When you email the person hiring, a human reads it. Almost nobody
 does that, so you stand out.</p>
@@ -208,12 +208,12 @@ Using only real ones, almost none did, and far more people replied:</p>
 <p>So this only ever uses an address the company itself has put online.
 No real address, no email.</p>
 
-<h2 id="try">Try it now. No account needed.</h2>
+<h2 id="try" data-section="try">Try it now. No account needed.</h2>
 <p>Type any company. We will show you the real email addresses it publishes,
 or tell you straight if there are none.</p>
 {% include "_finder.html" %}
 
-<h2>Why not an auto-apply bot?</h2>
+<h2 data-section="versus">Why not an auto-apply bot?</h2>
 <div class="panel scroll stacked">
 <table class="versus">
   <thead><tr><th></th><th>Auto-apply bots</th><th>Recruited</th></tr></thead>
@@ -225,7 +225,7 @@ or tell you straight if there are none.</p>
 </table>
 </div>
 
-<h2>Our promises</h2>
+<h2 data-section="promises">Our promises</h2>
 <ul class="promises">
   <li>We never guess an email address.</li>
   <li>We never make anything up about you.</li>
@@ -234,7 +234,7 @@ or tell you straight if there are none.</p>
     to&rdquo; list and nothing reaches anyone there.</li>
 </ul>
 
-<h2>Price</h2>
+<h2 data-section="price">Price</h2>
 <div class="panel price">
   {% if spots_left %}
   <p class="price-line"><b>Free for life</b>
@@ -254,7 +254,7 @@ or tell you straight if there are none.</p>
     account page.</p>
 </div>
 
-<h2>Questions</h2>
+<h2 data-section="faq">Questions</h2>
 <div class="faq">
   <details><summary>Is this spam?</summary>
     <p>No. It is one short email to one person, about a job they advertised.
@@ -281,7 +281,7 @@ or tell you straight if there are none.</p>
       free place, there is nothing to cancel.{% endif %}</p></details>
 </div>
 
-<div class="panel final-cta">
+<div class="panel final-cta" data-section="final">
   <h2 style="margin-top:0">Ready to get replies?</h2>
   <p>Tell us the job you want. We will start looking straight away.</p>
   <p class="hero-cta" style="margin-bottom:0">

@@ -40,6 +40,13 @@
   function remember() { try { localStorage.setItem(KEY, "1"); } catch (e) {} }
   function show() {
     if (acted || !card.hidden) return;
+    // Never on top of the cookie question; ask once that one is answered.
+    if (document.getElementById("consentbar")) {
+      document.addEventListener("consent-answered", function () {
+        setTimeout(show, 8000);
+      }, { once: true });
+      return;
+    }
     card.hidden = false; remember();
     window.rcPulse && rcPulse("why:shown");
   }

@@ -55,6 +55,7 @@ from . import study  # noqa: E402
 from . import track_record  # noqa: E402
 from . import understood  # noqa: E402
 from . import pulse  # noqa: E402
+from . import journey  # noqa: E402
 from . import views  # noqa: E402
 
 log = logging.getLogger("recruited")
@@ -214,6 +215,9 @@ def render(request: Request, template: str, **ctx):
                          host=request.headers.get("host", ""))
         except Exception:
             pass
+        # A journey step, for a visitor who accepted the cookie. Nothing
+        # at all for anybody who did not, or has not been asked yet.
+        journey.record_request(request, "view")
     response = templates.TemplateResponse(
         request, template,
         {"user": user, "paid": db.is_paid(user), "config": config,
@@ -234,7 +238,13 @@ def render(request: Request, template: str, **ctx):
          "record": track_record.read(),
          # Appended to the stylesheet's URL so a changed file is a changed
          # URL. See _asset_version for the deploy this was invisible on.
-         "asset_version": ASSET_VERSION, **ctx})
+         "asset_version": ASSET_VERSION,
+         # Whether to ask about the analytics cookie: only while there is
+         # no answer yet, and never to somebody signed in on the dashboard
+         # side, where it would be in the way of the work.
+         "consent_asked": bool(journey.consent(request)),
+         "consent_yes": journey.consent(request) == "yes",
+         "headline": journey.headline(request), **ctx})
     # First touch, here, because this is the same single door: a campaign tag
     # has to be read on the page somebody LANDS on, not where they sign up.
     # By the time they tap the link in their inbox the request carries no
@@ -847,6 +857,7 @@ def verify(request: Request, token: str = ""):
     epoch = db.confirm_email(user["id"])
     if not existed:
         _new_account(request, user)
+        journey.record_request(request, "signed_up", "link")
     target = _landing_for(user)
     if target == "/setup":
         target = _after_start(request, user, email, link_id) or target
@@ -968,6 +979,73 @@ async def start_read(request: Request):
     return _start_page(request, stage="check", answers=read, about=text)
 
 
+@app.post("/consent")
+async def set_consent(request: Request):
+    """Accept or decline the analytics cookie. Either answer is remembered,
+    so nobody is asked twice; only "yes" gets a visitor code."""
+    try:
+        choice = str((await request.json()).get("choice", ""))
+    except Exception:
+        choice = ""
+    if choice not in ("yes", "no"):
+        return JSONResponse({"ok": False}, status_code=400)
+    response = JSONResponse({"ok": True})
+    response.set_cookie(journey.CONSENT_COOKIE, choice,
+                        max_age=journey.CONSENT_MAX_AGE, samesite="lax",
+                        secure=not config.DEV, httponly=True)
+    views.outcome(f"consent:{choice}",
+                  user_agent=request.headers.get("user-agent", ""))
+    if choice == "yes":
+        vid = request.cookies.get(journey.VISITOR_COOKIE) or journey.new_visitor()
+        response.set_cookie(journey.VISITOR_COOKIE, vid,
+                            max_age=journey.VISITOR_MAX_AGE, samesite="lax",
+                            secure=not config.DEV, httponly=True)
+        # The page they were on when they said yes, and where they had come
+        # from - the first step of the journey, which the page view before
+        # the answer could not record.
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        journey.record(vid, "view", str(data.get("path", ""))[:120],
+                       "consented",
+                       journey._source(str(data.get("referrer", "")),
+                                       request.headers.get("host", "")),
+                       journey.variant(vid))
+    else:
+        response.delete_cookie(journey.VISITOR_COOKIE)
+    return response
+
+
+@app.post("/j")
+async def journey_step(request: Request):
+    """A step only the page can see: leaving, and which section was on the
+    screen at the time. Consenting visitors only; fixed kinds only."""
+    vid = journey.visitor(request)
+    if not vid:
+        return Response(status_code=204)
+    try:
+        data = await request.json()
+    except Exception:
+        return Response(status_code=204)
+    kind = str(data.get("k", ""))
+    section = str(data.get("s", ""))
+    if kind not in journey.CLIENT_KINDS:
+        return Response(status_code=204)
+    if section not in journey.SECTIONS:
+        section = "other"
+    try:
+        secs = max(0, min(3600, int(data.get("t", 0))))
+    except (TypeError, ValueError):
+        secs = 0
+    path = str(data.get("p", ""))[:120]
+    if path not in ("/", "/start", "/find", "/dashboard"):
+        path = "other"
+    journey.record(vid, kind, path, f"{section}|{secs}", "",
+                   journey.variant(vid))
+    return Response(status_code=204)
+
+
 PULSE_PER_IP = (120, 3600)
 
 
@@ -983,6 +1061,7 @@ async def pulse_event(request: Request):
     if pulse.allowed(name) and ratelimit.hit(
             f"pulse:{ratelimit.client_ip(request)}", limit=limit, window=window):
         pulse.count(name, request.headers.get("user-agent", ""))
+        journey.record_request(request, "step", name)
     return Response(status_code=204)
 
 
@@ -1090,6 +1169,7 @@ def _start_new_account(request: Request, address: str, answers: dict):
     user = db.get_user(user["id"])
     _save_start(user, answers)
     views.outcome("start:in", user_agent=request.headers.get("user-agent", ""))
+    journey.record_request(request, "signed_up", "instant")
     try:
         auth.send_confirm_email(address, auth.make_login_link(address, long=True),
                                 waiting=understood.for_email(answers))
@@ -2309,6 +2389,9 @@ def admin(request: Request):
                   # Where people stop before an account exists, and what
                   # the ones who answered said was stopping them.
                   signup_why=pulse.report(since=now - 7 * 86400),
+                  journeys=journey.report(since=now - 28 * 86400),
+                  consent_counts={k: v for k, v in views.outcomes(
+                      since=now - 28 * 86400).items() if k.startswith("consent:")},
                   search_console=search_console.latest(),
                   from_search=views.search_report(since=now - 28 * 86400),
                   **adminlib.summarise(rows, now=now))

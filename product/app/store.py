@@ -412,6 +412,20 @@ CREATE TABLE IF NOT EXISTS feedback (
     text    TEXT    NOT NULL DEFAULT ''
 );
 
+-- Steps of a visitor's journey, ONLY for visitors who accepted the
+-- analytics cookie. vid is a random code naming a browser, never a person,
+-- and is never joined to an account. Deleted after 90 days. See journey.py.
+CREATE TABLE IF NOT EXISTS journey_events (
+    vid     TEXT    NOT NULL,
+    at      BIGINT  NOT NULL,
+    kind    TEXT    NOT NULL,
+    path    TEXT    NOT NULL DEFAULT '',
+    detail  TEXT    NOT NULL DEFAULT '',
+    source  TEXT    NOT NULL DEFAULT '',
+    variant TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS journey_events_at ON journey_events (at);
+
 -- One row per fact the site needs to remember about itself between restarts.
 -- Deliberately not a settings table: nothing a human sets belongs here, only
 -- things a process wrote down so a later process does not repeat work. The

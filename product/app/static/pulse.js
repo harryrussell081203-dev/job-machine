@@ -27,6 +27,29 @@
     if (el) pulse(el.getAttribute("data-pulse"));
   }, true);
 
+  // For visitors who accepted the cookie only: which section was on screen
+  // when they left, and after how long. Nothing is sent for anybody else.
+  var started = Date.now(), current = (page === "landing") ? "hero"
+      : page.indexOf("start") === 0 ? (page === "start-check" ? "start-check" : "start")
+      : "other";
+  function consented() { return document.body.getAttribute("data-consent") === "yes"; }
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) current = en.target.getAttribute("data-section");
+      });
+    }, { rootMargin: "-40% 0px -55% 0px" });
+    document.querySelectorAll("[data-section]").forEach(function (el) { io.observe(el); });
+  }
+  var leftSent = false;
+  window.addEventListener("pagehide", function () {
+    if (leftSent || !consented()) return;
+    leftSent = true;
+    var body = JSON.stringify({ k: "left", s: current, p: location.pathname,
+                                t: Math.round((Date.now() - started) / 1000) });
+    try { navigator.sendBeacon("/j", new Blob([body], { type: "application/json" })); } catch (e) {}
+  });
+
   if (page === "landing") {
     var marks = [25, 50, 75, 100];
     var onScroll = function () {
