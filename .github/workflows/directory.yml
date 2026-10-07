@@ -9,7 +9,9 @@ name: directory
 # searches (the same secrets the sweep uses). Without Adzuna it still reads
 # the companies the product has already drafted letters to.
 #
-# Off: repository variable DIRECTORY_ENABLED=0. Size: DIRECTORY_PER_RUN.
+# Off: repository variable DIRECTORY_ENABLED=0. Size: DIRECTORY_PER_RUN,
+# DIRECTORY_SEARCHES. Also builds the role and town pages (app/hubs.py),
+# which need no job of their own: they are read from the directory.
 
 on:
   schedule:
@@ -27,7 +29,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: product
@@ -52,6 +54,10 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           DIRECTORY_ENABLED: ${{ vars.DIRECTORY_ENABLED }}
           DIRECTORY_PER_RUN: ${{ vars.DIRECTORY_PER_RUN }}
+          DIRECTORY_SEARCHES: ${{ vars.DIRECTORY_SEARCHES }}
+          # Optional: the same key the web app serves. Without it, new pages
+          # are announced when the app next restarts instead.
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
             echo "::error::DATABASE_URL must be a repository secret."

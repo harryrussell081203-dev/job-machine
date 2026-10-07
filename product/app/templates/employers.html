@@ -10,6 +10,8 @@ and the page it's printed on. Shared inboxes only, never a person's.</p>
 <div class="panel">
   <p>Not listed? <a href="/find">Type the company's name</a> and its website
     is read for you. Free, no account.</p>
+  {% if hub_roles %}<p>Looking by job instead? <a href="/jobs">Who to email, by
+    role and town</a>.</p>{% endif %}
 </div>
 
 {% if pages %}

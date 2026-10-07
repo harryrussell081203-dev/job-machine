@@ -26,7 +26,7 @@ from . import views
 from .store import connect
 
 SCROLL = ("25", "50", "75", "100")
-CTAS = ("hero", "how", "final", "price", "nav", "find")
+CTAS = ("hero", "how", "final", "price", "nav", "find", "hub")
 REASONS = {
     "unsure": "I'm not sure it works",
     "unclear": "I don't get what it does",
@@ -61,6 +61,7 @@ def real_page(path: str) -> str:
     if path in REAL_PAGES:
         return REAL_PAGES[path]
     for prefix, name in (("/answers", "answers"), ("/employers", "employers"),
+                         ("/jobs", "jobs"),
                          ("/employer", "employers"), ("/tools/", "tools")):
         if path.startswith(prefix):
             return name

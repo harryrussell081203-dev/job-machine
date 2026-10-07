@@ -989,3 +989,9 @@ ol.needs span { display: block; color: var(--muted); font-size: 14px; }
 .consent-btns { display: flex; gap: 8px; flex: 0 0 auto; }
 .consent-btns .btn { min-width: 96px; justify-content: center; }
 .consent-btns .btn[data-consent="no"] { background: var(--accent); color: var(--accent-ink); }
+
+/* Role and town pages (hub.html) */
+.hubrow { border-bottom: 1px solid var(--line, #e5e5e5); padding: 6px 0 8px; }
+.hubrow:last-of-type { border-bottom: 0; }
+.hubrow p { margin: 0 0 4px; overflow-wrap: anywhere; }
+ul.hubjobs { margin: 0; padding-left: 18px; }

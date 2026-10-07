@@ -84,18 +84,23 @@ def _read(domain: str, path: str, get) -> tuple[str, list[str]]:
 
 
 def lookup(company: str, *, get=None, find_domain=None, resolves=None,
-           store=None) -> dict:
+           store=None, retry_unknown: bool = False) -> dict:
     """{"domain": str, "emails": [..], "found_on": {email: page url}};
     domain "" when the company's own site could not be identified with
     confidence. A fresh answer is also offered to the public employer
-    directory (directory.py), which keeps only shared role inboxes."""
+    directory (directory.py), which keeps only shared role inboxes.
+
+    retry_unknown: a kept answer of "no website found" is not trusted. The
+    directory builder searches harder than /find does, so a miss there is
+    worth another look."""
     key = f"find:{company_key(company)}"
     if store is not None:
         try:
             saved = store.get(key)
             if saved:
                 data = json.loads(saved)
-                if time.time() - data.get("at", 0) < CACHE_SECONDS:
+                if time.time() - data.get("at", 0) < CACHE_SECONDS \
+                        and (data.get("domain") or not retry_unknown):
                     return data
         except Exception:
             pass

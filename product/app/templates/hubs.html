@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Who to email about a job, by role and town &middot; Recruited{% endblock %}
+{% block content %}
+{% if missing %}
+<h1>That page isn't here (yet)</h1>
+<p class="lede">A role and town gets a page once at least three employers there
+  print an address for applications. The list grows every day.</p>
+{% else %}
+<h1>Who to email about a job, by role and town</h1>
+<p class="lede">Employers advertising right now who print an address for
+  applications on their own website. Write to them directly instead of
+  clicking Apply.</p>
+{% endif %}
+
+{% if roles %}
+<div class="panel">
+  {% for r in roles %}
+    <p><b><a href="{{ r.path }}">{{ r.role }} jobs</a></b>
+      <small class="muted">{{ r.count }} employers</small>
+      {% if r.towns %}<br><small>{% for t, href in r.towns %}<a href="{{ href }}">{{ t }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}</small>{% endif %}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<p><a class="btn" href="/start" data-pulse="land:cta:hub">Start free</a>
+   <a class="btn ghost" href="/employers">All employers A to Z</a></p>
+{% endblock %}

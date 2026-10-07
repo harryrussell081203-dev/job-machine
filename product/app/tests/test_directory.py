@@ -177,7 +177,7 @@ class ThePages(AppTestCase):
         from app import directory_builder as b
         one = b.todays_searches(datetime.date(2026, 10, 2))
         two = b.todays_searches(datetime.date(2026, 10, 3))
-        self.assertEqual(len(one), 6)
+        self.assertEqual(len(one), b.SEARCHES_PER_RUN)
         self.assertFalse(set(one) & set(two))
 
 
