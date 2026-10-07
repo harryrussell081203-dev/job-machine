@@ -341,6 +341,30 @@ if ("serviceWorker" in navigator) {
 })();
 </script>
 
+{# Counts this page view as a real person, once, on the first scroll, tap,
+   click or keypress. Scrapers fetch pages and do none of those; a browser
+   that declares itself automated (navigator.webdriver) is never counted.
+   A tally only - see /seen in main.py. #}
+<script>
+(function () {
+  if (navigator.webdriver) return;
+  var done = false;
+  function seen() {
+    if (done) return; done = true;
+    ["scroll", "pointerdown", "touchstart", "keydown", "mousemove"].forEach(function (e) {
+      window.removeEventListener(e, seen, true);
+    });
+    var body = JSON.stringify({ p: location.pathname });
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon("/seen", new Blob([body], { type: "application/json" }));
+      else fetch("/seen", { method: "POST", body: body, keepalive: true, headers: { "Content-Type": "application/json" } });
+    } catch (e) {}
+  }
+  ["scroll", "pointerdown", "touchstart", "keydown", "mousemove"].forEach(function (e) {
+    window.addEventListener(e, seen, { capture: true, passive: true });
+  });
+})();
+</script>
 {% if not consent_asked %}{% include "_consent.html" %}{% endif %}
 </body>
 </html>

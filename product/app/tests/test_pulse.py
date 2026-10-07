@@ -72,6 +72,42 @@ class Counting(AppTestCase):
         self.assertEqual(self.outcomes().get("start:error:phone"), 1)
 
 
+class RealPeople(AppTestCase):
+    def outcomes(self):
+        import time
+        return self.main.views.outcomes(since=time.time() - 3600)
+
+    def test_a_page_reports_a_real_visit(self):
+        self.client.post("/seen", json={"p": "/"}, headers=PHONE)
+        self.client.post("/seen", json={"p": "/answers/attach-cv"}, headers=PHONE)
+        self.client.post("/seen", json={"p": "/../../etc"}, headers=PHONE)
+        out = self.outcomes()
+        self.assertEqual(out.get("real:front"), 1)
+        self.assertEqual(out.get("real:answers"), 1)
+        self.assertEqual(out.get("real:other"), 1)
+
+    def test_a_crawler_saying_so_is_not_a_person(self):
+        self.client.post("/seen", json={"p": "/"},
+                         headers={"User-Agent": "Googlebot/2.1"})
+        self.assertNotIn("real:front", self.outcomes())
+
+    def test_every_page_carries_the_beacon(self):
+        for path in ("/", "/find", "/playbook"):
+            page = self.client.get(path).text
+            self.assertIn('navigator.webdriver', page, path)
+            self.assertIn('"/seen"', page, path)
+
+    def test_the_funnel_starts_from_real_people(self):
+        import time
+        for _ in range(5):
+            self.client.get("/", headers=PHONE)      # the old counter
+        self.client.post("/seen", json={"p": "/"}, headers=PHONE)
+        r = self.main.pulse.report(since=time.time() - 3600)
+        self.assertEqual(r["funnel"][0], {"label": "Real people on the front page",
+                                          "n": 1, "kept": None})
+        self.assertEqual(r["raw_front"], 5)
+
+
 class OnThePages(AppTestCase):
     def test_landing_counts_and_asks(self):
         page = self.client.get("/").text
@@ -102,8 +138,8 @@ class TheReport(AppTestCase):
         import time
         report = self.main.pulse.report(since=time.time() - 3600)
         steps = {s["label"]: s for s in report["funnel"]}
-        self.assertEqual(steps["Saw the front page"]["n"], 4)
-        self.assertEqual(steps["Scrolled to the proof (25%)"]["kept"], 25)
+        self.assertEqual(steps["Real people on the front page"]["n"], 0)
+        self.assertEqual(steps["Scrolled to the proof (25%)"]["n"], 1)
         self.assertEqual(steps["Tapped a sign-up button"]["n"], 1)
         self.assertIn(("I'm not sure it works", 1), report["why"])
 

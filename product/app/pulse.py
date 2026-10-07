@@ -49,6 +49,24 @@ MAX_TEXT = 200
 KEEP_FOR = 60 * 86400
 
 
+# Pages a real visitor is counted on. Anything else is "other", so the tally
+# cannot be filled with paths a script makes up.
+REAL_PAGES = {"/": "front", "/start": "start", "/find": "find",
+              "/playbook": "playbook", "/numbers": "numbers", "/login": "login",
+              "/privacy": "privacy", "/terms": "terms", "/tools": "tools"}
+
+
+def real_page(path: str) -> str:
+    path = (path or "").split("?", 1)[0].rstrip("/") or "/"
+    if path in REAL_PAGES:
+        return REAL_PAGES[path]
+    for prefix, name in (("/answers", "answers"), ("/employers", "employers"),
+                         ("/employer", "employers"), ("/tools/", "tools")):
+        if path.startswith(prefix):
+            return name
+    return "other"
+
+
 def allowed(name: str) -> bool:
     return name in EVENTS
 
@@ -120,11 +138,11 @@ def report(*, since: float) -> dict:
     taps = sum(n(f"land:cta:{c}") for c in CTAS)
     joined = n("start:in") + n("start:sent")
     steps = [
-        ("Saw the front page", int(people.get("/", 0))),
+        ("Real people on the front page", n("real:front")),
         ("Scrolled to the proof (25%)", n("land:scroll:25")),
         ("Scrolled halfway", n("land:scroll:50")),
         ("Tapped a sign-up button", taps),
-        ("Opened the sign-up page", int(people.get("/start", 0))),
+        ("Opened the sign-up page", n("real:start")),
         ("Started typing", n("start:typing")),
         ("Pressed Next", n("start:next")),
         ("Finished: account made or link sent", joined),
@@ -134,8 +152,14 @@ def report(*, since: float) -> dict:
         kept = (round(100 * value / prev) if prev else None)
         funnel.append({"label": label, "n": value, "kept": kept})
         prev = value or prev
+    real = {k.split(":", 1)[1]: v for k, v in out.items()
+            if k.startswith("real:")}
     return {
         "funnel": funnel,
+        # Real people per page, next to what the old counter saw, so the gap
+        # (scrapers wearing a browser's name) stays visible.
+        "real": dict(sorted(real.items(), key=lambda x: -x[1])),
+        "raw_front": int(people.get("/", 0)),
         "ctas": {c: n(f"land:cta:{c}") for c in CTAS if n(f"land:cta:{c}")},
         "left": {k.split(":", 2)[2]: v for k, v in out.items()
                  if k.startswith("start:left:")},
