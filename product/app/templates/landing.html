@@ -65,10 +65,7 @@
 {# WRITTEN FOR A TEN-YEAR-OLD, ON PURPOSE.
 
    Most people land here on a phone, off a link, with a few seconds to
-   decide. So: short words, short sentences, one idea per block, and the
-   same order every page like this one uses - what it is, proof it works,
-   three steps, a picture, why it is different, the price, questions, and
-   the button again.
+   decide. So: short words, short sentences, one idea per block.
 
    Every number is still real and still counted the way the fold at the
    bottom says. Plain words are not a licence to round up. #}
@@ -81,6 +78,16 @@
   <b>{{ spots_left }} free place{{ '' if spots_left == 1 else 's' }} left</b></p>
 {% endif %}
 
+{# SIX QUESTIONS, TWO SCREENS.
+
+   Harry, on a second pass: "I feel overwhelmed a little when I go on the
+   site." Eleven sections answered about six questions a stranger has before
+   signing up: what is it, what do I do, what happens next, does it work and
+   what should I expect, what does it cost, am I in control. Those are the
+   page now, in that order. Everything else - the sign-up video, the example
+   email, why a person beats a portal, the bot comparison, the free finder -
+   is one tap away in a fold, not gone. #}
+
 {# Two headlines, tested fairly: a visitor who accepted the cookie keeps the
    version they first saw; everybody else sees A. See journey.HEADLINES. #}
 <h1 data-section="hero">{{ headline.title }}</h1>
@@ -88,7 +95,7 @@
 
 <p class="hero-cta">
   <a class="btn" href="/start" data-pulse="land:cta:hero">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
-  <a class="btn ghost" href="#how">See how it works</a>
+  <a class="btn ghost" href="#how">How it works</a>
 </p>
 <p class="hero-note"><small>
   Takes about a minute.
@@ -100,138 +107,105 @@
 
 {# Proof in the first screen, as one person's real results. #}
 <p class="proof-intro" data-section="proof">Harry built this for his own job hunt.
-  He emailed the person hiring instead of clicking Apply.
-  Here is what happened:</p>
+  He emailed the person hiring instead of clicking Apply:</p>
 <div class="stats proof">
   <div class="stat"><b>{{ proof.sent }}</b><span>emails sent</span></div>
   <div class="stat"><b>{{ proof.replied }}</b><span>people wrote back</span></div>
   <div class="stat"><b>{{ proof.interviews }}</b><span>interviews</span></div>
   <div class="stat"><b>{{ proof.offers }}</b><span>job offers</span></div>
 </div>
-<p class="hint">These are the founder's own results, {{ proof.period }},
-  counted email by email from his inbox. <a href="#counted">How we counted</a>.</p>
+<p class="hint">&ldquo;I&rsquo;ve had 3 job offers because of this system.&rdquo;
+  These are the founder's own results, {{ proof.period }}, counted from his
+  inbox.
+  <a href="#counted">How we counted</a>.</p>
 
 <h2 id="how" data-section="how">How it works</h2>
-{# The real sign-up, recorded from the app itself (example details, sped up
-   about a third). Muted and looping so it plays inline on a phone like a
-   picture; paused for anybody whose phone asks for less motion. Both
-   formats are small: WebM for most browsers, MP4 for Safari. #}
-<figure class="demo">
-  <video autoplay muted loop playsinline preload="metadata"
-         width="390" height="760" poster="/static/demo/signup-poster.jpg"
-         aria-label="Signing up: type one sentence about the work you want, it says back what it understood, add your pay, name, phone and email, and it starts looking">
-    <source src="/static/demo/signup.webm" type="video/webm">
-    <source src="/static/demo/signup.mp4" type="video/mp4">
-  </video>
-  <figcaption>The real sign-up, with example details. One sentence, a few
-    boxes, and it starts looking.</figcaption>
-</figure>
-<script>
-(function () {
-  var v = document.querySelector("figure.demo video");
-  if (v && window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    v.removeAttribute("autoplay"); v.pause(); v.controls = true;
-  }
-})();
-</script>
 <ol class="steps3">
-  <li><span class="n">1</span><div><b>Tell us the job you want.</b>
-    Four things: the job, your town, your last job, and the least you&rsquo;d
-    take. Like &ldquo;Warehouse operative in Leeds. Last job: forklift driver
-    at Tesco. At least &pound;12 an hour.&rdquo;</div></li>
+  <li><span class="n">1</span><div><b>Answer four quick questions.</b>
+    The job you want, your town, your last job, and the least you&rsquo;d
+    take.</div></li>
   <li><span class="n">2</span><div><b>We find jobs, and who is hiring.</b>
-    New jobs every weekday. For each one we find the real email address,
-    from the advert or the company&rsquo;s own website. We never guess.</div></li>
-  <li><span class="n">3</span><div><b>A short email goes out from you.</b>
-    With your CV attached. You press send, or switch on autopilot and it
-    sends by itself. Replies land in your own inbox.</div></li>
+    Every weekday. For each job we find a real email address from the advert
+    or the company&rsquo;s own website. We never guess one.</div></li>
+  <li><span class="n">3</span><div><b>A short email goes from your email.</b>
+    With your CV. You check each one and press send, or let autopilot send
+    them. Replies come to your own inbox.</div></li>
 </ol>
 
-{# The picture. Built from HTML, not an image: it loads instantly, works in
-   dark mode, and shows exactly what the machine writes and what the tracker
-   shows. Labelled as an example because it is one - made-up firms, so no
-   stranger's curiosity is pointed at a real inbox. #}
-<h2 data-section="looks">What it looks like</h2>
-<div class="showcase">
-  <div class="panel shot">
-    <p class="shot-label">The email <small class="muted">&middot; example, names changed</small></p>
-    <p class="meta">To: Fiona Menzies &lt;fiona.menzies@kestrelfoods.example&gt;<br>
-      Subject: Maintenance technician, packaging lines</p>
-    <div class="letter">Hi Fiona,
+<details class="fold more" data-section="looks" id="demo">
+  <summary>Watch the sign-up <small class="muted">(20 seconds)</small></summary>
+  {# The real sign-up, recorded from the app itself (example details, sped
+     up about a third). Loaded only when opened. #}
+  <figure class="demo">
+    <video muted loop playsinline preload="none"
+           width="390" height="760" poster="/static/demo/signup-poster.jpg"
+           aria-label="Signing up: type one sentence about the work you want, it says back what it understood, add your pay, name, phone and email, and it starts looking">
+      <source src="/static/demo/signup.webm" type="video/webm">
+      <source src="/static/demo/signup.mp4" type="video/mp4">
+    </video>
+    <figcaption>The real sign-up, with example details.</figcaption>
+  </figure>
+</details>
+<script>
+(function () {
+  var d = document.getElementById("demo"), v = d && d.querySelector("video");
+  if (!v) return;
+  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still) v.controls = true;
+  d.addEventListener("toggle", function () {
+    if (d.open && !still) { try { v.play(); } catch (e) {} }
+    else if (!d.open) v.pause();
+  });
+})();
+</script>
+
+<details class="fold more">
+  <summary>See an example email</summary>
+  {# Built from HTML, not an image. Made-up firms, so no stranger's
+     curiosity is pointed at a real inbox. #}
+  <div class="showcase">
+    <div class="panel shot">
+      <p class="shot-label">The email <small class="muted">&middot; example, names changed</small></p>
+      <p class="meta">To: Fiona Menzies &lt;fiona.menzies@kestrelfoods.example&gt;<br>
+        Subject: Maintenance technician, packaging lines</p>
+      <div class="letter">Hi Fiona,
 Saw your maintenance technician role covering the packaging lines at Rotherham. That is the work I do now.
 Four years of planned and reactive maintenance on high-speed lines, fault-finding on PLC conveyors and fillers.
 Would it help if I sent my availability for a call this week?
 Sam Doherty
 07700 900123 &middot; CV attached</div>
-    <p class="hint">Short, about one real job, with one question. Written
-      fresh for every advert.</p>
+      <p class="hint">Short, about one real job, with one question. Written
+        fresh for every advert.</p>
+    </div>
+    <div class="panel shot">
+      <p class="shot-label">What came back <small class="muted">&middot; example</small></p>
+      <ul class="mini-tracker">
+        <li><span><b>Maintenance Technician</b><small>Kestrel Foods &middot; 2d</small></span><span class="pill pill-interview">Interview</span></li>
+        <li><span><b>Engineering Technician</b><small>Harlow Controls &middot; 3d</small></span><span class="pill pill-heard">Wrote back</span></li>
+        <li><span><b>Field Service Engineer</b><small>Northgate Plant Hire &middot; 4d</small></span><span class="pill">Waiting</span></li>
+        <li><span><b>Electrical Technician</b><small>Firthside Systems &middot; 6d</small></span><span class="pill pill-rejected">Rejected</span></li>
+      </ul>
+      <p class="hint">Every email and every reply, in one list.</p>
+    </div>
   </div>
-  <div class="panel shot">
-    <p class="shot-label">What came back <small class="muted">&middot; example</small></p>
-    <ul class="mini-tracker">
-      <li><span><b>Maintenance Technician</b><small>Kestrel Foods &middot; 2d</small></span><span class="pill pill-interview">Interview</span></li>
-      <li><span><b>Engineering Technician</b><small>Harlow Controls &middot; 3d</small></span><span class="pill pill-heard">Wrote back</span></li>
-      <li><span><b>Field Service Engineer</b><small>Northgate Plant Hire &middot; 4d</small></span><span class="pill">Waiting</span></li>
-      <li><span><b>Electrical Technician</b><small>Firthside Systems &middot; 6d</small></span><span class="pill pill-rejected">Rejected</span></li>
-    </ul>
-    <p class="hint">Every email and every reply, in one list.</p>
-  </div>
-</div>
+</details>
 
-<div class="panel quote" data-section="story">
-  <p>&ldquo;I&rsquo;ve had 3 job offers because of this system.&rdquo;</p>
-  <p class="muted"><small>Harry, who built this</small></p>
-  <p style="margin-bottom:6px"><b>One email, start to finish:</b></p>
-  <ol class="timeline">
-    {% for when, what in proof.timeline %}
-      <li><b>{{ when }}</b> {{ what }}</li>
-    {% endfor %}
-  </ol>
-</div>
-
-<h2 data-section="why">Why email a person?</h2>
-<p>When you click Apply, your CV joins a pile of hundreds and a computer
-sorts it. When you email the person hiring, a human reads it. Almost nobody
-does that, so you stand out.</p>
-<p>The hard part is finding the right email address. Guessing does not
-work. When Harry guessed addresses, almost half of his emails bounced back.
-Using only real ones, almost none did, and far more people replied:</p>
-<div class="stats two">
-  <div class="stat"><b>{{ proof.guessed.bounce_pct }}%</b><span>bounced when
-    addresses were guessed ({{ proof.guessed.bounced }} of
-    {{ proof.guessed.sent }})</span></div>
-  <div class="stat"><b>{{ proof.published.bounce_pct }}%</b><span>bounced
-    using only real addresses ({{ proof.published.bounced }} of
-    {{ proof.published.sent }}), and {{ proof.published.replied }} people
-    wrote back</span></div>
-</div>
-<p>So this only ever uses an address the company itself has put online.
-No real address, no email.</p>
-
-<h2 id="try" data-section="try">Try it now. No account needed.</h2>
-<p>Type any company. We will show you the real email addresses it publishes,
-or tell you straight if there are none.</p>
-{% include "_finder.html" %}
-
-<h2 data-section="versus">Why not an auto-apply bot?</h2>
-<div class="panel scroll stacked">
-<table class="versus">
-  <thead><tr><th></th><th>Auto-apply bots</th><th>Recruited</th></tr></thead>
-  <tr><td class="rowhead">Who gets it</td><td data-label="Auto-apply bots">A job site, then a computer</td><td data-label="Recruited"><b>The person hiring</b></td></tr>
-  <tr><td class="rowhead">Sent from</td><td data-label="Auto-apply bots">Their system</td><td data-label="Recruited"><b>Your own email</b></td></tr>
-  <tr><td class="rowhead">Same company twice</td><td data-label="Auto-apply bots">Can happen</td><td data-label="Recruited"><b>Never</b></td></tr>
-  <tr><td class="rowhead">Email addresses</td><td data-label="Auto-apply bots">Form boxes</td><td data-label="Recruited"><b>Real ones, never guessed</b></td></tr>
-  <tr><td class="rowhead">Price</td><td data-label="Auto-apply bots">Often pay per application</td><td data-label="Recruited"><b>{% if spots_left %}Free for life, if you're early{% else %}One price{% endif %}</b></td></tr>
-</table>
-</div>
-
-<h2 data-section="promises">Our promises</h2>
-<ul class="promises">
-  <li>We never guess an email address.</li>
-  <li>We never make anything up about you.</li>
-  <li>We never email the same company twice.</li>
-  <li>We never tell your current boss. Add them to your &ldquo;never write
-    to&rdquo; list and nothing reaches anyone there.</li>
+{# What a stranger cannot know and will not ask: what happens after the
+   button, what a normal result looks like, and how much control they keep.
+   The honest expectation is here on purpose - most emails get no answer,
+   and saying so is what makes the rest believable. #}
+<h2 data-section="expect">What to expect</h2>
+<ul class="promises expect">
+  <li><b>It starts straight away.</b> We look for jobs as soon as you sign
+    up, and every weekday after.</li>
+  <li><b>Most emails get no reply.</b> That&rsquo;s normal. Using real
+    addresses, {{ proof.published.replied }} of {{ proof.published.sent }}
+    people wrote back to Harry, about {{ proof.published.reply_pct }}%.</li>
+  <li><b>Replies take days, not hours.</b> One of Harry&rsquo;s offers
+    came 17 days after one short email.</li>
+  <li><b>You stay in charge.</b> See every email first, set a daily limit,
+    pause any time, and list companies to never write to, like your
+    current boss.</li>
 </ul>
 
 <h2 data-section="price">Price</h2>
@@ -239,23 +213,36 @@ or tell you straight if there are none.</p>
   {% if spots_left %}
   <p class="price-line"><b>Free for life</b>
     <small class="muted">for the first {{ config.FREE_SPOTS }} people</small></p>
-  <p>Get in now and you never pay. When the free places are gone, new people
-    pay {{ config.PRICE_LABEL }}.</p>
+  <p>Get in now and you never pay. After that, new people pay
+    {{ config.PRICE_LABEL }}.</p>
   {% else %}
   <p class="price-line"><b>{{ config.PRICE_LABEL }}</b></p>
   {% endif %}
-  <ul>
-    <li>New jobs found for you every weekday</li>
-    <li>A fresh email written for each one</li>
-    <li>Sent from your email, or you press send</li>
-    <li>Replies tracked, plus help getting ready for interviews</li>
-  </ul>
   <p class="hint">No credits, no charge per application. Cancel from your
     account page.</p>
 </div>
 
 <h2 data-section="faq">Questions</h2>
 <div class="faq">
+  <details><summary>What do I need?</summary>
+    <p>Four answers, your name, phone and email. That&rsquo;s it to start.
+      A CV is optional; add one any time and it goes with every email after
+      that. To send from your own email you connect it later, in a
+      minute.</p></details>
+  <details><summary>What jobs does it work for?</summary>
+    <p>Any job in the UK that gets advertised: warehouse, care, driving,
+      trades, kitchens, offices. Nothing in it is built around one
+      trade.</p></details>
+  <details><summary>Why email a person instead of clicking Apply?</summary>
+    <p>When you click Apply, your CV joins a pile and a computer sorts it.
+      When you email the person hiring, a human reads it. Almost nobody does
+      that, so you stand out.</p>
+    <p>The hard part is the address. When Harry guessed addresses,
+      {{ proof.guessed.bounce_pct }}% bounced ({{ proof.guessed.bounced }} of
+      {{ proof.guessed.sent }}). Using only real ones,
+      {{ proof.published.bounce_pct }}% did ({{ proof.published.bounced }} of
+      {{ proof.published.sent }}). So we only use an address the company has
+      put online itself.</p></details>
   <details><summary>Is this spam?</summary>
     <p>No. It is one short email to one person, about a job they advertised.
       Never the same company twice, and you choose how many a day.</p></details>
@@ -266,9 +253,6 @@ or tell you straight if there are none.</p>
     <p>Once your email is connected, it sends each email by itself. By
       default you get an hour to stop any of them first (you can change that), and
       you set a daily limit.</p></details>
-  <details><summary>Do I need a CV?</summary>
-    <p>No. It works without one. Add a CV whenever you like and it goes with
-      every email after that.</p></details>
   <details><summary>I have a job now. Will my boss find out?</summary>
     <p>Add your employer to &ldquo;never write to&rdquo; and nothing ever
       reaches anyone there. Emails never name your current job's
@@ -276,17 +260,34 @@ or tell you straight if there are none.</p>
   <details><summary>Do you guess email addresses?</summary>
     <p>Never. Only an address printed in the advert or on the company's own
       website. No real address, no email.</p></details>
+  <details data-section="versus"><summary>Why not an auto-apply bot?</summary>
+    <div class="panel scroll stacked">
+    <table class="versus">
+      <thead><tr><th></th><th>Auto-apply bots</th><th>Recruited</th></tr></thead>
+      <tr><td class="rowhead">Who gets it</td><td data-label="Auto-apply bots">A job site, then a computer</td><td data-label="Recruited"><b>The person hiring</b></td></tr>
+      <tr><td class="rowhead">Sent from</td><td data-label="Auto-apply bots">Their system</td><td data-label="Recruited"><b>Your own email</b></td></tr>
+      <tr><td class="rowhead">Same company twice</td><td data-label="Auto-apply bots">Can happen</td><td data-label="Recruited"><b>Never</b></td></tr>
+      <tr><td class="rowhead">Email addresses</td><td data-label="Auto-apply bots">Form boxes</td><td data-label="Recruited"><b>Real ones, never guessed</b></td></tr>
+      <tr><td class="rowhead">Price</td><td data-label="Auto-apply bots">Often pay per application</td><td data-label="Recruited"><b>{% if spots_left %}Free for life, if you're early{% else %}One price{% endif %}</b></td></tr>
+    </table>
+    </div></details>
   <details><summary>Can I cancel?</summary>
     <p>Any time, from your account page.{% if spots_left %} And if you get a
       free place, there is nothing to cancel.{% endif %}</p></details>
 </div>
 
+<details class="fold more" id="try" data-section="try">
+  <summary>Not sure yet? Try it on one company, no account</summary>
+  <p>Type any company. We show you the real email addresses it publishes,
+    or tell you straight if there are none.</p>
+  {% include "_finder.html" %}
+</details>
+
 <div class="panel final-cta" data-section="final">
   <h2 style="margin-top:0">Ready to get replies?</h2>
-  <p>Tell us the job you want. We will start looking straight away.</p>
+  <p>Tell us the job you want. We start looking straight away.</p>
   <p class="hero-cta" style="margin-bottom:0">
-    <a class="btn" href="/start" data-pulse="land:cta:final">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a>
-    <a class="btn ghost" href="/find">Try it on one company</a></p>
+    <a class="btn" href="/start" data-pulse="land:cta:final">{% if spots_left %}Get it free for life{% else %}Start now{% endif %}</a></p>
   {% if spots_left %}<p class="hint" style="margin-bottom:0">{{ spots_left }}
     free place{{ '' if spots_left == 1 else 's' }} left. No card.</p>{% endif %}
 </div>

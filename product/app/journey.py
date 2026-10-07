@@ -40,7 +40,7 @@ _VID = re.compile(r"^[A-Za-z0-9_-]{16,40}$")
 
 # What a page may tell us about a consenting visitor. Fixed, like pulse.py.
 CLIENT_KINDS = {"left", "consented"}
-SECTIONS = {"hero", "proof", "how", "looks", "story", "why", "try", "versus",
+SECTIONS = {"hero", "proof", "how", "looks", "expect", "story", "why", "try", "versus",
             "promises", "price", "faq", "final", "start", "start-check",
             "dashboard", "other"}
 
