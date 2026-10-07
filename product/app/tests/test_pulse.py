@@ -108,6 +108,40 @@ class RealPeople(AppTestCase):
         self.assertEqual(r["raw_front"], 5)
 
 
+class FromAnAd(AppTestCase):
+    def outcomes(self):
+        import time
+        return self.main.views.outcomes(since=time.time() - 3600)
+
+    def test_a_tagged_visit_and_sign_up_are_counted(self):
+        self.client.post("/seen", json={"p": "/", "c": "meta"}, headers=PHONE)
+        page = self.client.get("/start?c=meta").text
+        self.assertIn('action="/start/read?c=meta"', page)
+        self.client.post("/start?c=meta", headers=PHONE, data={
+            "target_roles": "warehouse operative", "location": "Leeds",
+            "last_title": "Picker", "last_org": "Tesco", "min_pay": "12",
+            "name": "Sam", "phone": "07700 900123",
+            "email": "sam.ad@example.com"})
+        out = self.outcomes()
+        self.assertEqual(out.get("from:meta:real"), 1)
+        self.assertEqual(out.get("from:meta:joined"), 1)
+        import time
+        report = self.main.pulse.report(since=time.time() - 3600)
+        self.assertEqual(report["campaigns"], {"meta": {"real": 1, "joined": 1}})
+
+    def test_an_unknown_tag_is_not_counted(self):
+        self.client.post("/seen", json={"p": "/", "c": "anything-at-all"},
+                         headers=PHONE)
+        self.assertNotIn("anything-at-all", self.client.get(
+            "/start?c=anything-at-all").text.split("<form", 1)[1][:200])
+        self.assertFalse([k for k in self.outcomes() if k.startswith("from:")])
+
+    def test_every_page_passes_the_tag_on_to_sign_up(self):
+        page = self.client.get("/").text
+        self.assertIn('a[href^="/start"]', page)
+        self.assertIn("utm_source", page)
+
+
 class OnThePages(AppTestCase):
     def test_landing_counts_and_asks(self):
         page = self.client.get("/").text

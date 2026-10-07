@@ -69,7 +69,7 @@
     document.querySelectorAll("form").forEach(function (f) {
       f.addEventListener("submit", function () {
         submitted = true;
-        if (f.getAttribute("action") === "/start/read") pulse("start:next");
+        if ((f.getAttribute("action") || "").indexOf("/start/read") === 0) pulse("start:next");
       });
     });
     var about = document.getElementById("about");

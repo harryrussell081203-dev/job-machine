@@ -205,6 +205,14 @@ so this reads high until they age out.</small></p>
     Lost after they start typing: the form is confusing or asks too
     much.</small></p>
 
+  {% if w.campaigns %}
+  <h3>From ads and posts (links with ?c=)</h3>
+  <table><tr><th>Link</th><th class="num">Real people</th><th class="num">Accounts</th></tr>
+    {% for name, c in w.campaigns.items() %}
+      <tr><td>{{ name }}</td><td class="num">{{ c.real }}</td><td class="num">{{ c.joined }}</td></tr>
+    {% endfor %}</table>
+  {% endif %}
+
   <h3>What the ones who answered said</h3>
   {% if w.why %}
     <table>{% for label, n in w.why %}

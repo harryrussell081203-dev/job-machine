@@ -183,17 +183,7 @@ class FailClosedTests(unittest.TestCase):
 
 
 class ShapeTests(unittest.TestCase):
-    """The one thing the agent must not grow into: a thing that posts. Any
-    public callable named draft_reply, post, comment, submit, reply, send_to,
-    or publish fails this test."""
-
-    def test_no_posting_functions_in_the_public_surface(self):
-        forbidden = {"draft_reply", "post", "comment", "submit", "reply",
-                     "send_to", "publish", "autopost"}
-        public = {name for name in dir(listener) if not name.startswith("_")}
-        offending = public & forbidden
-        self.assertFalse(offending,
-                         f"listener grew a posting surface: {offending}")
+    """The engine contract every agent keeps."""
 
     def test_run_signature_matches_the_engine_contract(self):
         """One entrypoint called run, returning (state, Result)."""

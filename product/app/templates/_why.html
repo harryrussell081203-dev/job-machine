@@ -32,7 +32,7 @@
   try { if (localStorage.getItem(KEY)) return; } catch (e) {}
   var acted = false;
   document.addEventListener("click", function (ev) {
-    var el = ev.target.closest && ev.target.closest("[data-pulse^='land:cta'], form[action='/start'] button, form[action='/start/read'] button");
+    var el = ev.target.closest && ev.target.closest("[data-pulse^='land:cta'], form[action^='/start'] button");
     if (el) acted = true;
   }, true);
   document.addEventListener("input", function () { acted = true; }, true);

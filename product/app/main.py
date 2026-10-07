@@ -939,7 +939,8 @@ def _start_page(request: Request, *, stage: str = "describe",
     return render(request, "start.html", stage=stage, q=answers,
                   playback=understood.playback(answers),
                   missing=understood.missing(answers, understood.WORK),
-                  spots_left=db.free_spots_left(), **extra)
+                  spots_left=db.free_spots_left(),
+                  campaign=pulse.campaign_of(request), **extra)
 
 
 @app.get("/start", response_class=HTMLResponse)
@@ -1058,14 +1059,18 @@ async def seen(request: Request):
     server's word is a user-agent string that every scraper fakes - so a week
     that read as 400 people was mostly data-centre machines."""
     try:
-        path = str((await request.json()).get("p", ""))[:120]
+        data = await request.json()
+        path = str(data.get("p", ""))[:120]
+        came = pulse.campaign(str(data.get("c", ""))[:40])
     except Exception:
         return Response(status_code=204)
     limit, window = SEEN_PER_IP
     if ratelimit.hit(f"seen:{ratelimit.client_ip(request)}",
                      limit=limit, window=window):
-        views.outcome(f"real:{pulse.real_page(path)}",
-                      user_agent=request.headers.get("user-agent", ""))
+        agent = request.headers.get("user-agent", "")
+        views.outcome(f"real:{pulse.real_page(path)}", user_agent=agent)
+        if came:
+            views.outcome(f"from:{came}:real", user_agent=agent)
     return Response(status_code=204)
 
 
@@ -1153,9 +1158,13 @@ async def start_submit(request: Request):
 
     address = email.lower()
     ip = ratelimit.client_ip(request)
+    came = pulse.campaign_of(request)
     if db.get_user_by_email(address) is None:
         limit, window = START_ACCOUNTS_PER_IP
         if ratelimit.hit(f"start:new:{ip}", limit=limit, window=window):
+            if came:
+                views.outcome(f"from:{came}:joined",
+                              user_agent=request.headers.get("user-agent", ""))
             return _start_new_account(request, address, answers)
 
     # An existing account (or a machine that has made plenty today): the
