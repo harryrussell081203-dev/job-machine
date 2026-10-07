@@ -978,3 +978,14 @@ ol.needs span { display: block; color: var(--muted); font-size: 14px; }
 .why-other[hidden] { display: none; }
 .why-other input { flex: 1; }
 .why-thanks { color: var(--good); font-weight: 600; }
+
+/* The cookie question: small, at the foot, both answers equal. */
+.consentbar { position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 60;
+  max-width: 560px; margin: 0 auto; background: var(--panel);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .18); padding: 12px 14px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.consentbar p { margin: 0; flex: 1 1 260px; font-size: 14px; line-height: 1.45; }
+.consent-btns { display: flex; gap: 8px; flex: 0 0 auto; }
+.consent-btns .btn { min-width: 96px; justify-content: center; }
+.consent-btns .btn[data-consent="no"] { background: var(--accent); color: var(--accent-ink); }

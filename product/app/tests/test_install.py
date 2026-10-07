@@ -101,8 +101,10 @@ class TestTheOptionIsFindableAfterSigningUp(AppTestCase):
     def test_the_banner_offers_a_route_that_needs_no_prompt(self):
         """Both controls are in the markup, hidden, and the script reveals
         exactly one. Before this there was only the button, which on iOS
-        could never be revealed at all."""
-        r = self.client.get("/")
+        could never be revealed at all. Signed in: the bar is no longer shown
+        to a stranger on the front page, above the headline."""
+        self.sign_in("install@example.com")
+        r = self.client.get("/dashboard")
         self.assertIn('id="installbtn"', r.text)
         self.assertIn('id="installhow"', r.text)
         self.assertIn('href="/app"', r.text)

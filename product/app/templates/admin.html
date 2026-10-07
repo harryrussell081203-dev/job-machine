@@ -225,6 +225,53 @@ so this reads high until they age out.</small></p>
   {% endif %}
 </div>
 
+{# The richer view, for visitors who accepted the cookie. Their journeys
+   join up across visits; nobody who declined appears here at all. #}
+<h2>Visitor journeys, last 28 days</h2>
+<div class="panel">
+  {% set j = journeys %}
+  {% set yes = consent_counts.get('consent:yes', 0) %}{% set no = consent_counts.get('consent:no', 0) %}
+  <p class="muted"><small>Only people who tapped Accept on the cookie question:
+    {{ yes }} accepted, {{ no }} declined{% if yes + no %}
+    ({{ (100 * yes / (yes + no)) | round | int }}% accept){% endif %}.</small></p>
+  {% if j.visitors %}
+  <div class="stats">
+    <div class="stat"><b>{{ j.visitors }}</b><span>visitors</span></div>
+    <div class="stat"><b>{{ j.returning }}</b><span>came back another day</span></div>
+    <div class="stat"><b>{{ j.joined }}</b><span>made an account</span></div>
+  </div>
+  {% if j.visits_before_joining %}<p>Days with a visit before joining, on
+    average: <b>{{ j.visits_before_joining }}</b>.</p>{% endif %}
+
+  <h3>Where they came from, and who joined</h3>
+  <table><tr><th>First came from</th><th class="num">Visitors</th><th class="num">Joined</th></tr>
+    {% for src, n, joined in j.sources %}<tr><td>{{ src }}</td><td class="num">{{ n }}</td><td class="num">{{ joined }}</td></tr>{% endfor %}
+  </table>
+
+  {% if j.left_at %}
+  <h3>What they were reading when they left</h3>
+  <table><tr><th>Page and section</th><th class="num">Left there</th></tr>
+    {% for where, n in j.left_at %}<tr><td>{{ where }}</td><td class="num">{{ n }}</td></tr>{% endfor %}
+  </table>
+  {% if j.median_seconds_before_leaving is not none %}<p class="muted"><small>Typical
+    time on the page before leaving: {{ j.median_seconds_before_leaving }}
+    seconds.</small></p>{% endif %}
+  {% endif %}
+
+  {% if j.headline_test %}
+  <h3>Headline test</h3>
+  <table><tr><th>Headline</th><th class="num">Saw it</th><th class="num">Opened sign-up</th><th class="num">Joined</th></tr>
+    {% for arm, t in j.headline_test.items() %}<tr><td><b>{{ arm }}</b> {{ t.title }}</td>
+      <td class="num">{{ t.saw }}</td><td class="num">{{ t.opened_start }}</td><td class="num">{{ t.joined }}</td></tr>{% endfor %}
+  </table>
+  <p class="muted"><small>Too early to call until each version has been seen
+    by a hundred or so people.</small></p>
+  {% endif %}
+  {% else %}
+    <p class="muted">Nobody has accepted the cookie yet.</p>
+  {% endif %}
+</div>
+
 <h2>Free searches this week</h2>
 <div class="panel">
   {% if searches_week %}
