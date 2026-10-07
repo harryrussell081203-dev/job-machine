@@ -49,10 +49,15 @@ class OnTheLandingPage(AppTestCase):
 
     def test_the_sign_up_clip_is_there_and_its_files_are_served(self):
         """Muted, looping and inline, or a phone opens it full screen or
-        not at all; and every file it names has to exist."""
+        not at all; and every file it names has to exist. It sits in a fold
+        and plays when opened (Harry found the front page overwhelming), so
+        nothing is downloaded for somebody who never opens it."""
         page = self.client.get("/").text
-        for attr in ("autoplay", "muted", "loop", "playsinline"):
-            self.assertIn(attr, page.split('<figure class="demo">', 1)[1][:400])
+        video = page.split('<figure class="demo">', 1)[1][:400]
+        for attr in ("muted", "loop", "playsinline", 'preload="none"'):
+            self.assertIn(attr, video)
+        self.assertNotIn("autoplay", video)
+        self.assertIn("v.play()", page)
         for path in ("/static/demo/signup.webm", "/static/demo/signup.mp4",
                      "/static/demo/signup-poster.jpg"):
             self.assertIn(path, page)
