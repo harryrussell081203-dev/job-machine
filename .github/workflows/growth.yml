@@ -8,13 +8,12 @@ name: growth
 # sweep.yml was cut from eleven wake-ups a day to six on 20 September, and it
 # is the reason this workflow could not have existed a day earlier.
 #
-# NOTHING HERE POSTS. crawl_health reads the live site and writes a file.
+# What runs here: crawl_health reads the live site and writes a file.
 # listener reads a short allowlist of forums, writes a file, and once a week
-# emails Harry a digest - no account access, no replies drafted. page_builder
-# reads /employers.json from the live site and writes HTML files to
-# growth/out/pages/roles/. Agents that would reach further - outreach,
-# syndication, submissions - are gated in their own modules and several of
-# them are human-gated by design. See GROWTH.md.
+# emails Harry a digest. page_builder reads /employers.json from the live
+# site and writes HTML files to growth/out/pages/roles/. Posting to channels
+# we own is allowed (there is no "no auto-posting" rule); each agent that
+# does it gets its own job and its own switch. See GROWTH.md.
 
 on:
   schedule:

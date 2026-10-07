@@ -8,10 +8,11 @@ pending queue. Once a week - Friday at 18:00 UK time - it emails the queue
 to Harry as a list of direct links. He reads each thread and replies by
 hand, from his own account, where he has something genuinely useful to say.
 
-It does not draft replies. It does not post. It does not take credentials
-for the sites it reads. The output is links, and the responsibility to say
-anything on them is a human's. If a reply-drafting or posting function
-appears in this module, a test fails loudly.
+Today it only reads: the output is links. Posting is not ruled out - Harry
+has said there is no "no auto-posting" rule - but replying into other
+people's threads from a bot gets an account banned from the forums that
+matter, so anything that posts belongs on channels we own (our own video
+or social accounts), in its own agent, not here.
 
 WHY THE WEEK IS BATCHED.
 

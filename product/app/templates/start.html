@@ -27,7 +27,7 @@
 
 {% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
 
-<form method="post" action="/start/read" class="quick" data-busy="Reading what you wrote&hellip;">
+<form method="post" action="/start/read{% if campaign %}?c={{ campaign }}{% endif %}" class="quick" data-busy="Reading what you wrote&hellip;">
   <label for="about" class="sr-only">The work you want</label>
   <textarea id="about" name="about" rows="4" maxlength="600" required autofocus
     style="min-height:110px"
@@ -53,7 +53,7 @@
 {% if note %}<div class="note">{{ note }}</div>{% endif %}
 {% if error %}<div class="note bad" id="starterror">{{ error }}</div>{% endif %}
 
-<form method="post" action="/start#starterror" class="quick" data-busy="Setting it up&hellip;">
+<form method="post" action="/start{% if campaign %}?c={{ campaign }}{% endif %}#starterror" class="quick" data-busy="Setting it up&hellip;">
   <input type="hidden" name="about" value="{{ about or '' }}">
 
   {% macro field(key) %}

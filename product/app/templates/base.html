@@ -347,6 +347,20 @@ if ("serviceWorker" in navigator) {
    A tally only - see /seen in main.py. #}
 <script>
 (function () {
+  // A link from an ad or a post carries ?c=meta (or utm_source). Counted
+  // as a tally against that name only, and passed on to the sign-up links
+  // so a sign-up from it can be counted too. Nothing is stored.
+  var came = "";
+  try {
+    var q = new URLSearchParams(location.search);
+    came = (q.get("c") || q.get("utm_source") || "").toLowerCase().slice(0, 40);
+  } catch (e) {}
+  if (came) {
+    document.querySelectorAll('a[href^="/start"]').forEach(function (a) {
+      var h = a.getAttribute("href");
+      if (h.indexOf("c=") < 0) a.setAttribute("href", h + (h.indexOf("?") < 0 ? "?" : "&") + "c=" + encodeURIComponent(came));
+    });
+  }
   if (navigator.webdriver) return;
   var done = false;
   function seen() {
@@ -354,7 +368,7 @@ if ("serviceWorker" in navigator) {
     ["scroll", "pointerdown", "touchstart", "keydown", "mousemove"].forEach(function (e) {
       window.removeEventListener(e, seen, true);
     });
-    var body = JSON.stringify({ p: location.pathname });
+    var body = JSON.stringify({ p: location.pathname, c: came });
     try {
       if (navigator.sendBeacon) navigator.sendBeacon("/seen", new Blob([body], { type: "application/json" }));
       else fetch("/seen", { method: "POST", body: body, keepalive: true, headers: { "Content-Type": "application/json" } });

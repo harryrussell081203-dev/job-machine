@@ -56,6 +56,25 @@ REAL_PAGES = {"/": "front", "/start": "start", "/find": "find",
               "/privacy": "privacy", "/terms": "terms", "/tools": "tools"}
 
 
+# Where a paid or posted link came from: ?c=meta (or utm_source=meta) on the
+# link. Only names on this list are counted, so the tally cannot be filled
+# with whatever somebody types into an address bar. Add one with CAMPAIGNS.
+CAMPAIGNS_DEFAULT = "meta,facebook,instagram,reddit,google,tiktok,youtube,x"
+
+
+def campaign(value: str) -> str:
+    from jobseeker import settings
+    value = (value or "").strip().lower()
+    allowed = {c.strip() for c in settings.text(
+        "CAMPAIGNS", CAMPAIGNS_DEFAULT).lower().split(",") if c.strip()}
+    return value if value in allowed else ""
+
+
+def campaign_of(request) -> str:
+    q = request.query_params
+    return campaign(q.get("c") or q.get("utm_source") or "")
+
+
 def real_page(path: str) -> str:
     path = (path or "").split("?", 1)[0].rstrip("/") or "/"
     if path in REAL_PAGES:
@@ -155,12 +174,19 @@ def report(*, since: float) -> dict:
         prev = value or prev
     real = {k.split(":", 1)[1]: v for k, v in out.items()
             if k.startswith("real:")}
+    # Per campaign link: real people who arrived, and accounts made.
+    campaigns: dict[str, dict] = {}
+    for k, v in out.items():
+        if k.startswith("from:") and k.count(":") == 2:
+            _, name, what = k.split(":")
+            campaigns.setdefault(name, {"real": 0, "joined": 0})[what] = int(v)
     return {
         "funnel": funnel,
         # Real people per page, next to what the old counter saw, so the gap
         # (scrapers wearing a browser's name) stays visible.
         "real": dict(sorted(real.items(), key=lambda x: -x[1])),
         "raw_front": int(people.get("/", 0)),
+        "campaigns": dict(sorted(campaigns.items())),
         "ctas": {c: n(f"land:cta:{c}") for c in CTAS if n(f"land:cta:{c}")},
         "left": {k.split(":", 2)[2]: v for k, v in out.items()
                  if k.startswith("start:left:")},
