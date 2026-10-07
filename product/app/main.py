@@ -1046,6 +1046,28 @@ async def journey_step(request: Request):
     return Response(status_code=204)
 
 
+SEEN_PER_IP = (60, 3600)
+
+
+@app.post("/seen")
+async def seen(request: Request):
+    """A page view from a real person: sent by the page itself, only after a
+    scroll, tap, click or keypress, and never by a browser that says it is
+    automated. The old counter took the server's word for "person", and the
+    server's word is a user-agent string that every scraper fakes - so a week
+    that read as 400 people was mostly data-centre machines."""
+    try:
+        path = str((await request.json()).get("p", ""))[:120]
+    except Exception:
+        return Response(status_code=204)
+    limit, window = SEEN_PER_IP
+    if ratelimit.hit(f"seen:{ratelimit.client_ip(request)}",
+                     limit=limit, window=window):
+        views.outcome(f"real:{pulse.real_page(path)}",
+                      user_agent=request.headers.get("user-agent", ""))
+    return Response(status_code=204)
+
+
 PULSE_PER_IP = (120, 3600)
 
 

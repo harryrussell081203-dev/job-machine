@@ -188,6 +188,11 @@ so this reads high until they age out.</small></p>
 <h2>Why people don't sign up, last 7 days</h2>
 <div class="panel">
   {% set w = signup_why %}
+  <p><b>Real people, last 7 days:</b>
+    {% for page, n in w.real.items() %}{{ page }} {{ n }}{{ ", " if not loop.last }}{% else %}none yet{% endfor %}.
+    <br><small class="muted">The old counter saw {{ w.raw_front }} front-page
+    views in the same week. The gap is scrapers that claim to be a browser;
+    a real person is only counted once they scroll, tap or type.</small></p>
   <div class="scroll"><table>
     <tr><th>Step</th><th class="num">People</th><th class="num">Kept from the step before</th></tr>
     {% for step in w.funnel %}
