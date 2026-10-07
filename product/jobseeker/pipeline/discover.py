@@ -289,16 +289,47 @@ def from_guess(company: str, *, session=None, resolves=None) -> str | None:
     return None
 
 
+# Another country's own suffix. The directory is for UK jobs, and the first
+# live run matched "Vigilant Security" (an Edinburgh advert) to an Irish firm.
+FOREIGN = (".ie", ".no", ".nl", ".de", ".fr", ".dk", ".se", ".fi", ".it",
+           ".es", ".eu", ".au", ".nz", ".ca", ".us", ".in")
+
+
+def _home_says(company: str, domain: str, session) -> bool:
+    for url in (f"https://www.{domain}/", f"https://{domain}/"):
+        try:
+            r = session.get(url, headers=UA, timeout=8)
+        except Exception:
+            continue
+        if getattr(r, "status_code", 0) == 200:
+            return site_says(company, domain, (r.text or "")[:200_000])
+    return False
+
+
 def find_domain_wide(company: str, *, session=None, resolves=None) -> str | None:
     """find_domain, then Wikidata, then the obvious addresses checked
     against the site's own name. For the employer directory."""
     if not name_tokens(company):
         return None
-    for source, fn in (("clearbit", lambda: find_domain(company, session=session)),
+    import requests
+    web = session or requests
+
+    def clearbit():
+        domain = find_domain(company, session=session)
+        # One word names nobody: "Vita Group" (Edinburgh) came back as a
+        # German health software firm. Only if the site says it is them.
+        if domain and len(name_tokens(company)) < 2 \
+                and not _home_says(company, domain, web):
+            return None
+        return domain
+
+    for source, fn in (("clearbit", clearbit),
                        ("wikidata", lambda: from_wikidata(company, session=session)),
                        ("checked", lambda: from_guess(company, session=session,
                                                       resolves=resolves))):
         domain = fn()
+        if domain and domain.endswith(FOREIGN):
+            continue
         if domain:
             FOUND_BY[source] = FOUND_BY.get(source, 0) + 1
             return domain

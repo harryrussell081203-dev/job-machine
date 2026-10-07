@@ -167,6 +167,27 @@ class TheOrder(unittest.TestCase):
         self.assertEqual(d.FOUND_BY, {"clearbit": 1, "wikidata": 1,
                                       "checked": 1, "none": 1})
 
+    def test_another_countrys_site_is_not_a_uk_employer(self):
+        """The first live run: "Vigilant Security", an Edinburgh advert,
+        matched an Irish firm's site."""
+        web = Web(clearbit=[{"name": "Vigilant Security Services",
+                             "domain": "vigilantsecurityservices.ie"}])
+        self.assertIsNone(d.find_domain_wide("Vigilant Security", session=web,
+                                             resolves=lambda x: False))
+
+    def test_one_word_from_clearbit_needs_the_site_to_agree(self):
+        """The first live run: "Vita Group" (Edinburgh) matched a German
+        health software firm, whose site calls itself something else."""
+        web = Web(clearbit=[{"name": "Vita Group", "domain": "vitagroup.com"}],
+                  sites={"vitagroup.com": (home("vitagroup | Health IT"), "")})
+        self.assertIsNone(d.find_domain_wide("Vita Group", session=web,
+                                             resolves=lambda x: False))
+        web = Web(clearbit=[{"name": "Malmaison", "domain": "malmaison.com"}],
+                  sites={"malmaison.com": (home("Malmaison | Boutique hotels"), "")})
+        self.assertEqual(d.find_domain_wide("Malmaison", session=web,
+                                            resolves=lambda x: False),
+                         "malmaison.com")
+
 
 if __name__ == "__main__":
     unittest.main()

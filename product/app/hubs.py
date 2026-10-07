@@ -11,10 +11,9 @@ Built entirely from the directory (directory.py), at request time:
 
   - every employer on a page has a live directory page, so the same rules
     hold: shared inboxes only, never a person's, removable, re-checked
-  - an employer counts for a role and town only when the daily board search
-    for that role in that town found its advert (directory_builder records
-    which search it was). Older entries without that are matched on the
-    advert's own title and location words, never on a guess
+  - an employer counts for a role only when its advert's own title says
+    so (a board search returns loose matches), and for a town when the
+    board search for that town found it or the advert's location names it
   - a page exists only with MIN_EMPLOYERS or more employers. A page with one
     name on it helps nobody and reads as filler, to people and to search
     engines alike; it appears by itself once the directory has grown
@@ -52,9 +51,9 @@ def _words(text: str) -> set[str]:
 
 
 def role_of(job: dict) -> str:
-    """Which of ROLES this advert was for, or ""."""
-    if job.get("search") in ROLES:
-        return job["search"]
+    """Which of ROLES this advert was for, or "". Always from the advert's
+    own title: a board search for "warehouse operative" in Edinburgh also
+    returned a tech lead's job, so the search it came from proves nothing."""
     have = _words(job.get("title", ""))
     for role in ROLES:
         if _words(role) <= have:
