@@ -103,7 +103,8 @@ def submit(urls, *, post=None) -> bool:
         return False
 
 
-def submit_if_changed(urls, *, get_meta, set_meta, post=None) -> str:
+def submit_if_changed(urls, *, get_meta, set_meta, post=None,
+                      memory_key: str = MEMORY_KEY) -> str:
     """Submit only when the list or the figures have moved since last time.
 
     Returns a short word describing what happened, for a log line: "sent",
@@ -114,12 +115,12 @@ def submit_if_changed(urls, *, get_meta, set_meta, post=None) -> str:
         return "off"
     urls = list(urls)
     mark = fingerprint(urls, track_record.updated_on())
-    if get_meta(MEMORY_KEY) == mark:
+    if get_meta(memory_key) == mark:
         return "unchanged"
     if not submit(urls, post=post):
         return "failed"
     # Written only after acceptance. A failed submission that recorded its
     # fingerprint would never be retried, which is the one way this quietly
     # stops working and nothing looks wrong.
-    set_meta(MEMORY_KEY, mark)
+    set_meta(memory_key, mark)
     return "sent"

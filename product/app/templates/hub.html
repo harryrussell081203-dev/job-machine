@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set where = (" in " ~ hub.town) if hub.town else " in the UK" %}
+{% block title %}{{ hub.role_label }} jobs{{ where }}: who to email &middot; Recruited{% endblock %}
+{% block content %}
+<script type="application/ld+json">
+{{ {"@context": "https://schema.org", "@type": "ItemList",
+    "name": hub.role_label ~ " jobs" ~ where ~ ": who to email",
+    "numberOfItems": hub.employers | length,
+    "itemListElement": hub.employers | map(attribute="company") | list} | tojson }}
+</script>
+
+<p class="muted"><small><a href="/jobs">Jobs by role</a>
+  {% if hub.town %}&rsaquo; <a href="/jobs/{{ hub.role_slug }}">{{ hub.role_label }}</a>{% endif %}
+  &rsaquo; {{ hub.town or "UK" }}</small></p>
+<h1>{{ hub.role_label }} jobs{{ where }}: who to email</h1>
+<p class="lede">{{ hub.employers | length }} employers advertised {{ hub.role }} jobs{% if hub.town %} in and around {{ hub.town }}{% endif %} recently,
+  and each one prints an address for applications on its own website. Email
+  them directly. It gets read by a person, not a filter.</p>
+
+<div class="panel">
+  {% for e in hub.employers %}
+    <div class="hubrow">
+      <p><b><a href="/employers/{{ e.slug }}">{{ e.company }}</a></b>
+        <span class="tag">{{ "hiring inbox" if e.kind == "hiring" else "general inbox" }}</span><br>
+        <a href="mailto:{{ e.email }}">{{ e.email }}</a>
+        <small class="muted">printed on {{ e.domain }}, checked {{ e.checked_at | int | datefmt }}</small></p>
+      <ul class="hubjobs">
+        {% for j in e.jobs %}
+          <li>{{ j.title }}{% if j.location %} <small class="muted">{{ j.location }}{% if j.posted_at %}, {{ j.posted_at }}{% endif %}</small>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endfor %}
+  <p class="hint">Only shared inboxes each employer publishes itself, never a
+    person's address. Jobs by <a href="https://www.adzuna.co.uk" rel="noopener">Adzuna</a>;
+    an advert may have closed, but the address is still the way in.</p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Want these written for you?</h2>
+  <p>Tell us the job you want and where. We find employers like these, write a
+    short email from you to each one and send it from your own email. You
+    see every one first.</p>
+  <p><a class="btn" href="/start" data-pulse="land:cta:hub">Start free</a>
+     <a class="btn ghost" href="/">See how it works</a></p>
+</div>
+
+<h2>What to write</h2>
+<div class="panel">
+  <p>Short gets read. 60 to 90 words:</p>
+  <ol>
+    <li>The job you're after, and one thing about the company that shows you
+      looked.</li>
+    <li>Two things you've actually done that matter for this job, with a
+      number if you have one.</li>
+    <li>One question, so replying is easy.</li>
+  </ol>
+  <p>Then your name, your phone number and "CV attached". Subject line: the job
+    title, nothing else. <a href="/answers/job-email-subject-line">Why</a>.</p>
+</div>
+
+{% if hub.towns %}
+<h2>{{ hub.role_label }} jobs in other towns</h2>
+<p>{% for t, href in hub.towns %}<a href="{{ href }}">{{ t }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+{% endif %}
+{% if hub.other_roles %}
+<h2>Other jobs in {{ hub.town }}</h2>
+<p>{% for r, href in hub.other_roles %}<a href="{{ href }}">{{ r }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+{% endif %}
+<p><small class="muted">Not here? <a href="/find">Type any company's name</a>
+  and its website is read for you. Free, no account.</small></p>
+{% endblock %}

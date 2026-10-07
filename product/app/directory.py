@@ -117,10 +117,16 @@ def excluded(company: str, domain: str = "") -> bool:
 
 
 def record(company: str, result: dict, *, roles: list | None = None,
-           now: float | None = None) -> str:
+           now: float | None = None, remember_miss: bool = False) -> str:
     """Create or refresh this company's page from a fresh read of its site.
     Returns the slug when there is a page, "" when there is nothing to
-    publish. Never resurrects a removed page."""
+    publish. Never resurrects a removed page.
+
+    remember_miss: keep an empty, unpublished row for a company that had
+    nothing to publish, so the daily builder does not read it again for a
+    month. Without it the same few dozen misses took every day's places and
+    the new employers from the boards were never reached. Only the builder
+    sets this; a name somebody typed into /find is never kept."""
     if not enabled():
         return ""
     now = int(time.time() if now is None else now)
@@ -138,6 +144,12 @@ def record(company: str, result: dict, *, roles: list | None = None,
                 # Gone from their site, so gone from the page.
                 c.execute("UPDATE employer_pages SET inboxes = '[]', "
                           "checked_at = ? WHERE slug = ?", (now, slug))
+            elif remember_miss:
+                c.execute("INSERT INTO employer_pages (slug, company, domain, "
+                          "inboxes, roles, created_at, checked_at) "
+                          "VALUES (?, ?, ?, '[]', '[]', ?, ?)",
+                          (slug, display_name(company),
+                           result.get("domain") or "", now, now))
             return ""
         keep_roles = json.loads(row["roles"]) if row else []
         if roles:

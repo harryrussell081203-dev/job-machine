@@ -46,6 +46,7 @@ from . import answers as answerlib  # noqa: E402
 from . import auth, autosend, billing, config, cv as cvlib, db, delivery, ratelimit, vault  # noqa: E402
 from . import indexnow  # noqa: E402
 from . import directory  # noqa: E402
+from . import hubs  # noqa: E402
 from . import proof  # noqa: E402
 from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
@@ -2146,6 +2147,11 @@ def public_pages() -> tuple[str, ...]:
             pages += ("/employers",) + tuple(directory.paths())
         except Exception:
             pass
+        try:
+            # Role and town pages, once enough employers qualify. hubs.py.
+            pages += tuple(hubs.paths())
+        except Exception:
+            pass
     return pages
 
 
@@ -2162,6 +2168,7 @@ def employers(request: Request):
     if not directory.enabled():
         return PlainTextResponse("Not found", status_code=404)
     return render(request, "employers.html", pages=directory.listed(),
+                  hub_roles=bool(hubs.paths()),
                   removed=request.query_params.get("removed") == "1",
                   og_title="How to email UK employers about a job",
                   og_description=(
@@ -2184,6 +2191,38 @@ def employer_page(request: Request, slug: str):
                       f"The email address {page['company']} publishes on its "
                       f"own website for jobs ({first}), where it's printed, "
                       "and how to write to it."))
+
+
+@app.get("/jobs", response_class=HTMLResponse)
+def jobs_index(request: Request):
+    """Every role and town page, grouped by role."""
+    roles = hubs.overview()
+    if not roles:
+        return PlainTextResponse("Not found", status_code=404)
+    return render(request, "hubs.html", roles=roles, missing=False,
+                  og_title="Who to email about a job, by role and town",
+                  og_description=(
+                      "UK employers advertising right now who print an address "
+                      "for applications on their own website, by job and town."))
+
+
+@app.get("/jobs/{role}", response_class=HTMLResponse)
+@app.get("/jobs/{role}/{town}", response_class=HTMLResponse)
+def jobs_hub(request: Request, role: str, town: str = ""):
+    hub = hubs.page(role, town)
+    if not hub:
+        response = render(request, "hubs.html", roles=hubs.overview(),
+                          missing=True)
+        response.status_code = 404
+        return response
+    where = f" in {hub['town']}" if hub["town"] else " in the UK"
+    return render(request, "hub.html", hub=hub,
+                  og_title=f"{hub['role_label']} jobs{where}: who to email",
+                  og_description=(
+                      f"{len(hub['employers'])} employers advertising "
+                      f"{hub['role']} jobs{where} who print an address for "
+                      "applications on their own website. Write to them "
+                      "directly instead of clicking Apply."))
 
 
 @app.get("/employers.json")

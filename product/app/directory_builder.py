@@ -16,7 +16,8 @@ inboxes. A company already listed is read again after a month; one that
 asked to be removed never is.
 
 Run by .github/workflows/directory.yml. Switches: DIRECTORY_ENABLED,
-DIRECTORY_PER_RUN (companies read per run, default 40).
+DIRECTORY_PER_RUN (companies read per run, default 150),
+DIRECTORY_SEARCHES (board searches per run, default 10).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from __future__ import annotations
 import datetime
 
 from jobseeker import agencies, settings
-from jobseeker.pipeline import harvest
+from jobseeker.pipeline import discover, harvest
 
 from . import company_lookup, config, db, directory
 
@@ -38,14 +39,19 @@ TOWNS = ("London", "Birmingham", "Manchester", "Glasgow", "Leeds",
          "Liverpool", "Bristol", "Sheffield", "Edinburgh", "Newcastle",
          "Cardiff", "Nottingham", "Leicester", "Aberdeen", "Belfast",
          "Southampton", "Coventry", "Hull", "Stoke-on-Trent", "Plymouth")
-SEARCHES_PER_RUN = 6
+SEARCHES_PER_RUN = 10
+
+
+def searches_per_run() -> int:
+    return max(1, int(settings.number("DIRECTORY_SEARCHES", SEARCHES_PER_RUN)))
 
 
 def todays_searches(day: datetime.date) -> list[tuple[str, str]]:
     """A different slice of role x town each day, cycling through all 400."""
     pairs = [(r, t) for t in TOWNS for r in ROLES]
-    start = (day.toordinal() * SEARCHES_PER_RUN) % len(pairs)
-    return [pairs[(start + i) % len(pairs)] for i in range(SEARCHES_PER_RUN)]
+    n = searches_per_run()
+    start = (day.toordinal() * n) % len(pairs)
+    return [pairs[(start + i) % len(pairs)] for i in range(n)]
 
 
 def from_boards(day: datetime.date, *, session=None) -> dict[str, list]:
@@ -80,7 +86,10 @@ def from_boards(day: datetime.date, *, session=None) -> dict[str, list]:
                 "title": (j.get("title") or "").strip()[:80],
                 "location": ((j.get("location") or {})
                              .get("display_name") or "")[:60],
-                "posted_at": (j.get("created") or "")[:10]})
+                "posted_at": (j.get("created") or "")[:10],
+                # Which search found it, so the role and town pages
+                # (hubs.py) group by what was asked, not a guess at a title.
+                "search": role, "town": town})
     return out
 
 
@@ -98,12 +107,14 @@ def run(*, day: datetime.date | None = None, session=None, lookup=None,
     if not directory.enabled():
         return {"reason": "off"}
     day = day or datetime.date.today()
-    per_run = per_run or int(settings.number("DIRECTORY_PER_RUN", 40))
+    per_run = per_run or int(settings.number("DIRECTORY_PER_RUN", 150))
     boards = from_boards(day, session=session)
-    names = list(dict.fromkeys(from_drafts() + list(boards)))
+    # Today's advertisers first: they come with jobs to show.
+    names = list(dict.fromkeys(list(boards) + from_drafts()))
     todo = directory.due(names)[:per_run]
     look = lookup or (lambda name: company_lookup.lookup(
-        name, store=db._PlaceCache()))
+        name, store=db._PlaceCache(), find_domain=discover.find_domain_wide,
+        retry_unknown=True))
     published = 0
     for name in todo:
         try:
@@ -111,15 +122,31 @@ def run(*, day: datetime.date | None = None, session=None, lookup=None,
         except Exception as exc:
             print(f"[directory] {name}: {exc}")
             continue
-        if directory.record(name, result, roles=boards.get(name)):
+        if directory.record(name, result, roles=boards.get(name),
+                            remember_miss=True):
             published += 1
     return {"candidates": len(names), "read": len(todo),
-            "published": published, "listed": len(directory.listed())}
+            "published": published, "listed": len(directory.listed()),
+            "websites_found_by": dict(discover.FOUND_BY)}
+
+
+def announce() -> str:
+    """Tell IndexNow about the directory and the role and town pages the
+    moment they change, rather than whenever the web app next restarts.
+    Its own fingerprint, so it never cancels out the app's whole-site one."""
+    from . import hubs, indexnow
+    paths = directory.paths()
+    if paths:
+        paths = ["/employers"] + paths + hubs.paths()
+    return indexnow.submit_if_changed(
+        [config.BASE_URL + p for p in paths], get_meta=db.get_meta,
+        set_meta=db.set_meta, memory_key="indexnow_directory")
 
 
 def main() -> int:
     db.init()
     print(f"[directory] {run()}")
+    print(f"[directory] indexnow: {announce()}")
     return 0
 
 

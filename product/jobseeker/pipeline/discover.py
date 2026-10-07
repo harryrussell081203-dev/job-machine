@@ -106,6 +106,206 @@ def find_domain(company: str, *, session=None) -> str | None:
     return None
 
 
+# ----------------------------------------------------------------------
+# A wider search, for the public employer directory only.
+#
+# Clearbit's free autocomplete knows few UK employers: the directory builder
+# read 40 companies a day and found a website for one (Booker Group, Holiday
+# Inn and Bannatyne among the misses). Two more sources, both checkable:
+#
+#   - Wikidata's "official website" for an entity whose name is exactly the
+#     company's. Free, no key, and edited by people who check.
+#   - The obvious addresses (bookergroup.com, clarkcontracts.co.uk), kept
+#     ONLY when the site's own title or name says it is that company. A
+#     parked domain, a redirect elsewhere or a near-miss name is dropped.
+#
+# The sweep that writes letters keeps using find_domain alone; a wrong firm
+# there costs somebody an application. Here it would cost a page naming the
+# wrong site, which is why the site's own words have to agree.
+# ----------------------------------------------------------------------
+WIKI_UA = {"User-Agent": "recruited/1.0 (https://recruited.org.uk; "
+                         "UK employer directory)"}
+WIKIDATA = "https://www.wikidata.org/w/api.php"
+UK = "Q145"
+GUESS_TLDS = (".co.uk", ".com", ".uk", ".org.uk")
+UK_TLDS = (".co.uk", ".uk", ".org.uk")
+PARKED = re.compile(r"domain (is )?for sale|buy this domain|parked|"
+                    r"this domain|coming soon|under construction|"
+                    r"account suspended|default web page|it works!",
+                    re.I)
+TITLE_SPLIT = re.compile(r"\s+[|\-–—:·•]\s+|\s*\|\s*")
+
+# Which source answered, per run, so the log says what is working.
+FOUND_BY: dict[str, int] = {}
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlsplit
+    if "//" not in url:
+        url = "https://" + url
+    host = (urlsplit(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def from_wikidata(company: str, *, session=None) -> str | None:
+    """The official website of the Wikidata entity named exactly this."""
+    wanted = company_key(company)
+    tokens = name_tokens(company)
+    if not wanted:
+        return None
+    import requests
+    session = session or requests
+    try:
+        r = session.get(WIKIDATA, params={
+            "action": "wbsearchentities", "search": company, "language": "en",
+            "type": "item", "limit": 7, "format": "json"},
+            headers=WIKI_UA, timeout=15)
+        hits = r.json().get("search", [])
+        ids = [h["id"] for h in hits
+               if company_key(h.get("label", "")) == wanted
+               or any(company_key(a) == wanted for a in h.get("aliases", []))]
+        if not ids:
+            return None
+        r = session.get(WIKIDATA, params={
+            "action": "wbgetentities", "ids": "|".join(ids[:5]),
+            "props": "claims", "format": "json"}, headers=WIKI_UA, timeout=15)
+        entities = r.json().get("entities", {})
+    except Exception as exc:
+        print(f"[discover] wikidata '{company}': {exc}")
+        return None
+
+    def values(claims, prop):
+        out = []
+        for c in claims.get(prop, []):
+            v = ((c.get("mainsnak") or {}).get("datavalue") or {}).get("value")
+            out.append(v.get("id") if isinstance(v, dict) else v)
+        return [v for v in out if v]
+
+    for qid in ids:
+        claims = (entities.get(qid) or {}).get("claims") or {}
+        sites = [_host(u) for u in values(claims, "P856") if isinstance(u, str)]
+        sites = [s for s in sites if contacts.plausible_domain(s)]
+        if not sites:
+            continue
+        # One word is not a company ("Sanctuary"). Only a UK one will do.
+        if len(tokens) < 2 and UK not in values(claims, "P17") \
+                and not sites[0].endswith(UK_TLDS):
+            continue
+        return sites[0]
+    return None
+
+
+def guesses(company: str) -> list[str]:
+    """The addresses a company called this would most likely have. Nothing
+    is used unless the site itself confirms it - see site_says."""
+    key = company_key(company).split()
+    raw = re.sub(r"[^a-z0-9 ]", " ", (company or "").lower()
+                 .replace("'", "").replace("’", "")).split()
+    raw = [w for w in raw if w not in ("ltd", "limited", "plc", "llp", "the",
+                                       "and", "uk")]
+    stems = []
+    for words in (key, raw):
+        if words:
+            stems += ["".join(words)]
+            if len(words) > 1:
+                stems += ["-".join(words)]
+    stems = [s for s in dict.fromkeys(stems) if 3 <= len(s) <= 40]
+    single = len(name_tokens(company)) < 2
+    tlds = UK_TLDS if single else GUESS_TLDS
+    return [s + t for s in stems for t in tlds]
+
+
+def _names_on(page: str) -> list[str]:
+    """What a home page calls itself: title, site name, schema.org name."""
+    out = []
+    m = re.search(r"<title[^>]*>(.*?)</title>", page, re.I | re.S)
+    if m:
+        out.append(m.group(1))
+    for prop in ("og:site_name", "application-name", "og:title"):
+        m = re.search(r'<meta[^>]+(?:property|name)=["\']' + re.escape(prop)
+                      + r'["\'][^>]*content=["\']([^"\']+)', page, re.I)
+        if m:
+            out.append(m.group(1))
+    out += re.findall(r'"@type"\s*:\s*"(?:Organization|Corporation|'
+                      r'LocalBusiness)"[^{}]*?"name"\s*:\s*"([^"]+)"', page)
+    import html as _html
+    names = []
+    for text in out:
+        text = _html.unescape(" ".join(text.split()))
+        names.append(text)
+        names += [p for p in TITLE_SPLIT.split(text) if p.strip()]
+    return names
+
+
+def site_says(company: str, domain: str, page: str) -> bool:
+    """Does this home page name itself as the company? Exact name, or the
+    same words plus nothing but 'Group', 'Ltd' and the like."""
+    if not page or PARKED.search(page[:5000]):
+        return False
+    wanted = company_key(company)
+    for name in _names_on(page):
+        if company_key(name) == wanted:
+            return True
+        if len(name_tokens(company)) >= 2 and len(name) <= 80 \
+                and domain_matches(company, name, domain):
+            return True
+    return False
+
+
+def _resolves(domain: str) -> bool:
+    import socket
+    try:
+        return bool(socket.getaddrinfo(domain, 443))
+    except OSError:
+        return False
+
+
+def from_guess(company: str, *, session=None, resolves=None) -> str | None:
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+    session = session or requests
+    candidates = guesses(company)
+    if not candidates:
+        return None
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        live = [d for d, ok in zip(candidates, pool.map(
+            resolves or _resolves, candidates)) if ok]
+    for domain in live:
+        if not contacts.plausible_domain(domain):
+            continue
+        for url in (f"https://www.{domain}/", f"https://{domain}/"):
+            try:
+                r = session.get(url, headers=UA, timeout=8)
+            except Exception:
+                continue
+            if getattr(r, "status_code", 0) != 200:
+                continue
+            # A redirect to somebody else's site is not this company's site.
+            if _host(getattr(r, "url", "") or url) != domain:
+                break
+            if site_says(company, domain, (r.text or "")[:200_000]):
+                return domain
+            break
+    return None
+
+
+def find_domain_wide(company: str, *, session=None, resolves=None) -> str | None:
+    """find_domain, then Wikidata, then the obvious addresses checked
+    against the site's own name. For the employer directory."""
+    if not name_tokens(company):
+        return None
+    for source, fn in (("clearbit", lambda: find_domain(company, session=session)),
+                       ("wikidata", lambda: from_wikidata(company, session=session)),
+                       ("checked", lambda: from_guess(company, session=session,
+                                                      resolves=resolves))):
+        domain = fn()
+        if domain:
+            FOUND_BY[source] = FOUND_BY.get(source, 0) + 1
+            return domain
+    FOUND_BY["none"] = FOUND_BY.get("none", 0) + 1
+    return None
+
+
 def scrape_site(domain: str, *, session=None, paths=SCRAPE_PATHS,
                 delay: float = POLITE_DELAY) -> list[str]:
     """Addresses written on the company's own pages."""
