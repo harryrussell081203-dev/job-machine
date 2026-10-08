@@ -76,7 +76,7 @@ def _says_agency(page: str) -> bool:
     """Does the home page read like a recruitment agency's? Their titles
     often give nothing away ("Pioneering People", "Cathcart Technology"),
     but the page does: what they call themselves, or the two doors every
-    agency site has, one for candidates and one for clients."""
+    agency site has, one for candidates and one for employers."""
     import re
     text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", page[:300_000],
                   flags=re.I | re.S)
@@ -88,14 +88,13 @@ def _says_agency(page: str) -> bool:
                  r"\bsupply (teachers?|staff)\b|\bstaffing (agency|solutions|"
                  r"services)\b", text):
         return True
-    if re.search(r"\bfor (candidates|job ?seekers)\b", text) and \
-            re.search(r"\bfor (clients|employers|hiring managers)\b", text):
-        return True
-    return (len(re.findall(r"\bcandidates?\b", text)) >= 2
-            and len(re.findall(r"\bclients?\b", text)) >= 2
-            and bool(re.search(r"\b(vacancies|latest jobs|job search|"
-                               r"search jobs|register (your )?cv|upload "
-                               r"(your )?cv|submit (your )?cv)\b", text)))
+    # Counting "candidates" and "clients" is not enough: a care provider
+    # calls the people it looks after clients, and talks to candidates on
+    # the same page (Keystone Care was taken down on 8 October that way).
+    # The two labelled doors are the agency's tell.
+    return bool(re.search(r"\bfor (candidates|job ?seekers)\b", text)
+                and re.search(r"\bfor (employers|hiring managers|"
+                              r"companies|businesses)\b", text))
 
 
 def _read(domain: str, path: str, get) -> dict:

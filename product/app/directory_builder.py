@@ -116,11 +116,20 @@ def run(*, day: datetime.date | None = None, session=None, lookup=None,
     names = list(dict.fromkeys(list(boards) + from_drafts()))
     todo = directory.due(names)
     if recheck:
-        live = [p["company"] for p in directory.listed()]
-        todo = live + [n for n in todo if n not in live]
+        # Live pages, and pages taken down in the last few days: a rule
+        # that took one down by mistake gets its chance to put it back.
+        live = [p["company"] for p in directory.listed()] + _recently_down()
+        todo = list(dict.fromkeys(live + todo))
     todo = todo[:per_run]
+    # A live page already knows its company's website. Asking the lookup
+    # services again only risks a miss on a site that has not moved.
+    known = {p["slug"]: p["domain"] for p in _live_domains(recheck)}
+
+    def find(name):
+        return known.get(directory.slugify(name)) \
+            or discover.find_domain_wide(name)
     look = lookup or (lambda name: company_lookup.lookup(
-        name, store=db._PlaceCache(), find_domain=discover.find_domain_wide,
+        name, store=db._PlaceCache(), find_domain=find,
         retry_unknown=True, fresh=recheck))
     published = 0
     for name in todo:
@@ -132,9 +141,31 @@ def run(*, day: datetime.date | None = None, session=None, lookup=None,
         if directory.record(name, result, roles=boards.get(name),
                             remember_miss=True):
             published += 1
+    for company, why in directory.TAKEN_DOWN:
+        print(f"[directory] taken down: {company} ({why})")
     return {"candidates": len(names), "read": len(todo),
             "published": published, "listed": len(directory.listed()),
+            "taken_down": len(directory.TAKEN_DOWN),
             "websites_found_by": dict(discover.FOUND_BY)}
+
+
+def _recently_down(days: int = 3) -> list[str]:
+    import time
+    with db.connect() as c:
+        return [r["company"] for r in c.execute(
+            "SELECT company FROM employer_pages WHERE removed_at IS NULL "
+            "AND inboxes = '[]' AND domain != '' AND checked_at > ?",
+            (int(time.time()) - days * 86400,)).fetchall()]
+
+
+def _live_domains(recently_down: bool = False) -> list[dict]:
+    import time
+    since = int(time.time()) - 3 * 86400 if recently_down else 2 ** 62
+    with db.connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT slug, domain FROM employer_pages WHERE removed_at IS NULL "
+            "AND domain != '' AND (inboxes != '[]' OR checked_at > ?)",
+            (since,)).fetchall()]
 
 
 def announce() -> str:
