@@ -56,12 +56,23 @@ def build_app(**env):
 
 class AppTestCase(unittest.TestCase):
     env: dict = {}
+    # A sign-up starts the first search in a background thread. Left real,
+    # it outlives the test that started it, opens whatever database the NEXT
+    # test configured, and holds it: "database is locked" in an unrelated
+    # test's setUp (test_journey, 8 October). So it is recorded instead, in
+    # self.started. A class that tests the run itself sets this True.
+    real_runs = False
 
     def setUp(self):
         from fastapi.testclient import TestClient
         self.main, self.db_path = build_app(**self.env)
         self.addCleanup(lambda: os.path.exists(self.db_path)
                         and os.unlink(self.db_path))
+        if not self.real_runs:
+            self.started = []
+            real = self.main._start_run
+            self.main._start_run = lambda uid: self.started.append(uid) or True
+            self.addCleanup(setattr, self.main, "_start_run", real)
         self.client = TestClient(self.main.app)
         self.client.__enter__()               # fires startup, creates schema
         self.addCleanup(self.client.__exit__, None, None, None)
