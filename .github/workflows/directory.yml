@@ -15,9 +15,17 @@ name: directory
 
 on:
   schedule:
-    # Every day, early, not on the hour.
+    # Every day, early, not on the hour. The second run is for the days the
+    # job board is down for the first (7 Oct: every search answered 503);
+    # on a good day it finds the same companies, no longer due, and stops.
     - cron: "41 5 * * *"
-  workflow_dispatch: {}
+    - cron: "41 14 * * *"
+  workflow_dispatch:
+    inputs:
+      recheck:
+        description: "Read every live page again under the current rules"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,6 +63,7 @@ jobs:
           DIRECTORY_ENABLED: ${{ vars.DIRECTORY_ENABLED }}
           DIRECTORY_PER_RUN: ${{ vars.DIRECTORY_PER_RUN }}
           DIRECTORY_SEARCHES: ${{ vars.DIRECTORY_SEARCHES }}
+          DIRECTORY_RECHECK: ${{ inputs.recheck && '1' || '' }}
           # Optional: the same key the web app serves. Without it, new pages
           # are announced when the app next restarts instead.
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}

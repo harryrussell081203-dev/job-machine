@@ -57,7 +57,17 @@ def _same_site(url: str, domain: str) -> bool:
                                                           "www." + domain)
 
 
-def _read(domain: str, path: str, get) -> tuple[str, list[str]]:
+def _head(page: str) -> str:
+    """The home page's title and description: what the firm says it is."""
+    import html as _html
+    import re
+    bits = re.findall(r"<title[^>]*>(.*?)</title>", page[:100_000], re.I | re.S)[:1]
+    bits += re.findall(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']*)',
+                       page[:100_000], re.I)[:1]
+    return _html.unescape(" ".join(" ".join(bits).split()))[:400]
+
+
+def _read(domain: str, path: str, get) -> tuple[str, list[str], str]:
     """(the page it ended up on, the addresses on it). Redirects are followed only while they stay on
     the company's own domain: a redirect elsewhere is somewhere the visitor
     could not have pointed us, and is not followed."""
@@ -72,29 +82,33 @@ def _read(domain: str, path: str, get) -> tuple[str, list[str]]:
                 if status in (301, 302, 303, 307, 308):
                     nxt = urljoin(url, (r.headers or {}).get("location", ""))
                     if not _same_site(nxt, domain):
-                        return url, []
+                        return url, [], ""
                     url = nxt
                     continue
                 if status == 200:
-                    return url, discover.emails_in(r.text or "")
-                return url, []
+                    text = r.text or ""
+                    return url, discover.emails_in(text), (_head(text) if not path else "")
+                return url, [], ""
         except Exception:
             continue
-    return "", []
+    return "", [], ""
 
 
 def lookup(company: str, *, get=None, find_domain=None, resolves=None,
-           store=None, retry_unknown: bool = False) -> dict:
-    """{"domain": str, "emails": [..], "found_on": {email: page url}};
+           store=None, retry_unknown: bool = False,
+           fresh: bool = False) -> dict:
+    """{"domain": str, "emails": [..], "found_on": {email: page url},
+    "about": the home page's title and description};
     domain "" when the company's own site could not be identified with
     confidence. A fresh answer is also offered to the public employer
     directory (directory.py), which keeps only shared role inboxes.
 
     retry_unknown: a kept answer of "no website found" is not trusted. The
     directory builder searches harder than /find does, so a miss there is
-    worth another look."""
+    worth another look. fresh: ignore any kept answer (a re-check after
+    the publishing rules change)."""
     key = f"find:{company_key(company)}"
-    if store is not None:
+    if store is not None and not fresh:
         try:
             saved = store.get(key)
             if saved:
@@ -108,6 +122,7 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
     domain = (find_domain or discover.find_domain)(company) or ""
     emails: list[str] = []
     found_on: dict[str, str] = {}
+    about = ""
     if domain and (resolves or _public)(domain):
         if get is None:
             import requests
@@ -119,7 +134,8 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
         raw: list[str] = []
         for f in futures:
             if f in done and not f.exception():
-                page, found = f.result()
+                page, found, head = f.result()
+                about = about or head
                 raw += found
                 for address in contacts.clean_emails(found, domain):
                     found_on.setdefault(address, page)
@@ -128,7 +144,7 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
         domain = ""          # resolves somewhere private: treat as unknown
 
     result = {"domain": domain, "emails": emails, "found_on": found_on,
-              "at": int(time.time())}
+              "about": about, "at": int(time.time())}
     if store is not None:
         try:
             store.put(key, json.dumps(result))

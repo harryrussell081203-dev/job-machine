@@ -136,6 +136,14 @@ class TestEmailExtraction(unittest.TestCase):
         self.assertEqual(d.emails_in(None), [])
 
 
+class TestEscapedPages(unittest.TestCase):
+    def test_json_escapes_are_not_part_of_an_address(self):
+        """Sodexo's page carried "\\u003ehrsystemsupport.usa@sodexo.com"."""
+        page = r'{"a":"\u003ejobs@acme.co.uk\u003c/a\u003e","b":"hr\u0040acme.co.uk"}'
+        self.assertEqual(d.emails_in(page), ["jobs@acme.co.uk", "hr@acme.co.uk"])
+        self.assertEqual(d.emails_in("u003einfo@acme.co.uk"), ["info@acme.co.uk"])
+
+
 class TestScrapeSite(unittest.TestCase):
     def test_addresses_are_collected_across_pages(self):
         s = Session(pages={"/contact": "reach jane.smith@acme.com",

@@ -41,11 +41,19 @@ SCRAPE_PATHS = ("", "/contact", "/contact-us", "/careers", "/jobs",
 POLITE_DELAY = 0.5      # small sites do not deserve a hammering
 
 
+# JSON inside a page writes "<" and ">" as \u003c and \u003e. The backslash
+# is not part of an address, so without this the "u003e" was read as the
+# start of one: Sodexo's page gave "u003ehrsystemsupport.usa@sodexo.com".
+_ESCAPED = re.compile(r"\\u00([0-9a-fA-F]{2})")
+_ESCAPE_LEFT = re.compile(r"^(?:u00[0-9a-fA-F]{2})+")
+
+
 def emails_in(text: str) -> list[str]:
     """Every address written down in a page or an advert."""
-    found = EMAIL_RE.findall(text or "")
-    found += [m.replace("%40", "@") for m in MAILTO_RE.findall(text or "")]
-    return found
+    text = _ESCAPED.sub(lambda m: "@" if m.group(1) == "40" else " ", text or "")
+    found = EMAIL_RE.findall(text)
+    found += [m.replace("%40", "@") for m in MAILTO_RE.findall(text)]
+    return [_ESCAPE_LEFT.sub("", f) for f in found]
 
 
 def domain_matches(company: str, hit_name: str, domain: str) -> bool:
