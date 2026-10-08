@@ -54,6 +54,36 @@ class WhatMayBePublished(unittest.TestCase):
         self.assertEqual(self.d.display_name("McAlpine"), "McAlpine")
 
 
+class FromTheFirstLiveDirectory(unittest.TestCase):
+    """Addresses that were published on 7 October and should not have been."""
+
+    def setUp(self):
+        from app import directory
+        self.d = directory
+
+    def test_another_countrys_office_is_not_a_uk_inbox(self):
+        for address in ("hr.middleeast@aecom.com", "hrsystemsupport.usa@sodexo.com",
+                        "dubaicareersservice@hw.ac.uk"):
+            self.assertEqual(self.d.kind_of(address), "", address)
+        self.assertEqual(self.d.kind_of("ukiexternalpeopleservices@aecom.com"), "hiring")
+        self.assertEqual(self.d.kind_of("info.newcastle@hotelduvin.com"), "general")
+
+    def test_a_universitys_student_careers_service_is_not_its_hiring_inbox(self):
+        self.assertEqual(self.d.kind_of("careers@hw.ac.uk"), "")
+        self.assertEqual(self.d.kind_of("careers@benburgess.co.uk"), "hiring")
+
+    def test_an_agency_says_so_on_its_home_page(self):
+        for about in ("Morgan Hunt | Recruitment Agency for Construction",
+                      "Bright Purple: Specialist IT recruiters in Scotland",
+                      "GSL Education - Supply teachers across the UK",
+                      "Temporary and permanent recruitment in Sheffield"):
+            self.assertTrue(self.d.agency("Somebody", {"about": about}), about)
+        for about in ("We're recruiting! Join Keystone Care",
+                      "Exemplar Health Care - Specialist nursing care",
+                      "Recruitment open for care assistants", ""):
+            self.assertFalse(self.d.agency("Keystone Care", {"about": about}), about)
+
+
 class ThePages(AppTestCase):
     def setUp(self):
         super().setUp()
@@ -160,6 +190,26 @@ class ThePages(AppTestCase):
         seen.clear()
         b.run(day=datetime.date(2026, 10, 3), lookup=look)
         self.assertEqual(seen, [])
+
+    def test_an_agency_gets_no_page_and_loses_the_one_it_had(self):
+        page = site("info@lorienglobal.com", domain="lorienglobal.com")
+        self.assertEqual(self.d.record("Lorien", page), "lorien")
+        page["about"] = "Lorien | Technology recruitment specialists"
+        self.assertEqual(self.d.record("Lorien", page), "")
+        self.assertIsNone(self.d.get("lorien"))
+
+    def test_a_recheck_reads_live_pages_whatever_their_date(self):
+        from app import directory_builder as b
+        self.d.record("Pennine Foods", site("jobs@pennine.co.uk"))
+        seen = []
+
+        def look(name):
+            seen.append(name)
+            return site("jobs@pennine.co.uk")
+        b.run(day=datetime.date(2026, 10, 8), lookup=look)
+        self.assertEqual(seen, [])             # checked today: not due
+        b.run(day=datetime.date(2026, 10, 8), lookup=look, recheck=True)
+        self.assertEqual(seen, ["Pennine Foods"])
 
     def test_never_a_company_anybody_blocked(self):
         from app import db

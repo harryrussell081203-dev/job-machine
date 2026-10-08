@@ -65,10 +65,32 @@ def display_name(name: str) -> str:
     return name.title() if name.islower() or name.isupper() else name
 
 
+# An inbox for another country's office is not where a UK applicant writes.
+# Live examples: hr.middleeast@aecom.com, hrsystemsupport.usa@sodexo.com,
+# dubaicareersservice@hw.ac.uk. Whole words where a short one would match
+# inside others ("us" in "business"), anywhere for the long ones.
+ABROAD_WORDS = frozenset({"us", "usa", "uae", "ksa", "apac", "mena", "latam",
+                          "anz", "nz", "na", "emea"})
+ABROAD_ANYWHERE = ("middleeast", "dubai", "qatar", "saudi", "india",
+                   "australia", "canada", "singapore", "america", "china",
+                   "africa", "asia")
+
+
+def abroad(local: str) -> bool:
+    words = set(re.split(r"[._\-0-9]+", local))
+    return bool(words & ABROAD_WORDS) or any(w in local for w in ABROAD_ANYWHERE)
+
+
 def kind_of(address: str) -> str:
     """HIRING, GENERAL, or "" for anything that must not be published."""
-    local = address.split("@")[0].lower()
+    local, _, host = address.lower().partition("@")
     if contacts.never_write_to(local) or contacts.is_personal(local):
+        return ""
+    if abroad(local):
+        return ""
+    # At a university, careers@ is the service for its own students, not
+    # its recruitment team (careers@hw.ac.uk was published as a hiring inbox).
+    if host.endswith(".ac.uk") and "career" in local:
         return ""
     tier, name = contacts.classify(address)
     if name:
@@ -94,6 +116,32 @@ def inboxes(result: dict) -> list[dict]:
                         "found_on": found_on.get(address, "")})
     out.sort(key=lambda i: (i["kind"] != HIRING, i["email"]))
     return out
+
+
+# What an agency's own home page calls itself. The directory and the role
+# pages are for employers: an agency's info@ is not the person hiring, and
+# the first live directory was over a third agencies (Lorien, Morgan Hunt,
+# Berkeley Scott...) whose names alone give nothing away.
+AGENCY_SITE = re.compile(
+    # "We're recruiting!" is an employer; these are how agencies describe
+    # themselves.
+    r"\brecruitment (agency|agencies|consultancy|consultants?|specialists?|"
+    r"company|business|firm|partner|solutions|services|group)\b|"
+    r"\b(specialist|leading|independent|award[- ]winning) recruit(ment|ers?)\b|"
+    r"\brecruiters\b|\bstaffing\b|\bexecutive search\b|\bheadhunt|"
+    r"\btalent (solutions|partners?)\b|\bemployment agency\b|"
+    r"\bsupply (teachers?|staff)\b|"
+    r"\b(temporary|permanent|contract|temp)(,| and| &) (permanent|contract|"
+    r"temporary|perm)(,? (and|&) (permanent|contract|temporary))? "
+    r"(recruitment|staff|roles|positions|placements)\b",
+    re.I)
+
+
+def agency(company: str, result: dict) -> bool:
+    from jobseeker import agencies
+    if agencies.advertiser(company) == agencies.AGENCY:
+        return True
+    return bool(AGENCY_SITE.search(result.get("about") or ""))
 
 
 def excluded(company: str, domain: str = "") -> bool:
@@ -134,6 +182,8 @@ def record(company: str, result: dict, *, roles: list | None = None,
     found = inboxes(result)
     if not slug or excluded(company, result.get("domain") or ""):
         return ""
+    if agency(company, result):
+        found = []      # unpublished, and remembered like any other miss
     with db.connect() as c:
         row = c.execute("SELECT * FROM employer_pages WHERE slug = ?",
                         (slug,)).fetchone()

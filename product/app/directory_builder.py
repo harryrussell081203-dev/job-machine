@@ -103,7 +103,10 @@ def from_drafts() -> list[str]:
 
 
 def run(*, day: datetime.date | None = None, session=None, lookup=None,
-        per_run: int | None = None) -> dict:
+        per_run: int | None = None, recheck: bool = False) -> dict:
+    """recheck: read every live page again first, whatever its date, so a
+    change to what may be published (an agency, an inbox for another
+    country) reaches the pages already up, not only new ones."""
     if not directory.enabled():
         return {"reason": "off"}
     day = day or datetime.date.today()
@@ -111,10 +114,14 @@ def run(*, day: datetime.date | None = None, session=None, lookup=None,
     boards = from_boards(day, session=session)
     # Today's advertisers first: they come with jobs to show.
     names = list(dict.fromkeys(list(boards) + from_drafts()))
-    todo = directory.due(names)[:per_run]
+    todo = directory.due(names)
+    if recheck:
+        live = [p["company"] for p in directory.listed()]
+        todo = live + [n for n in todo if n not in live]
+    todo = todo[:per_run]
     look = lookup or (lambda name: company_lookup.lookup(
         name, store=db._PlaceCache(), find_domain=discover.find_domain_wide,
-        retry_unknown=True))
+        retry_unknown=True, fresh=recheck))
     published = 0
     for name in todo:
         try:
@@ -145,7 +152,7 @@ def announce() -> str:
 
 def main() -> int:
     db.init()
-    print(f"[directory] {run()}")
+    print(f"[directory] {run(recheck=settings.flag('DIRECTORY_RECHECK', False))}")
     print(f"[directory] indexnow: {announce()}")
     return 0
 
