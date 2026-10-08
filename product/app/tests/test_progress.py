@@ -31,6 +31,8 @@ from test_sending import Base as SendingBase  # noqa: E402
 
 
 class Base(AppTestCase):
+    real_runs = True        # these test the run itself, with a fake runner
+
     # AppTestCase does not set one, so any test here that connects a mailbox
     # would fail inside the vault rather than on the thing it is testing.
     env = {"CREDENTIAL_KEY": Fernet.generate_key().decode()}
