@@ -238,6 +238,52 @@ so this reads high until they age out.</small></p>
   {% endif %}
 </div>
 
+{# What the machine has learned. Anonymous: counts and categories only. #}
+<h2>What gets replies</h2>
+<div class="panel">
+  {% set L = lessons %}
+  {% if L.letters %}
+  <p><b>{{ L.letters }}</b> letters sent across every account,
+    <b>{{ L.replied }}</b> answered by a person ({{ L.rate }}%).</p>
+  <p class="muted"><small>The range is where the true rate probably sits
+    (90%). Under {{ 30 }} letters a line is marked "too few": a difference
+    there is as likely to be luck as a lesson.</small></p>
+  {% for f in L.features %}
+    <h3>{{ f.label }}</h3>
+    <div class="scroll"><table>
+      <tr><th></th><th class="num">Letters</th><th class="num">Replies</th><th class="num">Rate</th><th class="num">Range</th></tr>
+      {% for l in f.lines %}
+        <tr{% if l.too_few %} class="muted"{% endif %}><td>{{ l.value }}</td>
+          <td class="num">{{ l.n }}</td><td class="num">{{ l.good }}</td>
+          <td class="num">{{ l.rate }}%</td>
+          <td class="num">{% if l.too_few %}too few{% else %}{{ l.low }}-{{ l.high }}%{% endif %}</td></tr>
+      {% endfor %}
+    </table></div>
+  {% endfor %}
+  {% else %}
+  <p class="muted">No sent letters yet.</p>
+  {% endif %}
+</div>
+
+<h2>What reading company websites has taught us</h2>
+<div class="panel">
+  {% set C = crawl %}
+  <p><b>{{ C.sites }}</b> sites read. {{ C.resting }} resting after refusing
+    us or not answering; {{ C.agencies }} turned out to be agencies.
+    {% if C.found_by %}Sites found by: {% for k, v in C.found_by.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% endfor %}.{% endif %}</p>
+  {% if C.paths %}
+  <div class="scroll"><table>
+    <tr><th>Page</th><th class="num">Read on</th><th class="num">Had an address</th><th class="num">Doesn't exist</th></tr>
+    {% for p in C.paths %}
+      <tr><td>{{ p.path }}</td><td class="num">{{ p.tried }}</td>
+        <td class="num">{{ p.address_pct }}%</td><td class="num">{{ p.dead_pct }}%</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted"><small>A page that never has an address is a page
+    every read could skip.</small></p>
+  {% endif %}
+</div>
+
 {# The richer view, for visitors who accepted the cookie. Their journeys
    join up across visits; nobody who declined appears here at all. #}
 <h2>Visitor journeys, last 28 days</h2>

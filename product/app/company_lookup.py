@@ -98,11 +98,15 @@ def _says_agency(page: str) -> bool:
                                r"(your )?cv|submit (your )?cv)\b", text)))
 
 
-def _read(domain: str, path: str, get) -> tuple[str, list[str], str, bool]:
-    """(the page it ended up on, the addresses on it). Redirects are followed only while they stay on
-    the company's own domain: a redirect elsewhere is somewhere the visitor
-    could not have pointed us, and is not followed."""
+def _read(domain: str, path: str, get) -> dict:
+    """One page: where it ended up, the addresses on it, and what kind of
+    answer it was (see learning.kind_of_response). Redirects are followed
+    only while they stay on the company's own domain: a redirect elsewhere
+    is somewhere the visitor could not have pointed us, and is not
+    followed."""
     from urllib.parse import urljoin
+    from . import learning
+    home = not path
     for scheme in ("https", "http"):
         url = f"{scheme}://{domain}{path}"
         try:
@@ -113,19 +117,24 @@ def _read(domain: str, path: str, get) -> tuple[str, list[str], str, bool]:
                 if status in (301, 302, 303, 307, 308):
                     nxt = urljoin(url, (r.headers or {}).get("location", ""))
                     if not _same_site(nxt, domain):
-                        return url, [], "", False
+                        return {"url": url, "emails": [], "head": "",
+                                "agency": False, "kind": learning.AWAY}
                     url = nxt
                     continue
                 if status == 200:
                     text = r.text or ""
-                    home = not path
-                    return (url, discover.emails_in(text),
-                            _head(text) if home else "",
-                            _says_agency(text) if home else False)
-                return url, [], "", False
+                    found = discover.emails_in(text)
+                    return {"url": url, "emails": found,
+                            "head": _head(text) if home else "",
+                            "agency": _says_agency(text) if home else False,
+                            "kind": learning.kind_of_response(
+                                200, bool(contacts.clean_emails(found, domain)))}
+                return {"url": url, "emails": [], "head": "", "agency": False,
+                        "kind": learning.kind_of_response(status, False)}
         except Exception:
             continue
-    return "", [], "", False
+    return {"url": "", "emails": [], "head": "", "agency": False,
+            "kind": learning.ERROR}
 
 
 def lookup(company: str, *, get=None, find_domain=None, resolves=None,
@@ -154,33 +163,51 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
             pass
 
     domain = (find_domain or discover.find_domain)(company) or ""
+    found_by = discover.LAST_FOUND_BY.pop(company_key(company), "") \
+        or ("clearbit" if domain and not find_domain else "")
     emails: list[str] = []
     found_on: dict[str, str] = {}
     about = ""
     agency_signs = False
-    if domain and (resolves or _public)(domain):
+    tried: dict[str, str] = {}
+    from . import learning
+    if domain and learning.resting(domain):
+        # It refused us or did not answer recently. Not "no address": the
+        # page it may already have in the directory is left as it is.
+        tried = {"": learning.REFUSED}
+    elif domain and (resolves or _public)(domain):
         if get is None:
             import requests
             get = requests.get
-        pool = ThreadPoolExecutor(max_workers=len(PATHS))
-        futures = [pool.submit(_read, domain, p, get) for p in PATHS]
-        done, _ = wait(futures, timeout=OVERALL_TIMEOUT)
+        paths = [p for p in PATHS if (p or "/") not in learning.skip(domain)]
+        pool = ThreadPoolExecutor(max_workers=len(paths) or 1)
+        futures = {p: pool.submit(_read, domain, p, get) for p in paths}
+        done, _ = wait(futures.values(), timeout=OVERALL_TIMEOUT)
         pool.shutdown(wait=False, cancel_futures=True)
         raw: list[str] = []
-        for f in futures:
-            if f in done and not f.exception():
-                page, found, head, says = f.result()
-                about = about or head
-                agency_signs = agency_signs or says
-                raw += found
-                for address in contacts.clean_emails(found, domain):
-                    found_on.setdefault(address, page)
+        for path, f in futures.items():
+            if f not in done or f.exception():
+                tried[path] = learning.ERROR
+                continue
+            page = f.result()
+            tried[path] = page["kind"]
+            about = about or page["head"]
+            agency_signs = agency_signs or page["agency"]
+            raw += page["emails"]
+            for address in contacts.clean_emails(page["emails"], domain):
+                found_on.setdefault(address, page["url"])
         emails = contacts.clean_emails(raw, domain)
+        learning.remember(domain, tried, found_by=found_by,
+                          agency=agency_signs)
     elif domain:
         domain = ""          # resolves somewhere private: treat as unknown
 
     result = {"domain": domain, "emails": emails, "found_on": found_on,
               "about": about, "agency_signs": agency_signs,
+              # The site was there but nothing answered: an outage or a
+              # refusal, which says nothing about whether its address went.
+              "unreachable": bool(domain and tried
+                                  and not learning.reachable(tried)),
               "at": int(time.time())}
     if store is not None:
         try:

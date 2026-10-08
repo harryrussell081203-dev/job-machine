@@ -43,6 +43,8 @@ def main(argv=None) -> int:
           f"{totals['failed']} failed")
     for err in totals["errors"][:20]:
         print(f"[sweep] {err}", file=sys.stderr)
+    from . import learning
+    print(f"[sweep] lessons kept from {learning.sync()} sent letters")
     return 0
 
 

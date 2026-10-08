@@ -47,6 +47,7 @@ from . import auth, autosend, billing, config, cv as cvlib, db, delivery, rateli
 from . import indexnow  # noqa: E402
 from . import directory  # noqa: E402
 from . import hubs  # noqa: E402
+from . import learning  # noqa: E402
 from . import proof  # noqa: E402
 from . import recruiters as recruiterlib  # noqa: E402
 from . import runner  # noqa: E402
@@ -2446,6 +2447,7 @@ def admin(request: Request):
         return PlainTextResponse("Not found", status_code=404)
     rows = db.overview()
     now = time.time()
+    learning.sync()          # new sends and outcomes, before reading
     return render(request, "admin.html", user=user, rows=rows,
                   ago=adminlib.ago, spots_left=db.free_spots_left(),
                   # The half of the funnel that happens before anybody signs
@@ -2464,6 +2466,11 @@ def admin(request: Request):
                       since=now - 28 * 86400).items() if k.startswith("consent:")},
                   search_console=search_console.latest(),
                   from_search=views.search_report(since=now - 28 * 86400),
+                  # What the machine has learned: which pages of a company
+                  # site carry addresses, and what sort of letter gets a
+                  # reply. Anonymous; see app/learning.py.
+                  crawl=learning.crawl_report(),
+                  lessons=learning.letter_report(),
                   **adminlib.summarise(rows, now=now))
 
 

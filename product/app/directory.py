@@ -197,6 +197,11 @@ def record(company: str, result: dict, *, roles: list | None = None,
                         (slug,)).fetchone()
         if row and row["removed_at"]:
             return ""
+        if not found and row and result.get("unreachable") \
+                and row["inboxes"] != "[]":
+            # Down or refusing us today. Not the same as the address having
+            # gone, so the page stays as it was and is read again later.
+            return slug
         if not found:
             if row:
                 # Gone from their site, so gone from the page.
