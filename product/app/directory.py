@@ -137,11 +137,19 @@ AGENCY_SITE = re.compile(
     re.I)
 
 
+# Names that are an agency's in this directory, though the sweep's own
+# agency test (jobseeker.agencies) is left looser on purpose.
+AGENCY_NAME = re.compile(r"\brecruit\b|\bcareers\s*$|\btalent\b|"
+                         r"\bplacements?\b|\bstaff\b", re.I)
+
+
 def agency(company: str, result: dict) -> bool:
     from jobseeker import agencies
-    if agencies.advertiser(company) == agencies.AGENCY:
+    if agencies.advertiser(company) == agencies.AGENCY \
+            or AGENCY_NAME.search(company or ""):
         return True
-    return bool(AGENCY_SITE.search(result.get("about") or ""))
+    return bool(result.get("agency_signs")
+                or AGENCY_SITE.search(result.get("about") or ""))
 
 
 def excluded(company: str, domain: str = "") -> bool:

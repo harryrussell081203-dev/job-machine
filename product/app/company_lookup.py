@@ -61,13 +61,44 @@ def _head(page: str) -> str:
     """The home page's title and description: what the firm says it is."""
     import html as _html
     import re
-    bits = re.findall(r"<title[^>]*>(.*?)</title>", page[:100_000], re.I | re.S)[:1]
-    bits += re.findall(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']*)',
-                       page[:100_000], re.I)[:1]
-    return _html.unescape(" ".join(" ".join(bits).split()))[:400]
+    page = page[:100_000]
+    bits = re.findall(r"<title[^>]*>(.*?)</title>", page, re.I | re.S)[:1]
+    for name in ("description", "og:description"):
+        n = re.escape(name)
+        bits += (re.findall(r'<meta[^>]+(?:name|property)=["\']' + n
+                            + r'["\'][^>]*content=["\']([^"\']*)', page, re.I)
+                 or re.findall(r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*'
+                               r'(?:name|property)=["\']' + n + r'["\']', page, re.I))[:1]
+    return _html.unescape(" ".join(" ".join(bits).split()))[:600]
 
 
-def _read(domain: str, path: str, get) -> tuple[str, list[str], str]:
+def _says_agency(page: str) -> bool:
+    """Does the home page read like a recruitment agency's? Their titles
+    often give nothing away ("Pioneering People", "Cathcart Technology"),
+    but the page does: what they call themselves, or the two doors every
+    agency site has, one for candidates and one for clients."""
+    import re
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", page[:300_000],
+                  flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", text).lower()
+    if re.search(r"\brecruitment (agency|agencies|consultancy|consultants?|"
+                 r"specialists?|company|business|firm|partner|solutions|"
+                 r"services)\b|\bemployment (agency|business)\b|"
+                 r"\bspecialist recruit|\bexecutive search\b|\bheadhunt|"
+                 r"\bsupply (teachers?|staff)\b|\bstaffing (agency|solutions|"
+                 r"services)\b", text):
+        return True
+    if re.search(r"\bfor (candidates|job ?seekers)\b", text) and \
+            re.search(r"\bfor (clients|employers|hiring managers)\b", text):
+        return True
+    return (len(re.findall(r"\bcandidates?\b", text)) >= 2
+            and len(re.findall(r"\bclients?\b", text)) >= 2
+            and bool(re.search(r"\b(vacancies|latest jobs|job search|"
+                               r"search jobs|register (your )?cv|upload "
+                               r"(your )?cv|submit (your )?cv)\b", text)))
+
+
+def _read(domain: str, path: str, get) -> tuple[str, list[str], str, bool]:
     """(the page it ended up on, the addresses on it). Redirects are followed only while they stay on
     the company's own domain: a redirect elsewhere is somewhere the visitor
     could not have pointed us, and is not followed."""
@@ -82,16 +113,19 @@ def _read(domain: str, path: str, get) -> tuple[str, list[str], str]:
                 if status in (301, 302, 303, 307, 308):
                     nxt = urljoin(url, (r.headers or {}).get("location", ""))
                     if not _same_site(nxt, domain):
-                        return url, [], ""
+                        return url, [], "", False
                     url = nxt
                     continue
                 if status == 200:
                     text = r.text or ""
-                    return url, discover.emails_in(text), (_head(text) if not path else "")
-                return url, [], ""
+                    home = not path
+                    return (url, discover.emails_in(text),
+                            _head(text) if home else "",
+                            _says_agency(text) if home else False)
+                return url, [], "", False
         except Exception:
             continue
-    return "", [], ""
+    return "", [], "", False
 
 
 def lookup(company: str, *, get=None, find_domain=None, resolves=None,
@@ -123,6 +157,7 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
     emails: list[str] = []
     found_on: dict[str, str] = {}
     about = ""
+    agency_signs = False
     if domain and (resolves or _public)(domain):
         if get is None:
             import requests
@@ -134,8 +169,9 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
         raw: list[str] = []
         for f in futures:
             if f in done and not f.exception():
-                page, found, head = f.result()
+                page, found, head, says = f.result()
                 about = about or head
+                agency_signs = agency_signs or says
                 raw += found
                 for address in contacts.clean_emails(found, domain):
                     found_on.setdefault(address, page)
@@ -144,7 +180,8 @@ def lookup(company: str, *, get=None, find_domain=None, resolves=None,
         domain = ""          # resolves somewhere private: treat as unknown
 
     result = {"domain": domain, "emails": emails, "found_on": found_on,
-              "about": about, "at": int(time.time())}
+              "about": about, "agency_signs": agency_signs,
+              "at": int(time.time())}
     if store is not None:
         try:
             store.put(key, json.dumps(result))

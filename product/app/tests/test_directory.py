@@ -72,6 +72,32 @@ class FromTheFirstLiveDirectory(unittest.TestCase):
         self.assertEqual(self.d.kind_of("careers@hw.ac.uk"), "")
         self.assertEqual(self.d.kind_of("careers@benburgess.co.uk"), "hiring")
 
+    def test_an_agency_with_a_plain_name_is_known_by_its_page(self):
+        """Pioneering People and Cathcart Technology: nothing in the name or
+        title, but every agency site has a door for candidates and one for
+        clients."""
+        from app.company_lookup import _says_agency
+        self.assertTrue(_says_agency(
+            "<nav><a>Candidates</a><a>Clients</a></nav><h1>Engineering jobs"
+            "</h1><p>Our candidates and clients trust us.</p>"
+            "<a>Search jobs</a><a>Upload your CV</a>"))
+        self.assertTrue(_says_agency("<p>For candidates</p><p>For employers</p>"))
+        self.assertTrue(self.d.agency("Pioneering People", {"agency_signs": True}))
+        # An employer that is hiring, or a consultancy with clients, is not.
+        self.assertFalse(_says_agency(
+            "<h1>Keystone Care</h1><p>We're recruiting care assistants. Our "
+            "clients are families across Sheffield.</p>"))
+        self.assertFalse(_says_agency(
+            "<h1>Codurance</h1><p>We help clients build software. Join us.</p>"))
+
+    def test_names_that_are_agencies_here(self):
+        for name in ("Recruit Engineering", "Skilled Careers",
+                     "Medical Staff Talent", "Perfect Placement"):
+            self.assertTrue(self.d.agency(name, {}), name)
+        for name in ("Children's Hospices Across Scotland", "Ben Burgess",
+                     "Barchester Healthcare"):
+            self.assertFalse(self.d.agency(name, {}), name)
+
     def test_an_agency_says_so_on_its_home_page(self):
         for about in ("Morgan Hunt | Recruitment Agency for Construction",
                       "Bright Purple: Specialist IT recruiters in Scotland",
