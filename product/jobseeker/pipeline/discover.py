@@ -143,8 +143,11 @@ PARKED = re.compile(r"domain (is )?for sale|buy this domain|parked|"
                     re.I)
 TITLE_SPLIT = re.compile(r"\s+[|\-–—:·•]\s+|\s*\|\s*")
 
-# Which source answered, per run, so the log says what is working.
+# Which source answered, per run, so the log says what is working; and for
+# the last lookup of each company, so its crawl memory can say how its site
+# was found.
 FOUND_BY: dict[str, int] = {}
+LAST_FOUND_BY: dict[str, str] = {}
 
 
 def _host(url: str) -> str:
@@ -340,9 +343,16 @@ def find_domain_wide(company: str, *, session=None, resolves=None) -> str | None
             continue
         if domain:
             FOUND_BY[source] = FOUND_BY.get(source, 0) + 1
+            LAST_FOUND_BY[company_key(company)] = source
             return domain
     FOUND_BY["none"] = FOUND_BY.get("none", 0) + 1
     return None
+
+
+# Somewhere to remember what each site's pages did, when there is one. The
+# app sets it (app/learning.py); the command-line pipeline runs without it.
+# Anything with skip(domain), resting(domain) and remember(domain, tried).
+CRAWL_MEMORY = None
 
 
 def scrape_site(domain: str, *, session=None, paths=SCRAPE_PATHS,
@@ -350,19 +360,41 @@ def scrape_site(domain: str, *, session=None, paths=SCRAPE_PATHS,
     """Addresses written on the company's own pages."""
     import requests
     session = session or requests
+    memory = CRAWL_MEMORY
+    skip: set = set()
+    if memory is not None:
+        try:
+            if memory.resting(domain):
+                return []
+            skip = memory.skip(domain)
+        except Exception:
+            memory = None
     raw: list[str] = []
+    tried: dict[str, str] = {}
     for path in paths:
+        if (path or "/") in skip:
+            continue
+        tried[path] = "error"
         for scheme in ("https", "http"):
             try:
                 r = session.get(f"{scheme}://{domain}{path}", headers=UA,
                                 timeout=12)
-                if getattr(r, "status_code", 0) == 200:
-                    raw += emails_in(r.text)
+                status = getattr(r, "status_code", 0)
+                found = emails_in(r.text) if status == 200 else []
+                raw += found
+                if memory is not None:
+                    tried[path] = memory.kind_of_response(
+                        status, bool(contacts.clean_emails(found, domain)))
                 break
             except Exception:
                 continue
         if delay:
             time.sleep(delay)
+    if memory is not None:
+        try:
+            memory.remember(domain, tried, found_by="clearbit")
+        except Exception:
+            pass
     return contacts.clean_emails(raw, domain)
 
 

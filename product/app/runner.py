@@ -24,7 +24,10 @@ from jobseeker.pipeline import (compose, discover, harvest, pay, proofread,
                                 scoring)
 from jobseeker.profile import Profile, ProfileError
 
-from . import config, db
+from . import config, db, learning
+
+# The sweep's reads of company sites feed the same crawl memory as /find.
+discover.CRAWL_MEMORY = learning
 
 DEFAULT_DRAFT_CAP = 20
 

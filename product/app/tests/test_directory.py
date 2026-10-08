@@ -77,11 +77,13 @@ class FromTheFirstLiveDirectory(unittest.TestCase):
         title, but every agency site has a door for candidates and one for
         clients."""
         from app.company_lookup import _says_agency
-        self.assertTrue(_says_agency(
-            "<nav><a>Candidates</a><a>Clients</a></nav><h1>Engineering jobs"
-            "</h1><p>Our candidates and clients trust us.</p>"
-            "<a>Search jobs</a><a>Upload your CV</a>"))
         self.assertTrue(_says_agency("<p>For candidates</p><p>For employers</p>"))
+        self.assertTrue(_says_agency("<p>Leading recruitment consultancy</p>"))
+        # A care provider's clients are the people it cares for, and it
+        # talks to candidates too: not an agency (Keystone Care, 8 October).
+        self.assertFalse(_says_agency(
+            "<nav><a>Our clients</a><a>Candidates</a></nav><p>Care for "
+            "clients at home. Candidates: see our vacancies.</p>"))
         self.assertTrue(self.d.agency("Pioneering People", {"agency_signs": True}))
         # An employer that is hiring, or a consultancy with clients, is not.
         self.assertFalse(_says_agency(
@@ -224,6 +226,19 @@ class ThePages(AppTestCase):
         self.assertEqual(self.d.record("Lorien", page), "")
         self.assertIsNone(self.d.get("lorien"))
 
+    def test_a_failed_website_lookup_never_takes_a_page_down(self):
+        self.d.record("Pennine Foods", site("jobs@pennine.co.uk"))
+        self.d.record("Pennine Foods", {"domain": "", "emails": []})
+        self.assertIsNotNone(self.d.get("pennine-foods"))
+
+    def test_a_page_taken_down_says_why(self):
+        self.d.TAKEN_DOWN.clear()
+        self.d.record("Lorien", site("info@lorienglobal.com", domain="lorienglobal.com"))
+        self.d.record("Lorien", dict(site("info@lorienglobal.com",
+                                          domain="lorienglobal.com"),
+                                     about="Lorien | recruitment specialists"))
+        self.assertEqual(self.d.TAKEN_DOWN, [("Lorien", "a recruitment agency")])
+
     def test_a_recheck_reads_live_pages_whatever_their_date(self):
         from app import directory_builder as b
         self.d.record("Pennine Foods", site("jobs@pennine.co.uk"))
@@ -236,6 +251,23 @@ class ThePages(AppTestCase):
         self.assertEqual(seen, [])             # checked today: not due
         b.run(day=datetime.date(2026, 10, 8), lookup=look, recheck=True)
         self.assertEqual(seen, ["Pennine Foods"])
+
+    def test_a_recheck_gives_a_page_taken_down_by_mistake_its_chance_back(self):
+        from app import directory_builder as b
+        self.d.record("Keystone Care", site("hello@keystonecare.co.uk",
+                                            domain="keystonecare.co.uk"))
+        self.d.record("Keystone Care", dict(
+            site("hello@keystonecare.co.uk", domain="keystonecare.co.uk"),
+            agency_signs=True))
+        self.assertIsNone(self.d.get("keystone-care"))
+        asked = []
+
+        def look(name):
+            asked.append(name)
+            return site("hello@keystonecare.co.uk", domain="keystonecare.co.uk")
+        b.run(day=datetime.date(2026, 10, 8), lookup=look, recheck=True)
+        self.assertIn("Keystone Care", asked)
+        self.assertIsNotNone(self.d.get("keystone-care"))
 
     def test_never_a_company_anybody_blocked(self):
         from app import db

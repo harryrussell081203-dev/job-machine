@@ -172,6 +172,11 @@ def excluded(company: str, domain: str = "") -> bool:
     return False
 
 
+# Every live page taken down in this process, and why, for the builder's
+# log: a page should never disappear without the log saying which rule did it.
+TAKEN_DOWN: list[tuple[str, str]] = []
+
+
 def record(company: str, result: dict, *, roles: list | None = None,
            now: float | None = None, remember_miss: bool = False) -> str:
     """Create or refresh this company's page from a fresh read of its site.
@@ -190,16 +195,26 @@ def record(company: str, result: dict, *, roles: list | None = None,
     found = inboxes(result)
     if not slug or excluded(company, result.get("domain") or ""):
         return ""
+    why = "no shared inbox on their site any more"
     if agency(company, result):
         found = []      # unpublished, and remembered like any other miss
+        why = "a recruitment agency"
     with db.connect() as c:
         row = c.execute("SELECT * FROM employer_pages WHERE slug = ?",
                         (slug,)).fetchone()
         if row and row["removed_at"]:
             return ""
+        if not found and row and row["inboxes"] != "[]" and (
+                result.get("unreachable") or not result.get("domain")):
+            # Down or refusing us today, or its website could not be named
+            # this time. Neither means the address has gone, so the page
+            # stays as it was and is read again later.
+            return slug
         if not found:
             if row:
                 # Gone from their site, so gone from the page.
+                if row["inboxes"] != "[]":
+                    TAKEN_DOWN.append((company, why))
                 c.execute("UPDATE employer_pages SET inboxes = '[]', "
                           "checked_at = ? WHERE slug = ?", (now, slug))
             elif remember_miss:

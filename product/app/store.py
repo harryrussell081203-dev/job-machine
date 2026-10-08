@@ -436,6 +436,38 @@ CREATE TABLE IF NOT EXISTS site_meta (
     value      TEXT    NOT NULL DEFAULT '',
     updated_at BIGINT  NOT NULL DEFAULT 0
 );
+
+-- What reading a company's website taught us, one row per site, so the
+-- next read skips pages that do not exist and leaves alone a site that
+-- refused us. pages is JSON {{path: [kind, when]}}. See app/learning.py.
+CREATE TABLE IF NOT EXISTS crawl_facts (
+    domain      TEXT    PRIMARY KEY,
+    found_by    TEXT    NOT NULL DEFAULT '',
+    pages       TEXT    NOT NULL DEFAULT '{{}}',
+    rest_until  BIGINT  NOT NULL DEFAULT 0,
+    agency      INTEGER NOT NULL DEFAULT 0,
+    reads       INTEGER NOT NULL DEFAULT 0,
+    read_at     BIGINT  NOT NULL DEFAULT 0
+);
+
+-- What each sent letter was like and what came back. Counts and categories
+-- only: never the text, a name, an address or the account. draft_id is the
+-- only link, and it goes with the draft when an account is deleted.
+CREATE TABLE IF NOT EXISTS letter_lessons (
+    draft_id      BIGINT  PRIMARY KEY,
+    words         INTEGER,
+    length        TEXT,
+    asks_question INTEGER,
+    subject_kind  TEXT,
+    address_kind  TEXT,
+    advertiser    TEXT,
+    weekday       TEXT,
+    send_hour     TEXT,
+    followed_up   INTEGER,
+    outcome       TEXT    NOT NULL DEFAULT '',
+    outcome_days  INTEGER,
+    synced_at     BIGINT
+);
 """
 
 
@@ -680,6 +712,27 @@ def init() -> None:
     with connect() as c:
         c.executescript(_schema())
     _add_missing_columns()
+    _lock_tables()
+
+
+def _lock_tables() -> None:
+    """Row-level security on every table, on Supabase.
+
+    The app connects as the tables' owner, which RLS does not restrict, so
+    this changes nothing for it. What it closes is the project's public API:
+    a table with RLS off is readable by anybody holding the project's
+    publishable key if the role is ever granted on it, and Supabase flags
+    every such table. Several of these were created without it; any table
+    added later gets it on the next boot."""
+    if not IS_POSTGRES:
+        return
+    import re as _re
+    for table in _re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", _schema()):
+        try:
+            with connect() as c:
+                c.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        except Exception:
+            pass
 
 
 def describe() -> str:
