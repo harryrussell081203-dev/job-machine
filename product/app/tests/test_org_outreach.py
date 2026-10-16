@@ -70,6 +70,23 @@ class TheWeeklyRun(AppTestCase):
         self.assertEqual(len(self.sent), 3)
         self.assertEqual(len({a[0] for a, _ in self.sent}), 3)
 
+    def test_the_reply_address_can_live_in_the_database(self):
+        """So a personal address is never in a public repository's
+        settings or logs."""
+        from app import db
+        db.set_meta("outreach_reply_to", "owner@example.com")
+        with patch.dict(os.environ, dict(LIVE, OUTREACH_REPLY_TO="")), \
+                patch("app.config.mail_route", lambda: "brevo"):
+            done = self.go()
+        self.assertEqual(done["sent"], 3)
+        self.assertEqual(self.sent[0][1]["reply_to"], "owner@example.com")
+
+    def test_the_setting_wins_over_the_database(self):
+        from app import db
+        db.set_meta("outreach_reply_to", "owner@example.com")
+        with patch.dict(os.environ, LIVE):
+            self.assertEqual(self.o.reply_to_address(), "harry@recruited.org.uk")
+
     def test_switched_off(self):
         with patch.dict(os.environ, dict(LIVE, OUTREACH_ENABLED="0")), \
                 patch("app.config.mail_route", lambda: "brevo"):

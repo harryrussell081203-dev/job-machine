@@ -335,5 +335,13 @@ def managed_mail_available() -> bool:
 #
 #   python -c "import secrets; print(secrets.token_hex(16))"
 #
-# Unset, the whole feature is simply absent: no key file, no submissions.
-INDEXNOW_KEY = _env("INDEXNOW_KEY")
+# The key is public by design (it is served at /<key>.txt for anyone to
+# read), so it lives here rather than in a secret: the web app and the daily
+# directory builder on GitHub then use the same one without either needing a
+# setting. It was unset on the live site until 16 October 2026, and every
+# boot logged "[indexnow] off". INDEXNOW_KEY overrides it; set it to an empty
+# string to switch the feature off.
+INDEXNOW_DEFAULT_KEY = "110281611218a7bf3df0c75b3eeb98f0"
+_indexnow_raw = os.environ.get("INDEXNOW_KEY")
+INDEXNOW_KEY = (INDEXNOW_DEFAULT_KEY if _indexnow_raw is None
+                else _indexnow_raw.strip())
