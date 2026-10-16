@@ -77,11 +77,102 @@ def reply_to_address() -> str:
         return ""
 
 
+# ----------------------------------------------------------------------
+# Sending through the website.
+#
+# The mail service (Brevo) only takes mail from addresses it has approved,
+# and a GitHub runner has a different one every run: the first live run on
+# 16 October was refused before a single letter left. The website's address
+# is approved - it sends every sign-in link - so the weekly job finds the
+# organisations and writes the letters, and hands each one to the site to
+# send. OUTREACH_SEND_VIA=site switches it on (the workflow sets it).
+#
+# The site end is not a relay for anything: the caller must hold the site's
+# own secret, the letter must pass the same checks, the address must be an
+# organisation's shared inbox, the sender name and reply address are the
+# site's, never the caller's, and there is a daily cap.
+# ----------------------------------------------------------------------
+RELAY_PATH = "/internal/outreach/send"
+RELAY_PER_DAY = 60
+
+
+def via_site() -> bool:
+    return settings.text("OUTREACH_SEND_VIA").lower() == "site"
+
+
+def site_token() -> str:
+    import hashlib
+    import hmac
+    return hmac.new((config.SECRET_KEY or "").encode(), b"outreach-send-v1",
+                    hashlib.sha256).hexdigest()
+
+
+def send_via_site(to: str, subject: str, body: str, *, post=None,
+                  pause: float = 10) -> None:
+    """Hand one letter to the website to send. The free instance may be
+    asleep, so the first call can take a minute and is retried."""
+    if post is None:
+        import requests
+        post = requests.post
+    url = config.BASE_URL.rstrip("/") + RELAY_PATH
+    last = ""
+    for _ in range(3):
+        try:
+            r = post(url, json={"to": to, "subject": subject, "body": body},
+                     headers={"Authorization": f"Bearer {site_token()}"},
+                     timeout=90)
+            status = getattr(r, "status_code", 0)
+            if status == 200:
+                return
+            last = f"{status} {(getattr(r, 'text', '') or '')[:200]}"
+            if status < 500:
+                break           # refused on purpose: retrying will not help
+        except Exception as exc:
+            last = str(exc)
+        if pause:
+            time.sleep(pause)
+    raise RuntimeError(f"the site would not send to {to}: {last}")
+
+
+def relay(to: str, subject: str, body: str) -> tuple[int, dict]:
+    """The site end: check, send once, remember. Returns (status, reply)."""
+    import outreach
+    from . import ratelimit
+    to = (to or "").strip().lower()
+    if not auth.valid_email(to) or not outreach.shared_inbox(to):
+        return 422, {"ok": False, "why": "not an organisation's shared inbox"}
+    problems = outreach.check(subject or "", body or "")
+    if problems:
+        return 422, {"ok": False, "why": problems}
+    with db.connect() as c:
+        if c.execute("SELECT 1 FROM outreach_log WHERE address = ? AND "
+                     "outcome IN ('sent', 'relayed')", (to,)).fetchone():
+            # Already sent, perhaps on a call whose answer was lost.
+            return 200, {"ok": True, "already": True}
+    reply_to = reply_to_address()
+    if not reply_to:
+        return 409, {"ok": False, "why": "no reply address"}
+    if not ratelimit.hit("outreach:relay", limit=RELAY_PER_DAY, window=86400):
+        return 429, {"ok": False, "why": "today's letters have gone"}
+    auth.send_app_email(to, subject, body, reply_to=reply_to,
+                        sender_name="Harry Russell")
+    with db.connect() as c:
+        c.execute("INSERT INTO outreach_log (org_key, name, address, outcome, "
+                  "at) VALUES (?, '', ?, 'relayed', ?) "
+                  "ON CONFLICT (org_key) DO NOTHING",
+                  (f"relay:{to}", to, int(time.time())))
+    return 200, {"ok": True}
+
+
 def ready() -> tuple[bool, str]:
     if not settings.flag("OUTREACH_ENABLED"):
         return False, "OUTREACH_ENABLED is off"
-    if not reply_to_address():
+    if not reply_to_address() and not via_site():
         return False, "OUTREACH_REPLY_TO is not set, so nothing is sent"
+    if via_site():
+        if not config.SECRET_KEY:
+            return False, "SECRET_KEY is needed to send through the site"
+        return True, ""
     if not config.mail_route():
         return False, "no mail route (BREVO_API_KEY and APP_SMTP_ADDRESS)"
     return True, ""
@@ -102,6 +193,9 @@ def run(orgs: list, *, session=None, send_mail=None, delay: float = 30,
     reply_to = reply_to_address()
 
     def sender(to, subject, body):
+        if send_mail is None and via_site():
+            send_via_site(to, subject, body)
+            return
         (send_mail or auth.send_app_email)(
             to, subject, body, reply_to=reply_to, sender_name="Harry Russell")
 

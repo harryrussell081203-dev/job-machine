@@ -59,7 +59,8 @@ REAL_PAGES = {"/": "front", "/start": "start", "/find": "find",
 # Where a paid or posted link came from: ?c=meta (or utm_source=meta) on the
 # link. Only names on this list are counted, so the tally cannot be filled
 # with whatever somebody types into an address bar. Add one with CAMPAIGNS.
-CAMPAIGNS_DEFAULT = "meta,facebook,instagram,reddit,google,tiktok,youtube,x"
+CAMPAIGNS_DEFAULT = ("meta,facebook,instagram,reddit,google,tiktok,youtube,x,"
+                     "linkedin,outreach,extension,github")
 
 
 def campaign(value: str) -> str:
