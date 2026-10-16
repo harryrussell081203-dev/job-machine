@@ -224,5 +224,158 @@ class TestTheLetterItself(Base):
         self.assertIn("won't write again", joined)
 
 
+class Page:
+    def __init__(self, text, status=200, url=None):
+        self.text, self.status_code, self.url = text, status, url
+
+
+class Site:
+    """A site whose pages are named in full, redirects and all."""
+
+    def __init__(self, pages):
+        self.pages, self.asked = pages, []
+
+    def get(self, url, **kwargs):
+        self.asked.append(url)
+        page = self.pages.get(url)
+        if page is None:
+            return Page("", 404, url)
+        if isinstance(page, tuple):           # (where it ends up, text)
+            return Page(page[1], 200, page[0])
+        return Page(page, 200, url)
+
+
+UNI = {"name": "University of Leeds", "website": "https://www.leeds.ac.uk",
+       "kind": "careers"}
+COUNCIL = {"name": "Fife Council", "website": "https://www.fife.gov.uk",
+           "kind": "council"}
+
+
+class TestTheRightDeskForEachKind(unittest.TestCase):
+    """careers@ is the wrong desk at a charity (their own hiring) and the
+    right one at a university (the careers service). A council's front door
+    is a contact centre, so only its employment team's inbox will do."""
+
+    def test_a_charitys_careers_inbox_is_its_own_hiring(self):
+        self.assertFalse(outreach.desk_inbox("careers@club.org", "charity"))
+        self.assertTrue(outreach.desk_inbox("info@club.org", "charity"))
+
+    def test_a_universitys_careers_inbox_is_the_careers_service(self):
+        for good in ("careers@leeds.ac.uk", "careers.service@leeds.ac.uk",
+                     "employability@leeds.ac.uk", "placements@leeds.ac.uk"):
+            self.assertTrue(outreach.desk_inbox(good, "careers"), good)
+        for bad in ("info@leeds.ac.uk", "jobs@leeds.ac.uk", "hr@leeds.ac.uk",
+                    "recruitment@leeds.ac.uk", "j.smith@leeds.ac.uk",
+                    "careers.complaints@leeds.ac.uk"):
+            self.assertFalse(outreach.desk_inbox(bad, "careers"), bad)
+
+    def test_a_councils_employment_team_and_never_its_front_door(self):
+        for good in ("employability@fife.gov.uk",
+                     "employmentsupport@fife.gov.uk",
+                     "skills.team@fife.gov.uk"):
+            self.assertTrue(outreach.desk_inbox(good, "council"), good)
+        for bad in ("enquiries@fife.gov.uk", "contact@fife.gov.uk",
+                    "employee.relations@fife.gov.uk", "jobs@fife.gov.uk",
+                    "careers@fife.gov.uk", "hr.employment@fife.gov.uk"):
+            self.assertFalse(outreach.desk_inbox(bad, "council"), bad)
+
+    def test_the_site_end_takes_any_kinds_desk_and_never_a_person(self):
+        self.assertTrue(outreach.any_desk("careers@leeds.ac.uk"))
+        self.assertTrue(outreach.any_desk("info@club.org"))
+        self.assertFalse(outreach.any_desk("jane.smith@leeds.ac.uk"))
+
+
+class TestFindingTheDesk(unittest.TestCase):
+    def find(self, org, pages):
+        site = Site(pages)
+        return outreach.find_address(org, session=site, scrape_delay=0), site
+
+    def test_the_homepages_own_link_to_the_careers_service(self):
+        found, site = self.find(UNI, {
+            "https://www.leeds.ac.uk/": '<a href="/info">Contact</a>'
+                '<a href="/students/careers-centre">Careers Centre</a>',
+            "https://www.leeds.ac.uk/students/careers-centre":
+                '<a href="/students/careers-centre/contact">Contact us</a>',
+            "https://www.leeds.ac.uk/students/careers-centre/contact":
+                "Email careers@leeds.ac.uk or the switchboard info@leeds.ac.uk",
+        })
+        self.assertEqual(found["email"], "careers@leeds.ac.uk")
+        self.assertEqual(found["tier_name"], "their careers service")
+        # The site's own link was followed before any guessed path.
+        self.assertEqual(site.asked[1],
+                         "https://www.leeds.ac.uk/students/careers-centre")
+
+    def test_a_careers_subdomain(self):
+        found, _ = self.find(UNI, {
+            "https://careers.leeds.ac.uk/":
+                '<a href="https://careers.leeds.ac.uk/contact">Contact</a>',
+            "https://careers.leeds.ac.uk/contact":
+                "<a href='mailto:careerscentre@leeds.ac.uk'>Email us</a>",
+        })
+        self.assertEqual(found["email"], "careerscentre@leeds.ac.uk")
+
+    def test_nothing_printed_means_nothing_found(self):
+        found, site = self.find(UNI, {
+            "https://www.leeds.ac.uk/": '<a href="/careers">Careers</a>',
+            "https://www.leeds.ac.uk/careers": "Book an appointment online.",
+        })
+        self.assertIsNone(found)
+        self.assertLessEqual(len(site.asked), outreach.DESK_PAGES)
+
+    def test_an_address_at_another_domain_is_not_theirs(self):
+        found, _ = self.find(UNI, {
+            "https://www.leeds.ac.uk/careers":
+                "Powered by careers@targetconnect-host.com",
+        })
+        self.assertIsNone(found)
+
+    def test_a_councils_employment_support_page(self):
+        found, _ = self.find(COUNCIL, {
+            "https://www.fife.gov.uk/": (
+                "https://www.fife.gov.uk/kb/home",
+                '<a href="/kb/docs/articles/jobs/employability">'
+                'Employability support</a>'),
+            "https://www.fife.gov.uk/kb/docs/articles/jobs/employability":
+                "Contact enquiries@fife.gov.uk or "
+                "opportunities.fife@fife.gov.uk, employability@fife.gov.uk",
+        })
+        self.assertEqual(found["email"], "employability@fife.gov.uk")
+
+    def test_never_a_named_adviser(self):
+        found, _ = self.find(UNI, {
+            "https://www.leeds.ac.uk/careers":
+                "Your adviser: jane.mcleod@leeds.ac.uk",
+        })
+        self.assertIsNone(found)
+
+
+class TestTheLetterForEachKind(unittest.TestCase):
+    def body(self, org):
+        return outreach.compose_letter(org, {"email": "x@y.org"})[1]
+
+    def test_each_kind_is_spoken_to_in_its_own_terms(self):
+        self.assertIn("students and graduates", self.body(UNI))
+        self.assertIn("employment support team", self.body(COUNCIL))
+        self.assertIn("Aberdeen Employability Trust", self.body(ORG))
+
+    def test_each_kind_is_counted_on_its_own(self):
+        self.assertIn("/find?c=careers", self.body(UNI))
+        self.assertIn("/find?c=council", self.body(COUNCIL))
+        self.assertIn("/find?c=outreach", self.body(ORG))
+
+    def test_every_kind_passes_the_checks(self):
+        for org in (UNI, COUNCIL, ORG):
+            self.assertEqual(outreach.check(*outreach.compose_letter(
+                org, {"email": "x@y.org"})), [])
+
+    def test_a_rehearsal_writes_nobody_off(self):
+        """A rehearsal of a new kind must not record the ones it could not
+        read as done: the finder may be better by the time it sends."""
+        state = {}
+        outreach.run([UNI], state, session=Site({}), delay=0,
+                     scrape_delay=0, out=lambda *a: None)
+        self.assertFalse(outreach.already_asked(state, UNI))
+
+
 if __name__ == "__main__":
     unittest.main()

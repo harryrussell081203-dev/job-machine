@@ -154,5 +154,74 @@ class TestSelecting(unittest.TestCase):
         json.dumps(find_orgs.select(find_orgs.rows_from_csv(text)))
 
 
+class TestTheOtherLists(unittest.TestCase):
+    """Universities, colleges and councils: on the list by definition, one
+    per institution, at the kind of address they really use."""
+
+    def test_one_per_institution_and_its_main_site(self):
+        rows = [
+            {"name": "Department of Physics", "website": "https://www.physics.ox.ac.uk"},
+            {"name": "University of Oxford", "website": "https://www.ox.ac.uk/"},
+            {"name": "University of Leeds", "website": "leeds.ac.uk"},
+            {"name": "Leeds campus in Dubai", "website": "https://leeds.ae"},
+            {"name": "", "website": "https://noname.ac.uk"},
+        ]
+        out = find_orgs.listed(rows, "careers", (".ac.uk",))
+        self.assertEqual([(o["name"], o["website"], o["kind"]) for o in out], [
+            ("University of Leeds", "https://leeds.ac.uk", "careers"),
+            ("University of Oxford", "https://www.ox.ac.uk", "careers"),
+        ])
+
+    def test_institution(self):
+        self.assertEqual(find_orgs.institution("www.physics.ox.ac.uk"), "ox.ac.uk")
+        self.assertEqual(find_orgs.institution("www.fife.gov.uk"), "fife.gov.uk")
+        self.assertEqual(find_orgs.institution("www.club.org.uk"), "club.org.uk")
+
+    def test_wikidata_answers_are_read(self):
+        import io
+        import json
+
+        class Answer(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        asked = []
+
+        def opener(req, timeout=None):
+            asked.append(req)
+            return Answer(json.dumps({"results": {"bindings": [
+                {"areaLabel": {"value": "Fife"},
+                 "bodyLabel": {"value": "Fife Council"},
+                 "site": {"value": "https://www.fife.gov.uk"}},
+                {"orgLabel": {"value": "Q123456"},
+                 "site": {"value": "https://x.ac.uk"}},
+            ]}}).encode())
+        rows = find_orgs.wikidata_rows(find_orgs.COUNCILS, opener=opener)
+        self.assertEqual(rows[0], {"name": "Fife Council",
+                                   "website": "https://www.fife.gov.uk"})
+        self.assertEqual(rows[1]["name"], "")
+        self.assertIn("recruited", asked[0].get_header("User-agent"))
+
+    def test_englands_colleges_from_the_schools_register(self):
+        text = ("URN,EstablishmentName,TypeOfEstablishment (name),"
+                "EstablishmentStatus (name),SchoolWebsite,Postcode\n"
+                "1,Leeds City College,Further education,Open,"
+                "www.leedscitycollege.ac.uk,LS1 1AA\n"
+                "2,Old College,Further education,Closed,www.old.ac.uk,\n"
+                "3,Some Academy,Academy converter,Open,www.academy.sch.uk,\n"
+                "4,Hills Sixth Form,Sixth Form Centres,Open,hills.org.uk,\n")
+        out = find_orgs.colleges(text)
+        self.assertEqual([o["name"] for o in out],
+                         ["Hills Sixth Form", "Leeds City College"])
+        self.assertTrue(all(o["kind"] == "careers" for o in out))
+
+    def test_a_renamed_schools_register_raises(self):
+        with self.assertRaises(find_orgs.SourceError):
+            find_orgs.colleges("URN,Name\n1,X\n")
+
+
 if __name__ == "__main__":
     unittest.main()

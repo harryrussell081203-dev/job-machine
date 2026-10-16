@@ -87,6 +87,54 @@ class TheWeeklyRun(AppTestCase):
         with patch.dict(os.environ, LIVE):
             self.assertEqual(self.o.reply_to_address(), "harry@recruited.org.uk")
 
+    def test_a_days_letters_are_a_day_s(self):
+        """Every weekday now, so a day's share of the week, not all of it on
+        Monday."""
+        with patch.dict(os.environ, dict(LIVE, OUTREACH_PER_RUN="150",
+                                         OUTREACH_PER_DAY="2")), \
+                patch("app.config.mail_route", lambda: "brevo"):
+            first = self.go()
+            again = self.go()
+        self.assertEqual(first["sent"], 2)
+        self.assertEqual(again, {"sent": 0, "reason": "quota"})
+
+    def test_yesterdays_letters_are_not_on_todays_count(self):
+        import time
+        from app import db
+        with db.connect() as c:
+            for i in range(5):
+                c.execute("INSERT INTO outreach_log (org_key, name, address, "
+                          "outcome, at) VALUES (?, '', '', 'sent', ?)",
+                          (f"old{i}.org", int(time.time()) - 22 * 3600))
+        self.assertEqual(self.o.sent_today(), 0)
+        self.assertEqual(self.o.sent_this_week(), 5)
+
+    def test_the_lists_are_taken_in_turn_and_each_site_once(self):
+        a = [{"name": "A1", "website": "https://a1.org"},
+             {"name": "A2", "website": "https://a2.org"},
+             {"name": "A3", "website": "https://a3.org"}]
+        b = [{"name": "B1", "website": "https://www.a1.org", "kind": "careers"},
+             {"name": "B2", "website": "https://b2.ac.uk", "kind": "careers"}]
+        got = [o["name"] for o in self.o.in_turn([a, b, []])]
+        self.assertEqual(got, ["A1", "A2", "B2", "A3"])
+
+    def test_one_kind_on_its_own_from_several_files(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            one, two = os.path.join(d, "1.json"), os.path.join(d, "2.json")
+            with open(one, "w") as f:
+                json.dump(orgs(2), f)
+            with open(two, "w") as f:
+                json.dump([{"name": "Uni", "website": "https://u.ac.uk",
+                            "kind": "careers"}], f)
+            seen = []
+            with patch.object(self.o, "run", lambda o: seen.append(o) or {}):
+                self.o.main(["--orgs", one, "--orgs", two,
+                             "--orgs", os.path.join(d, "missing.json"),
+                             "--only", "careers"])
+        self.assertEqual([o["name"] for o in seen[0]], ["Uni"])
+
     def test_switched_off(self):
         with patch.dict(os.environ, dict(LIVE, OUTREACH_ENABLED="0")), \
                 patch("app.config.mail_route", lambda: "brevo"):
@@ -133,6 +181,12 @@ class ThroughTheSite(AppTestCase):
         self.assertEqual(to, "info@club.org")
         self.assertEqual(kw, {"reply_to": "owner@example.com",
                               "sender_name": "Harry Russell"})
+
+    def test_a_careers_service_and_an_employment_team(self):
+        self.assertEqual(self.post(to="careers@leeds.ac.uk").status_code, 200)
+        self.assertEqual(self.post(to="employability@fife.gov.uk").status_code, 200)
+        self.assertEqual(self.post(to="hr@leeds.ac.uk").status_code, 422)
+        self.assertEqual(len(self.sent), 2)
 
     def test_never_a_person_and_never_a_banned_letter(self):
         self.assertEqual(self.post(to="jane.smith@club.org").status_code, 422)
