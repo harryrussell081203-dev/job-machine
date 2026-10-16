@@ -194,7 +194,7 @@ times out of 34; a generic info@ address 4 times out of 42.
 
 I've turned the address-finding part into a free tool that might help the
 people {name} works with. Type a company's name or paste a job advert at
-{SITE}/find and it reads the advert and the company's own website, shows the
+{SITE}/find?c=outreach and it reads the advert and the company's own website, shows the
 real address to write to, and can write a short letter to it. No account,
 nothing to install, and it says plainly when there is nothing to find
 rather than guessing an address.

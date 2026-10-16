@@ -94,6 +94,81 @@ class TheWeeklyRun(AppTestCase):
         self.assertEqual(self.sent, [])
 
 
+LETTER = ("A free tool for the jobseekers you work with",
+          "Hello,\n\nA free tool that finds the address a company publishes: "
+          "https://recruited.org.uk/find\n\nHarry Russell")
+
+
+class ThroughTheSite(AppTestCase):
+    """Brevo refused the first live run from a GitHub runner's address
+    (16 October). Letters now go through the website, which must not become
+    a way for anybody else to send mail."""
+
+    def setUp(self):
+        super().setUp()
+        from app import auth, db, org_outreach
+        self.o = org_outreach
+        db.set_meta("outreach_reply_to", "owner@example.com")
+        self.sent = []
+        real = auth.send_app_email
+        auth.send_app_email = lambda *a, **k: self.sent.append((a, k))
+        self.addCleanup(setattr, auth, "send_app_email", real)
+
+    def post(self, to="info@club.org", token=None, subject=None, body=None):
+        return self.client.post(
+            "/internal/outreach/send",
+            json={"to": to, "subject": subject or LETTER[0],
+                  "body": body or LETTER[1]},
+            headers={"Authorization": "Bearer " + (token or self.o.site_token())})
+
+    def test_only_with_the_sites_own_secret(self):
+        self.assertEqual(self.post(token="nope").status_code, 403)
+        self.assertEqual(self.sent, [])
+
+    def test_sent_once_as_harry_with_replies_to_the_owner(self):
+        self.assertEqual(self.post().json(), {"ok": True})
+        self.assertEqual(self.post().json(), {"ok": True, "already": True})
+        self.assertEqual(len(self.sent), 1)
+        (to, subject, body), kw = self.sent[0]
+        self.assertEqual(to, "info@club.org")
+        self.assertEqual(kw, {"reply_to": "owner@example.com",
+                              "sender_name": "Harry Russell"})
+
+    def test_never_a_person_and_never_a_banned_letter(self):
+        self.assertEqual(self.post(to="jane.smith@club.org").status_code, 422)
+        self.assertEqual(self.post(body="I am excited to leverage synergies "
+                                        "as a passionate team player.").status_code, 422)
+        self.assertEqual(self.sent, [])
+
+    def test_the_job_hands_letters_to_the_site_and_retries_a_sleeping_one(self):
+        calls = []
+
+        class R:
+            def __init__(self, status):
+                self.status_code, self.text = status, ""
+
+        answers = [R(502), R(200)]
+
+        def post(url, json=None, headers=None, timeout=None):
+            calls.append((url, json, headers))
+            return answers.pop(0)
+        self.o.send_via_site("info@club.org", *LETTER, post=post, pause=0)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(calls[0][0].endswith("/internal/outreach/send"))
+        self.assertEqual(calls[0][2]["Authorization"],
+                         "Bearer " + self.o.site_token())
+
+    def test_a_refusal_is_not_retried(self):
+        calls = []
+
+        def post(url, **kw):
+            calls.append(url)
+            return type("R", (), {"status_code": 422, "text": "no"})()
+        with self.assertRaises(RuntimeError):
+            self.o.send_via_site("info@club.org", *LETTER, post=post, pause=0)
+        self.assertEqual(len(calls), 1)
+
+
 class TheCharityCommissionFile(unittest.TestCase):
     def test_tab_separated_with_status_and_email(self):
         from tools import find_orgs

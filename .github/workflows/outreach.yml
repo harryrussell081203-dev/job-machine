@@ -69,6 +69,9 @@ jobs:
           OUTREACH_ENABLED: ${{ vars.OUTREACH_ENABLED }}
           OUTREACH_REPLY_TO: ${{ vars.OUTREACH_REPLY_TO }}
           OUTREACH_PER_RUN: ${{ vars.OUTREACH_PER_RUN }}
+          # The mail service only accepts the website's address, not a
+          # GitHub runner's, so each letter is handed to the site to send.
+          OUTREACH_SEND_VIA: ${{ vars.OUTREACH_SEND_VIA || 'site' }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
             echo "::error::DATABASE_URL must be a repository secret."

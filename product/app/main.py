@@ -327,7 +327,12 @@ FIND_DESCRIPTION = ("Type a company's name or paste a job advert, and get the "
 
 @app.get("/find", response_class=HTMLResponse)
 def find_form(request: Request):
-    return render(request, "find.html", og_description=FIND_DESCRIPTION)
+    # ?company= fills the box, for links that already know the employer (the
+    # browser extension, on a job advert). It only fills it: the lookup reads
+    # a company's website, so it waits for the person to press the button.
+    company = " ".join(request.query_params.get("company", "").split())[:160]
+    return render(request, "find.html", og_description=FIND_DESCRIPTION,
+                  company=company)
 
 
 # Looking a company up reads its website, so it is rationed harder than an
@@ -2233,6 +2238,30 @@ def jobs_hub(request: Request, role: str, town: str = ""):
                       f"{hub['role']} jobs{where} who print an address for "
                       "applications on their own website. Write to them "
                       "directly instead of clicking Apply."))
+
+
+@app.post("/internal/outreach/send")
+async def outreach_relay(request: Request):
+    """One letter to an employability organisation, from the weekly job.
+    See org_outreach.relay: the caller must hold the site's secret, and the
+    letter, the address and the daily cap are all checked here."""
+    import hmac
+    from . import org_outreach
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not token or not hmac.compare_digest(token, org_outreach.site_token()):
+        return JSONResponse({"ok": False}, status_code=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=400)
+    try:
+        status, reply = org_outreach.relay(str(data.get("to", "")),
+                                           str(data.get("subject", "")),
+                                           str(data.get("body", "")))
+    except Exception as exc:
+        log.exception("outreach relay")
+        return JSONResponse({"ok": False, "why": str(exc)[:200]}, status_code=502)
+    return JSONResponse(reply, status_code=status)
 
 
 @app.get("/employers.json")

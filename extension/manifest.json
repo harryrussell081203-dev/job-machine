@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Recruited: who's hiring?",
+  "short_name": "Recruited",
+  "version": "1.0.0",
+  "description": "On a UK job advert, one tap finds the email address the employer publishes, so you write to a person, not a portal.",
+  "homepage_url": "https://recruited.org.uk/?c=extension",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Recruited: who's hiring?",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.indeed.com/*",
+        "https://www.reed.co.uk/jobs/*",
+        "https://www.totaljobs.com/job/*",
+        "https://www.cv-library.co.uk/job/*",
+        "https://www.linkedin.com/jobs/*",
+        "https://www.adzuna.co.uk/jobs/details/*",
+        "https://www.s1jobs.com/job/*",
+        "https://findajob.dwp.gov.uk/details/*",
+        "https://www.jobsite.co.uk/job/*",
+        "https://www.caterer.com/job/*",
+        "https://www.glassdoor.co.uk/job-listing/*",
+        "https://www.jobs.ac.uk/job/*",
+        "https://www.gumtree.com/p/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
