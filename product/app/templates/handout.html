@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who do you actually email about this job? (handout) &middot; Recruited</title>
+<meta name="robots" content="noindex">
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 178mm; padding: 16px; background: #fff;
+         color: #111; font: 16px/1.45 -apple-system, BlinkMacSystemFont,
+         "Segoe UI", Roboto, Arial, sans-serif; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0 0 12px; }
+  .lede { font-size: 19px; margin: 0 0 22px; }
+  ol { padding-left: 24px; margin: 0 0 22px; }
+  li { margin: 0 0 10px; font-size: 18px; }
+  .where { display: flex; gap: 22px; align-items: center; border: 2px solid #0f6e56;
+           border-radius: 12px; padding: 16px 20px; margin: 0 0 22px; }
+  .where svg { flex: none; width: 34mm; height: 34mm; }
+  .url { font-size: 26px; font-weight: 700; color: #0f6e56; word-break: break-all; }
+  .small { font-size: 14px; color: #333; }
+  .also { border-top: 1px solid #ccc; padding-top: 14px; }
+  .print { margin: 0 0 18px; }
+  .print a { margin-left: 12px; }
+  .print button { font: inherit; padding: 8px 16px; border-radius: 999px;
+                  border: 1px solid #0f6e56; background: #0f6e56; color: #fff; }
+  @media print { .print { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<p class="print"><button type="button" onclick="window.print()">Print or save as PDF</button>
+  <a href="/advisers">Back</a></p>
+
+<h1>Who do you actually email about this job?</h1>
+<p class="lede">Clicking Apply puts your CV in a pile that software sorts. An
+  email to a real person at the company gets read by a person. This finds you
+  the address.</p>
+
+<ol>
+  <li>Go to <b>recruited.org.uk/find</b> on your phone or a computer.</li>
+  <li>Type the company's name, or paste the job advert.</li>
+  <li>You get the real email address the company publishes, best first,
+    and a short letter you can send from your own email.</li>
+</ol>
+
+<div class="where">
+  {{ qr | safe }}
+  <div>
+    <div class="url">recruited.org.uk/find</div>
+    <div class="small">Free. No account. It never guesses an address, and it
+      tells you plainly when there isn't one.</div>
+  </div>
+</div>
+
+<div class="also">
+  <p class="small"><b>Also free:</b> Does my cover letter sound like AI?
+    <b>recruited.org.uk/tools</b>. When to follow up an application, and
+    when to stop: same page. The whole method, written down:
+    <b>recruited.org.uk/playbook</b>.</p>
+</div>
+</body>
+</html>

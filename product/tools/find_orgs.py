@@ -238,6 +238,149 @@ def select(rows, limit: int | None = None) -> list[dict]:
     return out
 
 
+# ----------------------------------------------------------------------
+# Careers services and council employment teams.
+#
+# These are not on the charity register, so they come from public lists of
+# their own: universities and councils from Wikidata (each with its official
+# website), and England's further-education and sixth-form colleges from the
+# Department for Education's register of establishments (Get Information
+# About Schools), which the workflow downloads. Every organisation on these
+# lists is in the business of getting people into work by definition, so
+# there is no filter on purpose; the filter is on the inbox (outreach.py).
+# ----------------------------------------------------------------------
+WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
+WIKI_UA = "recruited/1.0 (https://recruited.org.uk; outreach list)"
+
+UNIVERSITIES = """
+SELECT DISTINCT ?org ?orgLabel ?site WHERE {
+  VALUES ?type { wd:Q3918 wd:Q38723 wd:Q875538 wd:Q902104 }
+  ?org wdt:P31/wdt:P279* ?type ;
+       wdt:P17 wd:Q145 ;
+       wdt:P856 ?site .
+  FILTER NOT EXISTS { ?org wdt:P576 ?gone }
+  FILTER(CONTAINS(LCASE(STR(?site)), ".ac.uk"))
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en-gb,en". }
+}
+"""
+
+# Councils by their statistics code (GSS): unitary, district, metropolitan
+# and London borough in England, Welsh principal areas, Scottish council
+# areas, Northern Irish districts. The website is the council's own, from the
+# council or from the area it governs.
+COUNCILS = """
+SELECT DISTINCT ?area ?areaLabel ?bodyLabel ?site WHERE {
+  ?area wdt:P836 ?gss .
+  FILTER(REGEX(?gss, "^(E06|E07|E08|E09|W06|S12|N09)"))
+  FILTER NOT EXISTS { ?area wdt:P576 ?gone }
+  OPTIONAL { ?area wdt:P194 ?body . OPTIONAL { ?body wdt:P856 ?bodySite } }
+  OPTIONAL { ?area wdt:P856 ?areaSite }
+  BIND(COALESCE(?bodySite, ?areaSite) AS ?site)
+  FILTER(BOUND(?site))
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en-gb,en". }
+}
+"""
+
+LISTS = {
+    "universities": {"query": UNIVERSITIES, "kind": "careers",
+                     "hosts": (".ac.uk",)},
+    "councils": {"query": COUNCILS, "kind": "council",
+                 "hosts": (".gov.uk", ".gov.wales", ".gov.scot")},
+}
+
+# One institution, many sites: physics.ox.ac.uk and www.ox.ac.uk are one
+# university and one careers service. Under these suffixes the name that
+# matters is the label just before the suffix.
+_SHARED_SUFFIX = (".ac.uk", ".gov.uk", ".gov.wales", ".gov.scot", ".sch.uk")
+
+
+def institution(host: str) -> str:
+    host = (host or "").lower().removeprefix("www.")
+    for suffix in _SHARED_SUFFIX:
+        if host.endswith(suffix):
+            label = host[:-len(suffix)].rsplit(".", 1)[-1]
+            return label + suffix
+    return host
+
+
+def _host_of(site: str) -> str:
+    return site.split("//", 1)[-1].split("/", 1)[0].lower().removeprefix("www.")
+
+
+def wikidata_rows(query: str, opener=urllib.request.urlopen) -> list[dict]:
+    from urllib.parse import urlencode
+    url = WIKIDATA_SPARQL + "?" + urlencode({"query": query, "format": "json"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": WIKI_UA, "Accept": "application/sparql-results+json"})
+    with opener(req, timeout=120) as response:
+        data = json.loads(response.read().decode("utf-8", "replace"))
+    rows = []
+    for b in data.get("results", {}).get("bindings", []):
+        def v(name):
+            return (b.get(name) or {}).get("value", "")
+        name = v("bodyLabel") or v("orgLabel") or v("areaLabel")
+        if re.fullmatch(r"Q\d+", name or ""):
+            name = ""               # no English label
+        rows.append({"name": name, "website": v("site")})
+    return rows
+
+
+def listed(rows, kind: str, hosts: tuple, limit: int | None = None) -> list[dict]:
+    """A public list's rows as organisations to write to: the official site
+    on the expected kind of address, one per institution, the institution's
+    main site in preference to one of its departments'."""
+    best: dict[str, dict] = {}
+    for row in rows:
+        site = tidy_website(row.get("website", ""))
+        name = (row.get("name") or "").strip()
+        if not site or not name:
+            continue
+        host = _host_of(site)
+        if not host.endswith(hosts):
+            continue
+        key = institution(host)
+        org = {"name": name, "website": site, "postcode": "", "email": "",
+               "kind": kind}
+        have = best.get(key)
+        if have is None or (_host_of(have["website"]) != key and host == key):
+            best[key] = org
+    out = sorted(best.values(), key=lambda o: o["name"].lower())
+    return out[:limit] if limit else out
+
+
+# Get Information About Schools: the colleges, open, with a website.
+COLLEGE_TYPES = ("further education", "sixth form centres")
+GIAS_FIELDS = {
+    "name": "establishmentname",
+    "website": "schoolwebsite",
+    "status": "establishmentstatus (name)",
+    "type": "typeofestablishment (name)",
+    "postcode": "postcode",
+}
+
+
+def colleges(text: str, limit: int | None = None) -> list[dict]:
+    csv.field_size_limit(sys.maxsize)
+    reader = csv.DictReader(io.StringIO(text))
+    lowered = {(h or "").strip().lower(): h for h in reader.fieldnames or []}
+    missing = [f for f in ("name", "website", "type")
+               if GIAS_FIELDS[f] not in lowered]
+    if missing:
+        raise SourceError(f"no column for {missing!r}: the schools register "
+                          "has probably renamed it")
+    col = {f: lowered.get(c) for f, c in GIAS_FIELDS.items()}
+    rows = []
+    for row in reader:
+        kind = (row.get(col["type"]) or "").strip().lower()
+        status = (row.get(col["status"]) or "open").strip().lower() \
+            if col["status"] else "open"
+        if kind not in COLLEGE_TYPES or not status.startswith("open"):
+            continue
+        rows.append({"name": row.get(col["name"]) or "",
+                     "website": row.get(col["website"]) or ""})
+    return listed(rows, "careers", (".ac.uk", ".uk", ".com", ".org"), limit)
+
+
 def fetch(url: str, opener=urllib.request.urlopen) -> str:
     if not url:
         raise SourceError(
@@ -250,22 +393,34 @@ def fetch(url: str, opener=urllib.request.urlopen) -> str:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--source", choices=sorted(SOURCES))
+    ap.add_argument("--source", choices=sorted(SOURCES) + sorted(LISTS))
     ap.add_argument("--from-file", help="a register already downloaded")
+    ap.add_argument("--colleges", action="store_true",
+                    help="--from-file is the schools register (Get "
+                         "Information About Schools): take its colleges")
     ap.add_argument("--out", default=os.path.join(PRODUCT, "data", "orgs.json"))
     ap.add_argument("--limit", type=int)
     ap.add_argument("--dry-run", action="store_true",
                     help="print what would be written, write nothing")
     args = ap.parse_args(argv)
 
-    if args.from_file:
+    if args.source in LISTS:
+        spec = LISTS[args.source]
+        orgs = listed(wikidata_rows(spec["query"]), spec["kind"],
+                      spec["hosts"], limit=args.limit)
+    elif args.from_file and args.colleges:
+        # The register is published in Windows-1252, not UTF-8.
+        text = open(args.from_file, encoding="cp1252", errors="replace").read()
+        orgs = colleges(text, limit=args.limit)
+    elif args.from_file:
         text = open(args.from_file, encoding="utf-8", errors="replace").read()
+        orgs = select(rows_from_csv(text), limit=args.limit)
     elif args.source:
         text = fetch(SOURCES[args.source]["url"])
+        orgs = select(rows_from_csv(text), limit=args.limit)
     else:
         ap.error("give --source or --from-file")
 
-    orgs = select(rows_from_csv(text), limit=args.limit)
     print(f"{len(orgs)} organisations")
     for org in orgs[:10]:
         print(f"  {org['name']}  {org['website']}")

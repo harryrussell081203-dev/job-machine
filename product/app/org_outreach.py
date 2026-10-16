@@ -14,11 +14,16 @@ for real, once a week, from .github/workflows/outreach.yml:
   - **It sends nothing until OUTREACH_REPLY_TO is set** and OUTREACH_ENABLED
     is on. Until then each run is a rehearsal that prints the letters it
     would have sent.
-  - **A week's quota is a week's quota.** A second run in the same week
-    sends only what is left of OUTREACH_PER_RUN (default 40).
+  - **A week's quota is a week's quota, and a day's is a day's.** It runs
+    every weekday and sends at most OUTREACH_PER_DAY (default 30) a day and
+    OUTREACH_PER_RUN (default 150) a week, counted from the log, so a
+    re-run sends only what is left.
+  - **Several lists, taken in turn.** Employability charities, university
+    and college careers services and council employment teams each have a
+    list (tools/find_orgs.py); a day's letters go to some of each.
 
 Switches: OUTREACH_ENABLED (default on), OUTREACH_REPLY_TO,
-OUTREACH_PER_RUN.
+OUTREACH_PER_RUN (a week), OUTREACH_PER_DAY.
 """
 
 from __future__ import annotations
@@ -34,6 +39,9 @@ from jobseeker import settings
 from . import auth, config, db
 
 WEEK = 7 * 86400
+DAY = 86400
+PER_WEEK = 150
+PER_DAY = 30
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
@@ -57,13 +65,23 @@ class LogState:
                        int(time.time())))
 
 
-def sent_this_week(now: float | None = None) -> int:
+def sent_within(seconds: float, now: float | None = None) -> int:
     now = time.time() if now is None else now
     with db.connect() as c:
         row = c.execute("SELECT COUNT(*) AS n FROM outreach_log WHERE "
                         "outcome = 'sent' AND at > ?",
-                        (int(now - WEEK + 3600),)).fetchone()
+                        (int(now - seconds),)).fetchone()
     return int(row["n"] or 0)
+
+
+def sent_this_week(now: float | None = None) -> int:
+    return sent_within(WEEK - 3600, now)
+
+
+def sent_today(now: float | None = None) -> int:
+    # Twenty hours, not twenty-four: a run that starts a little earlier than
+    # yesterday's must not find yesterday's letters still on today's count.
+    return sent_within(20 * 3600, now)
 
 
 def reply_to_address() -> str:
@@ -139,7 +157,7 @@ def relay(to: str, subject: str, body: str) -> tuple[int, dict]:
     import outreach
     from . import ratelimit
     to = (to or "").strip().lower()
-    if not auth.valid_email(to) or not outreach.shared_inbox(to):
+    if not auth.valid_email(to) or not outreach.any_desk(to):
         return 422, {"ok": False, "why": "not an organisation's shared inbox"}
     problems = outreach.check(subject or "", body or "")
     if problems:
@@ -182,11 +200,14 @@ def run(orgs: list, *, session=None, send_mail=None, delay: float = 30,
         scrape_delay: float = 1, out=print) -> dict:
     import outreach
 
-    per_run = int(settings.number("OUTREACH_PER_RUN", 40))
+    per_week = int(settings.number("OUTREACH_PER_RUN", PER_WEEK))
+    per_day = int(settings.number("OUTREACH_PER_DAY", PER_DAY))
     live, why = ready()
-    left = max(0, per_run - sent_this_week()) if live else per_run
+    left = (max(0, min(per_week - sent_this_week(), per_day - sent_today()))
+            if live else min(per_week, per_day))
     if live and not left:
-        out(f"[outreach] this week's {per_run} have gone; nothing to do")
+        out(f"[outreach] today's or this week's letters have gone "
+            f"({per_day} a day, {per_week} a week); nothing to do")
         return {"sent": 0, "reason": "quota"}
     if not live:
         out(f"[outreach] rehearsal: {why}")
@@ -210,14 +231,46 @@ def run(orgs: list, *, session=None, send_mail=None, delay: float = 30,
     return done
 
 
+def in_turn(lists: list[list]) -> list:
+    """One from each list in turn, each organisation once.
+
+    So a day's letters go to a few of each kind rather than all of the
+    first list before any of the second. Once is by website, because the
+    same college can be on the charity register and the colleges list."""
+    import outreach
+    out, seen = [], set()
+    longest = max((len(x) for x in lists), default=0)
+    for i in range(longest):
+        for orgs in lists:
+            if i < len(orgs):
+                key = outreach.key_for(orgs[i])
+                if key and key not in seen:
+                    seen.add(key)
+                    out.append(orgs[i])
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="weekly organisation outreach")
-    ap.add_argument("--orgs", required=True,
-                    help="the list tools/find_orgs.py wrote")
+    ap.add_argument("--orgs", required=True, action="append",
+                    help="a list tools/find_orgs.py wrote; may be repeated")
+    ap.add_argument("--only", choices=("charity", "careers", "council"),
+                    help="just this kind of organisation")
     args = ap.parse_args(argv)
     db.init()
-    with open(args.orgs, encoding="utf-8") as f:
-        orgs = json.load(f)
+    lists = []
+    for path in args.orgs:
+        try:
+            with open(path, encoding="utf-8") as f:
+                orgs = json.load(f)
+        except (OSError, ValueError) as exc:
+            print(f"[outreach] {path}: {exc}; skipped")
+            continue
+        if args.only:
+            orgs = [o for o in orgs if (o.get("kind") or "charity") == args.only]
+        print(f"[outreach] {path}: {len(orgs)} organisations")
+        lists.append(orgs)
+    orgs = in_turn(lists)
     print(f"[outreach] {len(orgs)} organisations on the list")
     print(f"[outreach] {run(orgs)}")
     return 0

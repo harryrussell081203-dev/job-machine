@@ -137,6 +137,166 @@ def shared_inbox(address: str) -> bool:
     return first in FRONT_DOOR or any(w in local for w in SERVICE_WORDS)
 
 
+# ----------------------------------------------------------------------
+# Careers services and council employment teams.
+#
+# A charity's careers@ is the charity hiring its own staff, so it is the wrong
+# desk. A university's or college's careers@ is the careers service, which is
+# exactly the right one: it exists to get students and graduates into work.
+# A council is the other way round: its front door is a contact centre that
+# answers bins and council tax, so only the employment team's own inbox will
+# do. So which inbox counts depends on what kind of organisation it is, and
+# each organisation on the list says ("kind"; a charity when it does not).
+# ----------------------------------------------------------------------
+KINDS = ("charity", "careers", "council")
+DESK_WORDS = {
+    "careers": ("career", "employab", "placement", "jobshop"),
+    "council": ("employab", "employment", "skills", "jobclub", "intowork",
+                "backtowork"),
+}
+# Inside a desk word but somebody else's desk: hiring, pay and people.
+NOT_THE_DESK = ("employee", "employer", "recruit", "payroll", "pension",
+                "vacanc")
+NOT_THE_DESK_PARTS = ("hr", "jobs", "staff")
+
+
+def desk_inbox(address: str, kind: str = "charity") -> bool:
+    """Is this the right inbox for this kind of organisation. Never a
+    person's address, whatever the kind."""
+    if kind not in DESK_WORDS:
+        return shared_inbox(address)
+    # A desk word is required, and no person's name is one, so the name test
+    # the front door needs is not needed here (it reads "placements" as a
+    # name).
+    local = (address or "").split("@")[0].lower()
+    if not local or contacts.never_write_to(local):
+        return False
+    parts = [p for p in re.split(r"[._\-0-9+]+", local) if p]
+    if any(p in NOT_THE_DESK_PARTS for p in parts):
+        return False
+    if any(w in local for w in NOT_THE_DESK):
+        return False
+    return any(w in local for w in DESK_WORDS[kind])
+
+
+def any_desk(address: str) -> bool:
+    """The right inbox for some kind of organisation on the list."""
+    return any(desk_inbox(address, kind) for kind in KINDS)
+
+
+# Where the desk usually is. A university keeps its careers service a click
+# or two in, or on a subdomain of its own; a council files its employment
+# support under business, jobs or community. The homepage's own links are
+# tried first because they are where the site says it is.
+DESK_PATHS = {
+    "careers": ("/careers", "/careers-service", "/careersservice",
+                "/careers-and-employability", "/careers-employability",
+                "/students/careers", "/student-life/careers",
+                "/careers/contact", "/careers/contact-us", "/employability"),
+    "council": ("/employability", "/employment-support", "/jobs-and-skills",
+                "/employment-and-skills", "/work-and-skills",
+                "/business/employability", "/employment"),
+}
+DESK_SUBDOMAINS = {"careers": ("careers",), "council": ()}
+DESK_LINK = {
+    "careers": re.compile(r"careers?[- ]?(service|centre|hub|and|&|team|"
+                          r"advice|guidance|contact)|employability|"
+                          r"/careers?/?$", re.I),
+    "council": re.compile(r"employab|employment[- ]support|into[- ]work|"
+                          r"back[- ]to[- ]work|jobs?[- ](and|&)[- ]skills|"
+                          r"skills[- ](and|&)[- ](employment|jobs|work)|"
+                          r"job[- ]?club|work[- ]?(and|&)[- ]?skills", re.I),
+}
+CONTACT_LINK = re.compile(r"contact", re.I)
+_HREF = re.compile(r"<a\b[^>]*?href=[\"']([^\"'#]+)[\"'][^>]*>(.*?)</a>",
+                   re.I | re.S)
+_TAGS = re.compile(r"<[^>]+>")
+DESK_PAGES = 12            # pages read per organisation, at most
+
+
+def _links(page: str, base: str, host: str, wanted) -> list[str]:
+    """Links on this page to its own site (or a subdomain) that look like
+    the desk, best match first."""
+    from urllib.parse import urljoin, urlsplit
+    out = []
+    for href, label in _HREF.findall(page or "")[:800]:
+        url = urljoin(base, href.strip())
+        parts = urlsplit(url)
+        where = (parts.hostname or "").lower()
+        if parts.scheme not in ("http", "https"):
+            continue
+        if where != host and not where.endswith("." + host):
+            continue
+        if parts.path.lower().endswith((".pdf", ".doc", ".docx", ".jpg",
+                                        ".png", ".zip")):
+            continue
+        text = " ".join(_TAGS.sub(" ", label).split())
+        if wanted.search(parts.path) or wanted.search(text):
+            url = url.split("#", 1)[0]
+            if url not in out:
+                out.append(url)
+    return out
+
+
+def find_desk(org, kind, *, session=None, scrape_delay=None):
+    """The careers service's or employment team's own published inbox, read
+    from the organisation's own pages, or None. Nothing is guessed: a page
+    that does not print the address gives nothing."""
+    from urllib.parse import urlsplit
+
+    import requests
+    session = session or requests
+    if scrape_delay is None:
+        scrape_delay = discover.POLITE_DELAY
+    host = key_for(org)
+    if not host:
+        return None
+    wanted = DESK_LINK[kind]
+    site = (org.get("website") or f"https://{host}").rstrip("/")
+    queue = [site + "/"]
+    queue += [f"https://{sub}.{host}/" for sub in DESK_SUBDOMAINS[kind]]
+    queue += [f"https://{host}{p}" for p in DESK_PATHS[kind]]
+    seen, found = set(), []
+    read = 0
+    while queue and read < DESK_PAGES:
+        url = queue.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        try:
+            r = session.get(url, headers=discover.UA, timeout=12)
+        except Exception:
+            continue
+        finally:
+            read += 1
+            if scrape_delay:
+                time.sleep(scrape_delay)
+        if getattr(r, "status_code", 0) != 200:
+            continue
+        page = (getattr(r, "text", "") or "")[:2_000_000]
+        here = getattr(r, "url", None) or url
+        emails = contacts.clean_emails(discover.emails_in(page), host)
+        found += [e for e in emails if desk_inbox(e, kind) and e not in found]
+        if found:
+            break
+        desk_links = _links(page, here, host, wanted)
+        where = urlsplit(here)
+        on_desk = bool(wanted.search(where.path)) or any(
+            (where.hostname or "").startswith(sub + ".")
+            for sub in DESK_SUBDOMAINS[kind])
+        contact = _links(page, here, host, CONTACT_LINK) if on_desk else []
+        # The site's own links go ahead of the guesses at its paths.
+        queue = [u for u in contact + desk_links if u not in seen] + queue
+    if not found:
+        return None
+    words = DESK_WORDS[kind]
+    found.sort(key=lambda e: (not e.split("@")[0].startswith(words[0]),
+                              len(e), e))
+    return {"email": found[0], "name": None, "tier": 1,
+            "tier_name": ("their careers service" if kind == "careers"
+                          else "their employment team")}
+
+
 def find_address(org, *, session=None, scrape_delay=None):
     """A real published shared inbox on their own site, or None.
 
@@ -152,6 +312,9 @@ def find_address(org, *, session=None, scrape_delay=None):
     default to the real value and both go to zero in tests, because a suite
     that sleeps is a suite nobody runs.
     """
+    kind = org.get("kind") or "charity"
+    if kind in DESK_WORDS:
+        return find_desk(org, kind, session=session, scrape_delay=scrape_delay)
     host = key_for(org)
     if not host:
         return None
@@ -172,6 +335,16 @@ def find_address(org, *, session=None, scrape_delay=None):
             "tier_name": "their shared inbox"}
 
 
+# Who the tool might help, in the organisation's own terms.
+WHO = {
+    "charity": "the people {name} works with",
+    "careers": "the students and graduates your careers team works with",
+    "council": "the people your employment support team works with",
+}
+# Which kind of organisation a visit came from, counted on /admin.
+CAMPAIGN = {"charity": "outreach", "careers": "careers", "council": "council"}
+
+
 def compose_letter(org, contact) -> tuple[str, str]:
     """Subject and body. Plain, short, and asking for nothing.
 
@@ -182,6 +355,9 @@ def compose_letter(org, contact) -> tuple[str, str]:
     Nothing about his age or who he works for: public copy never says.
     """
     name = (org.get("name") or "your organisation").strip()
+    kind = org.get("kind") or "charity"
+    who = WHO.get(kind, WHO["charity"]).format(name=name)
+    campaign = CAMPAIGN.get(kind, "outreach")
 
     subject = "A free tool for the jobseekers you work with"
     body = f"""Hello,
@@ -192,15 +368,16 @@ kept count: 171 applications, 32 replies. Across 86 of those emails, the
 thing that moved the number was who received it. A named person replied 13
 times out of 34; a generic info@ address 4 times out of 42.
 
-I've turned the address-finding part into a free tool that might help the
-people {name} works with. Type a company's name or paste a job advert at
-{SITE}/find?c=outreach and it reads the advert and the company's own website, shows the
+I've turned the address-finding part into a free tool that might help
+{who}. Type a company's name or paste a job advert at
+{SITE}/find?c={campaign} and it reads the advert and the company's own website, shows the
 real address to write to, and can write a short letter to it. No account,
 nothing to install, and it says plainly when there is nothing to find
 rather than guessing an address.
 
 The method is written up at {SITE}/playbook, and every figure, including
-the bad months, is at {SITE}/numbers.
+the bad months, is at {SITE}/numbers. If it's easier to pass on, there's a
+paragraph for a newsletter and a printable handout at {SITE}/advisers.
 
 Pass it on if it's any use. If not, no reply is needed and I won't write
 again.
@@ -254,7 +431,10 @@ def run(orgs, state, *, send=False, limit=None, session=None, sender=None,
         contact = find_address(org, session=session,
                                scrape_delay=scrape_delay)
         if not contact:
-            record(state, org, "no_address")
+            # Remembered only when sending, so a rehearsal of a new kind of
+            # organisation does not write off the ones it could not read.
+            if send:
+                record(state, org, "no_address")
             done["no_address"] += 1
             out(f"  no address: {org.get('name')}")
             continue

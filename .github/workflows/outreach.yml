@@ -1,14 +1,17 @@
 name: outreach
 
-# One letter a week to each of up to OUTREACH_PER_RUN (default 40)
-# organisations that help people into work: employability charities, job
-# clubs, careers services. Never to a person's address, never twice to the
-# same organisation, never from the mailbox the job hunt runs on. See
-# product/outreach.py and product/app/org_outreach.py.
+# One letter, once, to each organisation that helps people into work:
+# employability charities and job clubs, university and college careers
+# services, council employment teams. Up to OUTREACH_PER_DAY (default 30) a
+# weekday and OUTREACH_PER_RUN (default 150) a week. Never to a person's
+# address, never twice to the same organisation, never from the mailbox the
+# job hunt runs on. See product/outreach.py and product/app/org_outreach.py.
 #
-# The list comes from the Charity Commission's public register extract,
-# filtered by tools/find_orgs.py to charities whose stated activities are
-# getting people into work.
+# The lists: the Charity Commission's register, filtered by tools/find_orgs.py
+# to charities whose stated activities are getting people into work; UK
+# universities and councils from Wikidata; England's colleges from the
+# Department for Education's register. A list that cannot be fetched is
+# skipped with a warning and the others still go.
 #
 # Sends nothing until there is an address for replies: the repository
 # variable OUTREACH_REPLY_TO, or site_meta "outreach_reply_to" in the
@@ -17,12 +20,19 @@ name: outreach
 
 on:
   schedule:
-    # Tuesdays and Thursdays, mid-morning UK, when a small charity's inbox is
-    # read. A week's quota is a week's quota (OUTREACH_PER_RUN, default 40):
-    # Thursday sends only what Tuesday did not.
-    - cron: "13 9 * * 2"
-    - cron: "13 9 * * 4"
-  workflow_dispatch: {}
+    # Every weekday, mid-morning UK, when an office inbox is read.
+    - cron: "13 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      rehearse:
+        description: "Find the addresses and write the letters, send nothing"
+        type: boolean
+        default: false
+      only:
+        description: "Just one kind of organisation"
+        type: choice
+        options: [all, charity, careers, council]
+        default: all
 
 permissions:
   contents: read
@@ -34,7 +44,7 @@ concurrency:
 jobs:
   write:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: product
@@ -56,6 +66,31 @@ jobs:
           ls -la register
       - name: Pick the organisations that help people into work
         run: python -m tools.find_orgs --from-file register/*.txt --out orgs.json
+      - name: Universities and councils
+        run: |
+          for list in universities councils; do
+            python -m tools.find_orgs --source "$list" --out "$list.json" || {
+              echo "::warning::the $list list could not be fetched; skipped today"
+              echo '[]' > "$list.json"
+            }
+          done
+      - name: England's colleges
+        run: |
+          # The schools register is published daily under that day's date.
+          for d in 0 1 2 3 4 5 6; do
+            day=$(date -u -d "-$d day" +%Y%m%d)
+            if curl -sSfL --max-time 300 -o gias.csv \
+                "https://ea-edubase-api-prod.azurewebsites.net/edubase/downloads/public/edubasealldata$day.csv"; then
+              break
+            fi
+            rm -f gias.csv
+          done
+          if [ -s gias.csv ] && python -m tools.find_orgs --from-file gias.csv --colleges --out colleges.json; then
+            :
+          else
+            echo "::warning::the colleges list could not be fetched; skipped today"
+            echo '[]' > colleges.json
+          fi
       - name: Write to this week's
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -66,9 +101,11 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           APP_SMTP_ADDRESS: ${{ secrets.APP_SMTP_ADDRESS }}
-          OUTREACH_ENABLED: ${{ vars.OUTREACH_ENABLED }}
+          OUTREACH_ENABLED: ${{ inputs.rehearse && '0' || vars.OUTREACH_ENABLED }}
           OUTREACH_REPLY_TO: ${{ vars.OUTREACH_REPLY_TO }}
           OUTREACH_PER_RUN: ${{ vars.OUTREACH_PER_RUN }}
+          OUTREACH_PER_DAY: ${{ inputs.rehearse && '12' || vars.OUTREACH_PER_DAY }}
+          ONLY: ${{ inputs.only != 'all' && inputs.only || '' }}
           # The mail service only accepts the website's address, not a
           # GitHub runner's, so each letter is handed to the site to send.
           OUTREACH_SEND_VIA: ${{ vars.OUTREACH_SEND_VIA || 'site' }}
@@ -77,4 +114,5 @@ jobs:
             echo "::error::DATABASE_URL must be a repository secret."
             exit 1
           fi
-          python -m app.org_outreach --orgs orgs.json
+          python -m app.org_outreach --orgs orgs.json --orgs universities.json \
+            --orgs colleges.json --orgs councils.json ${ONLY:+--only "$ONLY"}

@@ -692,6 +692,52 @@ def playbook(request: Request):
     return render(request, "playbook.html", playbook=text)
 
 
+ADVISER_BLURB = (
+    "Applying for a job? Before you click Apply, find out who to email. "
+    "Recruited's free finder reads the job advert and the company's own "
+    "website and shows you the real address to send your application to. "
+    "It never guesses an address, and it tells you plainly when there "
+    "isn't one. No account and nothing to install: {link}")
+
+
+@app.get("/advisers", response_class=HTMLResponse)
+def advisers(request: Request):
+    """For the careers services and employment teams the outreach letters go
+    to: something they can pass on in a minute. Every link carries ?c=advisers
+    or ?c=handout, so passing it on is counted on /admin."""
+    link = config.BASE_URL.rstrip("/") + "/find?c=advisers"
+    return render(request, "advisers.html",
+                  blurb=ADVISER_BLURB.format(link=link),
+                  og_title="Free job-search tools to hand out",
+                  og_description="For careers advisers, job clubs and "
+                                 "employment teams: a free tool that finds "
+                                 "the real email address behind a job advert, "
+                                 "a newsletter paragraph and a printable "
+                                 "handout.")
+
+
+def qr_svg(text: str) -> str:
+    """A QR code as inline SVG, or nothing if the library is missing: a
+    handout without a code still has the address in large type."""
+    try:
+        import io
+
+        import segno
+    except ImportError:
+        return ""
+    out = io.BytesIO()
+    segno.make(text, error="m").save(out, kind="svg", scale=4, border=2,
+                                     xmldecl=False, dark="#111",
+                                     title="Scan to open the finder")
+    return out.getvalue().decode()
+
+
+@app.get("/advisers/handout", response_class=HTMLResponse)
+def advisers_handout(request: Request):
+    return render(request, "handout.html",
+                  qr=qr_svg(config.BASE_URL.rstrip("/") + "/find?c=handout"))
+
+
 # Reachable without an account, deliberately. Somebody deciding whether to
 # hand over a CV and a mailbox password has to be able to read what happens
 # to them first, and a privacy notice behind a sign-in wall is not a notice.
@@ -2142,7 +2188,7 @@ def healthz():
 # later is private by default that way round, and public by default the other,
 # and the wrong default here puts somebody's drafts in Google.
 PUBLIC_PAGES = ("/", "/find", "/playbook", "/answers", "/numbers", "/terms",
-                "/privacy", "/login", "/start", "/app") + tuple(answerlib.paths())
+                "/privacy", "/login", "/start", "/app", "/advisers") + tuple(answerlib.paths())
 
 # The free tools, listed only while they are switched on, so the sitemap
 # never points a crawler at a page that answers 404.
