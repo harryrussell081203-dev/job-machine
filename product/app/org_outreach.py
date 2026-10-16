@@ -8,12 +8,14 @@ for real, once a week, from .github/workflows/outreach.yml:
     once, ever, whichever run it was.
   - **It sends through the site's own mail route** (Brevo), never the
     mailbox the job hunt runs on. Replies go to OUTREACH_REPLY_TO, an
-    address a person reads.
+    address a person reads - or, when that is not set, to the address kept
+    in the database (site_meta "outreach_reply_to"), which keeps a personal
+    address out of a public repository's settings and logs.
   - **It sends nothing until OUTREACH_REPLY_TO is set** and OUTREACH_ENABLED
     is on. Until then each run is a rehearsal that prints the letters it
     would have sent.
   - **A week's quota is a week's quota.** A second run in the same week
-    sends only what is left of OUTREACH_PER_RUN (default 20).
+    sends only what is left of OUTREACH_PER_RUN (default 40).
 
 Switches: OUTREACH_ENABLED (default on), OUTREACH_REPLY_TO,
 OUTREACH_PER_RUN.
@@ -64,10 +66,21 @@ def sent_this_week(now: float | None = None) -> int:
     return int(row["n"] or 0)
 
 
+def reply_to_address() -> str:
+    """Where replies go: the setting, else the address kept in the database."""
+    address = settings.text("OUTREACH_REPLY_TO")
+    if address:
+        return address
+    try:
+        return (db.get_meta("outreach_reply_to") or "").strip()
+    except Exception:
+        return ""
+
+
 def ready() -> tuple[bool, str]:
     if not settings.flag("OUTREACH_ENABLED"):
         return False, "OUTREACH_ENABLED is off"
-    if not settings.text("OUTREACH_REPLY_TO"):
+    if not reply_to_address():
         return False, "OUTREACH_REPLY_TO is not set, so nothing is sent"
     if not config.mail_route():
         return False, "no mail route (BREVO_API_KEY and APP_SMTP_ADDRESS)"
@@ -78,7 +91,7 @@ def run(orgs: list, *, session=None, send_mail=None, delay: float = 30,
         scrape_delay: float = 1, out=print) -> dict:
     import outreach
 
-    per_run = int(settings.number("OUTREACH_PER_RUN", 20))
+    per_run = int(settings.number("OUTREACH_PER_RUN", 40))
     live, why = ready()
     left = max(0, per_run - sent_this_week()) if live else per_run
     if live and not left:
@@ -86,7 +99,7 @@ def run(orgs: list, *, session=None, send_mail=None, delay: float = 30,
         return {"sent": 0, "reason": "quota"}
     if not live:
         out(f"[outreach] rehearsal: {why}")
-    reply_to = settings.text("OUTREACH_REPLY_TO")
+    reply_to = reply_to_address()
 
     def sender(to, subject, body):
         (send_mail or auth.send_app_email)(

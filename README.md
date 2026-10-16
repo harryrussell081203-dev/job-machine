@@ -1,5 +1,21 @@
 # Recruited
 
+**[recruited.org.uk](https://recruited.org.uk)** finds UK jobs, finds the
+real email address of the person hiring (from the advert or the employer's
+own website, never a guessed one) and writes them a short email from you.
+
+Free, no account needed:
+
+- [Find who to email at any company](https://recruited.org.uk/find): type a
+  company's name and see the addresses it publishes.
+- [How to email UK employers about a job](https://recruited.org.uk/employers):
+  the careers inboxes employers print on their own sites.
+- [Straight answers](https://recruited.org.uk/answers) to job-hunting
+  questions, and [the playbook](https://recruited.org.uk/playbook).
+- [Check whether a cover letter reads as AI-written](https://recruited.org.uk/tools/cover-letter-ai-check).
+
+---
+
 Everything that runs lives in [`product/`](product/README.md): the website at
 recruited.org.uk and the sweep that finds jobs, writes to the people hiring,
 follows up once and tells each user what happened.

@@ -64,9 +64,6 @@ jobs:
           DIRECTORY_PER_RUN: ${{ vars.DIRECTORY_PER_RUN }}
           DIRECTORY_SEARCHES: ${{ vars.DIRECTORY_SEARCHES }}
           DIRECTORY_RECHECK: ${{ inputs.recheck && '1' || '' }}
-          # Optional: the same key the web app serves. Without it, new pages
-          # are announced when the app next restarts instead.
-          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
             echo "::error::DATABASE_URL must be a repository secret."

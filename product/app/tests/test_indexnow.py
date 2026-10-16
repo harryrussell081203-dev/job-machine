@@ -60,6 +60,33 @@ class TestOff(Base):
         self.assertEqual(self.client.get(f"/{KEY}.txt").status_code, 404)
 
 
+class TestTheDefaultKey(unittest.TestCase):
+    """On the live site the key was never set, and every boot logged
+    "[indexnow] off" for a month. The key is public by design, so there is
+    now one in the code; an explicit empty setting still switches it off."""
+
+    def load(self, **env):
+        import importlib
+        from unittest.mock import patch
+        from app import config
+        with patch.dict(os.environ, env):
+            if "INDEXNOW_KEY" not in env:
+                os.environ.pop("INDEXNOW_KEY", None)
+            importlib.reload(config)
+            key = config.INDEXNOW_KEY
+        importlib.reload(config)
+        return key
+
+    def test_unset_means_the_default(self):
+        from app import config
+        self.assertEqual(self.load(), config.INDEXNOW_DEFAULT_KEY)
+        self.assertRegex(config.INDEXNOW_DEFAULT_KEY, r"^[0-9a-f]{32}$")
+
+    def test_empty_means_off_and_a_value_wins(self):
+        self.assertEqual(self.load(INDEXNOW_KEY=""), "")
+        self.assertEqual(self.load(INDEXNOW_KEY=KEY), KEY)
+
+
 class TestOn(Base):
     # DEV_MODE off, because the feature refuses to submit from a development
     # instance and that is the point of the guard - see TestDevNeverSubmits.
