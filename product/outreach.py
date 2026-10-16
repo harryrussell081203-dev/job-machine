@@ -385,7 +385,13 @@ again.
 Harry Russell
 Recruited, {SITE}
 """
-    return subject, body.strip()
+    # One line per paragraph: the wording above changes with the kind of
+    # organisation, so fixed line breaks came out ragged, and a phone wraps
+    # a paragraph better than a hard break does. The sign-off keeps its.
+    paragraphs = body.strip().split("\n\n")
+    body = "\n\n".join([" ".join(p.split()) for p in paragraphs[:-1]]
+                       + paragraphs[-1:])
+    return subject, body
 
 
 def check(subject, body) -> list[str]:

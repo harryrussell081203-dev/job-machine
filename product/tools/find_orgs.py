@@ -252,10 +252,13 @@ def select(rows, limit: int | None = None) -> list[dict]:
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 WIKI_UA = "recruited/1.0 (https://recruited.org.uk; outreach list)"
 
+# A university, or an instance of a kind of university (public, research,
+# collegiate...). One step down the class tree, not all of them: following
+# every subclass of "higher education institution" took Wikidata past its
+# time limit on the first run (16 October).
 UNIVERSITIES = """
 SELECT DISTINCT ?org ?orgLabel ?site WHERE {
-  VALUES ?type { wd:Q3918 wd:Q38723 wd:Q875538 wd:Q902104 }
-  ?org wdt:P31/wdt:P279* ?type ;
+  ?org wdt:P31/wdt:P279? wd:Q3918 ;
        wdt:P17 wd:Q145 ;
        wdt:P856 ?site .
   FILTER NOT EXISTS { ?org wdt:P576 ?gone }
@@ -267,11 +270,15 @@ SELECT DISTINCT ?org ?orgLabel ?site WHERE {
 # Councils by their statistics code (GSS): unitary, district, metropolitan
 # and London borough in England, Welsh principal areas, Scottish council
 # areas, Northern Irish districts. The website is the council's own, from the
-# council or from the area it governs.
+# council or from the area it governs. A code with an end date belongs to a
+# council that has gone (Caradon, Congleton and Carrick were on the first
+# list, abolished in 2009).
 COUNCILS = """
 SELECT DISTINCT ?area ?areaLabel ?bodyLabel ?site WHERE {
-  ?area wdt:P836 ?gss .
+  ?area p:P836 ?code .
+  ?code ps:P836 ?gss .
   FILTER(REGEX(?gss, "^(E06|E07|E08|E09|W06|S12|N09)"))
+  FILTER NOT EXISTS { ?code pq:P582 ?ended }
   FILTER NOT EXISTS { ?area wdt:P576 ?gone }
   OPTIONAL { ?area wdt:P194 ?body . OPTIONAL { ?body wdt:P856 ?bodySite } }
   OPTIONAL { ?area wdt:P856 ?areaSite }
@@ -307,13 +314,29 @@ def _host_of(site: str) -> str:
     return site.split("//", 1)[-1].split("/", 1)[0].lower().removeprefix("www.")
 
 
-def wikidata_rows(query: str, opener=urllib.request.urlopen) -> list[dict]:
+def wikidata_rows(query: str, opener=urllib.request.urlopen, *,
+                  tries: int = 3, pause: float = 20) -> list[dict]:
+    """Rows from Wikidata's query service. It answers 5xx when busy, so a
+    failure is tried again after a pause before the list is given up."""
+    import time
+    import urllib.error
     from urllib.parse import urlencode
     url = WIKIDATA_SPARQL + "?" + urlencode({"query": query, "format": "json"})
     req = urllib.request.Request(url, headers={
         "User-Agent": WIKI_UA, "Accept": "application/sparql-results+json"})
-    with opener(req, timeout=120) as response:
-        data = json.loads(response.read().decode("utf-8", "replace"))
+    for attempt in range(tries):
+        try:
+            with opener(req, timeout=120) as response:
+                data = json.loads(response.read().decode("utf-8", "replace"))
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500 or attempt == tries - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == tries - 1:
+                raise
+        if pause:
+            time.sleep(pause)
     rows = []
     for b in data.get("results", {}).get("bindings", []):
         def v(name):
@@ -321,6 +344,8 @@ def wikidata_rows(query: str, opener=urllib.request.urlopen) -> list[dict]:
         name = v("bodyLabel") or v("orgLabel") or v("areaLabel")
         if re.fullmatch(r"Q\d+", name or ""):
             name = ""               # no English label
+        # Wikidata calls some councils "council of Adur District Council".
+        name = re.sub(r"^council of (?=.*\bcouncil\b)", "", name, flags=re.I)
         rows.append({"name": name, "website": v("site")})
     return rows
 
