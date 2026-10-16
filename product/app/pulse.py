@@ -60,7 +60,8 @@ REAL_PAGES = {"/": "front", "/start": "start", "/find": "find",
 # link. Only names on this list are counted, so the tally cannot be filled
 # with whatever somebody types into an address bar. Add one with CAMPAIGNS.
 CAMPAIGNS_DEFAULT = ("meta,facebook,instagram,reddit,google,tiktok,youtube,x,"
-                     "linkedin,outreach,extension,github,careers,council")
+                     "linkedin,outreach,extension,github,careers,council,"
+                     "advisers,handout")
 
 
 def campaign(value: str) -> str:

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Free job-search tools to hand out: for careers advisers and employability teams &middot; Recruited{% endblock %}
+{% block content %}
+
+<h1>Something free to hand the people you work with</h1>
+<p class="lede">For careers services, job clubs and employment teams. Free for
+them and for you: no account, nothing to install, nothing to sign.</p>
+
+<div class="panel">
+  <h2>What it does</h2>
+  <p>Most applications go through a job portal and are sorted by software.
+    An email to a real person at the company is read by a person. The hard
+    part is finding the address.</p>
+  <p>Type a company's name or paste a job advert at
+    <a href="/find?c=advisers">recruited.org.uk/find</a>. It reads the advert
+    and the company's own website and shows the real address the company
+    publishes, best first, and can write a short letter to it. It never
+    guesses an address, and says plainly when there isn't one.</p>
+  {% if record and record.applications %}
+  <p><small>Where the method comes from: one person's own job hunt, counted.
+    {{ record.applications }} applications, {{ record.replies }} replies.
+    Every figure, including the bad months, is on
+    <a href="/numbers">the numbers page</a>.</small></p>
+  {% endif %}
+</div>
+
+<h2>A paragraph for your newsletter or noticeboard</h2>
+<p class="copyrow">
+  <textarea id="blurb" rows="6" readonly aria-label="Newsletter paragraph">{{ blurb }}</textarea>
+  <button type="button" class="ghost" id="blurbcopy">Copy</button>
+</p>
+
+<h2>A one-page handout</h2>
+<p>An A4 page with the address and a code to scan, to print or send as a
+  PDF: <a href="/advisers/handout">open the handout</a>, then print it (or
+  "Save as PDF" from the print window).</p>
+
+<h2>Also free, for the same people</h2>
+<ul>
+  <li><a href="/tools/cover-letter-ai-check?c=advisers">Does my cover letter sound like AI?</a>
+    The stock phrases and American spellings that give a letter away.</li>
+  <li><a href="/tools/follow-up?c=advisers">When should I follow up?</a>
+    The date to chase an application, and the date to stop.</li>
+  <li><a href="/playbook?c=advisers">The playbook</a>: the whole method,
+    written down.</li>
+</ul>
+
+<h2>What it will not do</h2>
+<ul>
+  <li>Guess an email address, or write to anybody on its own.</li>
+  <li>Ask for an account, a CV or contact details to use the finder.</li>
+  <li>Sell or pass on anything typed into it. See <a href="/privacy">privacy</a>.</li>
+</ul>
+<p><small>There is a paid version that finds jobs and sends the letters from
+  the person's own email. Nobody needs it to use anything on this page.</small></p>
+
+<script>
+(function () {
+  var btn = document.getElementById("blurbcopy");
+  var box = document.getElementById("blurb");
+  if (!btn || !box) { return; }
+  btn.addEventListener("click", function () {
+    function done() { btn.textContent = "Copied"; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(box.value).then(done, function () {
+        box.select(); document.execCommand("copy"); done();
+      });
+    } else {
+      box.select(); document.execCommand("copy"); done();
+    }
+  });
+})();
+</script>
+{% endblock %}

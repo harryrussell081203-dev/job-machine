@@ -31,6 +31,10 @@ psycopg[binary]>=3.1
 # password, needed to send letters as them. See app/vault.py.
 cryptography>=41.0
 
+# The QR code on the printable handout for careers advisers (/advisers).
+# Pure Python, no dependencies. The handout works without it.
+segno>=1.5
+
 # Reading an uploaded CV so the profile questions can be prefilled. Optional
 # in spirit - a CV that cannot be parsed is still a fine attachment - but
 # pinned here because onboarding is much worse without it.

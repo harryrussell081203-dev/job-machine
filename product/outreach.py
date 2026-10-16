@@ -376,7 +376,8 @@ nothing to install, and it says plainly when there is nothing to find
 rather than guessing an address.
 
 The method is written up at {SITE}/playbook, and every figure, including
-the bad months, is at {SITE}/numbers.
+the bad months, is at {SITE}/numbers. If it's easier to pass on, there's a
+paragraph for a newsletter and a printable handout at {SITE}/advisers.
 
 Pass it on if it's any use. If not, no reply is needed and I won't write
 again.
