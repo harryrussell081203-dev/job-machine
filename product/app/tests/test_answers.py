@@ -177,6 +177,19 @@ class TestAnswerPages(Base):
                              f"{replied}/{sent} is not {rate}")
             self.assertIn(rate, page)
 
+    def test_each_page_names_the_count_its_figures_come_from(self):
+        """Two counts are quoted across these pages: the 86-email study and
+        the 568 emails of the whole job hunt. A page quoting one must not
+        sit above a box describing the other."""
+        for a in self.answers.ANSWERS:
+            page = self.client.get(f"/answers/{a.slug}").text
+            box = page.split("Where these numbers come from", 1)[1]
+            if a.source == "hunt":
+                self.assertIn("568", box, a.slug)
+                self.assertNotIn("86 cold emails", box, a.slug)
+            else:
+                self.assertIn("86 cold emails", box, a.slug)
+
     def test_no_page_tells_anybody_to_guess_an_address(self):
         """The whole differentiator, and the one claim that must never slip.
         Every competing page on this search tells the reader to guess a

@@ -44,6 +44,10 @@ class Answer:
     answer: str
     # One line on the index and in the meta description.
     blurb: str
+    # Which count the figures come from, for the box at the foot of the page:
+    # "study" is the 86-email study in the playbook; "hunt" is the 568
+    # application emails of the founder's job hunt, May to October 2026.
+    source: str = "study"
 
 
 ANSWERS: tuple[Answer, ...] = (
@@ -368,6 +372,52 @@ ANSWERS: tuple[Answer, ...] = (
             "when applications are read. That is the rule Recruited follows "
             "for every letter it sends."),
         blurb="5 working days, then one follow-up. After 3 weeks, move on.",
+    ),
+    Answer(
+        slug="how-many-applications-to-get-a-job",
+        question="How many job applications does it take to get a job?",
+        answer=(
+            "For one person who counted every email: 568 applications sent "
+            "straight to UK employers between May and October 2026 brought 87 "
+            "replies from a person, 12 interviews and 3 written job offers. "
+            "That is about one interview for every 47 applications and one "
+            "offer for every 189. The rate rose sharply once guessed email "
+            "addresses were dropped: sent only to addresses employers publish "
+            "themselves, 61 of 264 emails got a reply, 23%. One person's "
+            "figures, not a law, but every one is counted from the sent "
+            "folder."),
+        blurb="568 applications, 87 replies, 12 interviews, 3 offers. One job "
+              "hunt, counted.",
+        source="hunt",
+    ),
+    Answer(
+        slug="guess-email-address",
+        question="Should I guess a hiring manager's email address?",
+        answer=(
+            "No. Guessed addresses bounce, and every bounce makes the next "
+            "email from your inbox more likely to land in spam. In one UK job "
+            "hunt, 304 emails sent to guessed addresses saw 132 bounce, 43%, "
+            "and 26 replies. The next 264, sent only to addresses the "
+            "employers had published themselves, saw 5 bounce, 2%, and 61 "
+            "replies. Use an address printed in the advert or on the "
+            "company's own contact, careers or team pages. If there is none, "
+            "write to the next employer instead."),
+        blurb="304 guessed addresses: 43% bounced. 264 published ones: 2%.",
+        source="hunt",
+    ),
+    Answer(
+        slug="email-cv-to-employer",
+        question="What should I write in an email when sending my CV?",
+        answer=(
+            "60 to 90 words: the exact job, one detail from the advert that "
+            "shows you read it, two things you have done with figures, and "
+            "one question so replying is easy. Then your name, your phone "
+            "number and \"CV attached\", with the CV as a PDF. Who it goes to "
+            "matters more than the wording: across 86 cold emails to UK "
+            "employers, a named person replied 13 times out of 34, 38%, and "
+            "a generic info@ inbox 4 times out of 42, 10%."),
+        blurb="60 to 90 words, one question, CV as a PDF. And send it to a "
+              "person: 38% against 10%.",
     ),
 )
 

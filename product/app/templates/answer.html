@@ -29,11 +29,20 @@
 
 <div class="panel">
   <h2 style="margin-top:0">Where these numbers come from</h2>
+  {% if answer.source == "hunt" %}
+  <p>Every application email in one UK job hunt, May to October 2026: 568 of
+    them, counted one by one from the sent folder. Addresses were guessed from
+    a pattern in May; from August only addresses employers publish were used.
+    The interviews are the jobseeker's own count, rounds and phone invitations
+    included; the offers are all in writing. One person's figures, so a guide,
+    not a promise.</p>
+  {% else %}
   <p>86 cold emails to real UK employers over four weeks, sent by one person
     looking for work, logged as they went. 22 replies. The full method and
     every table is in <a href="/playbook">the playbook</a>, free, no account.</p>
   <p>They are engineering and technician roles in Scotland, so a different
     trade may behave differently. Where a row is thin it says so on the row.</p>
+  {% endif %}
   {% if record %}
     <p>Since then: {{ record.applications }} applications across
       {{ record.employers }} employers, {{ record.replies }} replies,
