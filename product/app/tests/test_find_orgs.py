@@ -205,6 +205,52 @@ class TestTheOtherLists(unittest.TestCase):
         self.assertEqual(rows[1]["name"], "")
         self.assertIn("recruited", asked[0].get_header("User-agent"))
 
+    def test_a_busy_query_service_is_asked_again(self):
+        """The first run's university list came back 504 and was lost."""
+        import io
+        import json
+        import urllib.error
+
+        class Answer(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        calls = []
+
+        def opener(req, timeout=None):
+            calls.append(1)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(req.full_url, 504, "busy", {}, None)
+            return Answer(json.dumps({"results": {"bindings": [
+                {"bodyLabel": {"value": "council of Adur District Council"},
+                 "site": {"value": "https://www.adur-worthing.gov.uk"}},
+            ]}}).encode())
+        rows = find_orgs.wikidata_rows(find_orgs.COUNCILS, opener=opener,
+                                       pause=0)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(rows[0]["name"], "Adur District Council")
+
+    def test_a_refusal_is_not_asked_again(self):
+        import urllib.error
+        calls = []
+
+        def opener(req, timeout=None):
+            calls.append(1)
+            raise urllib.error.HTTPError(req.full_url, 400, "bad", {}, None)
+        with self.assertRaises(urllib.error.HTTPError):
+            find_orgs.wikidata_rows(find_orgs.UNIVERSITIES, opener=opener,
+                                    pause=0)
+        self.assertEqual(len(calls), 1)
+
+    def test_the_queries_stay_inside_the_time_limit_and_the_present(self):
+        """Every subclass of every kind of higher education timed out;
+        councils abolished in 2009 were on the first list."""
+        self.assertNotIn("P279*", find_orgs.UNIVERSITIES)
+        self.assertIn("pq:P582", find_orgs.COUNCILS)
+
     def test_englands_colleges_from_the_schools_register(self):
         text = ("URN,EstablishmentName,TypeOfEstablishment (name),"
                 "EstablishmentStatus (name),SchoolWebsite,Postcode\n"

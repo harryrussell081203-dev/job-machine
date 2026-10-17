@@ -363,6 +363,15 @@ class TestTheLetterForEachKind(unittest.TestCase):
         self.assertIn("/find?c=council", self.body(COUNCIL))
         self.assertIn("/find?c=outreach", self.body(ORG))
 
+    def test_one_line_per_paragraph_whatever_the_wording(self):
+        """The wording changes with the kind, so fixed line breaks came out
+        ragged (the first rehearsal, 16 October)."""
+        for org in (UNI, COUNCIL, ORG):
+            paragraphs = self.body(org).split("\n\n")
+            for p in paragraphs[:-1]:
+                self.assertNotIn("\n", p)
+            self.assertTrue(paragraphs[-1].startswith("Harry Russell\n"))
+
     def test_every_kind_passes_the_checks(self):
         for org in (UNI, COUNCIL, ORG):
             self.assertEqual(outreach.check(*outreach.compose_letter(
