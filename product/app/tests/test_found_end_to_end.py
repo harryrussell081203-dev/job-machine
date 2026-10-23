@@ -63,6 +63,14 @@ class TheRunSummary(unittest.TestCase):
         r = RunReport(harvested=426, prefiltered=243, drafted=0)
         self.assertIn("243: below your pay floor", r.summary())
 
+    def test_jobs_the_scorer_could_not_reach_are_named(self):
+        """'0 drafted from 11 listings (... 1 already contacted)': the other
+        ten were left for the next run when the model answered 503."""
+        from app.runner import RunReport
+        r = RunReport(harvested=11, already_contacted=1, unscored=10)
+        self.assertIn("10: not scored yet because the scoring service was "
+                      "busy", r.summary())
+
 
 from test_app import AppTestCase  # noqa: E402
 

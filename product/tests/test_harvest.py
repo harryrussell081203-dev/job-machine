@@ -124,6 +124,45 @@ class TestSearches(unittest.TestCase):
         self.assertFalse([s for s in h.searches(profile()) if s[0] == "UK"])
 
 
+class TestWhatTheJobIsAdvertisedAs(unittest.TestCase):
+    """The first sign-up from ChatGPT asked for "shop keeper" and was shown
+    a herd manager and a welding supervisor (22 October)."""
+
+    def test_an_everyday_title_also_searches_the_advertised_ones(self):
+        got = [kw for _, _, kw in h.searches(profile(target_roles=["shop keeper"]))]
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_each_title_is_searched_once(self):
+        got = [kw for _, _, kw in h.searches(
+            profile(target_roles=["Shop Keeper", "retail assistant"]))]
+        self.assertEqual(got, ["Shop Keeper", "retail assistant", "sales assistant"])
+
+    def test_a_title_with_no_everyday_twin_is_searched_alone(self):
+        got = [kw for _, _, kw in h.searches(profile())]
+        self.assertEqual(got, ["maintenance technician"])
+
+    def test_adzuna_wants_every_word_not_any(self):
+        """As any-word, "shop keeper" matched workshops and herd keepers."""
+        s = FakeSession([])
+        h.adzuna(profile(target_roles=["shop keeper"]), CREDS, session=s)
+        params = [c["params"] for c in s.calls]
+        self.assertTrue(params)
+        self.assertTrue(all("what_or" not in p for p in params))
+        self.assertEqual([p["what"] for p in params],
+                         ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_reed_searches_the_advertised_titles_too(self):
+        s = FakeSession([])
+        h.reed(profile(target_roles=["carer"]), CREDS, session=s)
+        self.assertEqual([c["params"]["keywords"] for c in s.calls],
+                         ["carer", "care assistant", "support worker"])
+
+    def test_the_scorer_is_told_they_are_the_same_job(self):
+        text = profile(target_roles=["shop keeper"]).prompt_block()
+        self.assertIn("shop keeper (also advertised as retail assistant or "
+                      "sales assistant)", text)
+
+
 class TestExclusions(unittest.TestCase):
     def test_course_adverts_are_binned_for_everyone(self):
         listing = h.Listing(
