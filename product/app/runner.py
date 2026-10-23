@@ -47,6 +47,7 @@ class RunReport:
     too_far: int = 0
     dissolved: int = 0
     other_kind: int = 0        # agency/employer or terms the user didn't pick
+    unscored: int = 0          # the model failed; kept for the next run
     drafted: int = 0
     errors: list = field(default_factory=list)
 
@@ -64,7 +65,10 @@ class RunReport:
                              (self.too_far, "too far away"),
                              (self.dissolved, "the company has closed"),
                              (self.other_kind, "not the kind of job you picked"),
-                             (self.blocked, "on your never-write-to list")):
+                             (self.blocked, "on your never-write-to list"),
+                             (self.compose_failed, "the letter could not be written"),
+                             (self.unscored, "not scored yet because the scoring "
+                                             "service was busy; tried again next run")):
             if count:
                 reasons.append(f"{count}: {words}")
         return (f"{self.drafted} drafted from {self.harvested} listings "
@@ -190,6 +194,10 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     for listing in judged["rejected"]:
         report.scored_out += 1
         db.mark_seen(user_id, listing.external_id, listing.skipped)
+    # Neither passed nor rejected: the model was busy (a 503 left ten of the
+    # first ChatGPT sign-up's jobs out of "0 drafted from 11", unexplained).
+    report.unscored = max(0, len(candidates) - len(judged["passed"])
+                          - len(judged["rejected"]))
 
     # Asked once, before the loop, because it cannot change mid-run and the
     # sign-off has to state it truthfully on every letter. A CV is NOT

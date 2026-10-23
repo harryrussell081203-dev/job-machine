@@ -309,7 +309,8 @@ class Profile:
             out.append(f"  {i}. {self._priority_line(p)}")
 
         if self.target_roles:
-            out.append("- TARGET ROLES: " + ", ".join(self.target_roles) + ".")
+            from .roles import describe
+            out.append("- TARGET ROLES: " + describe(self.target_roles) + ".")
 
         return "\n".join(out)
 
