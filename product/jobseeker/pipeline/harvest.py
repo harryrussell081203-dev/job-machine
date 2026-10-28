@@ -231,10 +231,11 @@ def adzuna(profile, creds: Credentials, *, pages: int = 1, session=None,
                     params={"app_id": creds.adzuna_app_id,
                             "app_key": creds.adzuna_app_key,
                             "results_per_page": RESULTS_PER_PAGE,
-                            # Every word of the title, not any of them:
-                            # "shop keeper" as any-word found workshop
-                            # supervisors and herd keepers (22 October).
-                            "what": kw, "where": location,
+                            # Every word, in the advert's TITLE: "shop
+                            # keeper" as any word found herd keepers, and
+                            # "retail assistant" anywhere in the text found
+                            # SAP architects for retail clients (28 October).
+                            "title_only": kw, "where": location,
                             "distance": radius, "max_days_old": max_days,
                             "sort_by": "date",
                             "content-type": "application/json"},

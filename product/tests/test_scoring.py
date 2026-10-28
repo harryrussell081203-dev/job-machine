@@ -104,6 +104,21 @@ class TestScoreGuide(unittest.TestCase):
         self.assertNotIn("better than what they have", guide)
         self.assertIn("looking for work", guide)
 
+    def test_out_of_work_the_same_work_under_another_title_passes(self):
+        """A KFC team member advert scored 40 for the person who asked for
+        shop and restaurant work (28 October): the bands only rewarded a
+        step up, which a first job never is."""
+        guide = s.score_guide(profile(situation="unemployed", current_salary=0))
+        self.assertIn("Judge the WORK an advert describes", guide)
+        self.assertIn("70-84 the same kind of work they asked for under a "
+                      "different title", guide)
+        self.assertNotIn("step up in pay", guide)
+
+    def test_in_work_the_bar_is_still_a_step_up(self):
+        guide = s.score_guide(profile())
+        self.assertIn("70-84 a clear step up", guide)
+        self.assertNotIn("Judge the WORK", guide)
+
     def test_their_own_towns_are_neutral_not_a_bonus(self):
         # A local job is not better for being local. Rewarding it buries the
         # better-paid one an hour away.

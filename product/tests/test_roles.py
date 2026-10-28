@@ -61,6 +61,25 @@ class TheModelsAnswer(unittest.TestCase):
                                         "waiter", "waiting staff"])
         self.assertEqual(got["from_history"], ["landscape gardener"])
 
+    def test_the_kind_of_work_is_kept_for_the_scorer(self):
+        ai = lambda prompt: json.dumps({
+            "asked": ["retail assistant"], "from_history": [],
+            "work": "Customer-facing shop and restaurant work at entry level."})
+        p = person()
+        got = roles.plan(p, ai)
+        self.assertEqual(got["work"], "Customer-facing shop and restaurant "
+                                      "work at entry level.")
+        p.search_titles, p.wanted_work = got["asked"], got["work"]
+        text = roles.describe(p)
+        self.assertIn("The work they want: Customer-facing shop and "
+                      "restaurant work at entry level. Judge an advert by "
+                      "the work it describes, not by its exact title", text)
+
+    def test_a_work_line_that_is_not_a_sentence_is_dropped(self):
+        ai = lambda prompt: json.dumps({"asked": ["waiter"],
+                                        "work": "<script>x</script>"})
+        self.assertEqual(roles.plan(person(), ai)["work"], "")
+
     def test_no_titles_above_the_level_their_history_shows(self):
         got = roles.plan(person(), answer(
             ["Retail Assistant", "Store Manager", "Senior Waiter"],

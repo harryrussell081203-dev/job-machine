@@ -156,14 +156,17 @@ class TestWhatTheJobIsAdvertisedAs(unittest.TestCase):
         got = [kw for _, _, kw in h.searches(profile())]
         self.assertEqual(got, ["maintenance technician"])
 
-    def test_adzuna_wants_every_word_not_any(self):
-        """As any-word, "shop keeper" matched workshops and herd keepers."""
+    def test_adzuna_wants_every_word_and_in_the_title(self):
+        """As any word, "shop keeper" matched workshops and herd keepers; as
+        words anywhere in the advert, "retail assistant" matched SAP
+        architects for retail clients."""
         s = FakeSession([])
         h.adzuna(profile(target_roles=["shop keeper"]), CREDS, session=s)
         params = [c["params"] for c in s.calls]
         self.assertTrue(params)
-        self.assertTrue(all("what_or" not in p for p in params))
-        self.assertEqual([p["what"] for p in params],
+        self.assertTrue(all("what_or" not in p and "what" not in p
+                            for p in params))
+        self.assertEqual([p["title_only"] for p in params],
                          ["shop keeper", "retail assistant", "sales assistant"])
 
     def test_reed_searches_the_advertised_titles_too(self):
