@@ -189,12 +189,14 @@ def run_for_user(user_id: int, *, ai=None, session=None,
     # ago has three hundred - but a new account with an empty queue has every
     # reason to widen it once and catch up on what it missed.
     settings = db.get_send_settings(user_id)
-    step(f"Searching the job boards for the last "
-         f"{settings['search_days']} days")
+    days = search_days(user_id, settings["search_days"])
+    step(f"Searching the job boards for the last {days} days"
+         + (f" (nothing new in the last {settings['search_days']})"
+            if days > settings["search_days"] else ""))
     found = harvest.harvest(profile, credentials(), session=session,
                             known_ids=seen,
                             exclude_titles=profile.exclude_titles,
-                            max_age_hours=settings["search_days"] * 24)
+                            max_age_hours=days * 24)
     report.harvested = len(found["keep"]) + len(found["dropped"])
     report.prefiltered = len(found["dropped"])
     for listing in found["dropped"]:
@@ -268,7 +270,52 @@ def run_for_user(user_id: int, *, ai=None, session=None,
 
     step("Finishing up", done=len(shortlist), total=len(shortlist),
          drafted=report.drafted)
+    note_run(user_id, report)
     return report
+
+
+# ----------------------------------------------------------------------
+# Looking further back when there is nothing new.
+#
+# Two days is the default because a fresh advert has fewer applicants. But
+# for entry-level shop and restaurant work within 25 miles, two days held
+# nothing new for the first ChatGPT sign-up, run after run (October). After
+# WIDEN_AFTER runs in a row that drafted nothing - and not because the model
+# was busy - the search looks back WIDE_DAYS instead, until one drafts.
+# ----------------------------------------------------------------------
+WIDEN_AFTER = 3
+WIDE_DAYS = 7
+
+
+def _quiet_key(user_id: int) -> str:
+    return f"quiet_runs:{user_id}"
+
+
+def quiet_runs(user_id: int) -> int:
+    try:
+        return int(db.get_meta(_quiet_key(user_id)) or 0)
+    except (ValueError, TypeError):
+        return 0
+
+
+def search_days(user_id: int, chosen: int) -> int:
+    """How far back to look: the person's choice, or a week once their
+    runs have come back empty WIDEN_AFTER times in a row."""
+    if quiet_runs(user_id) >= WIDEN_AFTER:
+        return max(chosen, WIDE_DAYS)
+    return chosen
+
+
+def note_run(user_id: int, report) -> None:
+    """Count a run that found nothing; a letter resets the count. A run cut
+    short by a busy model is not evidence that there is nothing to find."""
+    try:
+        if report.drafted:
+            db.set_meta(_quiet_key(user_id), "0")
+        elif not report.unscored and not report.errors:
+            db.set_meta(_quiet_key(user_id), str(quiet_runs(user_id) + 1))
+    except Exception:
+        pass
 
 
 def _measure(user_id, listings, profile, session, report) -> list:

@@ -356,6 +356,60 @@ class TestItWorksOutWhatToSearchFor(RunnerTestCase):
         self.assertEqual(self.searched(session), ["maintenance technician"])
 
 
+class TestItLooksFurtherBackWhenThereIsNothingNew(RunnerTestCase):
+    """Two days held nothing new for the first ChatGPT sign-up, run after
+    run. After three empty runs the search looks back a week."""
+
+    def ages(self, session):
+        return [p.get("max_days_old") for u, p in session.asked if "adzuna" in u]
+
+    def empty_run(self, **kw):
+        return self.run_once(session=Session(adzuna={"results": []}), **kw)
+
+    def test_three_empty_runs_then_a_week(self):
+        for _ in range(3):
+            self.assertEqual(self.empty_run().drafted, 0)
+        session = Session()
+        said = []
+        self.run_once(session=session,
+                      on_step=lambda text, **c: said.append(text))
+        self.assertEqual(self.ages(session), [7])
+        self.assertIn("Searching the job boards for the last 7 days (nothing "
+                      "new in the last 2)", said)
+
+    def test_a_letter_puts_it_back_to_their_own_choice(self):
+        for _ in range(3):
+            self.empty_run()
+        self.assertEqual(self.run_once().drafted, 1)
+        session = Session()
+        self.run_once(session=session)
+        self.assertEqual(self.ages(session), [2])
+
+    def test_two_empty_runs_are_not_enough(self):
+        for _ in range(2):
+            self.empty_run()
+        session = Session()
+        self.run_once(session=session)
+        self.assertEqual(self.ages(session), [2])
+
+    def test_a_busy_model_is_not_an_empty_run(self):
+        def busy(prompt):
+            if "SCORE GUIDE" in prompt:
+                raise RuntimeError("HTTP 503")
+            return scripted_ai()(prompt)
+        for _ in range(3):
+            self.run_once(ai=busy, session=Session())
+        self.assertEqual(self.runner.quiet_runs(self.user["id"]), 0)
+
+    def test_a_longer_choice_of_their_own_is_kept(self):
+        self.db.save_send_settings(self.user["id"], search_days=14)
+        for _ in range(3):
+            self.empty_run()
+        session = Session()
+        self.run_once(session=session)
+        self.assertEqual(self.ages(session), [14])
+
+
 class TestTheSettings(RunnerTestCase):
     def test_defaults_and_cleaning(self):
         s = self.db.get_send_settings(self.user["id"])
