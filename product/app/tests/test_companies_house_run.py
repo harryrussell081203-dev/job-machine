@@ -46,7 +46,8 @@ class Dissolved(RunnerTestCase):
         report = self.run_once(session=CHSession("dissolved"),
                                ai=lambda p: (prompts.append(p), "[]")[1])
         self.assertEqual(report.dissolved, 1)
-        self.assertEqual(prompts, [])
+        from jobseeker.roles import is_planning
+        self.assertEqual([p for p in prompts if not is_planning(p)], [])
 
     def test_an_active_one_goes_ahead(self):
         report = self.run_once(session=CHSession("active"))

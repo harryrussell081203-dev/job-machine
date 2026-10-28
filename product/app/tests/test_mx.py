@@ -144,7 +144,9 @@ class AtDraftTime(unittest.TestCase):
             report = case.run_once(ai=ai)
         self.assertEqual(report.undeliverable, 1)
         self.assertEqual(report.drafted, 0)
-        self.assertTrue(all("SCORE GUIDE" in p for p in prompts),
+        from jobseeker.roles import is_planning
+        self.assertTrue(all("SCORE GUIDE" in p for p in prompts
+                            if not is_planning(p)),
                         "a letter was written to a domain that takes no mail")
         rows = case.db.list_drafts(case.user["id"], status="undeliverable")
         self.assertEqual([r["company"] for r in rows], ["Pennine Foods"])

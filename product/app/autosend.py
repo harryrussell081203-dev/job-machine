@@ -278,6 +278,14 @@ def _is_auth_failure(message: str) -> bool:
     return "rejected the password" in text or "app password" in text
 
 
+def _paused(user_id: int) -> bool:
+    try:
+        until = db.get_send_settings(user_id)["paused_until"]
+    except Exception:
+        return False
+    return bool(until and until > db.now())
+
+
 def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
     """One pass over every paying user: look for work, then send what is due.
 
@@ -348,6 +356,11 @@ def sweep(*, ai=None, session=None, run=True, sender=None) -> dict:
     if run:
         for user in users:
             user_id = user["id"]
+            # A paused account is not looked for work for either: letters it
+            # will never send still cost the model and job-board allowance
+            # every other user's search runs on.
+            if _paused(user_id):
+                continue
             # Recorded exactly as a hand-started run is, so the dashboard can
             # say "last looked for work an hour ago" about a scheduled sweep
             # too. Without this the only runs the app could see were the ones

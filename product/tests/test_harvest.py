@@ -135,7 +135,22 @@ class TestWhatTheJobIsAdvertisedAs(unittest.TestCase):
     def test_each_title_is_searched_once(self):
         got = [kw for _, _, kw in h.searches(
             profile(target_roles=["Shop Keeper", "retail assistant"]))]
-        self.assertEqual(got, ["Shop Keeper", "retail assistant", "sales assistant"])
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_jobs_run_together_and_misspelt_are_split_and_corrected(self):
+        """What the first ChatGPT sign-up actually typed. As any-word it
+        found herd keepers; as all-words it would find nothing."""
+        got = [kw for _, _, kw in h.searches(
+            profile(target_roles=["shop keeper restraunt waiter"]))]
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant",
+                               "waiter", "waiting staff", "front of house"])
+
+    def test_the_titles_worked_out_for_the_person_are_what_is_searched(self):
+        p = profile(target_roles=["shop keeper restraunt waiter"])
+        p.search_titles = ["retail assistant", "waiter"]
+        p.experience_titles = ["landscape gardener", "waiter"]
+        self.assertEqual([kw for _, _, kw in h.searches(p)],
+                         ["retail assistant", "waiter", "landscape gardener"])
 
     def test_a_title_with_no_everyday_twin_is_searched_alone(self):
         got = [kw for _, _, kw in h.searches(profile())]
@@ -158,9 +173,20 @@ class TestWhatTheJobIsAdvertisedAs(unittest.TestCase):
                          ["carer", "care assistant", "support worker"])
 
     def test_the_scorer_is_told_they_are_the_same_job(self):
-        text = profile(target_roles=["shop keeper"]).prompt_block()
-        self.assertIn("shop keeper (also advertised as retail assistant or "
-                      "sales assistant)", text)
+        text = " ".join(profile(target_roles=["shop keeper"]).prompt_block().split())
+        self.assertIn("TARGET ROLES: shop keeper. These are the same jobs as "
+                      "advertised, and count as what they asked for: retail "
+                      "assistant, sales assistant", text)
+
+    def test_the_scorer_is_told_the_second_choice_is_a_second_choice(self):
+        p = profile(target_roles=["shop keeper restraunt waiter"])
+        p.search_titles = ["retail assistant", "waiter"]
+        p.experience_titles = ["landscape gardener"]
+        text = " ".join(p.prompt_block().split())
+        self.assertIn("count as what they asked for: retail assistant, waiter",
+                      text)
+        self.assertIn("from work they have done (a second choice): landscape "
+                      "gardener", text)
 
 
 class TestExclusions(unittest.TestCase):

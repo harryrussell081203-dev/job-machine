@@ -17,9 +17,10 @@ perfectly normal outcome, and a user who cannot see why stops trusting it.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
-from jobseeker import companies_house, geo, mx
+from jobseeker import companies_house, geo, mx, roles
 from jobseeker.pipeline import (compose, discover, harvest, pay, proofread,
                                 scoring)
 from jobseeker.profile import Profile, ProfileError
@@ -92,6 +93,41 @@ def wanted(listing, settings: dict) -> bool:
     return True
 
 
+def plan_search(user_id: int, profile, ai) -> dict:
+    """Attach the titles to search for this person to their profile.
+
+    Worked out by the model from what they asked for, their history and
+    their CV (jobseeker/roles.py), kept against the profile in site_meta, and
+    asked again only when the profile or CV changes - one model call per
+    change, not per run. When the model is unavailable the rules answer for
+    this run and the model is asked again next time."""
+    cv_text = ""
+    try:
+        cv = db.get_cv(user_id)
+        cv_text = (cv["extracted"] or "") if cv else ""
+    except Exception:
+        pass
+    key = f"search_plan:{user_id}"
+    mark = roles.fingerprint(profile, cv_text)
+    found = None
+    try:
+        kept = json.loads(db.get_meta(key) or "{}")
+        if kept.get("for") == mark and kept.get("by") == "model":
+            found = kept
+    except (ValueError, TypeError, AttributeError):
+        pass
+    if found is None:
+        found = roles.plan(profile, ai, cv_text)
+        if found.get("by") == "model":
+            try:
+                db.set_meta(key, json.dumps(dict(found, **{"for": mark})))
+            except Exception:
+                pass
+    profile.search_titles = list(found.get("asked") or [])
+    profile.experience_titles = list(found.get("from_history") or [])
+    return found
+
+
 def credentials() -> harvest.Credentials:
     return harvest.Credentials(adzuna_app_id=config.ADZUNA_APP_ID,
                                adzuna_app_key=config.ADZUNA_APP_KEY,
@@ -142,6 +178,9 @@ def run_for_user(user_id: int, *, ai=None, session=None,
         # A caller that brings its own model means it for everything.
         score_ai = ai
     kwargs = {} if delay is None else {"delay": delay}
+
+    step("Working out which job titles to search for")
+    plan_search(user_id, profile, score_ai)
 
     seen = db.seen_ids(user_id)
     # How far back to look is the user's call. Two days by default, because a

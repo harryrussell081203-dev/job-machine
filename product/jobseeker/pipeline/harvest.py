@@ -167,7 +167,7 @@ def searches(profile):
     town, and a radius search around one city never sees it.
     """
     for location in profile.locations:
-        for role in roles.search_terms(profile.target_roles):
+        for role in roles.titles(profile):
             yield location, profile.radius_miles, role
 
     national = []
@@ -300,7 +300,7 @@ def reed(profile, creds: Credentials, *, pages: int = 1, session=None,
     out: list[Listing] = []
 
     for location in profile.locations:
-        for kw in roles.search_terms(profile.target_roles):
+        for kw in roles.titles(profile):
             for page in range(pages):
                 try:
                     r = session.get(

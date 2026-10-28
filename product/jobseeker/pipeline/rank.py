@@ -51,8 +51,8 @@ _embedder_failed = False
 
 def profile_text(profile) -> str:
     """What this person does, in their own words, for comparing against."""
-    from ..roles import search_terms
-    parts = search_terms(profile.target_roles or [])
+    from ..roles import titles
+    parts = titles(profile)
     parts += [r.title for r in profile.history or []]
     parts += [r.detail for r in (profile.history or [])[:3] if r.detail]
     parts += list(profile.qualifications or [])[:5]
