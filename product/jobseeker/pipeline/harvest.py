@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from .. import agencies
+from .. import agencies, roles
 from ..names import company_key
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; recruited/1.0; +job search)"}
@@ -167,7 +167,7 @@ def searches(profile):
     town, and a radius search around one city never sees it.
     """
     for location in profile.locations:
-        for role in profile.target_roles:
+        for role in roles.titles(profile):
             yield location, profile.radius_miles, role
 
     national = []
@@ -231,7 +231,10 @@ def adzuna(profile, creds: Credentials, *, pages: int = 1, session=None,
                     params={"app_id": creds.adzuna_app_id,
                             "app_key": creds.adzuna_app_key,
                             "results_per_page": RESULTS_PER_PAGE,
-                            "what_or": kw, "where": location,
+                            # Every word of the title, not any of them:
+                            # "shop keeper" as any-word found workshop
+                            # supervisors and herd keepers (22 October).
+                            "what": kw, "where": location,
                             "distance": radius, "max_days_old": max_days,
                             "sort_by": "date",
                             "content-type": "application/json"},
@@ -297,7 +300,7 @@ def reed(profile, creds: Credentials, *, pages: int = 1, session=None,
     out: list[Listing] = []
 
     for location in profile.locations:
-        for kw in profile.target_roles:
+        for kw in roles.titles(profile):
             for page in range(pages):
                 try:
                     r = session.get(

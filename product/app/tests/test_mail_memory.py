@@ -153,8 +153,10 @@ class TestDrafting(unittest.TestCase):
         report = self.case.run_once(ai=ai)
         self.assertEqual(report.drafted, 0)
         self.assertEqual(report.already_contacted, 1)
-        # Scoring is one call; no letter was composed.
-        self.assertEqual(len(calls), 1)
+        # Scoring is one call; no letter was composed. (Working out what to
+        # search for is about the person, not this listing.)
+        from jobseeker.roles import is_planning
+        self.assertEqual(len([c for c in calls if not is_planning(c)]), 1)
 
 
 if __name__ == "__main__":

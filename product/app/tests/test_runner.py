@@ -65,9 +65,11 @@ class Session:
     def __init__(self, adzuna=None):
         self.adzuna = adzuna if adzuna is not None else adzuna_payload()
         self.urls = []
+        self.asked = []
 
     def get(self, url, **kw):
         self.urls.append(url)
+        self.asked.append((url, kw.get("params") or {}))
         if "adzuna" in url:
             return Resp(payload=self.adzuna)
         if "reed" in url:
@@ -154,7 +156,12 @@ class TestItProtectsThePersonReceiving(RunnerTestCase):
         report = self.run_once(ai=lambda p: (calls.append(p), "[]")[1])
         self.assertEqual(report.already_contacted, 1)
         self.assertEqual(report.drafted, 0)
-        self.assertEqual(calls, [], "an AI call was spent on an unsendable listing")
+        # Working out what to search for is about the person, once per
+        # profile, not about this listing.
+        from jobseeker.roles import is_planning
+        about_listings = [c for c in calls if not is_planning(c)]
+        self.assertEqual(about_listings, [],
+                         "an AI call was spent on an unsendable listing")
 
     def test_a_blocked_employer_is_never_drafted(self):
         self.db.block_company(self.user["id"], "Pennine Foods", reason="asked")
@@ -298,6 +305,55 @@ class TestWhoItWritesTo(RunnerTestCase):
         report = self.run_once(session=Session(adzuna=adzuna_payload(
             title="Maintenance Technician - 6 month contract")))
         self.assertEqual((report.drafted, report.other_kind), (0, 1))
+
+
+class TestItWorksOutWhatToSearchFor(RunnerTestCase):
+    """The first ChatGPT sign-up typed "shop keeper restraunt waiter" and had
+    been a landscaper; their runs found herd keepers and welders."""
+
+    PLAN = {"asked": ["Retail Assistant", "Waiter"],
+            "from_history": ["Landscape Gardener"]}
+
+    def planning_ai(self, answer=None):
+        self.asked = 0
+        letters = scripted_ai()
+
+        def ai(prompt):
+            if "You choose the job titles" in prompt:
+                self.asked += 1
+                if isinstance(answer, Exception):
+                    raise answer
+                return json.dumps(answer or self.PLAN)
+            return letters(prompt)
+        return ai
+
+    def searched(self, session):
+        return [p.get("what") for u, p in session.asked if "adzuna" in u]
+
+    def test_the_person_is_read_once_and_their_titles_searched(self):
+        ai = self.planning_ai()
+        first = Session()
+        self.run_once(ai=ai, session=first)
+        self.run_once(ai=ai, session=Session())
+        self.assertEqual(self.asked, 1, "asked again with nothing changed")
+        self.assertEqual(self.searched(first),
+                         ["retail assistant", "waiter", "landscape gardener"])
+
+    def test_a_changed_profile_is_read_again(self):
+        ai = self.planning_ai()
+        self.run_once(ai=ai)
+        self.db.save_profile(self.user["id"], dict(PROFILE,
+                                                   target_roles=["electrician"]))
+        self.run_once(ai=ai)
+        self.assertEqual(self.asked, 2)
+
+    def test_a_busy_model_falls_back_to_the_rules_and_is_asked_next_time(self):
+        ai = self.planning_ai(RuntimeError("HTTP 503"))
+        session = Session()
+        self.run_once(ai=ai, session=session)
+        self.run_once(ai=ai, session=Session())
+        self.assertEqual(self.asked, 2)
+        self.assertEqual(self.searched(session), ["maintenance technician"])
 
 
 class TestTheSettings(RunnerTestCase):

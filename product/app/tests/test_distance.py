@@ -78,7 +78,8 @@ class TooFar(DistanceCase):
                                                      longitude=-2.09)),
             ai=lambda p: (prompts.append(p), "[]")[1])
         self.assertEqual(report.too_far, 1)
-        self.assertEqual(prompts, [])
+        from jobseeker.roles import is_planning
+        self.assertEqual([p for p in prompts if not is_planning(p)], [])
 
     def test_an_unknown_job_location_is_kept(self):
         report = self.run_with({"Sheffield": SHEFFIELD})

@@ -171,6 +171,12 @@ class Profile:
     # either. A filter nobody asked for hides the job they wanted.
     exclude_titles: list[str] = field(default_factory=list)
 
+    # The titles worked out from the whole person (jobseeker/roles.py): what
+    # employers advertise the work they asked for as, and a second choice
+    # from their own history. Filled in at run time, never typed.
+    search_titles: list[str] = field(default_factory=list)
+    experience_titles: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -309,7 +315,8 @@ class Profile:
             out.append(f"  {i}. {self._priority_line(p)}")
 
         if self.target_roles:
-            out.append("- TARGET ROLES: " + ", ".join(self.target_roles) + ".")
+            from .roles import describe
+            out.append("- TARGET ROLES: " + describe(self) + ".")
 
         return "\n".join(out)
 

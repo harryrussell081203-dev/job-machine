@@ -124,6 +124,71 @@ class TestSearches(unittest.TestCase):
         self.assertFalse([s for s in h.searches(profile()) if s[0] == "UK"])
 
 
+class TestWhatTheJobIsAdvertisedAs(unittest.TestCase):
+    """The first sign-up from ChatGPT asked for "shop keeper" and was shown
+    a herd manager and a welding supervisor (22 October)."""
+
+    def test_an_everyday_title_also_searches_the_advertised_ones(self):
+        got = [kw for _, _, kw in h.searches(profile(target_roles=["shop keeper"]))]
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_each_title_is_searched_once(self):
+        got = [kw for _, _, kw in h.searches(
+            profile(target_roles=["Shop Keeper", "retail assistant"]))]
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_jobs_run_together_and_misspelt_are_split_and_corrected(self):
+        """What the first ChatGPT sign-up actually typed. As any-word it
+        found herd keepers; as all-words it would find nothing."""
+        got = [kw for _, _, kw in h.searches(
+            profile(target_roles=["shop keeper restraunt waiter"]))]
+        self.assertEqual(got, ["shop keeper", "retail assistant", "sales assistant",
+                               "waiter", "waiting staff", "front of house"])
+
+    def test_the_titles_worked_out_for_the_person_are_what_is_searched(self):
+        p = profile(target_roles=["shop keeper restraunt waiter"])
+        p.search_titles = ["retail assistant", "waiter"]
+        p.experience_titles = ["landscape gardener", "waiter"]
+        self.assertEqual([kw for _, _, kw in h.searches(p)],
+                         ["retail assistant", "waiter", "landscape gardener"])
+
+    def test_a_title_with_no_everyday_twin_is_searched_alone(self):
+        got = [kw for _, _, kw in h.searches(profile())]
+        self.assertEqual(got, ["maintenance technician"])
+
+    def test_adzuna_wants_every_word_not_any(self):
+        """As any-word, "shop keeper" matched workshops and herd keepers."""
+        s = FakeSession([])
+        h.adzuna(profile(target_roles=["shop keeper"]), CREDS, session=s)
+        params = [c["params"] for c in s.calls]
+        self.assertTrue(params)
+        self.assertTrue(all("what_or" not in p for p in params))
+        self.assertEqual([p["what"] for p in params],
+                         ["shop keeper", "retail assistant", "sales assistant"])
+
+    def test_reed_searches_the_advertised_titles_too(self):
+        s = FakeSession([])
+        h.reed(profile(target_roles=["carer"]), CREDS, session=s)
+        self.assertEqual([c["params"]["keywords"] for c in s.calls],
+                         ["carer", "care assistant", "support worker"])
+
+    def test_the_scorer_is_told_they_are_the_same_job(self):
+        text = " ".join(profile(target_roles=["shop keeper"]).prompt_block().split())
+        self.assertIn("TARGET ROLES: shop keeper. These are the same jobs as "
+                      "advertised, and count as what they asked for: retail "
+                      "assistant, sales assistant", text)
+
+    def test_the_scorer_is_told_the_second_choice_is_a_second_choice(self):
+        p = profile(target_roles=["shop keeper restraunt waiter"])
+        p.search_titles = ["retail assistant", "waiter"]
+        p.experience_titles = ["landscape gardener"]
+        text = " ".join(p.prompt_block().split())
+        self.assertIn("count as what they asked for: retail assistant, waiter",
+                      text)
+        self.assertIn("from work they have done (a second choice): landscape "
+                      "gardener", text)
+
+
 class TestExclusions(unittest.TestCase):
     def test_course_adverts_are_binned_for_everyone(self):
         listing = h.Listing(

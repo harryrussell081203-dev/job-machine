@@ -325,7 +325,8 @@ class TestTheRunSaysWhatItIsDoing(Base):
 
     def test_it_names_each_stage_in_order(self):
         said = self.steps_of_a_real_run()
-        self.assertTrue(said[0].startswith("Searching the job boards"), said)
+        self.assertEqual(said[0], "Working out which job titles to search for")
+        self.assertTrue(said[1].startswith("Searching the job boards"), said)
         self.assertTrue(any("Setting aside employers" in s for s in said), said)
         self.assertTrue(any("Scoring" in s for s in said), said)
         self.assertEqual(said[-1], "Finishing up")
@@ -471,6 +472,20 @@ class TestTheDashboardSaysWhetherItIsOn(Base):
         self.assertEqual(drafted, [self.uid])
         self.assertGreater(self.db.machine_status(self.uid)["last_looked_at"],
                            0)
+
+    def test_a_paused_account_is_not_looked_for_work(self):
+        """Letters a paused account will never send still spent the model
+        and job-board allowance everybody else's search runs on."""
+        self.db.save_mail_account(self.uid, address="a@b.com",
+                                  host="smtp.b.com", port=465, password="x")
+        self.db.mark_mail_verified(self.uid)
+        self.db.save_send_settings(self.uid, auto_send=0,
+                                   paused_until=self.db.now() + 3600)
+        drafted = self.no_drafting()
+
+        self.autosend.sweep(sender=self.fake_send)
+
+        self.assertEqual(drafted, [])
 
     def test_a_sweep_is_never_skipped_to_protect_a_progress_row(self):
         """start_run() refusing means a hand-started run is already in flight.
