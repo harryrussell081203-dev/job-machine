@@ -176,6 +176,7 @@ class Profile:
     # from their own history. Filled in at run time, never typed.
     search_titles: list[str] = field(default_factory=list)
     experience_titles: list[str] = field(default_factory=list)
+    wanted_work: str = ""
 
     def __post_init__(self) -> None:
         self.validate()

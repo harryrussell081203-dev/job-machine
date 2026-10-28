@@ -164,9 +164,13 @@ Rules:
   their history is blank.
 - Each title 1 to 4 words, UK spelling, no places, no pay, no company names.
 - At most {max_titles} titles for what they asked for.
+- In "work", one plain sentence on the kind of work they want and can do
+  now, so somebody reading an advert with a different title can tell
+  whether it is that work (for example "Customer-facing shop, cafe and
+  restaurant work at entry level").
 
 Reply with JSON only:
-{{"asked": ["..."], "from_history": ["..."]}}
+{{"asked": ["..."], "from_history": ["..."], "work": "..."}}
 
 WHAT THEY ASKED FOR: {asked}
 WORK HISTORY: {history}
@@ -185,10 +189,13 @@ _TOO_SENIOR = re.compile(r"\b(manager|head|director|senior|lead|principal)\b",
                          re.I)
 
 
+PLAN_VERSION = "2"     # bump when the question changes, so it is asked again
+
+
 def fingerprint(profile, cv_text: str = "") -> str:
     """What the titles were worked out from. A change to any of it asks
     again; nothing else does."""
-    parts = [*(profile.target_roles or []),
+    parts = [PLAN_VERSION, *(profile.target_roles or []),
              *[f"{r.title}|{r.org}|{r.detail}" for r in profile.history or []],
              *(profile.qualifications or []), (cv_text or "")[:2000]]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
@@ -237,12 +244,16 @@ def parse_plan(text: str, profile) -> dict:
                if _key(t) not in {_key(a) for a in asked}]
     if not profile.history:
         history = []
-    return {"asked": asked, "from_history": history, "by": "model"}
+    work = " ".join(str(data.get("work") or "").split())[:200]
+    if not re.fullmatch(r"[A-Za-z][A-Za-z ,.'&\-]*", work or "x1"):
+        work = ""
+    return {"asked": asked, "from_history": history, "work": work,
+            "by": "model"}
 
 
 def by_rules(profile) -> dict:
     return {"asked": search_terms(profile.target_roles), "from_history": [],
-            "by": "rules"}
+            "work": "", "by": "rules"}
 
 
 def plan(profile, ai=None, cv_text: str = "") -> dict:
@@ -271,12 +282,14 @@ def describe(profile_or_roles) -> str:
     """The target roles for the scorer: their own words, what those are
     advertised as, and what their history also fits, so an advert for any of
     them is judged as the job they want rather than a near miss."""
+    work = ""
     if isinstance(profile_or_roles, (list, tuple)):
         roles, asked, extra = list(profile_or_roles), [], []
     else:
         roles = list(profile_or_roles.target_roles or [])
         asked = list(getattr(profile_or_roles, "search_titles", None) or [])
         extra = list(getattr(profile_or_roles, "experience_titles", None) or [])
+        work = getattr(profile_or_roles, "wanted_work", "") or ""
     if not asked:
         asked = [t for t in search_terms(roles)
                  if _key(t) not in {_key(r) for r in roles}]
@@ -287,4 +300,7 @@ def describe(profile_or_roles) -> str:
     if extra:
         text += (". Also suitable, from work they have done (a second "
                  "choice): " + ", ".join(extra))
+    if work:
+        text += (". The work they want: " + work.rstrip(".") + ". Judge an "
+                 "advert by the work it describes, not by its exact title")
     return text

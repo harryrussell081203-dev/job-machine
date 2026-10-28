@@ -328,7 +328,7 @@ class TestItWorksOutWhatToSearchFor(RunnerTestCase):
         return ai
 
     def searched(self, session):
-        return [p.get("what") for u, p in session.asked if "adzuna" in u]
+        return [p.get("title_only") for u, p in session.asked if "adzuna" in u]
 
     def test_the_person_is_read_once_and_their_titles_searched(self):
         ai = self.planning_ai()

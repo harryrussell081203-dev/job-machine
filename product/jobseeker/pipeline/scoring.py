@@ -110,7 +110,8 @@ def score_guide(profile) -> str:
         lines.append(
             "They are looking for work, so a solid match in their trade at or "
             "above their floor is a good result.")
-        top = "85+  a strong match in their trade, at or above their floor"
+        top = ("85+  the work they asked for, under whatever title, at or "
+               "above their floor")
 
     wants = []
     if profile.wants_travel:
@@ -126,8 +127,23 @@ def score_guide(profile) -> str:
     lines.append(
         "Read pay in whatever unit the advert uses - GBP 30 an hour is roughly "
         "GBP 60,000 a year, not GBP 30. Day rates and shift allowances count.")
-    lines.append("70-84 a clear step up in pay or responsibility in their trade.")
-    lines.append("40-69 partial match, or a step up they could not obviously make.")
+    if profile.situation == "employed" and profile.current_salary:
+        lines.append("70-84 a clear step up in pay or responsibility in "
+                     "their trade.")
+        lines.append("40-69 partial match, or a step up they could not "
+                     "obviously make.")
+    else:
+        # Somebody out of work wants a job they can start, not a step up:
+        # under the old bands a plain shop or restaurant job could never
+        # reach 70 for the person who asked for exactly that.
+        lines.append("Judge the WORK an advert describes, not its exact "
+                     "title: a 'team member', 'crew', 'colleague' or "
+                     "'customer assistant' advert can be the job they asked "
+                     "for under another name.")
+        lines.append("70-84 the same kind of work they asked for under a "
+                     "different title, or the second-choice work from their "
+                     "own history, that they could start now.")
+        lines.append("40-69 related work they could do but did not ask for.")
 
     floor = []
     if profile.min_salary_annual:

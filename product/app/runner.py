@@ -125,6 +125,7 @@ def plan_search(user_id: int, profile, ai) -> dict:
                 pass
     profile.search_titles = list(found.get("asked") or [])
     profile.experience_titles = list(found.get("from_history") or [])
+    profile.wanted_work = str(found.get("work") or "")
     return found
 
 
