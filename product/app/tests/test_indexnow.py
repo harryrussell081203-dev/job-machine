@@ -30,14 +30,29 @@ KEY = "0123456789abcdef0123456789abcdef"
 class Recorder:
     """Stands in for requests.post."""
 
-    def __init__(self, status=200, boom=False):
-        self.status, self.boom, self.calls = status, boom, []
+    def __init__(self, status=200, boom=False, text=""):
+        self.status, self.boom, self.text, self.calls = status, boom, text, []
 
-    def __call__(self, url, json=None, timeout=None):
+    def __call__(self, url, json=None, timeout=None, headers=None):
         if self.boom:
             raise RuntimeError("the network is having a moment")
         self.calls.append((url, json))
-        return type("R", (), {"status_code": self.status})()
+        self.headers = headers or {}
+        return type("R", (), {"status_code": self.status, "text": self.text})()
+
+
+class KeyFile:
+    """Stands in for requests.get on our own key file, as the engine sees
+    it from outside."""
+
+    def __init__(self, status=200, text=KEY, boom=False):
+        self.status, self.text, self.boom, self.calls = status, text, boom, []
+
+    def __call__(self, url, timeout=None):
+        self.calls.append(url)
+        if self.boom:
+            raise TimeoutError("asleep")
+        return type("R", (), {"status_code": self.status, "text": self.text})()
 
 
 class TestOff(Base):
@@ -99,12 +114,13 @@ class TestOn(Base):
         self.indexnow = indexnow
         self.store = {}
 
-    def go(self, post, urls=("https://recruited.org.uk/find",)):
+    def go(self, post, urls=("https://recruited.org.uk/find",), get=None,
+           now=None):
         return self.indexnow.submit_if_changed(
             list(urls),
             get_meta=lambda k: self.store.get(k, ""),
             set_meta=lambda k, v: self.store.__setitem__(k, v),
-            post=post)
+            post=post, get=get or KeyFile(), now=now)
 
     # -- the key file --------------------------------------------------
     def test_the_key_is_served_at_the_root_as_the_protocol_wants(self):
@@ -163,20 +179,145 @@ class TestOn(Base):
         """Recording a failure would mean it is never retried, and nothing
         would ever look wrong."""
         bad = Recorder(status=403)
-        self.assertEqual(self.go(bad), "failed")
-        self.assertEqual(self.store, {})
+        self.assertTrue(self.go(bad, now=1000).startswith("failed"))
+        self.assertNotIn(self.indexnow.MEMORY_KEY, self.store)
         good = Recorder()
-        self.assertEqual(self.go(good), "sent")
+        later = 1000 + self.indexnow.RETRY_AFTER + 1
+        self.assertEqual(self.go(good, now=later), "sent")
 
     def test_a_network_failure_is_swallowed(self):
-        """This runs inside startup. A search engine not hearing about a page
-        today is worth nothing next to an app that will not boot."""
-        self.assertEqual(self.go(Recorder(boom=True)), "failed")
+        """A search engine not hearing about a page today is worth nothing
+        next to an app that will not boot."""
+        said = self.go(Recorder(boom=True))
+        self.assertTrue(said.startswith("failed: no answer"), said)
+
+    # -- saying why (16 October to 9 November 2026: "failed", every time) --
+    def test_a_refusal_says_what_the_engine_said(self):
+        said = self.go(Recorder(status=403, text="  Key not\nvalid "))
+        self.assertIn("403", said)
+        self.assertIn("key was not accepted", said)
+        self.assertIn("Key not valid", said)
+
+    def test_the_last_try_is_kept_for_the_weekly_check(self):
+        """The hosting logs are often unreadable; site_meta is not."""
+        self.go(Recorder(status=429), now=5000)
+        last = self.indexnow.last_try(lambda k: self.store.get(k, ""))
+        self.assertEqual(last["at"], 5000)
+        self.assertFalse(last["ok"])
+        self.assertIn("429 too many submissions", last["said"])
+        self.assertEqual(last["urls"], 1)
+        self.go(Recorder(), now=5000 + self.indexnow.RETRY_AFTER)
+        self.assertTrue(
+            self.indexnow.last_try(lambda k: self.store.get(k, ""))["ok"])
+
+    # -- not retrying a refusal on every wake ---------------------------
+    def test_a_refusal_waits_a_day(self):
+        """Every cold start sent the whole list again, several times a
+        night, for three weeks."""
+        post = Recorder(status=403)
+        self.go(post, now=1000)
+        said = self.go(post, now=1000 + 3600)
+        self.assertTrue(said.startswith("waiting"), said)
+        self.assertIn("403", said)
+        self.go(post, now=1000 + 7200)
+        self.assertEqual(len(post.calls), 1)
+        self.go(post, now=1000 + self.indexnow.RETRY_AFTER)
+        self.assertEqual(len(post.calls), 2)
+
+    def test_the_wait_is_per_list(self):
+        """The directory run and the web app keep their own records, so a
+        refusal of one does not hold back the other."""
+        self.go(Recorder(status=403), now=1000)
+        post = Recorder()
+        said = self.indexnow.submit_if_changed(
+            ["https://recruited.org.uk/employers"],
+            get_meta=lambda k: self.store.get(k, ""),
+            set_meta=lambda k, v: self.store.__setitem__(k, v),
+            post=post, get=KeyFile(), memory_key="indexnow_directory",
+            now=1001)
+        self.assertEqual(said, "sent")
+
+    # -- the key file, read from outside first --------------------------
+    def test_the_key_file_is_read_where_the_engine_reads_it(self):
+        keyfile = KeyFile()
+        self.go(Recorder(), get=keyfile)
+        self.assertEqual(keyfile.calls,
+                         [f"https://recruited.org.uk/{KEY}.txt"])
+
+    def test_nothing_is_sent_when_the_key_file_does_not_answer(self):
+        """Sending a key the engine cannot read is how a key gets
+        rejected."""
+        for keyfile, why in ((KeyFile(status=404), "answered 404"),
+                             (KeyFile(text="something else"), "does not hold"),
+                             (KeyFile(boom=True), "did not answer")):
+            self.store.clear()
+            post = Recorder()
+            said = self.go(post, get=keyfile)
+            self.assertTrue(said.startswith("failed"), said)
+            self.assertIn(why, said)
+            self.assertEqual(post.calls, [])
 
     def test_202_counts_as_accepted(self):
         """The protocol returns 202 while a new key is still being verified,
         which is most of the first day."""
         self.assertEqual(self.go(Recorder(status=202)), "sent")
+
+    def test_sent_as_the_protocol_asks(self):
+        post = Recorder()
+        self.go(post)
+        self.assertEqual(post.headers["Content-Type"],
+                         "application/json; charset=utf-8")
+
+
+class TestTheAppSendsOnceItIsServing(Base):
+    """The engine checks the key by fetching it from this site. Sending from
+    inside startup meant asking it to read a file from a site that could
+    not answer yet."""
+
+    def test_startup_hands_it_to_a_thread(self):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        from app import indexnow, main
+        started, sent = [], []
+        with patch.object(indexnow, "available", return_value=True), \
+                patch.object(indexnow, "submit_if_changed",
+                             side_effect=lambda *a, **k: sent.append(1)), \
+                patch.object(main, "start_announcing",
+                             lambda: started.append(1)), \
+                TestClient(main.app) as client:
+            self.assertEqual(client.get("/privacy").status_code, 200)
+        self.assertEqual(started, [1])
+        self.assertEqual(sent, [], "sent from inside startup")
+
+    def test_the_thread_is_a_background_one(self):
+        from unittest.mock import patch
+
+        from app import main
+        made = []
+
+        class Thread:
+            def __init__(self, target=None, daemon=None, name=None):
+                made.append((target, daemon))
+
+            def start(self):
+                made.append("started")
+
+        with patch.object(main.threading, "Thread", Thread):
+            main.start_announcing()
+        self.assertEqual(made, [(main.announce_pages, True), "started"])
+
+    def test_the_thread_reports_and_never_raises(self):
+        from unittest.mock import patch
+        from app import indexnow, main
+        with patch.object(indexnow, "submit_if_changed",
+                          return_value="failed: 403 x"):
+            self.assertEqual(main.announce_pages(delay=0), "failed: 403 x")
+        with patch.object(indexnow, "submit_if_changed",
+                          side_effect=RuntimeError("db gone")):
+            self.assertEqual(main.announce_pages(delay=0),
+                             "failed: RuntimeError")
 
 
 class TestDevNeverSubmits(Base):

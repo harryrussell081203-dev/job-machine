@@ -154,10 +154,13 @@ async def lifespan(_app: FastAPI):
     ratelimit.init()
     # Told once per deploy that adds pages, or per day the figures move -
     # never on an ordinary wake from sleep, because the fingerprint has not
-    # changed. See indexnow.submit_if_changed. It cannot raise and it cannot
-    # delay a request: the only caller that pays for it is the first boot
-    # after something actually changed.
-    print(f"[indexnow] {indexnow.submit_if_changed(public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)}")
+    # changed. See indexnow.submit_if_changed. From a thread, after startup:
+    # the engine checks the key by fetching it from this site, and a site
+    # still inside startup cannot answer.
+    if indexnow.available():
+        start_announcing()
+    else:
+        print("[indexnow] off")
     # The Telegram bot's webhook, registered once per token and address.
     # Dormant without a token; cannot raise. See telegram.py.
     print(f"[telegram] {telegram.register(get_meta=db.get_meta, set_meta=db.set_meta)}")
@@ -165,6 +168,28 @@ async def lifespan(_app: FastAPI):
 
 
 app.router.lifespan_context = lifespan
+
+# How long after startup the page list goes to IndexNow, so the site is
+# already answering when the engine fetches the key file.
+ANNOUNCE_AFTER = 20
+
+
+def start_announcing() -> None:
+    threading.Thread(target=announce_pages, daemon=True,
+                     name="indexnow").start()
+
+
+def announce_pages(delay: float = ANNOUNCE_AFTER) -> str:
+    """Send the public page list to IndexNow if it changed. Never raises:
+    it runs on its own thread and nothing waits for it."""
+    time.sleep(delay)
+    try:
+        said = indexnow.submit_if_changed(
+            public_urls(), get_meta=db.get_meta, set_meta=db.set_meta)
+    except Exception as exc:  # noqa: BLE001 - a thread nobody joins
+        said = f"failed: {type(exc).__name__}"
+    print(f"[indexnow] {said}")
+    return said
 
 
 # ----------------------------------------------------------------------
